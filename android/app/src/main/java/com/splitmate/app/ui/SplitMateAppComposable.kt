@@ -1,12 +1,18 @@
 package com.splitmate.app
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,9 +38,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.core.content.ContextCompat
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -42,10 +50,16 @@ import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.splitmate.app.data.GroupMemberEntity
+import com.splitmate.app.ui.DesignSystemBindings
+import com.splitmate.app.ui.GroupCategoryIcons
+import com.splitmate.app.ui.NewGroupMemberDraft
 import com.splitmate.app.ui.SplitMateBrandFontFamily
 import com.splitmate.app.ui.SplitMateDisplayFontFamily
 import com.splitmate.app.ui.SplitMateViewModel
 import com.splitmate.app.ui.buildDiceBearOpenPeepsUrl
+import com.splitmate.app.ui.extractInitialsFromNameOrSeed
+import com.splitmate.app.ui.extractPhoneAndNameFromContactUri
+import com.splitmate.app.ui.resolveGroupCategoryIcon
 import com.splitmate.app.ui.screens.EditFriendUpiDialog
 import com.splitmate.app.ui.screens.OnboardingSetupScreen
 import com.splitmate.app.ui.screens.QuickExpenseScreen
@@ -53,42 +67,41 @@ import com.splitmate.app.ui.screens.UserSettingsScreen
 import java.util.Locale
 
 // ==============================================================================
-// 1. MATERIAL 3 EXPRESSIVE PALETTE & TOKENS (Reactive to Dark / Light Mode)
+// 1. MATERIAL 3 EXPRESSIVE PALETTE & TOKENS (GM3 Dark Elevation & DesignSystemBindings)
 // ==============================================================================
 object SplitMateTheme {
     var isDark by mutableStateOf(false)
 
     val ScreenBg: Color
-        get() = if (isDark) Color(0xFF121212) else Color(0xFFFAF7F2)
+        get() = if (isDark) DesignSystemBindings.GM3DarkBackground else DesignSystemBindings.GM3LightBackground
     val PrimaryDark: Color
-        get() = if (isDark) Color(0xFFFAF7F2) else Color(0xFF23201E)
-    val AccentSage = Color(0xFFD7E8B6)             // Active Navigation Pill / Secondary Action
+        get() = if (isDark) DesignSystemBindings.GM3DarkPrimaryText else DesignSystemBindings.GM3LightPrimaryText
+    val AccentSage = DesignSystemBindings.ElementsPositiveContainer
     val SageSurface: Color
         get() = if (isDark) Color(0xFF243314) else Color(0xFFEAF3DC)
     val SageText: Color
-        get() = if (isDark) Color(0xFFD7E8B6) else Color(0xFF2D4810)
+        get() = if (isDark) Color(0xFFD7E8B6) else DesignSystemBindings.ElementsPositiveText
     val TerracottaSurface: Color
         get() = if (isDark) Color(0xFF3A1E18) else Color(0xFFFCECE7)
     val TerracottaText: Color
-        get() = if (isDark) Color(0xFFFFB4A4) else Color(0xFFC23E2A)
-    val BrandCoral = Color(0xFFE06B52)             // App Leaf / Brand Logo
+        get() = if (isDark) Color(0xFFFFB4A4) else DesignSystemBindings.ElementsNegativeText
+    val BrandCoral = Color(0xFFE06B52)
     val SurfaceWhite: Color
-        get() = if (isDark) Color(0xFF1E1D1B) else Color(0xFFFFFFFF)
+        get() = if (isDark) DesignSystemBindings.GM3DarkCardSurface else DesignSystemBindings.GM3LightCardSurface
     val SurfaceMuted: Color
-        get() = if (isDark) Color(0xFF2B2823) else Color(0xFFF0EDE6)
+        get() = if (isDark) DesignSystemBindings.GM3DarkKeypadSurface else DesignSystemBindings.GM3LightKeypadSurface
     val BorderLight: Color
-        get() = if (isDark) Color(0xFF38332D) else Color(0xFFE6E2D8)
+        get() = if (isDark) Color(0xFF333333) else Color(0xFFE6E2D8)
     val TextSecondary: Color
-        get() = if (isDark) Color(0xFFB5ADA3) else Color(0xFF6E6863)
+        get() = if (isDark) DesignSystemBindings.GM3DarkSubtitleText else DesignSystemBindings.GM3LightSubtitleText
 
-    // Exaggerated Expressive Radii
-    val RadiusHero = RoundedCornerShape(32.dp)
-    val RadiusCard = RoundedCornerShape(24.dp)
+    val RadiusHero = DesignSystemBindings.GM3ShapeExtraLarge
+    val RadiusCard = DesignSystemBindings.GM3ShapeLarge
     val RadiusPanel = RoundedCornerShape(20.dp)
     val RadiusButton = RoundedCornerShape(16.dp)
     val RadiusDialog = RoundedCornerShape(28.dp)
     val RadiusInput = RoundedCornerShape(20.dp)
-    val RadiusBadge = RoundedCornerShape(999.dp)
+    val RadiusBadge = DesignSystemBindings.GM3ShapePill
 
     val FontRounded = SplitMateBrandFontFamily
     val FontDisplay = SplitMateDisplayFontFamily
@@ -198,9 +211,19 @@ fun SplitMateMainDashboardScaffold(
     onOpenSettings: () -> Unit
 ) {
     var currentTab by remember { mutableStateOf(SplitMateTab.LEDGERS) }
+    val animatedScreenBg by animateColorAsState(
+        targetValue = SplitMateTheme.ScreenBg,
+        animationSpec = DesignSystemBindings.themeColorTween(),
+        label = "DashboardScreenBg"
+    )
+    val animatedPrimaryDark by animateColorAsState(
+        targetValue = SplitMateTheme.PrimaryDark,
+        animationSpec = DesignSystemBindings.themeColorTween(),
+        label = "DashboardPrimaryDark"
+    )
 
     Scaffold(
-        containerColor = SplitMateTheme.ScreenBg,
+        containerColor = animatedScreenBg,
         floatingActionButton = {
             if (currentTab == SplitMateTab.LEDGERS) {
                 ExtendedFloatingActionButton(
@@ -209,19 +232,19 @@ fun SplitMateMainDashboardScaffold(
                         Icon(
                             imageVector = Icons.Rounded.ElectricBolt,
                             contentDescription = "Log Expense",
-                            tint = SplitMateTheme.ScreenBg
+                            tint = animatedScreenBg
                         )
                     },
                     text = {
                         Text(
                             text = "Log Expense",
                             fontWeight = FontWeight.ExtraBold,
-                            color = SplitMateTheme.ScreenBg,
+                            color = animatedScreenBg,
                             fontFamily = SplitMateTheme.FontRounded
                         )
                     },
-                    containerColor = SplitMateTheme.PrimaryDark,
-                    contentColor = SplitMateTheme.ScreenBg,
+                    containerColor = animatedPrimaryDark,
+                    contentColor = animatedScreenBg,
                     shape = SplitMateTheme.RadiusBadge,
                     modifier = Modifier.shadow(10.dp, SplitMateTheme.RadiusBadge)
                 )
@@ -271,18 +294,23 @@ fun SplitMateBottomNavigationBar(
     selectedTab: SplitMateTab,
     onTabSelected: (SplitMateTab) -> Unit
 ) {
+    val navSurfaceColor by animateColorAsState(
+        targetValue = SplitMateTheme.SurfaceWhite,
+        animationSpec = DesignSystemBindings.themeColorTween(),
+        label = "BottomNavSurface"
+    )
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding(),
-        color = SplitMateTheme.SurfaceWhite,
+        color = navSurfaceColor,
         shadowElevation = 8.dp,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 14.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -295,7 +323,7 @@ fun SplitMateBottomNavigationBar(
                     modifier = Modifier.sizeIn(minWidth = 64.dp, minHeight = 48.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
@@ -330,6 +358,7 @@ fun LedgersDashboardScreen(
     onNavigateToSplit: () -> Unit = {},
     onAvatarSettingsClick: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     val totalBalance by viewModel.totalBalance.collectAsState()
     val activeGroups by viewModel.activeGroups.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
@@ -352,23 +381,23 @@ fun LedgersDashboardScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 18.dp),
-        contentPadding = PaddingValues(top = 12.dp, bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(horizontal = 16.dp),
+        contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp),
+        verticalArrangement = Arrangement.spacedBy(DesignSystemBindings.PixelSectionSpacing)
     ) {
         // 1. Custom Top Bar (Subtitle "Fun & Trip Expenses", Static ₹ INR Badge, Clickable Avatar)
         item {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 8.dp),
+                    .padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(44.dp)
+                            .size(42.dp)
                             .clip(RoundedCornerShape(14.dp))
                             .background(SplitMateTheme.SurfaceWhite)
                             .border(1.dp, SplitMateTheme.BorderLight, RoundedCornerShape(14.dp)),
@@ -378,7 +407,7 @@ fun LedgersDashboardScreen(
                             painter = painterResource(id = R.drawable.ic_launcher_foreground),
                             contentDescription = "SplitMate Official App Logo",
                             modifier = Modifier
-                                .size(44.dp)
+                                .size(42.dp)
                                 .scale(1.25f)
                         )
                     }
@@ -402,12 +431,11 @@ fun LedgersDashboardScreen(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Static Native INR Badge (No currency picker, no '?' guide icon)
                     Surface(
                         shape = SplitMateTheme.RadiusBadge,
                         color = SplitMateTheme.SurfaceWhite,
                         border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
-                        modifier = Modifier.height(38.dp)
+                        modifier = Modifier.height(36.dp)
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
@@ -415,7 +443,7 @@ fun LedgersDashboardScreen(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(24.dp)
+                                    .size(22.dp)
                                     .clip(CircleShape)
                                     .background(SplitMateTheme.AccentSage),
                                 contentAlignment = Alignment.Center
@@ -441,7 +469,6 @@ fun LedgersDashboardScreen(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // Clickable Top-Right Avatar routing to UserSettingsScreen
                     Box(
                         modifier = Modifier
                             .clip(CircleShape)
@@ -458,7 +485,7 @@ fun LedgersDashboardScreen(
             }
         }
 
-        // 2. Hero Balance Card (32dp Radius, Dark-Mode Adaptive Gradient, Spring Bounce Animation)
+        // 2. Hero Balance Card (32dp Radius, Dark-Mode Adaptive Gradient, Compact 16.dp Padding)
         item {
             val heroGradientColors = if (SplitMateTheme.isDark) {
                 listOf(Color(0xFF1D2416), Color(0xFF261C19))
@@ -476,7 +503,7 @@ fun LedgersDashboardScreen(
                 Box(
                     modifier = Modifier
                         .background(Brush.linearGradient(colors = heroGradientColors))
-                        .padding(22.dp)
+                        .padding(16.dp)
                 ) {
                     Column {
                         Row(
@@ -494,7 +521,7 @@ fun LedgersDashboardScreen(
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (isNegativeBalance) SplitMateTheme.TerracottaText else SplitMateTheme.SageText,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
                                 )
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -515,11 +542,11 @@ fun LedgersDashboardScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         Text(
                             text = totalBalance,
-                            fontSize = 54.sp,
+                            fontSize = 48.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = SplitMateTheme.PrimaryDark,
                             fontFamily = SplitMateTheme.FontDisplay
@@ -533,7 +560,7 @@ fun LedgersDashboardScreen(
                             fontWeight = FontWeight.Medium
                         )
 
-                        Spacer(modifier = Modifier.height(20.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -548,7 +575,7 @@ fun LedgersDashboardScreen(
                                 ),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .sizeIn(minHeight = 48.dp)
+                                    .sizeIn(minHeight = 46.dp)
                             ) {
                                 Icon(Icons.Rounded.Add, contentDescription = null, tint = SplitMateTheme.ScreenBg, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -561,7 +588,7 @@ fun LedgersDashboardScreen(
                                 colors = ButtonDefaults.filledTonalButtonColors(containerColor = SplitMateTheme.AccentSage),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .sizeIn(minHeight = 48.dp)
+                                    .sizeIn(minHeight = 46.dp)
                             ) {
                                 Icon(Icons.Rounded.ReceiptLong, contentDescription = null, tint = Color(0xFF23201E), modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -578,7 +605,7 @@ fun LedgersDashboardScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 8.dp),
+                    .padding(top = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -602,24 +629,13 @@ fun LedgersDashboardScreen(
                     }
                 }
 
-                Surface(
-                    shape = SplitMateTheme.RadiusBadge,
-                    color = Color.Transparent,
-                    modifier = Modifier.sizeIn(minHeight = 48.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = "Sort by balance ⇅",
-                            fontFamily = SplitMateTheme.FontRounded,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = SplitMateTheme.TextSecondary
-                        )
-                    }
-                }
+                Text(
+                    text = "Sort by balance ⇅",
+                    fontFamily = SplitMateTheme.FontRounded,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = SplitMateTheme.TextSecondary
+                )
             }
         }
 
@@ -641,12 +657,12 @@ fun LedgersDashboardScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 24.dp, vertical = 32.dp),
+                            .padding(horizontal = 20.dp, vertical = 20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(76.dp)
+                                .size(64.dp)
                                 .clip(CircleShape)
                                 .background(SplitMateTheme.SageSurface),
                             contentAlignment = Alignment.Center
@@ -655,12 +671,12 @@ fun LedgersDashboardScreen(
                                 imageVector = Icons.Rounded.Explore,
                                 contentDescription = "No Active Trips Illustration",
                                 tint = SplitMateTheme.SageText,
-                                modifier = Modifier.size(38.dp)
+                                modifier = Modifier.size(32.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "No active trips. Tap the + button below to create your first group!",
+                            text = "No active trips. Tap + New Group to create your first ledger!",
                             fontFamily = SplitMateTheme.FontDisplay,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.ExtraBold,
@@ -668,15 +684,15 @@ fun LedgersDashboardScreen(
                             textAlign = TextAlign.Center,
                             lineHeight = 22.sp
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Create a trip or roommate ledger with Exact Split precision.",
+                            text = "Pick members directly from Android Contacts with automatic UPI routing.",
                             fontFamily = SplitMateTheme.FontRounded,
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             color = SplitMateTheme.TextSecondary,
                             textAlign = TextAlign.Center
                         )
-                        Spacer(modifier = Modifier.height(18.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
                         Button(
                             onClick = { showNewGroupDialog = true },
                             shape = SplitMateTheme.RadiusBadge,
@@ -694,7 +710,7 @@ fun LedgersDashboardScreen(
             }
         }
 
-        // 5. Dynamic Group Cards (24dp radius, Spring Bounce Animation)
+        // 5. Dynamic Group Cards (24dp radius, 8-Icon Category support, 14dp compact padding)
         items(activeGroups, key = { it.groupId }) { groupCard ->
             val cardSurfaceColor = when {
                 groupCard.netBalanceCents > 0L -> SplitMateTheme.SageSurface
@@ -706,11 +722,7 @@ fun LedgersDashboardScreen(
                 groupCard.netBalanceCents < 0L -> SplitMateTheme.TerracottaText
                 else -> SplitMateTheme.SageText
             }
-            val groupIcon = when {
-                groupCard.name.contains("Cabin", ignoreCase = true) -> Icons.Rounded.Cabin
-                groupCard.name.contains("Apt", ignoreCase = true) || groupCard.name.contains("Room", ignoreCase = true) -> Icons.Rounded.Apartment
-                else -> Icons.Rounded.RamenDining
-            }
+            val groupIcon = resolveGroupCategoryIcon(groupCard.iconName, groupCard.name)
 
             Card(
                 onClick = { viewModel.selectActiveGroup(groupCard.groupId) },
@@ -725,7 +737,7 @@ fun LedgersDashboardScreen(
                         } else Modifier
                     )
             ) {
-                Column(modifier = Modifier.padding(18.dp)) {
+                Column(modifier = Modifier.padding(14.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -734,7 +746,7 @@ fun LedgersDashboardScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
-                                    .size(44.dp)
+                                    .size(42.dp)
                                     .clip(CircleShape)
                                     .background(if (groupCard.netBalanceCents == 0L) SplitMateTheme.SurfaceMuted else Color.White),
                                 contentAlignment = Alignment.Center
@@ -744,7 +756,7 @@ fun LedgersDashboardScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(groupCard.name, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = SplitMateTheme.PrimaryDark)
-                                Text("${groupCard.memberCount} members", fontSize = 13.sp, color = SplitMateTheme.TextSecondary)
+                                Text("${groupCard.memberCount} members", fontSize = 12.sp, color = SplitMateTheme.TextSecondary)
                             }
                         }
 
@@ -762,7 +774,7 @@ fun LedgersDashboardScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -787,14 +799,14 @@ fun LedgersDashboardScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Rounded.Edit,
-                                            contentDescription = "Edit Friend UPI",
+                                            imageVector = Icons.Rounded.ContactPhone,
+                                            contentDescription = "Link Friend Contact",
                                             tint = SplitMateTheme.PrimaryDark,
                                             modifier = Modifier.size(12.dp)
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
-                                            text = "Edit UPI",
+                                            text = "Contacts",
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = SplitMateTheme.PrimaryDark
@@ -820,21 +832,21 @@ fun LedgersDashboardScreen(
             }
         }
 
-        // 6. Recent Activity Preview (Spring Bounce Animation)
+        // 6. Recent Activity Preview
         if (uiState.expenses.isNotEmpty()) {
             item {
                 Column(
                     modifier = Modifier
-                        .padding(top = 8.dp)
+                        .padding(top = 4.dp)
                         .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
                 ) {
                     Text(
                         text = "Recent Activity",
-                        fontSize = 17.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = SplitMateTheme.PrimaryDark
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     uiState.expenses.take(3).forEach { expense ->
                         val payer = uiState.members.find { it.memberId == expense.payerId }
                         val isMePayer = payer?.isCurrentUser == true
@@ -845,7 +857,7 @@ fun LedgersDashboardScreen(
                             icon = Icons.Rounded.Restaurant,
                             iconBg = if (isMePayer) Color(0xFFE0E7FF) else Color(0xFFFFE4E6),
                             title = expense.title,
-                            subtitle = "Paid by ${if (isMePayer) "you" else (payer?.name ?: "Member")} · Rate ${expense.lockedExchangeRate}",
+                            subtitle = "Paid by ${if (isMePayer) "you" else (payer?.name ?: "Member")} · Exact Split",
                             amount = formattedAmt,
                             isPositive = isMePayer
                         )
@@ -856,10 +868,45 @@ fun LedgersDashboardScreen(
         }
     }
 
-    // Custom M3 Expressive Dialog for "+ New Group" (28dp radius, 20dp input radius)
+    // =========================================================================
+    // CREATE GROUP DIALOG (Point 1: Contact Multi-Selector + Point 3: 8-Icon Grid)
+    // Zero Comma-Separated Input!
+    // =========================================================================
     if (showNewGroupDialog) {
         var groupNameInput by remember { mutableStateOf("") }
-        var friendsInput by remember { mutableStateOf("Priya, Sam, Maya") }
+        var selectedIconKey by remember { mutableStateOf("Flight") }
+        var selectedMembers by remember { mutableStateOf(listOf<NewGroupMemberDraft>()) }
+        var customPeerNameInput by remember { mutableStateOf("") }
+
+        val contactPickerLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.PickContact()
+        ) { contactUri: Uri? ->
+            if (contactUri != null) {
+                val extracted = extractPhoneAndNameFromContactUri(context, contactUri)
+                if (extracted != null) {
+                    val (contactName, cleanPhone) = extracted
+                    val resolvedName = contactName.trim().ifEmpty { "Friend" }
+                    if (selectedMembers.none { it.name.equals(resolvedName, ignoreCase = true) }) {
+                        selectedMembers = selectedMembers + NewGroupMemberDraft(
+                            name = resolvedName,
+                            cleanPhone = cleanPhone
+                        )
+                    }
+                } else {
+                    Toast.makeText(context, "Unable to read contact details", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+        val contactsPermissionLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission()
+        ) { granted: Boolean ->
+            if (granted) {
+                contactPickerLauncher.launch(null)
+            } else {
+                Toast.makeText(context, "Contacts permission allows 1-tap UPI linking", Toast.LENGTH_SHORT).show()
+            }
+        }
 
         Dialog(onDismissRequest = { showNewGroupDialog = false }) {
             Surface(
@@ -871,35 +918,42 @@ fun LedgersDashboardScreen(
                     .border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusDialog)
             ) {
                 Column(
-                    modifier = Modifier.padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    modifier = Modifier
+                        .padding(18.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .size(44.dp)
+                                .size(40.dp)
                                 .clip(CircleShape)
                                 .background(SplitMateTheme.AccentSage),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Rounded.GroupAdd, contentDescription = null, tint = Color(0xFF23201E))
+                            Icon(
+                                imageVector = resolveGroupCategoryIcon(selectedIconKey, groupNameInput),
+                                contentDescription = null,
+                                tint = Color(0xFF23201E)
+                            )
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
                                 text = "Create Ledger Group",
-                                fontSize = 20.sp,
+                                fontSize = 19.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = SplitMateTheme.PrimaryDark
                             )
                             Text(
-                                text = "Add friends with DiceBear Open-Peeps avatars",
+                                text = "Select icon & add members from Contacts",
                                 fontSize = 12.sp,
                                 color = SplitMateTheme.TextSecondary
                             )
                         }
                     }
 
+                    // 1. Group Name Field
                     OutlinedTextField(
                         value = groupNameInput,
                         onValueChange = { groupNameInput = it },
@@ -907,18 +961,220 @@ fun LedgersDashboardScreen(
                         placeholder = { Text("e.g. Goa Beach Villa") },
                         singleLine = true,
                         shape = SplitMateTheme.RadiusInput,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = SplitMateTheme.PrimaryDark,
+                            unfocusedTextColor = SplitMateTheme.PrimaryDark,
+                            focusedBorderColor = SplitMateTheme.PrimaryDark,
+                            unfocusedBorderColor = SplitMateTheme.BorderLight
+                        ),
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    OutlinedTextField(
-                        value = friendsInput,
-                        onValueChange = { friendsInput = it },
-                        label = { Text("Members (comma-separated)") },
-                        singleLine = true,
-                        shape = SplitMateTheme.RadiusInput,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    // 2. Group Category Icon Picker Grid (2x4 Expressive Material 3 Icons)
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "Category Icon",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SplitMateTheme.PrimaryDark
+                        )
+                        GroupCategoryIcons.chunked(4).forEach { rowIcons ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                rowIcons.forEach { option ->
+                                    val isSelected = selectedIconKey == option.key
+                                    val iconScale by animateFloatAsState(
+                                        targetValue = if (isSelected) 1.08f else 1.0f,
+                                        animationSpec = DesignSystemBindings.tactileSpring(),
+                                        label = "GroupIconBounce_${option.key}"
+                                    )
+                                    Surface(
+                                        onClick = { selectedIconKey = option.key },
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = if (isSelected) SplitMateTheme.AccentSage else SplitMateTheme.SurfaceMuted,
+                                        border = BorderStroke(
+                                            width = if (isSelected) 1.5.dp else 1.dp,
+                                            color = if (isSelected) Color(0xFF416913) else SplitMateTheme.BorderLight
+                                        ),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .scale(iconScale)
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            Icon(
+                                                imageVector = option.icon,
+                                                contentDescription = option.label,
+                                                tint = if (isSelected) Color(0xFF23201E) else SplitMateTheme.PrimaryDark,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = option.label,
+                                                fontSize = 10.sp,
+                                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                                color = if (isSelected) Color(0xFF23201E) else SplitMateTheme.TextSecondary,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
 
+                    // 3. Prominent "+ Add Members from Contacts" Button
+                    Button(
+                        onClick = {
+                            val hasPermission = ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.READ_CONTACTS
+                            ) == PackageManager.PERMISSION_GRANTED
+                            if (hasPermission) {
+                                contactPickerLauncher.launch(null)
+                            } else {
+                                contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+                            }
+                        },
+                        shape = SplitMateTheme.RadiusButton,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SplitMateTheme.AccentSage,
+                            contentColor = Color(0xFF23201E)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Contacts,
+                            contentDescription = null,
+                            tint = Color(0xFF23201E),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "+ Add Members from Contacts",
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 14.sp,
+                            color = Color(0xFF23201E)
+                        )
+                    }
+
+                    // 4. Horizontal Scrollable Selected Member Chips (Initials + Name + 'X' to Remove)
+                    if (selectedMembers.isNotEmpty()) {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(selectedMembers, key = { it.name + it.cleanPhone }) { member ->
+                                Surface(
+                                    shape = SplitMateTheme.RadiusBadge,
+                                    color = SplitMateTheme.SurfaceMuted,
+                                    border = BorderStroke(1.dp, SplitMateTheme.BorderLight)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(start = 6.dp, end = 8.dp, top = 5.dp, bottom = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(24.dp)
+                                                .clip(CircleShape)
+                                                .background(SplitMateTheme.AccentSage),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = extractInitialsFromNameOrSeed(member.name),
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = Color(0xFF23201E)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Column {
+                                            Text(
+                                                text = member.name,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = SplitMateTheme.PrimaryDark
+                                            )
+                                            if (member.cleanPhone.isNotEmpty()) {
+                                                Text(
+                                                    text = "${member.cleanPhone}@upi",
+                                                    fontSize = 9.sp,
+                                                    color = SplitMateTheme.SageText,
+                                                    fontWeight = FontWeight.SemiBold
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        IconButton(
+                                            onClick = {
+                                                selectedMembers = selectedMembers.filterNot {
+                                                    it.name == member.name && it.cleanPhone == member.cleanPhone
+                                                }
+                                            },
+                                            modifier = Modifier.size(20.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Close,
+                                                contentDescription = "Remove ${member.name}",
+                                                tint = SplitMateTheme.TextSecondary,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 5. Quick "+ Add Custom Name" Row for Peers Without Phone Contacts
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = customPeerNameInput,
+                            onValueChange = { customPeerNameInput = it },
+                            placeholder = { Text("+ Add Custom Name", fontSize = 13.sp) },
+                            singleLine = true,
+                            shape = SplitMateTheme.RadiusInput,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = SplitMateTheme.PrimaryDark,
+                                unfocusedTextColor = SplitMateTheme.PrimaryDark,
+                                focusedBorderColor = SplitMateTheme.PrimaryDark,
+                                unfocusedBorderColor = SplitMateTheme.BorderLight
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilledTonalButton(
+                            onClick = {
+                                val cleanCustom = customPeerNameInput.trim()
+                                if (cleanCustom.isNotEmpty()) {
+                                    selectedMembers = selectedMembers + NewGroupMemberDraft(name = cleanCustom)
+                                    customPeerNameInput = ""
+                                }
+                            },
+                            enabled = customPeerNameInput.isNotBlank(),
+                            shape = SplitMateTheme.RadiusButton,
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = SplitMateTheme.SurfaceMuted,
+                                contentColor = SplitMateTheme.PrimaryDark
+                            ),
+                            modifier = Modifier.height(52.dp)
+                        ) {
+                            Icon(Icons.Rounded.PersonAdd, contentDescription = "Add Peer", modifier = Modifier.size(18.dp))
+                        }
+                    }
+
+                    // 6. Action Buttons
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End
@@ -929,7 +1185,16 @@ fun LedgersDashboardScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
                             onClick = {
-                                viewModel.createNewGroup(groupNameInput, "INR", friendsInput)
+                                val finalDrafts = if (customPeerNameInput.isNotBlank()) {
+                                    selectedMembers + NewGroupMemberDraft(name = customPeerNameInput.trim())
+                                } else {
+                                    selectedMembers
+                                }
+                                viewModel.createNewGroupWithContacts(
+                                    name = groupNameInput,
+                                    iconName = selectedIconKey,
+                                    memberDrafts = finalDrafts
+                                )
                                 showNewGroupDialog = false
                             },
                             shape = SplitMateTheme.RadiusButton,
@@ -956,7 +1221,53 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
     val settlementPlan by viewModel.settlementPlan.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     var editingFriend by remember { mutableStateOf<GroupMemberEntity?>(null) }
+    var targetMemberForContactLink by remember { mutableStateOf<GroupMemberEntity?>(null) }
     val rawDebtEdges = (uiState.expenses.size * uiState.activeGroupMembers.size).coerceAtLeast(settlementPlan.size)
+
+    val directContactPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickContact()
+    ) { contactUri: Uri? ->
+        val memberToUpdate = targetMemberForContactLink
+        if (contactUri != null && memberToUpdate != null) {
+            val extracted = extractPhoneAndNameFromContactUri(context, contactUri)
+            if (extracted != null && extracted.second.isNotBlank()) {
+                val cleanPhone = extracted.second
+                viewModel.updateFriendUpi(
+                    memberId = memberToUpdate.memberId,
+                    newName = memberToUpdate.name,
+                    newUpiId = "$cleanPhone@upi",
+                    newAvatarSeed = memberToUpdate.avatarSeed
+                )
+            } else {
+                Toast.makeText(context, "Could not read phone number from selected contact", Toast.LENGTH_SHORT).show()
+            }
+        }
+        targetMemberForContactLink = null
+    }
+
+    val directContactPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted: Boolean ->
+        if (granted && targetMemberForContactLink != null) {
+            directContactPickerLauncher.launch(null)
+        } else {
+            Toast.makeText(context, "Contacts permission required to link phone for UPI", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun launchContactPickerForMember(member: GroupMemberEntity?) {
+        if (member == null) return
+        targetMemberForContactLink = member
+        val hasPermission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.READ_CONTACTS
+        ) == PackageManager.PERMISSION_GRANTED
+        if (hasPermission) {
+            directContactPickerLauncher.launch(null)
+        } else {
+            directContactPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+        }
+    }
 
     editingFriend?.let { friend ->
         EditFriendUpiDialog(
@@ -972,22 +1283,22 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 18.dp),
-        contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(horizontal = 16.dp),
+        contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(DesignSystemBindings.PixelSectionSpacing)
     ) {
         item {
             Text(
                 text = "Greedy Settlement",
                 fontFamily = SplitMateTheme.FontDisplay,
-                fontSize = 26.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = SplitMateTheme.PrimaryDark
             )
             Text(
-                text = "Min-Cash Flow network simplification and 1-tap transfers",
+                text = "Min-Cash Flow network simplification & Phone-Linked UPI",
                 fontFamily = SplitMateTheme.FontRounded,
-                fontSize = 13.sp,
+                fontSize = 12.sp,
                 color = SplitMateTheme.TextSecondary
             )
         }
@@ -1002,12 +1313,12 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                     .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
             ) {
                 Row(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(38.dp)
+                            .size(36.dp)
                             .clip(CircleShape)
                             .background(SplitMateTheme.SurfaceWhite),
                         contentAlignment = Alignment.Center
@@ -1032,7 +1343,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
             Text(
                 text = "Required Direct Transfers (${settlementPlan.size})",
                 fontFamily = SplitMateTheme.FontDisplay,
-                fontSize = 16.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = SplitMateTheme.PrimaryDark
             )
@@ -1048,7 +1359,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                     .border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusCard)
                     .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
             ) {
-                Column(modifier = Modifier.padding(18.dp)) {
+                Column(modifier = Modifier.padding(14.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1088,61 +1399,119 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Editable Friend UPI VPA Pill
-                    Surface(
-                        onClick = {
-                            if (toRoomMember != null) editingFriend = toRoomMember
-                        },
-                        shape = SplitMateTheme.RadiusBadge,
-                        color = SplitMateTheme.SurfaceMuted
+                    // Phone-Linked Status Chip or "+ Link Contact" Chip
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Surface(
+                            onClick = { launchContactPickerForMember(toRoomMember) },
+                            shape = SplitMateTheme.RadiusBadge,
+                            color = if (transfer.hasLinkedPhone) SplitMateTheme.SageSurface else SplitMateTheme.TerracottaSurface,
+                            border = BorderStroke(
+                                1.dp,
+                                if (transfer.hasLinkedPhone) SplitMateTheme.AccentSage else SplitMateTheme.TerracottaText.copy(alpha = 0.4f)
+                            )
                         ) {
-                            Icon(
-                                imageVector = Icons.Rounded.ContactPhone,
-                                contentDescription = null,
-                                tint = SplitMateTheme.PrimaryDark,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "To UPI: ${transfer.upiId} · Tap to Pick from Contacts",
-                                fontFamily = SplitMateTheme.FontRounded,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = SplitMateTheme.PrimaryDark
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (transfer.hasLinkedPhone) Icons.Rounded.CheckCircle else Icons.Rounded.PersonAddAlt1,
+                                    contentDescription = null,
+                                    tint = if (transfer.hasLinkedPhone) SplitMateTheme.SageText else SplitMateTheme.TerracottaText,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (transfer.hasLinkedPhone) {
+                                        "Phone Linked: ${transfer.upiId}"
+                                    } else {
+                                        "+ Link Contact"
+                                    },
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = if (transfer.hasLinkedPhone) SplitMateTheme.SageText else SplitMateTheme.TerracottaText
+                                )
+                            }
+                        }
+
+                        if (toRoomMember != null) {
+                            TextButton(
+                                onClick = { editingFriend = toRoomMember },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "Avatar & Handle",
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SplitMateTheme.TextSecondary
+                                )
+                            }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Button(
-                            onClick = {
-                                val upiUri = Uri.parse(
-                                    "upi://pay?pa=${transfer.upiId}&pn=${Uri.encode(transfer.toName)}&am=${transfer.amount}&cu=INR"
+                        if (transfer.hasLinkedPhone) {
+                            Button(
+                                onClick = {
+                                    val upiUri = Uri.parse(
+                                        "upi://pay?pa=${transfer.upiId}&pn=${Uri.encode(transfer.toName)}&am=${transfer.amount}&cu=INR"
+                                    )
+                                    val upiIntent = Intent(Intent.ACTION_VIEW, upiUri)
+                                    context.startActivity(Intent.createChooser(upiIntent, "Pay with UPI"))
+                                },
+                                shape = SplitMateTheme.RadiusButton,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = SplitMateTheme.PrimaryDark,
+                                    contentColor = SplitMateTheme.ScreenBg
+                                ),
+                                modifier = Modifier
+                                    .weight(1.35f)
+                                    .sizeIn(minHeight = 46.dp)
+                            ) {
+                                Icon(Icons.Rounded.AccountBalance, contentDescription = null, tint = SplitMateTheme.ScreenBg, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Pay via UPI (Phone Linked)",
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SplitMateTheme.ScreenBg,
+                                    fontSize = 12.sp,
+                                    maxLines = 1
                                 )
-                                val upiIntent = Intent(Intent.ACTION_VIEW, upiUri)
-                                context.startActivity(Intent.createChooser(upiIntent, "Pay with UPI"))
-                            },
-                            shape = SplitMateTheme.RadiusButton,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = SplitMateTheme.PrimaryDark,
-                                contentColor = SplitMateTheme.ScreenBg
-                            ),
-                            modifier = Modifier
-                                .weight(1.2f)
-                                .sizeIn(minHeight = 48.dp)
-                        ) {
-                            Icon(Icons.Rounded.AccountBalance, contentDescription = null, tint = SplitMateTheme.ScreenBg, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Pay via UPI", fontFamily = SplitMateTheme.FontRounded, fontWeight = FontWeight.Bold, color = SplitMateTheme.ScreenBg, fontSize = 13.sp)
+                            }
+                        } else {
+                            Button(
+                                onClick = { launchContactPickerForMember(toRoomMember) },
+                                shape = SplitMateTheme.RadiusButton,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = SplitMateTheme.AccentSage,
+                                    contentColor = Color(0xFF23201E)
+                                ),
+                                modifier = Modifier
+                                    .weight(1.35f)
+                                    .sizeIn(minHeight = 46.dp)
+                            ) {
+                                Icon(Icons.Rounded.Contacts, contentDescription = null, tint = Color(0xFF23201E), modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "+ Link Contact",
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color(0xFF23201E),
+                                    fontSize = 13.sp
+                                )
+                            }
                         }
 
                         OutlinedButton(
@@ -1151,21 +1520,22 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = SplitMateTheme.PrimaryDark),
                             modifier = Modifier
                                 .weight(1f)
-                                .sizeIn(minHeight = 48.dp)
+                                .sizeIn(minHeight = 46.dp)
                         ) {
-                            Text("Mark as Paid", fontFamily = SplitMateTheme.FontRounded, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("Mark Paid", fontFamily = SplitMateTheme.FontRounded, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     AssistChip(
                         onClick = {
+                            val upiText = if (transfer.hasLinkedPhone) " (${transfer.upiId})" else ""
                             val sendIntent = Intent().apply {
                                 action = Intent.ACTION_SEND
                                 putExtra(
                                     Intent.EXTRA_TEXT,
-                                    "Hey ${transfer.fromName}! Reminder for ${transfer.formattedDisplayAmount} settlement to ${transfer.toName} (${transfer.upiId}) on SplitMate."
+                                    "Hey ${transfer.fromName}! Reminder for ${transfer.formattedDisplayAmount} settlement to ${transfer.toName}$upiText on SplitMate."
                                 )
                                 type = "text/plain"
                             }
@@ -1175,7 +1545,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                         leadingIcon = { Icon(Icons.Rounded.Share, contentDescription = null, modifier = Modifier.size(16.dp)) },
                         shape = SplitMateTheme.RadiusButton,
                         colors = AssistChipDefaults.assistChipColors(containerColor = SplitMateTheme.SurfaceMuted),
-                        modifier = Modifier.sizeIn(minHeight = 48.dp)
+                        modifier = Modifier.sizeIn(minHeight = 42.dp)
                     )
                 }
             }
@@ -1193,27 +1563,27 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(20.dp),
+                        .padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(54.dp)
+                            .size(48.dp)
                             .clip(CircleShape)
                             .background(Color.White),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = SplitMateTheme.SageText, modifier = Modifier.size(32.dp))
+                        Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = SplitMateTheme.SageText, modifier = Modifier.size(28.dp))
                     }
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text("All Accounts Balanced", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = SplitMateTheme.PrimaryDark)
                     Text("Zero debt loop detected · Exact Split Certified", fontSize = 12.sp, color = SplitMateTheme.TextSecondary)
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     Surface(
                         shape = SplitMateTheme.RadiusBadge,
                         color = SplitMateTheme.PrimaryDark
                     ) {
-                        Text("Equilibrium Reached", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SplitMateTheme.ScreenBg, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
+                        Text("Equilibrium Reached", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SplitMateTheme.ScreenBg, modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp))
                     }
                 }
             }
@@ -1232,22 +1602,22 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 18.dp),
-        contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(horizontal = 16.dp),
+        contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(DesignSystemBindings.PixelSectionSpacing)
     ) {
         item {
             Text(
                 text = "Audit & Local Vault",
                 fontFamily = SplitMateTheme.FontDisplay,
-                fontSize = 26.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = SplitMateTheme.PrimaryDark
             )
             Text(
                 text = "Cryptographic ledger footprint and SQLite persistence",
                 fontFamily = SplitMateTheme.FontRounded,
-                fontSize = 13.sp,
+                fontSize = 12.sp,
                 color = SplitMateTheme.TextSecondary
             )
         }
@@ -1263,14 +1633,14 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
                     .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
             ) {
                 Row(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(14.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(38.dp)
                                 .clip(CircleShape)
                                 .background(SplitMateTheme.AccentSage),
                             contentAlignment = Alignment.Center
@@ -1323,7 +1693,7 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
                     .fillMaxWidth()
                     .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(14.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1332,7 +1702,7 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
-                                    .size(44.dp)
+                                    .size(40.dp)
                                     .clip(CircleShape)
                                     .background(if (isMePayer) Color(0xFFE0E7FF) else Color(0xFFFFE4E6)),
                                 contentAlignment = Alignment.Center
@@ -1365,7 +1735,7 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     HorizontalDivider(color = SplitMateTheme.BorderLight)
                     Spacer(modifier = Modifier.height(8.dp))
 
@@ -1377,7 +1747,7 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
                             onClick = { viewModel.rollbackExpense(expense.expenseId) },
                             shape = SplitMateTheme.RadiusBadge,
                             color = SplitMateTheme.SurfaceMuted,
-                            modifier = Modifier.sizeIn(minHeight = 48.dp)
+                            modifier = Modifier.sizeIn(minHeight = 42.dp)
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -1398,7 +1768,7 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 8.dp),
+                    .padding(top = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 OutlinedButton(
@@ -1406,7 +1776,7 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
                     shape = SplitMateTheme.RadiusButton,
                     modifier = Modifier
                         .weight(1f)
-                        .sizeIn(minHeight = 48.dp)
+                        .sizeIn(minHeight = 46.dp)
                 ) {
                     Icon(Icons.Rounded.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
@@ -1419,7 +1789,7 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
                     colors = ButtonDefaults.filledTonalButtonColors(containerColor = SplitMateTheme.AccentSage),
                     modifier = Modifier
                         .weight(1f)
-                        .sizeIn(minHeight = 48.dp)
+                        .sizeIn(minHeight = 46.dp)
                 ) {
                     Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF23201E))
                     Spacer(modifier = Modifier.width(6.dp))
@@ -1445,7 +1815,7 @@ fun AvatarToken(
         buildDiceBearOpenPeepsUrl(initials)
     }
     val cleanInitials = remember(initials) {
-        initials.trim().substringBefore("|").substringBefore("_").take(2).uppercase().ifBlank { "SM" }
+        extractInitialsFromNameOrSeed(initials)
     }
 
     Box(

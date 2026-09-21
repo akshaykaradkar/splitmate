@@ -36,7 +36,7 @@ data class SplitMateUiState(
     val currentUserName: String = "Akshay",
     val currentUserSeed: String = "Akshay|Masculine",
     val currentUserCountry: String = "India",
-    val userUpiId: String = "akshay@okhdfcbank",
+    val userUpiId: String = "",
     val isDarkTheme: Boolean = false,
     val activeCurrencyCode: String = "INR",
     val isOfflineMode: Boolean = false,
@@ -77,9 +77,16 @@ fun defaultSeedReceiptItems(): List<ReceiptLineItem> = listOf(
     ReceiptLineItem("item_4", "Shared Antipasto Misto", 2600L, emptySet())
 )
 
+data class NewGroupMemberDraft(
+    val name: String,
+    val cleanPhone: String = "",
+    val presentationStyle: String = "Neutral"
+)
+
 data class ActiveGroupCardUiModel(
     val groupId: String,
     val name: String,
+    val iconName: String = "Flight",
     val memberCount: Int,
     val memberSeeds: List<String>,
     val remainingCount: Int,
@@ -97,6 +104,7 @@ data class SettlementTransferUiModel(
     val toName: String,
     val toSeed: String,
     val upiId: String,
+    val hasLinkedPhone: Boolean,
     val amount: String,
     val formattedDisplayAmount: String,
     val isCurrentUserDebtor: Boolean
@@ -165,6 +173,7 @@ class SplitMateViewModel(
                 ActiveGroupCardUiModel(
                     groupId = group.groupId,
                     name = group.name,
+                    iconName = group.iconName,
                     memberCount = groupMembers.size,
                     memberSeeds = visibleSeeds,
                     remainingCount = rem,
@@ -197,8 +206,10 @@ class SplitMateViewModel(
             transfers.map { tr ->
                 val fromMember = groupMembers.find { it.memberId == tr.fromMemberId }
                 val toMember = groupMembers.find { it.memberId == tr.toMemberId }
-                val cleanHandle = tr.toName.lowercase(Locale.US).replace(Regex("[^a-z0-9]"), "").ifEmpty { "splitmate" }
-                val resolvedUpiId = toMember?.upiId?.takeIf { it.isNotBlank() } ?: "$cleanHandle@upi"
+                val savedUpi = toMember?.upiId?.trim().orEmpty()
+                val phonePrefix = savedUpi.substringBefore("@")
+                val hasPhoneLinked = phonePrefix.length >= 6 && phonePrefix.all { it.isDigit() }
+                val resolvedUpiId = if (hasPhoneLinked) savedUpi else ""
                 val majorStr = String.format(Locale.US, "%.2f", tr.amountCents / 100.0)
                 SettlementTransferUiModel(
                     transfer = tr,
@@ -209,6 +220,7 @@ class SplitMateViewModel(
                     toName = if (toMember?.isCurrentUser == true) "You" else tr.toName,
                     toSeed = toMember?.avatarSeed ?: tr.toName,
                     upiId = resolvedUpiId,
+                    hasLinkedPhone = hasPhoneLinked,
                     amount = majorStr,
                     formattedDisplayAmount = "$sym$majorStr",
                     isCurrentUserDebtor = (tr.fromMemberId == meMember?.memberId) || (fromMember?.isCurrentUser == true)
@@ -228,7 +240,7 @@ class SplitMateViewModel(
         currentUserName = "",
         currentUserSeed = "SplitMateExplorer",
         currentUserCountry = "India",
-        userUpiId = "explorer@okaxis",
+        userUpiId = "",
         activeCurrencyCode = "INR",
         groups = emptyList(),
         members = emptyList(),
@@ -553,27 +565,44 @@ class SplitMateViewModel(
         }
     }
 
-    fun createNewGroup(name: String, currencyCode: String, friendNamesCsv: String) {
+    fun createNewGroupWithContacts(
+        name: String,
+        iconName: String,
+        memberDrafts: List<NewGroupMemberDraft>
+    ) {
         val cleanGroup = name.trim().ifEmpty { "New Group" }
+        val cleanIcon = iconName.trim().ifEmpty { "Flight" }
         val groupId = "g_${System.currentTimeMillis()}"
-        val newGroup = ExpenseGroupEntity(groupId, cleanGroup, "INR")
+        val newGroup = ExpenseGroupEntity(
+            groupId = groupId,
+            name = cleanGroup,
+            currencyCode = "INR",
+            iconName = cleanIcon
+        )
 
-        val friendList = friendNamesCsv.split(",").map { it.trim() }.filter { it.isNotEmpty() }
         val meMember = GroupMemberEntity(
             memberId = "${groupId}_me",
             groupId = groupId,
-            name = _uiState.value.currentUserName,
+            name = _uiState.value.currentUserName.ifBlank { "You" },
             avatarSeed = _uiState.value.currentUserSeed,
+            upiId = _uiState.value.userUpiId,
             isCurrentUser = true
         )
-        val friendMembers = friendList.mapIndexed { index, fName ->
-            GroupMemberEntity(
-                memberId = "${groupId}_f$index",
-                groupId = groupId,
-                name = fName,
-                avatarSeed = "$fName|Neutral",
-                isCurrentUser = false
-            )
+        val friendMembers = memberDrafts.mapIndexedNotNull { index, draft ->
+            val fName = draft.name.trim()
+            if (fName.isEmpty()) null else {
+                val cleanPhone = draft.cleanPhone.replace(Regex("[^0-9]"), "")
+                val autoUpiId = if (cleanPhone.length >= 6) "${cleanPhone.takeLast(10)}@upi" else ""
+                val style = draft.presentationStyle.ifBlank { "Neutral" }
+                GroupMemberEntity(
+                    memberId = "${groupId}_f$index",
+                    groupId = groupId,
+                    name = fName,
+                    avatarSeed = "$fName|$style",
+                    upiId = autoUpiId,
+                    isCurrentUser = false
+                )
+            }
         }
         val allNewMembers = listOf(meMember) + friendMembers
 
@@ -592,6 +621,20 @@ class SplitMateViewModel(
             dao?.insertGroup(newGroup)
             dao?.insertMembers(allNewMembers)
         }
+    }
+
+    fun createNewGroup(
+        name: String,
+        currencyCode: String,
+        friendNamesCsv: String,
+        iconName: String = "Flight"
+    ) {
+        val drafts = friendNamesCsv
+            .split(",")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .map { NewGroupMemberDraft(name = it) }
+        createNewGroupWithContacts(name = name, iconName = iconName, memberDrafts = drafts)
     }
 
     fun addMemberToActiveGroup(friendName: String) {

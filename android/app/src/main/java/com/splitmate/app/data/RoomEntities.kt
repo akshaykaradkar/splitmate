@@ -24,7 +24,8 @@ data class CurrencyRateEntity(
 data class ExpenseGroupEntity(
     @PrimaryKey val groupId: String,
     val name: String,
-    val currencyCode: String = "USD",
+    val currencyCode: String = "INR",
+    val iconName: String = "Flight",
     val createdAt: Long = System.currentTimeMillis()
 )
 
