@@ -1,0 +1,81 @@
+/**
+ * Copyright 2026 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+/** Note: AI-generated */
+@layer md.comp.fab-menu {
+  .fab-menu {
+    --action-button-background: var(--md-sys-color-surface-container-high);
+    --action-button-color: var(--md-sys-color-primary);
+    --action-button-elevation: var(--md-sys-elevation-shadow-2);
+    --action-button-hover-background: var(
+      --md-sys-color-surface-container-highest
+    );
+    --action-button-shape: 12px;
+    --action-button-size: 40px;
+    --action-label-background: var(--md-sys-color-inverse-surface);
+    --action-label-color: var(--md-sys-color-inverse-on-surface);
+    --action-label-elevation: var(--md-sys-elevation-shadow-1);
+    --action-label-font: var(--md-sys-typescale-label-sm);
+    --action-label-padding-inline: 8px;
+    --action-label-padding-block: 4px;
+    --action-label-shape: 4px;
+  }
+
+  .fab-menu {
+    position-area: start span-start;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    margin: 0 0 16px;
+    padding: 0;
+    border: none;
+    overflow: visible;
+    background: transparent;
+    transition:
+      opacity 200ms ease-out,
+      transform 200ms ease-out,
+      display 200ms ease-out,
+      overlay 200ms ease-out;
+  }
+  .fab-menu:popover-open {
+    display: flex;
+  }
+  @starting-style {
+    .fab-menu:popover-open {
+      opacity: 0;
+    }
+  }
+
+  .fab-menu-action {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .fab-menu-action-label {
+    background-color: var(--action-label-background);
+    color: var(--action-label-color);
+    font: var(--action-label-font);
+    padding-inline: var(--action-label-padding-inline);
+    padding-block: var(--action-label-padding-block);
+    border-radius: var(--action-label-shape);
+    box-shadow: var(--action-label-elevation);
+  }
+
+  .fab-menu-action-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--action-button-size);
+    height: var(--action-button-size);
+    border-radius: var(--action-button-shape);
+    background-color: var(--action-button-background);
+    color: var(--action-button-color);
+    box-shadow: var(--action-button-elevation);
+    transition: background-color 100ms;
+  }
+  .fab-menu-action-button:hover {
+    background-color: var(--action-button-hover-background);
+  }
+}

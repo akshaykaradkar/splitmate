@@ -1,0 +1,108 @@
+/**
+ * Copyright 2026 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+/** Note: AI-generated */
+@layer md.comp.nav-bar {
+  /* Tokens */
+  .navigation-bar {
+    --container-color: var(--md-sys-color-surface-container);
+    --container-height: 80px;
+    --container-elevation: var(--shadow-2);
+
+    --item-active-indicator-color: var(--md-sys-color-secondary-container);
+    --item-active-indicator-width: 64px;
+    --item-active-indicator-height: 32px;
+    --item-active-indicator-shape: var(--md-sys-shape-corner-full);
+
+    --item-icon-color: var(--md-sys-color-on-surface-variant);
+    --item-icon-size: 24px;
+    --item-active-icon-color: var(--md-sys-color-on-secondary-container);
+
+    --item-label-text-color: var(--md-sys-color-on-surface-variant);
+    --item-label-text: var(--md-sys-typescale-label-md);
+    --item-label-text-tracking: var(--md-sys-typescale-label-md-tracking);
+    --item-active-label-text-color: var(--md-sys-color-on-surface);
+
+    --item-ripple-color: var(--md-sys-color-on-surface-variant);
+  }
+
+  /* Styles */
+  .navigation-bar {
+    display: flex;
+    justify-content: space-evenly;
+    align-items: center;
+    background-color: var(--container-color);
+    height: var(--container-height);
+    width: 100%;
+    box-shadow: var(--container-elevation);
+  }
+
+  .navigation-bar-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 100%;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    position: relative;
+    color: var(--item-label-text-color);
+
+    /* Ripple override */
+    --ripple-color: var(--item-ripple-color);
+    --ripple-hover-opacity: 0%; /* M3 specs say state layer is on the indicator, not the whole item? Or maybe whole item. Let's stick to standard ripple behavior for now but maybe scope it? Actually M3 usually has the state layer on the indicator container. */
+  }
+
+  /* State layer on the icon container (indicator) */
+  .navigation-bar-item .navigation-bar-item-icon-container {
+     position: relative;
+     overflow: hidden; /* For ripple */
+  }
+
+  /* We need to apply ripple to the icon container if we want it there.
+     But the .ripple class is usually on the button.
+     Let's keep simple ripple on the button for now, or move it to container.
+     For gBreeze, let's put ripple on the item itself for simplicity as per existing components.
+  */
+
+  .navigation-bar-item-icon-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--item-active-indicator-width);
+    height: var(--item-active-indicator-height);
+    border-radius: var(--item-active-indicator-shape);
+    transition: background-color 200ms cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  .navigation-bar-item.active .navigation-bar-item-icon-container {
+    background-color: var(--item-active-indicator-color);
+  }
+
+  .navigation-bar-item .md-icon {
+    color: var(--item-icon-color);
+    --md-icon-size: var(--item-icon-size);
+    transition: color 200ms;
+  }
+
+  .navigation-bar-item.active .md-icon {
+    color: var(--item-active-icon-color);
+    font-variation-settings: 'FILL' 1;
+  }
+
+  .navigation-bar-item-label {
+    font: var(--item-label-text);
+    letter-spacing: var(--item-label-text-tracking);
+    color: var(--item-label-text-color);
+    transition: color 200ms;
+  }
+
+  .navigation-bar-item.active .navigation-bar-item-label {
+    color: var(--item-active-label-text-color);
+  }
+}

@@ -1,0 +1,54 @@
+/**
+ * Copyright 2026 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+/** Note: AI-generated */
+@layer md.comp.tooltip {
+  .tooltip {
+    --container-color: var(--md-sys-color-inverse-surface);
+    --text-color: var(--md-sys-color-inverse-on-surface);
+    --container-shape: 6px;
+    --container-elevation: var(--md-sys-elevation-shadow-2);
+  }
+
+  /*
+   * Structural styles
+   */
+  .tooltip {
+    background-color: var(--container-color);
+    color: var(--text-color);
+    border-radius: var(--container-shape);
+    box-shadow: var(--container-elevation);
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    white-space: nowrap;
+
+    margin: unset;
+    inset: unset;
+    border: unset;
+    transition:
+      opacity 100ms ease-out,
+      display 100ms ease-out;
+  }
+  .tooltip:popover-open {
+    display: flex;
+  }
+  @starting-style {
+    .tooltip:popover-open {
+      opacity: 0;
+    }
+  }
+  .tooltip.bottom {
+    position-area: end center;
+  }
+  .tooltip.top {
+    position-area: start center;
+  }
+  .tooltip.left {
+    position-area: center start;
+  }
+  .tooltip.right {
+    position-area: center end;
+  }
+}

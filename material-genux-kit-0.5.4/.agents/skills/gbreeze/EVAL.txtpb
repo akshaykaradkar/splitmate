@@ -1,0 +1,71 @@
+# proto-file: learning/gemini/agents/evaluation/evalin/proto/eval_suite.proto
+# proto-message: EvalSuite
+# txtpbfmt: wrap_strings_after_newlines
+
+suite_name: "gbreeze"
+timeout_seconds: 300
+cases {
+  name: "generate_material_button"
+  prompt: "Can you generate an HTML snippet for a filled Material Design button that says 'Submit'?"
+  expectations: "Output contains `<md-button color=\"filled\">Submit</md-button>`"
+  expectations: "Output loads m3.css stylesheet"
+  expectations: "Output loads 'Roboto Flex' font"
+  expectations: "Output imports `@material/web/labs/gb/components/button/md-button.js`"
+}
+cases {
+  name: "generate_gm3_button"
+  prompt: "Can you generate an HTML snippet for a filled GM3 button that says 'Submit'?"
+  expectations: "Output contains `<md-button color=\"filled\">Submit</md-button>`"
+  expectations: "Output uses the GM3 stylesheet from `https://static.corp.google.com/material-web/gbreeze/latest/styles/gm3.css`"
+  expectations: "Output loads 'Google Sans Flex' font"
+}
+cases {
+  name: "use_material_tokens"
+  prompt: "Create an HTML snippet of a red error alert that says 'A problem has occurred' and uses Material tokens for the background and text."
+  expectations: "Styles use `var(--md-sys-color-error-container)` for the background color"
+  expectations: "Styles use `var(--md-sys-color-on-error-container)` for the text color"
+}
+cases {
+  name: "gotcha_no_default_icon_classes"
+  prompt: "Generate an HTML snippet for a Material search icon."
+  expectations: "Output contains `<span class=\"md-icon\" aria-hidden=\"true\">search</span>` OR `<md-icon>search</md-icon>`"
+  expectations: "Output does not use the `.material-symbols`, `.material-symbols-outlined`, or `.google-symbols` classes for the icon"
+}
+cases {
+  name: "gotcha_mwc_fallback"
+  prompt: "Generate an HTML snippet for an outlined text field with a 'Name' label."
+  expectations: "Output contains `<md-outlined-text-field label=\"Name\"></md-outlined-text-field>`"
+  expectations: "Output imports `@material/web/textfield/outlined-text-field.js`"
+}
+cases {
+  name: "gotcha_google3_build"
+  prompt: "Create a plan to generate a web app with a GM3 toggle button for google3, using web_dev_server. Output the content for `BUILD`, `app.ts`, and `index.html`."
+  expectations: "Output does not load files from a non-Google CDN (no esm.sh, esm.run, or unpkg.com)"
+  expectations: "Output imports from `@material/web/labs/gb/components/button/md-button` or `third_party/javascript/material/web/labs/gb/components/button/md-button`"
+  expectations: "Output includes a BUILD rule with `//third_party/javascript/material/web/labs/gb/components/button:ts` as a dependency"
+}
+cases {
+  name: "tailwind_setup"
+  prompt: "Generate an HTML snippet for a Material note-taking app that uses Tailwind."
+  expectations: "Output imports Material Tailwind theme from `@material/web/labs/gb/styles/tailwind.css`"
+  expectations: "Output imports design system stylesheet (e.g. `m3.css` or `gm3.css`) after Material Tailwind theme"
+}
+cases {
+  name: "gotcha_tailwind_typescale_utility"
+  prompt: "Generate an HTML snippet of all Material typography styles using Tailwind and gBreeze."
+  expectations: "Output uses `.typescale-*` custom utility classes (e.g. `.typescale-headline-sm`, `.typescale-body-lg`)"
+  expectations: "Output does not use Tailwind font utility classes (e.g. `text-xl`, `font-medium`)"
+}
+cases {
+  name: "gotcha_tailwind_spacing"
+  prompt: "Generate an HTML snippet of a Material card with 24dp padding using Tailwind"
+  expectations: "Output uses a Tailwind padding class with a spacing scale of 3 (e.g. `.p-3`, `.px-3`, `.py-3`)."
+  expectations: "Output does not use Tailwind's default 4px spacing scale of 6 (e.g. `.p-6`, `.px-6`, `.py-6`)."
+}
+cases {
+  name: "gotcha_tailwind_button_shadows"
+  prompt: "Generate an HTML snippet of a Material elevated button using Tailwind."
+  expectations: "Output contains a `<md-button>` element."
+  expectations: "Output sets the button's color property or attribute to 'elevated'."
+  expectations: "Output does not add a Tailwind shadow utility class (e.g. `.shadow-md`) to the `<md-button>` element."
+}

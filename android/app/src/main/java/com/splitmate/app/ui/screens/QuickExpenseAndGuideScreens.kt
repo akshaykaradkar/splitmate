@@ -1,12 +1,18 @@
 package com.splitmate.app.ui.screens
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.ContactsContract
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -25,37 +31,51 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.splitmate.app.data.CurrencyRateEntity
+import androidx.core.content.ContextCompat
+import coil.compose.AsyncImage
+import coil.decode.SvgDecoder
+import coil.request.ImageRequest
+import com.splitmate.app.SplitMateTheme
 import com.splitmate.app.data.GroupMemberEntity
+import com.splitmate.app.ui.SplitMateBrandFontFamily
+import com.splitmate.app.ui.SplitMateDisplayFontFamily
 import com.splitmate.app.ui.SplitMateViewModel
+import com.splitmate.app.ui.buildDiceBearOpenPeepsUrl
 import java.text.NumberFormat
 import java.util.Locale
 
 // ==============================================================================
-// SPLITMATE MATERIAL 3 EXPRESSIVE THEME TOKENS
+// SPLITMATE MATERIAL 3 EXPRESSIVE THEME TOKENS (DARK-MODE ADAPTIVE)
 // ==============================================================================
 object QuickExpenseThemeTokens {
-    val ScreenBg = Color(0xFFFAF7F2)               // Warm Eggshell Canvas
-    val PrimaryDark = Color(0xFF23201E)            // Charcoal Espresso
+    val ScreenBg: Color
+        get() = if (SplitMateTheme.isDark) Color(0xFF121212) else Color(0xFFFAF7F2)
+    val PrimaryDark: Color
+        get() = if (SplitMateTheme.isDark) Color(0xFFFAF7F2) else Color(0xFF23201E)
     val AccentSage = Color(0xFFD7E8B6)             // Active Accent / Glowing Bolt
-    val SageSurface = Color(0xFFEAF3DC)            // Soft Sage Surface (Receipt Key / Badge)
+    val SageSurface = Color(0xFFEAF3DC)            // Soft Sage Surface (Note Key / Badge)
     val SageText = Color(0xFF2D4810)               // Deep Forest Green Text
     val SageBorder = Color(0xFF5A8E24)             // Selected Avatar High-Contrast Border
     val TerracottaSurface = Color(0xFFFCECE7)      // Warning / Debit Surface
     val TerracottaText = Color(0xFFC23E2A)         // Terracotta Text
-    val SurfaceWhite = Color(0xFFFFFFFF)
-    val SurfaceKeypad = Color(0xFFF3EFEA)          // Tactile Keypad Squircle Background
-    val SurfaceKeypadBorder = Color(0xFFE8E2D8)    // Subtle Key Border
-    val BorderLight = Color(0xFFE5DFC5)
-    val TextSecondary = Color(0xFF7A746D)
-    val ShadowSoft = Color(0x1A23201E)
+    val SurfaceWhite: Color
+        get() = if (SplitMateTheme.isDark) Color(0xFF1E1D1B) else Color(0xFFFFFFFF)
+    val SurfaceKeypad: Color
+        get() = if (SplitMateTheme.isDark) Color(0xFF242220) else Color(0xFFF3EFEA)
+    val SurfaceKeypadBorder: Color
+        get() = if (SplitMateTheme.isDark) Color(0xFF38332D) else Color(0xFFE8E2D8)
+    val BorderLight: Color
+        get() = if (SplitMateTheme.isDark) Color(0xFF38332D) else Color(0xFFE5DFC5)
+    val TextSecondary: Color
+        get() = if (SplitMateTheme.isDark) Color(0xFFB5ADA3) else Color(0xFF7A746D)
 
     // Expressive Radii
     val RadiusHero = RoundedCornerShape(32.dp)
@@ -69,18 +89,17 @@ data class QuickParticipant(
     val id: String,
     val name: String,
     val initials: String,
+    val avatarSeed: String,
     val avatarBg: Color,
     val avatarFg: Color,
     val upiId: String = ""
 )
 
 val DefaultParticipants = listOf(
-    QuickParticipant("1", "You", "JD", Color(0xFFD7E8B6), Color(0xFF23201E)),
-    QuickParticipant("2", "Maya", "ML", Color(0xFFFFD8CC), Color(0xFF8A2E1A)),
-    QuickParticipant("3", "Sam", "SK", Color(0xFFD0E2FF), Color(0xFF143E82)),
-    QuickParticipant("4", "Priya", "PR", Color(0xFFFFD5E5), Color(0xFF801844)),
-    QuickParticipant("5", "Kai", "KL", Color(0xFFE5DCFF), Color(0xFF452285)),
-    QuickParticipant("6", "Aria", "AZ", Color(0xFFD2F5DC), Color(0xFF1B6331))
+    QuickParticipant("1", "You", "AK", "Akshay|Masculine", Color(0xFFD7E8B6), Color(0xFF23201E)),
+    QuickParticipant("2", "Maya", "ML", "Maya|Feminine", Color(0xFFFFD8CC), Color(0xFF8A2E1A)),
+    QuickParticipant("3", "Sam", "SK", "Sam|Masculine", Color(0xFFD0E2FF), Color(0xFF143E82)),
+    QuickParticipant("4", "Priya", "PR", "Priya|Feminine", Color(0xFFFFD5E5), Color(0xFF801844))
 )
 
 private val ParticipantPalette = listOf(
@@ -100,18 +119,18 @@ private val ParticipantPalette = listOf(
 fun QuickExpenseScreen(
     viewModel: SplitMateViewModel? = null,
     onBackClick: () -> Unit = {},
-    onScanReceiptClick: () -> Unit = {},
-    onHelpClick: () -> Unit = {},
+    onLogExpenseClick: () -> Unit = {},
     onSaveSplit: (amount: Long, selectedMembers: List<QuickParticipant>) -> Unit = { _, _ -> }
 ) {
+    val context = LocalContext.current
     val uiState = viewModel?.uiState?.collectAsState()?.value
-    val isDark = uiState?.isDarkTheme == true
-    val screenBg = if (isDark) Color(0xFF141311) else QuickExpenseThemeTokens.ScreenBg
-    val surfaceColor = if (isDark) Color(0xFF1F1D1A) else QuickExpenseThemeTokens.SurfaceWhite
-    val textPrimary = if (isDark) Color(0xFFF6F2EA) else QuickExpenseThemeTokens.PrimaryDark
-    val textSecondary = if (isDark) Color(0xFFB5ADA3) else QuickExpenseThemeTokens.TextSecondary
-    val keypadBg = if (isDark) Color(0xFF282521) else QuickExpenseThemeTokens.SurfaceKeypad
-    val keypadBorder = if (isDark) Color(0xFF3B3630) else QuickExpenseThemeTokens.SurfaceKeypadBorder
+    val isDark = uiState?.isDarkTheme == true || SplitMateTheme.isDark
+    val screenBg = if (isDark) Color(0xFF121212) else Color(0xFFFAF7F2)
+    val surfaceColor = if (isDark) Color(0xFF1E1D1B) else Color(0xFFFFFFFF)
+    val textPrimary = if (isDark) Color(0xFFFAF7F2) else Color(0xFF23201E)
+    val textSecondary = if (isDark) Color(0xFFB5ADA3) else Color(0xFF7A746D)
+    val keypadBg = if (isDark) Color(0xFF242220) else Color(0xFFF3EFEA)
+    val keypadBorder = if (isDark) Color(0xFF38332D) else Color(0xFFE8E2D8)
 
     val activeMembers = uiState?.activeGroupMembers ?: emptyList()
     val participants: List<QuickParticipant> = remember(activeMembers) {
@@ -128,6 +147,7 @@ fun QuickExpenseScreen(
                     id = m.memberId,
                     name = if (m.isCurrentUser) "${m.name} (You)" else m.name,
                     initials = initials,
+                    avatarSeed = m.avatarSeed,
                     avatarBg = bg,
                     avatarFg = fg,
                     upiId = m.upiId
@@ -149,7 +169,7 @@ fun QuickExpenseScreen(
     }
     val haptic = LocalHapticFeedback.current
 
-    val currencySymbol = uiState?.activeCurrency?.symbol ?: "₹"
+    val currencySymbol = "₹"
     val activeGroupName = uiState?.activeGroup?.name ?: "Create / Select Group"
 
     val numericVal = amountDigits.toLongOrNull() ?: 0L
@@ -168,13 +188,26 @@ fun QuickExpenseScreen(
         AlertDialog(
             onDismissRequest = { showEditTitleDialog = false },
             containerColor = surfaceColor,
-            title = { Text("Expense Description", fontWeight = FontWeight.ExtraBold, color = textPrimary) },
+            title = {
+                Text(
+                    "Log Expense Description",
+                    fontFamily = SplitMateDisplayFontFamily,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = textPrimary
+                )
+            },
             text = {
                 OutlinedTextField(
                     value = draftTitle,
                     onValueChange = { draftTitle = it },
-                    label = { Text("What was this expense for?") },
+                    label = { Text("What was this expense for?", fontFamily = SplitMateBrandFontFamily) },
                     singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = textPrimary,
+                        unfocusedTextColor = textPrimary,
+                        focusedBorderColor = textPrimary,
+                        unfocusedBorderColor = keypadBorder
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
             },
@@ -185,16 +218,16 @@ fun QuickExpenseScreen(
                         showEditTitleDialog = false
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = QuickExpenseThemeTokens.PrimaryDark,
-                        contentColor = Color.White
+                        containerColor = textPrimary,
+                        contentColor = screenBg
                     )
                 ) {
-                    Text("Save", fontWeight = FontWeight.Bold)
+                    Text("Save", fontFamily = SplitMateBrandFontFamily, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showEditTitleDialog = false }) {
-                    Text("Cancel", color = textSecondary)
+                    Text("Cancel", fontFamily = SplitMateBrandFontFamily, color = textSecondary)
                 }
             }
         )
@@ -204,8 +237,8 @@ fun QuickExpenseScreen(
         EditFriendUpiDialog(
             member = friend,
             onDismiss = { editingFriend = null },
-            onSave = { newName, newUpi ->
-                viewModel?.updateFriendUpi(friend.memberId, newName, newUpi)
+            onSave = { newName, newUpi, newAvatarSeed ->
+                viewModel?.updateFriendUpi(friend.memberId, newName, newUpi, newAvatarSeed)
                 editingFriend = null
             }
         )
@@ -237,6 +270,7 @@ fun QuickExpenseScreen(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = activeGroupName,
+                                    fontFamily = SplitMateBrandFontFamily,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
                                     color = QuickExpenseThemeTokens.SageText,
@@ -260,7 +294,7 @@ fun QuickExpenseScreen(
                             val groups = uiState?.groups ?: emptyList()
                             if (groups.isEmpty()) {
                                 DropdownMenuItem(
-                                    text = { Text("No groups yet — create one in Ledgers") },
+                                    text = { Text("No groups yet — create one in Ledgers", fontFamily = SplitMateBrandFontFamily) },
                                     onClick = {
                                         showGroupDropdown = false
                                         onBackClick()
@@ -269,7 +303,13 @@ fun QuickExpenseScreen(
                             } else {
                                 groups.forEach { grp ->
                                     DropdownMenuItem(
-                                        text = { Text("${grp.name} (${grp.currencyCode})", fontWeight = FontWeight.SemiBold) },
+                                        text = {
+                                            Text(
+                                                "${grp.name} (₹ INR)",
+                                                fontFamily = SplitMateBrandFontFamily,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        },
                                         onClick = {
                                             viewModel?.selectActiveGroup(grp.groupId)
                                             showGroupDropdown = false
@@ -288,7 +328,7 @@ fun QuickExpenseScreen(
                         Surface(
                             shape = CircleShape,
                             color = surfaceColor,
-                            border = BorderStroke(1.dp, QuickExpenseThemeTokens.BorderLight.copy(alpha = 0.5f)),
+                            border = BorderStroke(1.dp, keypadBorder),
                             modifier = Modifier.size(40.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
@@ -303,41 +343,21 @@ fun QuickExpenseScreen(
                     }
                 },
                 actions = {
-                    // Currency auto-peg tag
+                    // Locked Native INR & Exact Split badge (No '?' Help icon)
                     Surface(
                         shape = QuickExpenseThemeTokens.RadiusPill,
                         color = surfaceColor.copy(alpha = 0.9f),
-                        border = BorderStroke(1.dp, QuickExpenseThemeTokens.BorderLight.copy(alpha = 0.6f)),
-                        modifier = Modifier.padding(end = 6.dp)
+                        border = BorderStroke(1.dp, keypadBorder),
+                        modifier = Modifier.padding(end = 12.dp)
                     ) {
                         Text(
-                            text = "${uiState?.activeCurrencyCode ?: "INR"} • 0.00¢ drift",
+                            text = "₹ INR • Exact Split",
+                            fontFamily = SplitMateBrandFontFamily,
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
+                            fontWeight = FontWeight.Bold,
                             color = textSecondary,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                         )
-                    }
-
-                    IconButton(
-                        onClick = onHelpClick,
-                        modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = surfaceColor,
-                            border = BorderStroke(1.dp, QuickExpenseThemeTokens.BorderLight.copy(alpha = 0.5f)),
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Rounded.HelpOutline,
-                                    contentDescription = "Guide",
-                                    tint = textPrimary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -367,19 +387,20 @@ fun QuickExpenseScreen(
                 Surface(
                     onClick = { showEditTitleDialog = true },
                     shape = QuickExpenseThemeTokens.RadiusPill,
-                    color = QuickExpenseThemeTokens.SurfaceWhite,
+                    color = surfaceColor,
                     shadowElevation = 3.dp,
-                    border = BorderStroke(1.dp, Color(0xFFFFD9CE)),
+                    border = BorderStroke(1.dp, if (isDark) Color(0xFF4A332C) else Color(0xFFFFD9CE)),
                     modifier = Modifier.padding(bottom = 12.dp)
                 ) {
                     Row(
                         modifier = Modifier
                             .background(
                                 Brush.horizontalGradient(
-                                    colors = listOf(
-                                        Color(0xFFFFF7F3),
-                                        Color(0xFFFDECE5)
-                                    )
+                                    colors = if (isDark) {
+                                        listOf(Color(0xFF28201D), Color(0xFF33241F))
+                                    } else {
+                                        listOf(Color(0xFFFFF7F3), Color(0xFFFDECE5))
+                                    }
                                 )
                             )
                             .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -387,23 +408,25 @@ fun QuickExpenseScreen(
                     ) {
                         Text(
                             text = expenseCategoryTitle,
+                            fontFamily = SplitMateBrandFontFamily,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = QuickExpenseThemeTokens.PrimaryDark
+                            color = textPrimary
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Icon(
                             imageVector = Icons.Rounded.Edit,
                             contentDescription = "Edit Category",
-                            tint = QuickExpenseThemeTokens.TextSecondary,
+                            tint = textSecondary,
                             modifier = Modifier.size(14.dp)
                         )
                     }
                 }
 
-                // Massive 56sp DisplayLarge Amount Field
+                // Massive 56sp DisplayLarge Amount Field (Outfit Font)
                 Text(
                     text = formattedDisplay,
+                    fontFamily = SplitMateDisplayFontFamily,
                     fontSize = 56.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = textPrimary,
@@ -414,7 +437,7 @@ fun QuickExpenseScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Real-time Remainder Allocation Badge
+                // Real-time Exact Split / Unassigned Badge
                 Surface(
                     shape = QuickExpenseThemeTokens.RadiusPill,
                     color = if (memberCount > 0) QuickExpenseThemeTokens.SageSurface else QuickExpenseThemeTokens.TerracottaSurface,
@@ -438,10 +461,11 @@ fun QuickExpenseScreen(
                         Text(
                             text = if (memberCount > 0) {
                                 "$currencySymbol ${NumberFormat.getNumberInstance(Locale("en", "IN")).format(perPerson)} / person · $memberCount splitting" +
-                                        if (remainder > 0L) " · (+$currencySymbol$remainder remainder safe)" else " · exact"
+                                        if (remainder > 0L) " · +$currencySymbol$remainder Unassigned" else " · Exact Split"
                             } else {
                                 "Select at least 1 person to split"
                             },
+                            fontFamily = SplitMateBrandFontFamily,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = if (memberCount > 0) QuickExpenseThemeTokens.SageText else QuickExpenseThemeTokens.TerracottaText
@@ -466,12 +490,14 @@ fun QuickExpenseScreen(
                     Column {
                         Text(
                             text = "Who's in on this?",
+                            fontFamily = SplitMateDisplayFontFamily,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = textPrimary
                         )
                         Text(
-                            text = "Tap avatar to include · Long-press friend to edit UPI ID",
+                            text = "Tap avatar to include · Long-press friend to link Contact UPI",
+                            fontFamily = SplitMateBrandFontFamily,
                             fontSize = 11.sp,
                             color = textSecondary
                         )
@@ -494,6 +520,7 @@ fun QuickExpenseScreen(
                     ) {
                         Text(
                             text = if (selectedMemberIds.size == participants.size) "Clear" else "Select All (${participants.size})",
+                            fontFamily = SplitMateBrandFontFamily,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = QuickExpenseThemeTokens.SageText,
@@ -504,7 +531,7 @@ fun QuickExpenseScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Overlapping avatar strip with 2dp white borders and thick Sage border on active
+                // Avatar strip with DiceBear Open-Peeps SVG & Presentation Style support
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(horizontal = 4.dp),
@@ -513,6 +540,9 @@ fun QuickExpenseScreen(
                     items(participants) { person ->
                         val isSelected = selectedMemberIds.contains(person.id)
                         val matchingRoomMember = activeMembers.find { it.memberId == person.id }
+                        val avatarUrl = remember(person.avatarSeed) {
+                            buildDiceBearOpenPeepsUrl(person.avatarSeed)
+                        }
 
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -548,16 +578,30 @@ fun QuickExpenseScreen(
                                     )
                                     .border(
                                         width = if (isSelected) 3.5.dp else 2.dp,
-                                        color = if (isSelected) QuickExpenseThemeTokens.SageBorder else Color.White,
+                                        color = if (isSelected) QuickExpenseThemeTokens.SageBorder else surfaceColor,
                                         shape = CircleShape
                                     ),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     text = person.initials,
-                                    fontSize = 18.sp,
+                                    fontFamily = SplitMateDisplayFontFamily,
+                                    fontSize = 16.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = if (isSelected) person.avatarFg else person.avatarFg.copy(alpha = 0.45f)
+                                )
+                                AsyncImage(
+                                    model = ImageRequest.Builder(context)
+                                        .data(avatarUrl)
+                                        .decoderFactory(SvgDecoder.Factory())
+                                        .crossfade(true)
+                                        .build(),
+                                    contentDescription = person.name,
+                                    contentScale = ContentScale.Crop,
+                                    alpha = if (isSelected) 1f else 0.45f,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(CircleShape)
                                 )
 
                                 // Active Checkmark Badge
@@ -568,7 +612,7 @@ fun QuickExpenseScreen(
                                             .size(20.dp)
                                             .clip(CircleShape)
                                             .background(QuickExpenseThemeTokens.SageBorder)
-                                            .border(2.dp, Color.White, CircleShape),
+                                            .border(2.dp, surfaceColor, CircleShape),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
@@ -585,6 +629,7 @@ fun QuickExpenseScreen(
 
                             Text(
                                 text = person.name,
+                                fontFamily = SplitMateBrandFontFamily,
                                 fontSize = 12.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                 color = if (isSelected) textPrimary else textSecondary.copy(alpha = 0.7f)
@@ -701,18 +746,18 @@ fun QuickExpenseScreen(
                         }
                     }
 
-                    // Right: 4th Column (Receipt / Category Button & Giant Split & Save FAB)
+                    // Right: 4th Column (Note / Category Button & Giant Split & Save FAB)
                     Column(
                         modifier = Modifier
                             .weight(1f),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        // Key 1: Dedicated "Receipt / Title" Key in Keypad Grid (Sage Tint #EAF3DC)
+                        // Key 1: Dedicated "Log Expense Note" Key in Keypad Grid (Sage Tint #EAF3DC)
                         Surface(
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 showEditTitleDialog = true
-                                onScanReceiptClick()
+                                onLogExpenseClick()
                             },
                             shape = QuickExpenseThemeTokens.RadiusKeySquircle,
                             color = QuickExpenseThemeTokens.SageSurface,
@@ -737,6 +782,7 @@ fun QuickExpenseScreen(
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = "Note",
+                                    fontFamily = SplitMateBrandFontFamily,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = QuickExpenseThemeTokens.SageText
@@ -758,8 +804,8 @@ fun QuickExpenseScreen(
                             },
                             shape = QuickExpenseThemeTokens.RadiusKeySquircle,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = QuickExpenseThemeTokens.PrimaryDark,
-                                contentColor = Color.White
+                                containerColor = textPrimary,
+                                contentColor = screenBg
                             ),
                             enabled = numericVal > 0L && selectedMemberIds.isNotEmpty(),
                             modifier = Modifier
@@ -773,29 +819,29 @@ fun QuickExpenseScreen(
                                 verticalArrangement = Arrangement.Center,
                                 modifier = Modifier.fillMaxSize()
                             ) {
-                                // Glowing Accent Sage Lightning Bolt
                                 Surface(
                                     shape = CircleShape,
-                                    color = QuickExpenseThemeTokens.AccentSage.copy(alpha = 0.25f),
+                                    color = if (isDark) Color(0xFF416913).copy(alpha = 0.35f) else QuickExpenseThemeTokens.AccentSage.copy(alpha = 0.25f),
                                     modifier = Modifier.size(46.dp)
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
                                         Icon(
                                             imageVector = Icons.Rounded.ElectricBolt,
                                             contentDescription = null,
-                                            tint = QuickExpenseThemeTokens.AccentSage,
+                                            tint = if (isDark) Color(0xFF416913) else QuickExpenseThemeTokens.AccentSage,
                                             modifier = Modifier.size(26.dp)
                                         )
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    text = "Split &\nSave",
-                                    fontSize = 13.sp,
+                                    text = "Log &\nSplit",
+                                    fontFamily = SplitMateDisplayFontFamily,
+                                    fontSize = 14.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White,
+                                    color = screenBg,
                                     textAlign = TextAlign.Center,
-                                    lineHeight = 16.sp
+                                    lineHeight = 17.sp
                                 )
                             }
                         }
@@ -892,6 +938,7 @@ fun TactileSquircleKey(
             } else {
                 Text(
                     text = label,
+                    fontFamily = SplitMateDisplayFontFamily,
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
                     color = textPrimary
@@ -913,392 +960,362 @@ private fun appendDigit(key: String, current: String, onUpdate: (String) -> Unit
 }
 
 // ==============================================================================
-// USER GUIDE BOTTOM SHEET (Triggered by '?' Help Icon in Top Bar)
-// ==============================================================================
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun UserGuideBottomSheet(
-    onDismiss: () -> Unit
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = QuickExpenseThemeTokens.ScreenBg,
-        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .animateContentSize()
-                .padding(horizontal = 24.dp, vertical = 12.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        shape = CircleShape,
-                        color = QuickExpenseThemeTokens.AccentSage,
-                        modifier = Modifier.size(44.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Rounded.AutoAwesome,
-                                contentDescription = null,
-                                tint = QuickExpenseThemeTokens.SageText,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = "How SplitMate Works",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = QuickExpenseThemeTokens.PrimaryDark
-                        )
-                        Text(
-                            text = "Zero-Drift Quick Splits & UPI Guide",
-                            fontSize = 12.sp,
-                            color = QuickExpenseThemeTokens.TextSecondary
-                        )
-                    }
-                }
-            }
-
-            GuideStepItem(
-                stepNumber = "1",
-                title = "Create a Trip or Group Ledger",
-                subtitle = "Tap '+ Create New Group' on Ledgers, name your trip, and add your friends. Long-press any friend's avatar or tap 'Edit UPI' to save their UPI ID (e.g. rahul@okaxis).",
-                icon = Icons.Rounded.GroupAdd,
-                badgeColor = Color(0xFFD7E8B6),
-                badgeTextColor = Color(0xFF2D4810)
-            )
-
-            GuideStepItem(
-                stepNumber = "2",
-                title = "Tap Avatars & Enter Total",
-                subtitle = "Open the Split tab, enter the total amount on the tactile squircle keypad, and tap the avatars of everyone sharing the bill. SplitMate divides the total equally with 0.00¢ drift.",
-                icon = Icons.Rounded.Calculate,
-                badgeColor = Color(0xFFFFD8CC),
-                badgeTextColor = Color(0xFF8A2E1A)
-            )
-
-            GuideStepItem(
-                stepNumber = "3",
-                title = "Greedy Debt Simplification & UPI",
-                subtitle = "Open the Settle tab to collapse circular debts into minimum transfers. Tap 'Pay via UPI' to launch Google Pay, PhonePe, or Paytm directly with your friend's custom UPI ID.",
-                icon = Icons.Rounded.ElectricBolt,
-                badgeColor = Color(0xFFD0E2FF),
-                badgeTextColor = Color(0xFF143E82)
-            )
-
-            GuideStepItem(
-                stepNumber = "4",
-                title = "160+ World Currencies & Offline Vault",
-                subtitle = "Switch between 160+ live currencies anytime via the Currency Bottom Sheet. All ledgers and rates are cached in your local SQLite Room Vault.",
-                icon = Icons.Rounded.CurrencyExchange,
-                badgeColor = Color(0xFFE5DCFF),
-                badgeTextColor = Color(0xFF452285)
-            )
-
-            Button(
-                onClick = onDismiss,
-                shape = QuickExpenseThemeTokens.RadiusPill,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = QuickExpenseThemeTokens.PrimaryDark,
-                    contentColor = Color.White
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp)
-            ) {
-                Text("Got It, Let's Split!", fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
-            }
-        }
-    }
-}
-
-@Composable
-private fun GuideStepItem(
-    stepNumber: String,
-    title: String,
-    subtitle: String,
-    icon: ImageVector,
-    badgeColor: Color,
-    badgeTextColor: Color
-) {
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = Color.White,
-        border = BorderStroke(1.dp, QuickExpenseThemeTokens.BorderLight),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            Surface(
-                shape = CircleShape,
-                color = badgeColor,
-                modifier = Modifier.size(40.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = stepNumber,
-                        tint = badgeTextColor,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "$stepNumber. $title",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = QuickExpenseThemeTokens.PrimaryDark
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = subtitle,
-                    fontSize = 12.sp,
-                    color = QuickExpenseThemeTokens.TextSecondary,
-                    lineHeight = 17.sp
-                )
-            }
-        }
-    }
-}
-
-// ==============================================================================
-// 160+ WORLD CURRENCIES MODAL BOTTOM SHEET WITH CIRCULAR SYMBOL ICONS
-// ==============================================================================
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun CurrencyModalBottomSheet(
-    currencies: List<CurrencyRateEntity>,
-    activeCurrencyCode: String,
-    onSelectCurrency: (String) -> Unit,
-    onSyncLiveRates: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var searchQuery by remember { mutableStateOf("") }
-
-    val filtered = remember(currencies, searchQuery) {
-        val q = searchQuery.trim().lowercase()
-        if (q.isEmpty()) currencies
-        else currencies.filter {
-            it.currencyCode.lowercase().contains(q) ||
-                it.currencyName.lowercase().contains(q) ||
-                it.symbol.lowercase().contains(q)
-        }
-    }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = QuickExpenseThemeTokens.ScreenBg,
-        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.84f)
-                .animateContentSize()
-                .padding(horizontal = 20.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = "World Currencies (${currencies.size})",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = QuickExpenseThemeTokens.PrimaryDark
-                    )
-                    Text(
-                        text = "Live Open Exchange Rates API · Offline Room Cache",
-                        fontSize = 12.sp,
-                        color = QuickExpenseThemeTokens.TextSecondary
-                    )
-                }
-                TextButton(onClick = onSyncLiveRates) {
-                    Icon(Icons.Rounded.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Refresh", fontWeight = FontWeight.Bold)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = { Text("Search 160+ currencies (e.g. INR, USD, JPY, AED)") },
-                leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
-                singleLine = true,
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = 24.dp)
-            ) {
-                items(filtered, key = { it.currencyCode }) { rate ->
-                    val isSelected = rate.currencyCode == activeCurrencyCode
-                    val paletteIdx = kotlin.math.abs(rate.currencyCode.hashCode()) % ParticipantPalette.size
-                    val (circleBg, circleFg) = ParticipantPalette[paletteIdx]
-
-                    Surface(
-                        onClick = {
-                            onSelectCurrency(rate.currencyCode)
-                            onDismiss()
-                        },
-                        shape = RoundedCornerShape(18.dp),
-                        color = if (isSelected) QuickExpenseThemeTokens.SageSurface else Color.White,
-                        border = BorderStroke(
-                            width = if (isSelected) 2.dp else 1.dp,
-                            color = if (isSelected) QuickExpenseThemeTokens.SageBorder else QuickExpenseThemeTokens.BorderLight
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Premium Circular Symbol Icon (No Emoji Flags)
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(circleBg)
-                                    .border(1.5.dp, Color.White, CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = rate.symbol.take(3),
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = circleFg
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(14.dp))
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "${rate.currencyCode} · ${rate.currencyName}",
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = QuickExpenseThemeTokens.PrimaryDark
-                                )
-                                Text(
-                                    text = "1 ${rate.baseCurrency} = ${String.format(Locale.US, "%.4f", rate.rateFromBase)} ${rate.currencyCode}",
-                                    fontSize = 12.sp,
-                                    color = QuickExpenseThemeTokens.TextSecondary
-                                )
-                            }
-
-                            if (isSelected) {
-                                Icon(
-                                    imageVector = Icons.Rounded.CheckCircle,
-                                    contentDescription = "Selected",
-                                    tint = QuickExpenseThemeTokens.SageBorder,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ==============================================================================
-// EDIT FRIEND UPI ID DIALOG (Point 3)
+// EDIT FRIEND PERSONA & NATIVE CONTACTS UPI DIALOG (Points 1 & 4)
 // ==============================================================================
 @Composable
 fun EditFriendUpiDialog(
     member: GroupMemberEntity,
     onDismiss: () -> Unit,
-    onSave: (name: String, upiId: String) -> Unit
+    onSave: (name: String, upiId: String, avatarSeed: String) -> Unit
 ) {
+    val context = LocalContext.current
+    val initialStyle = remember(member.avatarSeed) {
+        member.avatarSeed.substringAfter('|', "Neutral").takeIf {
+            it in listOf("Masculine", "Feminine", "Neutral")
+        } ?: "Neutral"
+    }
     var friendName by remember(member) { mutableStateOf(member.name) }
-    var friendUpi by remember(member) {
-        val fallbackUpi = member.upiId.ifBlank {
-            "${member.name.lowercase().replace(Regex("[^a-z0-9]"), "")}@okhdfcbank"
+    var selectedPresentationStyle by remember(member) { mutableStateOf(initialStyle) }
+    var selectedUpiHandleSuffix by remember { mutableStateOf("upi") }
+
+    val initialCleanDigits = remember(member.upiId) {
+        member.upiId.substringBefore('@').replace(Regex("[^0-9]"), "")
+    }
+    var pickedPhoneNumber by remember(member) { mutableStateOf(initialCleanDigits) }
+    var friendUpi by remember(member, pickedPhoneNumber, selectedUpiHandleSuffix) {
+        val resolved = if (pickedPhoneNumber.isNotEmpty()) {
+            "$pickedPhoneNumber@$selectedUpiHandleSuffix"
+        } else {
+            member.upiId.ifBlank {
+                "${member.name.lowercase().replace(Regex("[^a-z0-9]"), "")}@upi"
+            }
         }
-        mutableStateOf(fallbackUpi)
+        mutableStateOf(resolved)
+    }
+
+    val contactPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickContact()
+    ) { contactUri: Uri? ->
+        if (contactUri != null) {
+            val extracted = extractPhoneAndNameFromContactUri(context, contactUri)
+            if (extracted != null) {
+                val (contactName, cleanDigits) = extracted
+                if (contactName.isNotBlank()) {
+                    friendName = contactName
+                }
+                if (cleanDigits.isNotBlank()) {
+                    pickedPhoneNumber = cleanDigits
+                    friendUpi = "$cleanDigits@$selectedUpiHandleSuffix"
+                }
+            }
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted: Boolean ->
+        if (granted) {
+            contactPickerLauncher.launch(null)
+        }
+    }
+
+    val avatarPreviewUrl = remember(friendName, selectedPresentationStyle) {
+        buildDiceBearOpenPeepsUrl(friendName.ifBlank { member.name }, selectedPresentationStyle)
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = QuickExpenseThemeTokens.ScreenBg,
+        containerColor = QuickExpenseThemeTokens.SurfaceWhite,
         title = {
-            Text(
-                text = "Edit Friend & UPI ID",
-                fontWeight = FontWeight.ExtraBold,
-                color = QuickExpenseThemeTokens.PrimaryDark
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(CircleShape)
+                        .background(QuickExpenseThemeTokens.AccentSage)
+                        .border(2.dp, QuickExpenseThemeTokens.SageBorder, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(avatarPreviewUrl)
+                            .decoderFactory(SvgDecoder.Factory())
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = "Friend Avatar",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = "Friend Profile & UPI",
+                        fontFamily = SplitMateDisplayFontFamily,
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = QuickExpenseThemeTokens.PrimaryDark
+                    )
+                    Text(
+                        text = "Avatar Style & Native Contact Link",
+                        fontFamily = SplitMateBrandFontFamily,
+                        fontSize = 12.sp,
+                        color = QuickExpenseThemeTokens.TextSecondary
+                    )
+                }
+            }
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = "Set ${member.name}'s verified UPI VPA so 1-tap 'Pay via UPI' routes directly to their bank account.",
-                    fontSize = 12.sp,
-                    color = QuickExpenseThemeTokens.TextSecondary
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                // 1. Presentation Style Toggle (Masculine, Feminine, Neutral)
+                Column {
+                    Text(
+                        text = "Presentation Style",
+                        fontFamily = SplitMateBrandFontFamily,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = QuickExpenseThemeTokens.PrimaryDark,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+                    Surface(
+                        shape = QuickExpenseThemeTokens.RadiusPill,
+                        color = QuickExpenseThemeTokens.SurfaceKeypad,
+                        border = BorderStroke(1.dp, QuickExpenseThemeTokens.BorderLight),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            listOf("Masculine", "Feminine", "Neutral").forEach { style ->
+                                val isSelected = selectedPresentationStyle == style
+                                Surface(
+                                    onClick = { selectedPresentationStyle = style },
+                                    shape = QuickExpenseThemeTokens.RadiusPill,
+                                    color = if (isSelected) QuickExpenseThemeTokens.PrimaryDark else Color.Transparent,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(36.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            text = style,
+                                            fontFamily = SplitMateBrandFontFamily,
+                                            fontSize = 12.sp,
+                                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                            color = if (isSelected) QuickExpenseThemeTokens.ScreenBg else QuickExpenseThemeTokens.TextSecondary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 2. Friend's Name Field
                 OutlinedTextField(
                     value = friendName,
                     onValueChange = { friendName = it },
-                    label = { Text("Friend's Name") },
+                    label = { Text("Friend's Name", fontFamily = SplitMateBrandFontFamily) },
                     singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = QuickExpenseThemeTokens.PrimaryDark,
+                        unfocusedTextColor = QuickExpenseThemeTokens.PrimaryDark,
+                        focusedBorderColor = QuickExpenseThemeTokens.PrimaryDark,
+                        unfocusedBorderColor = QuickExpenseThemeTokens.BorderLight
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
-                    value = friendUpi,
-                    onValueChange = { friendUpi = it },
-                    label = { Text("Friend's UPI ID (e.g. name@okaxis)") },
-                    singleLine = true,
+
+                // 3. Pick from Contacts Button (Replaces manual UPI ID text input)
+                Button(
+                    onClick = {
+                        val hasPermission = ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.READ_CONTACTS
+                        ) == PackageManager.PERMISSION_GRANTED
+                        if (hasPermission) {
+                            contactPickerLauncher.launch(null)
+                        } else {
+                            permissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+                        }
+                    },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = QuickExpenseThemeTokens.SageSurface,
+                        contentColor = QuickExpenseThemeTokens.SageText
+                    ),
+                    border = BorderStroke(1.5.dp, QuickExpenseThemeTokens.SageBorder),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.ContactPhone,
+                        contentDescription = null,
+                        tint = QuickExpenseThemeTokens.SageText,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Pick from Contacts",
+                        fontFamily = SplitMateBrandFontFamily,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 14.sp,
+                        color = QuickExpenseThemeTokens.SageText
+                    )
+                }
+
+                // 4. Resolved Mobile UPI VPA Preview Card + @upi / @paytm Suffix Pill
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = QuickExpenseThemeTokens.SurfaceKeypad,
+                    border = BorderStroke(1.dp, QuickExpenseThemeTokens.BorderLight),
                     modifier = Modifier.fillMaxWidth()
-                )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Linked UPI Handle",
+                                    fontFamily = SplitMateBrandFontFamily,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = QuickExpenseThemeTokens.TextSecondary
+                                )
+                                Text(
+                                    text = friendUpi,
+                                    fontFamily = SplitMateDisplayFontFamily,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = QuickExpenseThemeTokens.PrimaryDark
+                                )
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                listOf("upi", "paytm").forEach { suffix ->
+                                    val active = selectedUpiHandleSuffix == suffix
+                                    Surface(
+                                        onClick = {
+                                            selectedUpiHandleSuffix = suffix
+                                            val base = pickedPhoneNumber.ifEmpty {
+                                                friendUpi.substringBefore('@')
+                                            }
+                                            friendUpi = "$base@$suffix"
+                                        },
+                                        shape = QuickExpenseThemeTokens.RadiusPill,
+                                        color = if (active) QuickExpenseThemeTokens.PrimaryDark else Color.Transparent,
+                                        border = BorderStroke(1.dp, QuickExpenseThemeTokens.BorderLight)
+                                    ) {
+                                        Text(
+                                            text = "@$suffix",
+                                            fontFamily = SplitMateBrandFontFamily,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (active) QuickExpenseThemeTokens.ScreenBg else QuickExpenseThemeTokens.TextSecondary,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
             Button(
-                onClick = { onSave(friendName, friendUpi) },
+                onClick = {
+                    val cleanName = friendName.trim().ifEmpty { member.name }
+                    val styledSeed = "$cleanName|$selectedPresentationStyle"
+                    onSave(cleanName, friendUpi, styledSeed)
+                },
                 colors = ButtonDefaults.buttonColors(
                     containerColor = QuickExpenseThemeTokens.PrimaryDark,
-                    contentColor = Color.White
+                    contentColor = QuickExpenseThemeTokens.ScreenBg
                 )
             ) {
-                Text("Save UPI ID", fontWeight = FontWeight.Bold)
+                Text(
+                    "Save Friend & UPI",
+                    fontFamily = SplitMateBrandFontFamily,
+                    fontWeight = FontWeight.Bold
+                )
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", color = QuickExpenseThemeTokens.TextSecondary)
+                Text(
+                    "Cancel",
+                    fontFamily = SplitMateBrandFontFamily,
+                    color = QuickExpenseThemeTokens.TextSecondary
+                )
             }
         }
     )
+}
+
+/**
+ * Queries Android's ContentResolver for a picked Contact URI, retrieves their Display Name
+ * and Phone Number, strips all non-digit characters (spaces, dashes, '+91'), and returns
+ * `(displayName, cleanMobileDigits)`.
+ */
+private fun extractPhoneAndNameFromContactUri(
+    context: Context,
+    contactUri: Uri
+): Pair<String, String>? {
+    return try {
+        var contactId = ""
+        var displayName = ""
+        context.contentResolver.query(
+            contactUri,
+            arrayOf(ContactsContract.Contacts._ID, ContactsContract.Contacts.DISPLAY_NAME),
+            null,
+            null,
+            null
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val idIdx = cursor.getColumnIndex(ContactsContract.Contacts._ID)
+                val nameIdx = cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME)
+                if (idIdx >= 0) contactId = cursor.getString(idIdx).orEmpty()
+                if (nameIdx >= 0) displayName = cursor.getString(nameIdx).orEmpty()
+            }
+        }
+
+        var rawNumber = ""
+        if (contactId.isNotEmpty()) {
+            context.contentResolver.query(
+                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER),
+                "${ContactsContract.CommonDataKinds.Phone.CONTACT_ID} = ?",
+                arrayOf(contactId),
+                null
+            )?.use { phoneCursor ->
+                if (phoneCursor.moveToFirst()) {
+                    val numIdx = phoneCursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                    if (numIdx >= 0) rawNumber = phoneCursor.getString(numIdx).orEmpty()
+                }
+            }
+        }
+
+        val digitsOnly = rawNumber.replace(Regex("[^0-9]"), "")
+        val normalizedTenDigits = when {
+            digitsOnly.length == 12 && digitsOnly.startsWith("91") -> digitsOnly.substring(2)
+            digitsOnly.length == 11 && digitsOnly.startsWith("0") -> digitsOnly.substring(1)
+            else -> digitsOnly
+        }
+        displayName to normalizedTenDigits
+    } catch (e: Exception) {
+        null
+    }
 }

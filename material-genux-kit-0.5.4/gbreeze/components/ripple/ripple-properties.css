@@ -1,0 +1,29 @@
+/**
+ * Copyright 2026 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+@property --ripple-scale {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 0%;
+}
+@property --ripple-hover-opacity {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 0%;
+}
+@property --ripple-press-opacity {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 0%;
+}
+@property --ripple-x {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 50%;
+}
+@property --ripple-y {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 50%;
+}

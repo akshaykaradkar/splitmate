@@ -1,5 +1,6 @@
 package com.splitmate.app.ui
 
+import android.net.Uri
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -14,7 +15,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.googlefonts.Font
+import androidx.compose.ui.text.googlefonts.GoogleFont
 import androidx.compose.ui.unit.sp
+import com.splitmate.app.R
 
 // Stitch "Organic Tactile Financial" (Buckwheat) + HCT Expressive Tokens
 val BuckwheatCanvas = Color(0xFFFAF6F0)
@@ -63,42 +67,76 @@ private val SplitMateDarkColorScheme = darkColorScheme(
     onSecondary = BuckwheatTerracottaDark,
     secondaryContainer = BuckwheatTerracottaDark,
     onSecondaryContainer = BuckwheatPeachContainer,
-    background = Color(0xFF191715),
-    onBackground = BuckwheatCanvas,
-    surface = Color(0xFF23201E),
-    onSurface = BuckwheatCanvas
+    background = Color(0xFF121212),
+    onBackground = Color(0xFFFAF7F2),
+    surface = Color(0xFF1E1D1B),
+    onSurface = Color(0xFFFAF7F2)
 )
 
-val SplitMateBrandFontFamily = FontFamily.SansSerif
+// Google Fonts Provider for Plus Jakarta Sans & Outfit (Point 6)
+private val googleFontProvider = GoogleFont.Provider(
+    providerAuthority = "com.google.android.gms.fonts",
+    providerPackage = "com.google.android.gms",
+    certificates = R.array.com_google_android_gms_fonts_certs
+)
 
-private val SplitMateTypography = Typography(
+private val plusJakartaSansGoogleFont = GoogleFont("Plus Jakarta Sans")
+private val outfitGoogleFont = GoogleFont("Outfit")
+
+val SplitMateDisplayFontFamily = FontFamily(
+    Font(googleFont = outfitGoogleFont, fontProvider = googleFontProvider, weight = FontWeight.Bold),
+    Font(googleFont = outfitGoogleFont, fontProvider = googleFontProvider, weight = FontWeight.ExtraBold),
+    Font(googleFont = plusJakartaSansGoogleFont, fontProvider = googleFontProvider, weight = FontWeight.ExtraBold)
+)
+
+val SplitMateBrandFontFamily = FontFamily(
+    Font(googleFont = plusJakartaSansGoogleFont, fontProvider = googleFontProvider, weight = FontWeight.Medium),
+    Font(googleFont = plusJakartaSansGoogleFont, fontProvider = googleFontProvider, weight = FontWeight.SemiBold),
+    Font(googleFont = plusJakartaSansGoogleFont, fontProvider = googleFontProvider, weight = FontWeight.Bold),
+    Font(googleFont = plusJakartaSansGoogleFont, fontProvider = googleFontProvider, weight = FontWeight.ExtraBold)
+)
+
+val SplitMateTypography = Typography(
     displayLarge = TextStyle(
-        fontFamily = SplitMateBrandFontFamily,
+        fontFamily = SplitMateDisplayFontFamily,
         fontWeight = FontWeight.ExtraBold,
         fontSize = 54.sp,
         lineHeight = 60.sp,
         letterSpacing = (-1.2).sp
     ),
     displayMedium = TextStyle(
-        fontFamily = SplitMateBrandFontFamily,
+        fontFamily = SplitMateDisplayFontFamily,
         fontWeight = FontWeight.ExtraBold,
         fontSize = 42.sp,
         lineHeight = 48.sp,
         letterSpacing = (-0.8).sp
     ),
+    displaySmall = TextStyle(
+        fontFamily = SplitMateDisplayFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 36.sp,
+        lineHeight = 42.sp,
+        letterSpacing = (-0.5).sp
+    ),
     headlineLarge = TextStyle(
-        fontFamily = SplitMateBrandFontFamily,
+        fontFamily = SplitMateDisplayFontFamily,
         fontWeight = FontWeight.ExtraBold,
         fontSize = 32.sp,
         lineHeight = 38.sp,
         letterSpacing = (-0.5).sp
     ),
     headlineMedium = TextStyle(
-        fontFamily = SplitMateBrandFontFamily,
+        fontFamily = SplitMateDisplayFontFamily,
         fontWeight = FontWeight.ExtraBold,
         fontSize = 26.sp,
         lineHeight = 32.sp,
         letterSpacing = (-0.3).sp
+    ),
+    headlineSmall = TextStyle(
+        fontFamily = SplitMateBrandFontFamily,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 22.sp,
+        lineHeight = 28.sp
     ),
     titleLarge = TextStyle(
         fontFamily = SplitMateBrandFontFamily,
@@ -111,6 +149,12 @@ private val SplitMateTypography = Typography(
         fontWeight = FontWeight.Bold,
         fontSize = 16.sp,
         lineHeight = 22.sp
+    ),
+    titleSmall = TextStyle(
+        fontFamily = SplitMateBrandFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 14.sp,
+        lineHeight = 20.sp
     ),
     bodyLarge = TextStyle(
         fontFamily = SplitMateBrandFontFamily,
@@ -131,6 +175,23 @@ private val SplitMateTypography = Typography(
         lineHeight = 18.sp
     )
 )
+
+/**
+ * Generates DiceBear Open-Peeps SVG URL with Presentation Style (Masculine, Feminine, Neutral) support (Point 1).
+ * Supports encoding style inside seed as `"SeedName|Masculine"`, `"SeedName|Feminine"`, or `"SeedName|Neutral"`.
+ */
+fun buildDiceBearOpenPeepsUrl(rawSeed: String, styleOverride: String? = null): String {
+    val parts = rawSeed.split("|")
+    val baseSeed = parts.firstOrNull()?.ifBlank { "Explorer" } ?: "Explorer"
+    val resolvedStyle = styleOverride ?: parts.getOrNull(1) ?: "Neutral"
+    val encodedSeed = Uri.encode(baseSeed)
+    val headParam = when (resolvedStyle.lowercase()) {
+        "masculine" -> "&head=flatTop,short1,short2,short3,short4"
+        "feminine" -> "&head=long1,long2,long3,long4,buns"
+        else -> ""
+    }
+    return "https://api.dicebear.com/9.x/open-peeps/svg?seed=$encodedSeed&backgroundColor=f4efe6,d7e8b6,fed8c8,dce3fd$headParam"
+}
 
 @Composable
 fun SplitMateMaterial3ExpressiveTheme(

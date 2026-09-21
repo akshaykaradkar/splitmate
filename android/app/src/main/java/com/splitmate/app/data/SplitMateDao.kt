@@ -36,8 +36,8 @@ interface SplitMateDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMembers(members: List<GroupMemberEntity>)
 
-    @Query("UPDATE group_members SET name = :name, upiId = :upiId WHERE memberId = :memberId")
-    suspend fun updateMemberProfile(memberId: String, name: String, upiId: String)
+    @Query("UPDATE group_members SET name = :name, upiId = :upiId, avatarSeed = :avatarSeed WHERE memberId = :memberId")
+    suspend fun updateMemberProfile(memberId: String, name: String, upiId: String, avatarSeed: String)
 
     // --- Expenses & Splits ---
     @Query("SELECT * FROM expenses ORDER BY createdAt DESC")

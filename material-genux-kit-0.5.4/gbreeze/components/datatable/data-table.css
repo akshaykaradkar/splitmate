@@ -1,0 +1,72 @@
+/**
+ * Copyright 2026 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+/** Note: AI-generated */
+@layer md.comp.data-table {
+  .data-table {
+    --container-shape: var(--md-sys-shape-corner-xl); /* 28px */
+    --header-height: 56px;
+    --row-height: 52px;
+  }
+  .data-table {
+    border: 1px solid var(--md-sys-color-outline-variant);
+    border-radius: var(--container-shape);
+    overflow: hidden;
+    background-color: var(--md-sys-color-surface);
+  }
+  .data-table-scroll {
+    overflow-x: auto;
+  }
+  .data-table table {
+    width: 100%;
+    text-align: left;
+    border-collapse: collapse;
+  }
+  .data-table th,
+  .data-table td {
+    padding: 0 16px;
+    border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  }
+  .data-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .data-table thead th {
+    height: var(--header-height);
+    font: var(--md-sys-typescale-title-sm);
+    letter-spacing: var(--md-sys-typescale-title-sm-tracking);
+    color: var(--md-sys-color-on-surface-variant);
+    background-color: var(--md-sys-color-surface-container-low);
+    font-weight: 500;
+  }
+  .data-table tbody td {
+    height: var(--row-height);
+    font: var(--md-sys-typescale-body-md);
+    letter-spacing: var(--md-sys-typescale-body-md-tracking);
+    color: var(--md-sys-color-on-surface);
+  }
+  .data-table tbody tr:hover {
+    background-color: hsl(from var(--md-sys-color-surface-container-highest) h s l / 50%);
+  }
+  .data-table tbody tr.selected {
+    background-color: hsl(from var(--md-sys-color-secondary-container) h s l / 30%);
+  }
+  .data-table-cell-checkbox {
+    width: 68px;
+    padding: 0;
+    text-align: center;
+  }
+  .data-table-cell-checkbox > div {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    width: 100%;
+  }
+  .text-right {
+    text-align: right;
+  }
+  .text-center {
+    text-align: center;
+  }
+}

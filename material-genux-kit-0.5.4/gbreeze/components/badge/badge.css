@@ -1,0 +1,45 @@
+/**
+ * Copyright 2026 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+@layer md.comp.badge {
+  @scope (.badge) {
+    /* ── Tokens ── */
+    & {
+      --color: var(--md-sys-color-error);
+      --shape: var(--md-sys-shape-corner-full);
+      --size: 6px;
+      --label-text-color: var(--md-sys-color-on-error);
+      --label-text: var(--md-sys-typescale-label-sm);
+      --label-text-tracking: var(--md-sys-typescale-label-sm-tracking);
+    }
+
+    /* ── Base (small dot) ── */
+    & {
+      background-color: var(--color);
+      border-radius: var(--shape);
+      height: var(--size);
+      width: var(--size);
+      color: transparent;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      z-index: 1;
+      position: absolute;
+      position-anchor: --badge;
+      position-area: start end;
+    }
+
+    /* ── Large (with content) ── */
+    &:not(:empty) {
+      --size: 16px;
+      min-width: var(--size);
+      width: auto;
+      color: var(--label-text-color);
+      font: var(--label-text);
+      letter-spacing: var(--label-text-tracking);
+      padding-inline: 4px;
+    }
+  }
+}

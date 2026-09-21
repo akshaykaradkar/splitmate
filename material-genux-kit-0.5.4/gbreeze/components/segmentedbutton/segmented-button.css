@@ -1,0 +1,76 @@
+/**
+ * Copyright 2026 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+/** Note: AI-generated */
+@layer md.comp.segmented-button {
+  .segmented-button {
+    --button-container-color: var(--md-sys-color-surface);
+    --button-label-text-color: var(--md-sys-color-on-surface);
+    --button-outline-color: var(--md-sys-color-outline);
+    --button-selected-container-color: var(--md-sys-color-secondary-container);
+    --button-selected-label-text-color: var(
+      --md-sys-color-on-secondary-container
+    );
+    --button-selected-hover-state-layer-color: var(
+      --md-sys-color-on-secondary-container
+    );
+    --button-unselected-hover-state-layer-color: var(
+      --md-sys-color-on-surface
+    );
+  }
+
+  /*
+   * Structural styles
+   */
+  .segmented-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .segmented-button-button {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 16px;
+    min-height: 40px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+    border: 1px solid var(--button-outline-color);
+    background-color: var(--button-container-color);
+    color: var(--button-label-text-color);
+  }
+  .segmented-button-button:hover {
+    background-color: var(--md-sys-color-surface-container-high);
+  }
+  .segmented-button-button[aria-pressed='true'] {
+    background-color: var(--button-selected-container-color);
+    color: var(--button-selected-label-text-color);
+    border-color: transparent;
+  }
+  .segmented-button-button:disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
+  }
+
+  .segmented-button-button:first-child:last-child {
+    border-radius: 20px;
+  }
+  .segmented-button-button:first-child:not(:last-child) {
+    border-radius: 20px 4px 4px 20px;
+  }
+  .segmented-button-button:last-child:not(:first-child) {
+    border-radius: 4px 20px 20px 4px;
+  }
+  .segmented-button-button:not(:first-child):not(:last-child) {
+    border-radius: 4px;
+  }
+
+  .segmented-button-icon {
+    font-size: 18px;
+  }
+}

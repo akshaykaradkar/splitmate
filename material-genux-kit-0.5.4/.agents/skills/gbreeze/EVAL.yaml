@@ -1,0 +1,104 @@
+suite_name: gbreeze
+timeout_seconds: 300
+max_tool_calls: 20
+
+cases:
+  - name: find_component_import
+    prompt: >
+      I need to add a filled button to my page. What's the import
+      and how do I use it?
+    skills: [__SKILL_DIR__]
+    difficulty: easy
+    outcome_assertions:
+      - "The agent provides the correct import path for Button from @gbreeze/components/button/button"
+      - "The agent shows color='filled' prop usage"
+      - "The agent includes a working JSX/TSX example"
+    expect_keywords_any:
+      - "button"
+      - "filled"
+      - "import"
+
+  - name: theme_component_token
+    prompt: >
+      I want to make a button red for a delete action. How do I
+      override its color?
+    skills: [__SKILL_DIR__]
+    difficulty: medium
+    outcome_assertions:
+      - "The agent uses --container-color custom property, not a Tailwind class on the component"
+      - "The agent references var(--md-sys-color-error) or an error color token"
+      - "The agent provides a working inline style or CSS override example"
+    expect_keywords_any:
+      - "--container-color"
+      - "error"
+
+  - name: interactive_card_pattern
+    prompt: >
+      How do I make a card clickable? I tried adding onClick to Card
+      but nothing happens.
+    skills: [__SKILL_DIR__]
+    difficulty: medium
+    outcome_assertions:
+      - "The agent explains the CardButton pattern — a card-btn child inside the card"
+      - "The agent mentions ripple and focus-ring-outer are needed on interactive cards"
+      - "The agent shows the correct DOM nesting with CardButton as a child of Card"
+    expect_keywords_any:
+      - "CardButton"
+      - "card-btn"
+
+  - name: switch_vs_checkbox_gotcha
+    prompt: >
+      I'm building a settings toggle. Should I use Switch or Checkbox?
+      What's the actual difference in how they work?
+    skills: [__SKILL_DIR__]
+    difficulty: medium
+    outcome_assertions:
+      - "The agent distinguishes Switch (button with role=switch, uses aria-checked) from Checkbox (input type=checkbox)"
+      - "The agent notes Switch is NOT an input element — it's a button"
+      - "The agent recommends Switch for on/off toggles in settings"
+    expect_keywords_any:
+      - "switch"
+      - "aria-checked"
+      - "button"
+
+  - name: popover_anchor_gotcha
+    prompt: >
+      I'm building a dropdown menu using popover. I set a CSS anchor
+      name but when I have two menus on the page, only one positions
+      correctly.
+    skills: [__SKILL_DIR__]
+    difficulty: hard
+    outcome_assertions:
+      - "The agent identifies hardcoded anchor names as the root cause of the collision"
+      - "The agent recommends useId() to generate unique anchor names per instance"
+      - "The agent explains that hardcoded names cause global CSS rendering collisions"
+    expect_keywords_any:
+      - "useId"
+      - "unique"
+      - "anchor"
+
+  - name: disabled_card_gotcha
+    prompt: >
+      My disabled card still shows a hover effect. I added the disabled
+      attribute to the card-btn but the card itself still looks active.
+    skills: [__SKILL_DIR__]
+    difficulty: medium
+    outcome_assertions:
+      - "The agent identifies that card-disabled class is also needed on the card wrapper div"
+      - "The agent explains both card-disabled on the card AND disabled on the card-btn are required"
+    expect_keywords_any:
+      - "card-disabled"
+
+  - name: list_available_components
+    prompt: >
+      What components does gbreeze have? I need to see everything
+      available, not just the documented ones.
+    skills: [__SKILL_DIR__]
+    difficulty: easy
+    outcome_assertions:
+      - "The agent runs or references the list-components.sh script to discover all components"
+      - "The agent shows there are 30+ components beyond the core documented set"
+      - "The agent lists components with their React wrapper import paths"
+    expect_keywords_any:
+      - "list-components"
+      - "wrapper"

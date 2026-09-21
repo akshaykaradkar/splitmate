@@ -1,0 +1,61 @@
+/**
+ * Copyright 2026 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+/** Note: AI-generated */
+@layer md.comp.search {
+  /* Tokens */
+  .search-bar {
+    --container-color: var(--md-sys-color-surface-container-high);
+    --container-elevation: var(--shadow-1);
+    --container-height: 56px;
+    --container-shape: var(--md-sys-shape-corner-full);
+    --input-text-color: var(--md-sys-color-on-surface);
+    --input-text-font: var(--md-sys-typescale-body-lg);
+    --placeholder-text-color: var(--md-sys-color-on-surface-variant);
+    --leading-icon-color: var(--md-sys-color-on-surface);
+    --trailing-icon-color: var(--md-sys-color-on-surface-variant);
+  }
+
+  .search-bar:hover {
+      --container-elevation: var(--shadow-2);
+      --container-color: var(--md-sys-color-surface-container-highest);
+  }
+
+  /* Styles */
+  .search-bar {
+    display: flex;
+    align-items: center;
+    height: var(--container-height);
+    background-color: var(--container-color);
+    border-radius: var(--container-shape);
+    box-shadow: var(--container-elevation);
+    padding-inline: 16px;
+    gap: 16px;
+    transition: box-shadow 200ms cubic-bezier(0.2, 0, 0, 1), background-color 200ms;
+  }
+
+  .search-bar-input {
+    flex: 1;
+    height: 100%;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--input-text-color);
+    font: var(--input-text-font);
+    caret-color: var(--md-sys-color-primary);
+  }
+
+  .search-bar-input::placeholder {
+      color: var(--placeholder-text-color);
+  }
+
+  .search-bar-leading-icon {
+    color: var(--leading-icon-color);
+    --md-icon-size: 24px;
+  }
+
+  .search-bar-trailing-icon {
+    color: var(--trailing-icon-color);
+  }
+}

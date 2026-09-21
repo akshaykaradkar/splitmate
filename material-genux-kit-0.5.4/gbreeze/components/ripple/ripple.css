@@ -1,0 +1,56 @@
+/**
+ * Copyright 2026 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+@layer md.comp.ripple {
+  .ripple {
+    --ripple-color: currentColor;
+    --ripple-press-transition: --ripple-press-opacity 375ms linear;
+    --ripple-transition:
+      --ripple-hover-opacity 15ms linear, var(--ripple-press-transition);
+    --ripple-animation: ripple-release 375ms linear;
+    --ripple:
+      radial-gradient(
+        hsl(from var(--ripple-color) h s l / var(--ripple-hover-opacity))
+      ),
+      radial-gradient(
+        circle at var(--ripple-x) var(--ripple-y),
+        hsl(from var(--ripple-color) h s l / var(--ripple-press-opacity))
+          var(--ripple-scale),
+        transparent calc(var(--ripple-scale) * 1.35)
+      );
+
+    background-image: var(--ripple);
+    transition: var(--ripple-transition);
+    animation: var(--ripple-animation), var(--focus-ring-animation, none);
+
+    &:is(:hover, .ripple-hover),
+    .ripple-host:is(:hover, .ripple-hover) & {
+      --ripple-hover-opacity: 8%;
+    }
+    &:is(:active, .ripple-press),
+    .ripple-host:is(:active, .ripple-press) & {
+      --ripple-press-opacity: 10%;
+      --ripple-press-transition: --ripple-press-opacity 100ms linear;
+      --ripple-animation: ripple-press forwards 450ms cubic-bezier(0.2, 0, 0, 1);
+    }
+  }
+  @keyframes ripple-press {
+    from {
+      --ripple-scale: 20%;
+    }
+    to {
+      --ripple-scale: 100%;
+      --ripple-x: 50%;
+      --ripple-y: 50%;
+    }
+  }
+  @keyframes ripple-release {
+    from {
+      --ripple-scale: 100%;
+    }
+    to {
+      --ripple-scale: 100%;
+    }
+  }
+}

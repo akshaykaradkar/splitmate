@@ -42,12 +42,13 @@ import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.splitmate.app.data.GroupMemberEntity
+import com.splitmate.app.ui.SplitMateBrandFontFamily
+import com.splitmate.app.ui.SplitMateDisplayFontFamily
 import com.splitmate.app.ui.SplitMateViewModel
-import com.splitmate.app.ui.screens.CurrencyModalBottomSheet
+import com.splitmate.app.ui.buildDiceBearOpenPeepsUrl
 import com.splitmate.app.ui.screens.EditFriendUpiDialog
 import com.splitmate.app.ui.screens.OnboardingSetupScreen
 import com.splitmate.app.ui.screens.QuickExpenseScreen
-import com.splitmate.app.ui.screens.UserGuideBottomSheet
 import com.splitmate.app.ui.screens.UserSettingsScreen
 import java.util.Locale
 
@@ -58,9 +59,9 @@ object SplitMateTheme {
     var isDark by mutableStateOf(false)
 
     val ScreenBg: Color
-        get() = if (isDark) Color(0xFF141311) else Color(0xFFFAF7F2)
+        get() = if (isDark) Color(0xFF121212) else Color(0xFFFAF7F2)
     val PrimaryDark: Color
-        get() = if (isDark) Color(0xFFF6F2EA) else Color(0xFF23201E)
+        get() = if (isDark) Color(0xFFFAF7F2) else Color(0xFF23201E)
     val AccentSage = Color(0xFFD7E8B6)             // Active Navigation Pill / Secondary Action
     val SageSurface: Color
         get() = if (isDark) Color(0xFF243314) else Color(0xFFEAF3DC)
@@ -72,7 +73,7 @@ object SplitMateTheme {
         get() = if (isDark) Color(0xFFFFB4A4) else Color(0xFFC23E2A)
     val BrandCoral = Color(0xFFE06B52)             // App Leaf / Brand Logo
     val SurfaceWhite: Color
-        get() = if (isDark) Color(0xFF1F1D1A) else Color(0xFFFFFFFF)
+        get() = if (isDark) Color(0xFF1E1D1B) else Color(0xFFFFFFFF)
     val SurfaceMuted: Color
         get() = if (isDark) Color(0xFF2B2823) else Color(0xFFF0EDE6)
     val BorderLight: Color
@@ -89,7 +90,8 @@ object SplitMateTheme {
     val RadiusInput = RoundedCornerShape(20.dp)
     val RadiusBadge = RoundedCornerShape(999.dp)
 
-    val FontRounded = FontFamily.SansSerif
+    val FontRounded = SplitMateBrandFontFamily
+    val FontDisplay = SplitMateDisplayFontFamily
 }
 
 // ==============================================================================
@@ -147,8 +149,8 @@ fun SplitMateApp(viewModel: SplitMateViewModel) {
                     viewModel.completeOnboarding(
                         name = name,
                         countryName = currency.country,
-                        currencyCode = currency.code,
-                        currencySymbol = currency.symbol,
+                        currencyCode = "INR",
+                        currencySymbol = "₹",
                         avatarSeed = avatarSeed
                     )
                     navController.navigate("dashboard") {
@@ -170,17 +172,15 @@ fun SplitMateApp(viewModel: SplitMateViewModel) {
                 userName = uiState.currentUserName.ifBlank { "Explorer" },
                 avatarSeed = uiState.currentUserSeed,
                 upiId = uiState.userUpiId,
-                defaultCurrencyCode = "${uiState.activeCurrency.currencyCode} (${uiState.activeCurrency.symbol})",
+                defaultCurrencyCode = "INR (₹)",
                 totalBalanceText = totalBalance,
                 activeGroupsCount = activeGroups.size,
                 isDarkThemeInitial = uiState.isDarkTheme,
                 allCurrencies = uiState.currencyRates,
-                onSyncLiveRates = { viewModel.syncLiveCurrencyRatesFromFrankfurter("USD") },
+                onSyncLiveRates = {},
                 onBackClick = { navController.popBackStack() },
                 onUpdateUpiId = { newUpi -> viewModel.updateUpiId(newUpi) },
-                onUpdateCurrencyCode = { newCode ->
-                    viewModel.updateUserProfile(uiState.currentUserName, newCode)
-                },
+                onUpdateCurrencyCode = {},
                 onThemeToggle = { isDark ->
                     prefs.edit().putBoolean("is_dark_theme", isDark).apply()
                     viewModel.toggleDarkTheme(isDark)
@@ -198,28 +198,6 @@ fun SplitMateMainDashboardScaffold(
     onOpenSettings: () -> Unit
 ) {
     var currentTab by remember { mutableStateOf(SplitMateTab.LEDGERS) }
-    var showUserGuideSheet by remember { mutableStateOf(false) }
-    var showCurrencySheet by remember { mutableStateOf(false) }
-    val uiState by viewModel.uiState.collectAsState()
-
-    if (showUserGuideSheet) {
-        UserGuideBottomSheet(
-            onDismiss = { showUserGuideSheet = false }
-        )
-    }
-
-    if (showCurrencySheet) {
-        CurrencyModalBottomSheet(
-            currencies = uiState.currencyRates,
-            activeCurrencyCode = uiState.activeCurrencyCode,
-            onSelectCurrency = { code ->
-                viewModel.updateUserProfile(uiState.currentUserName, code)
-                showCurrencySheet = false
-            },
-            onSyncLiveRates = { viewModel.syncLiveCurrencyRatesFromFrankfurter("USD") },
-            onDismiss = { showCurrencySheet = false }
-        )
-    }
 
     Scaffold(
         containerColor = SplitMateTheme.ScreenBg,
@@ -230,20 +208,20 @@ fun SplitMateMainDashboardScaffold(
                     icon = {
                         Icon(
                             imageVector = Icons.Rounded.ElectricBolt,
-                            contentDescription = "Quick Split",
-                            tint = Color.White
+                            contentDescription = "Log Expense",
+                            tint = SplitMateTheme.ScreenBg
                         )
                     },
                     text = {
                         Text(
-                            text = "Quick Split",
+                            text = "Log Expense",
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color.White,
+                            color = SplitMateTheme.ScreenBg,
                             fontFamily = SplitMateTheme.FontRounded
                         )
                     },
-                    containerColor = Color(0xFF23201E),
-                    contentColor = Color.White,
+                    containerColor = SplitMateTheme.PrimaryDark,
+                    contentColor = SplitMateTheme.ScreenBg,
                     shape = SplitMateTheme.RadiusBadge,
                     modifier = Modifier.shadow(10.dp, SplitMateTheme.RadiusBadge)
                 )
@@ -272,14 +250,11 @@ fun SplitMateMainDashboardScaffold(
                 SplitMateTab.LEDGERS -> LedgersDashboardScreen(
                     viewModel = viewModel,
                     onNavigateToSplit = { currentTab = SplitMateTab.SPLIT },
-                    onAvatarSettingsClick = onOpenSettings,
-                    onOpenGuideSheet = { showUserGuideSheet = true },
-                    onOpenCurrencySheet = { showCurrencySheet = true }
+                    onAvatarSettingsClick = onOpenSettings
                 )
                 SplitMateTab.SPLIT -> QuickExpenseScreen(
                     viewModel = viewModel,
                     onBackClick = { currentTab = SplitMateTab.LEDGERS },
-                    onHelpClick = { showUserGuideSheet = true },
                     onSaveSplit = { _, _ ->
                         currentTab = SplitMateTab.LEDGERS
                     }
@@ -334,6 +309,7 @@ fun SplitMateBottomNavigationBar(
                             Text(
                                 text = "  ${tab.label}",
                                 color = Color(0xFF23201E),
+                                fontFamily = SplitMateTheme.FontRounded,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp
                             )
@@ -352,9 +328,7 @@ fun SplitMateBottomNavigationBar(
 fun LedgersDashboardScreen(
     viewModel: SplitMateViewModel,
     onNavigateToSplit: () -> Unit = {},
-    onAvatarSettingsClick: () -> Unit = {},
-    onOpenGuideSheet: () -> Unit = {},
-    onOpenCurrencySheet: () -> Unit = {}
+    onAvatarSettingsClick: () -> Unit = {}
 ) {
     val totalBalance by viewModel.totalBalance.collectAsState()
     val activeGroups by viewModel.activeGroups.collectAsState()
@@ -368,8 +342,8 @@ fun LedgersDashboardScreen(
         EditFriendUpiDialog(
             member = friend,
             onDismiss = { editingFriend = null },
-            onSave = { newName, newUpi ->
-                viewModel.updateFriendUpi(friend.memberId, newName, newUpi)
+            onSave = { newName, newUpi, newAvatarSeed ->
+                viewModel.updateFriendUpi(friend.memberId, newName, newUpi, newAvatarSeed)
                 editingFriend = null
             }
         )
@@ -382,7 +356,7 @@ fun LedgersDashboardScreen(
         contentPadding = PaddingValues(top = 12.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. Custom Top Bar (Subtitle "Fun & Trip Expenses", Currency Circular Icon Pill, Help '?' Guide, Clickable Avatar)
+        // 1. Custom Top Bar (Subtitle "Fun & Trip Expenses", Static ₹ INR Badge, Clickable Avatar)
         item {
             Row(
                 modifier = Modifier
@@ -392,12 +366,11 @@ fun LedgersDashboardScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Direct reference to ic_launcher_foreground.xml vector drawable (home screen icon sync)
                     Box(
                         modifier = Modifier
                             .size(44.dp)
                             .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0xFFFAF6F0))
+                            .background(SplitMateTheme.SurfaceWhite)
                             .border(1.dp, SplitMateTheme.BorderLight, RoundedCornerShape(14.dp)),
                         contentAlignment = Alignment.Center
                     ) {
@@ -416,21 +389,21 @@ fun LedgersDashboardScreen(
                             fontSize = 20.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = SplitMateTheme.PrimaryDark,
-                            fontFamily = SplitMateTheme.FontRounded
+                            fontFamily = SplitMateTheme.FontDisplay
                         )
                         Text(
                             text = "Fun & Trip Expenses",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = SplitMateTheme.TextSecondary
+                            color = SplitMateTheme.TextSecondary,
+                            fontFamily = SplitMateTheme.FontRounded
                         )
                     }
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Circular Currency Symbol Chip opening 160+ World Currencies ModalBottomSheet
+                    // Static Native INR Badge (No currency picker, no '?' guide icon)
                     Surface(
-                        onClick = onOpenCurrencySheet,
                         shape = SplitMateTheme.RadiusBadge,
                         color = SplitMateTheme.SurfaceWhite,
                         border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
@@ -448,15 +421,17 @@ fun LedgersDashboardScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = uiState.activeCurrency.symbol.take(2),
-                                    fontSize = 11.sp,
+                                    text = "₹",
+                                    fontFamily = SplitMateTheme.FontDisplay,
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = Color(0xFF23201E)
                                 )
                             }
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = uiState.activeCurrencyCode,
+                                text = "INR",
+                                fontFamily = SplitMateTheme.FontRounded,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = SplitMateTheme.PrimaryDark
@@ -464,31 +439,7 @@ fun LedgersDashboardScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(6.dp))
-
-                    // Help '?' Button triggering UserGuideBottomSheet (Point 9)
-                    IconButton(
-                        onClick = onOpenGuideSheet,
-                        modifier = Modifier.size(38.dp)
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = SplitMateTheme.SurfaceWhite,
-                            border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Rounded.HelpOutline,
-                                    contentDescription = "User Guide",
-                                    tint = SplitMateTheme.PrimaryDark,
-                                    modifier = Modifier.size(19.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     // Clickable Top-Right Avatar routing to UserSettingsScreen
                     Box(
@@ -507,23 +458,24 @@ fun LedgersDashboardScreen(
             }
         }
 
-        // 2. Hero Balance Card (32dp Radius, Expressive Gradient, Spring Bounce Animation)
+        // 2. Hero Balance Card (32dp Radius, Dark-Mode Adaptive Gradient, Spring Bounce Animation)
         item {
+            val heroGradientColors = if (SplitMateTheme.isDark) {
+                listOf(Color(0xFF1D2416), Color(0xFF261C19))
+            } else {
+                listOf(Color(0xFFF5F8EC), Color(0xFFFDF1EC))
+            }
             Card(
                 shape = SplitMateTheme.RadiusHero,
                 colors = CardDefaults.cardColors(containerColor = Color.Transparent),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, Color(0x33D7E8B6), SplitMateTheme.RadiusHero)
+                    .border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusHero)
                     .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
             ) {
                 Box(
                     modifier = Modifier
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(Color(0xFFF5F8EC), Color(0xFFFDF1EC))
-                            )
-                        )
+                        .background(Brush.linearGradient(colors = heroGradientColors))
                         .padding(22.dp)
                 ) {
                     Column {
@@ -534,10 +486,11 @@ fun LedgersDashboardScreen(
                         ) {
                             Surface(
                                 shape = SplitMateTheme.RadiusBadge,
-                                color = SplitMateTheme.SurfaceWhite.copy(alpha = 0.8f)
+                                color = SplitMateTheme.SurfaceWhite.copy(alpha = 0.85f)
                             ) {
                                 Text(
                                     text = if (isNegativeBalance) "↑ You owe overall" else "↓ You are owed overall",
+                                    fontFamily = SplitMateTheme.FontRounded,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (isNegativeBalance) SplitMateTheme.TerracottaText else SplitMateTheme.SageText,
@@ -554,6 +507,7 @@ fun LedgersDashboardScreen(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = if (uiState.isOfflineMode) "Offline Vault" else "Live Sync",
+                                    fontFamily = SplitMateTheme.FontRounded,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (uiState.isOfflineMode) SplitMateTheme.BrandCoral else Color(0xFF388E3C)
@@ -568,11 +522,12 @@ fun LedgersDashboardScreen(
                             fontSize = 54.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = SplitMateTheme.PrimaryDark,
-                            fontFamily = SplitMateTheme.FontRounded
+                            fontFamily = SplitMateTheme.FontDisplay
                         )
 
                         Text(
-                            text = "✓ Across ${activeGroups.size} active groups · 0 penny drift",
+                            text = "✓ Across ${activeGroups.size} active groups · Exact Split",
+                            fontFamily = SplitMateTheme.FontRounded,
                             fontSize = 13.sp,
                             color = SplitMateTheme.TextSecondary,
                             fontWeight = FontWeight.Medium
@@ -587,14 +542,17 @@ fun LedgersDashboardScreen(
                             Button(
                                 onClick = { showNewGroupDialog = true },
                                 shape = SplitMateTheme.RadiusButton,
-                                colors = ButtonDefaults.buttonColors(containerColor = SplitMateTheme.PrimaryDark),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = SplitMateTheme.PrimaryDark,
+                                    contentColor = SplitMateTheme.ScreenBg
+                                ),
                                 modifier = Modifier
                                     .weight(1f)
                                     .sizeIn(minHeight = 48.dp)
                             ) {
                                 Icon(Icons.Rounded.Add, contentDescription = null, tint = SplitMateTheme.ScreenBg, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("+ New Group", color = SplitMateTheme.ScreenBg, fontWeight = FontWeight.Bold)
+                                Text("+ New Group", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.ScreenBg, fontWeight = FontWeight.Bold)
                             }
 
                             FilledTonalButton(
@@ -605,9 +563,9 @@ fun LedgersDashboardScreen(
                                     .weight(1f)
                                     .sizeIn(minHeight = 48.dp)
                             ) {
-                                Icon(Icons.Rounded.DocumentScanner, contentDescription = null, tint = SplitMateTheme.PrimaryDark, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Rounded.ReceiptLong, contentDescription = null, tint = Color(0xFF23201E), modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Scan / Log", color = SplitMateTheme.PrimaryDark, fontWeight = FontWeight.Bold)
+                                Text("Log Expense", fontFamily = SplitMateTheme.FontRounded, color = Color(0xFF23201E), fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -627,6 +585,7 @@ fun LedgersDashboardScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "Active Groups",
+                        fontFamily = SplitMateTheme.FontDisplay,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = SplitMateTheme.PrimaryDark
@@ -638,7 +597,7 @@ fun LedgersDashboardScreen(
                         modifier = Modifier.size(24.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text("${activeGroups.size}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SplitMateTheme.PrimaryDark)
+                            Text("${activeGroups.size}", fontFamily = SplitMateTheme.FontRounded, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SplitMateTheme.PrimaryDark)
                         }
                     }
                 }
@@ -654,6 +613,7 @@ fun LedgersDashboardScreen(
                     ) {
                         Text(
                             text = "Sort by balance ⇅",
+                            fontFamily = SplitMateTheme.FontRounded,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = SplitMateTheme.TextSecondary
@@ -663,7 +623,7 @@ fun LedgersDashboardScreen(
             }
         }
 
-        // 4. Illustrated M3 Empty State Card when activeGroups is empty (Point 3)
+        // 4. Illustrated M3 Empty State Card when activeGroups is empty
         item {
             AnimatedVisibility(
                 visible = activeGroups.isEmpty(),
@@ -701,6 +661,7 @@ fun LedgersDashboardScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "No active trips. Tap the + button below to create your first group!",
+                            fontFamily = SplitMateTheme.FontDisplay,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = SplitMateTheme.PrimaryDark,
@@ -709,7 +670,8 @@ fun LedgersDashboardScreen(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Create a trip or roommate ledger with zero penny rounding drift.",
+                            text = "Create a trip or roommate ledger with Exact Split precision.",
+                            fontFamily = SplitMateTheme.FontRounded,
                             fontSize = 13.sp,
                             color = SplitMateTheme.TextSecondary,
                             textAlign = TextAlign.Center
@@ -718,11 +680,14 @@ fun LedgersDashboardScreen(
                         Button(
                             onClick = { showNewGroupDialog = true },
                             shape = SplitMateTheme.RadiusBadge,
-                            colors = ButtonDefaults.buttonColors(containerColor = SplitMateTheme.PrimaryDark)
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = SplitMateTheme.PrimaryDark,
+                                contentColor = SplitMateTheme.ScreenBg
+                            )
                         ) {
-                            Icon(Icons.Rounded.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Rounded.Add, contentDescription = null, tint = SplitMateTheme.ScreenBg, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Create First Group", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text("Create First Group", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.ScreenBg, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -964,13 +929,16 @@ fun LedgersDashboardScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
                             onClick = {
-                                viewModel.createNewGroup(groupNameInput, uiState.activeCurrencyCode, friendsInput)
+                                viewModel.createNewGroup(groupNameInput, "INR", friendsInput)
                                 showNewGroupDialog = false
                             },
                             shape = SplitMateTheme.RadiusButton,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF23201E))
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = SplitMateTheme.PrimaryDark,
+                                contentColor = SplitMateTheme.ScreenBg
+                            )
                         ) {
-                            Text("Create Group", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text("Create Group", color = SplitMateTheme.ScreenBg, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -994,8 +962,8 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
         EditFriendUpiDialog(
             member = friend,
             onDismiss = { editingFriend = null },
-            onSave = { newName, newUpi ->
-                viewModel.updateFriendUpi(friend.memberId, newName, newUpi)
+            onSave = { newName, newUpi, newAvatarSeed ->
+                viewModel.updateFriendUpi(friend.memberId, newName, newUpi, newAvatarSeed)
                 editingFriend = null
             }
         )
@@ -1011,12 +979,14 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
         item {
             Text(
                 text = "Greedy Settlement",
+                fontFamily = SplitMateTheme.FontDisplay,
                 fontSize = 26.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = SplitMateTheme.PrimaryDark
             )
             Text(
                 text = "Min-Cash Flow network simplification and 1-tap transfers",
+                fontFamily = SplitMateTheme.FontRounded,
                 fontSize = 13.sp,
                 color = SplitMateTheme.TextSecondary
             )
@@ -1061,6 +1031,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
         item {
             Text(
                 text = "Required Direct Transfers (${settlementPlan.size})",
+                fontFamily = SplitMateTheme.FontDisplay,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = SplitMateTheme.PrimaryDark
@@ -1108,6 +1079,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                         }
                         Text(
                             text = transfer.formattedDisplayAmount,
+                            fontFamily = SplitMateTheme.FontDisplay,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 18.sp,
                             color = SplitMateTheme.PrimaryDark
@@ -1129,14 +1101,15 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Rounded.AccountBalanceWallet,
+                                imageVector = Icons.Rounded.ContactPhone,
                                 contentDescription = null,
                                 tint = SplitMateTheme.PrimaryDark,
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "To UPI: ${transfer.upiId} · Tap to Edit Friend's VPA",
+                                text = "To UPI: ${transfer.upiId} · Tap to Pick from Contacts",
+                                fontFamily = SplitMateTheme.FontRounded,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = SplitMateTheme.PrimaryDark
@@ -1159,14 +1132,17 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                 context.startActivity(Intent.createChooser(upiIntent, "Pay with UPI"))
                             },
                             shape = SplitMateTheme.RadiusButton,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF23201E)),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = SplitMateTheme.PrimaryDark,
+                                contentColor = SplitMateTheme.ScreenBg
+                            ),
                             modifier = Modifier
                                 .weight(1.2f)
                                 .sizeIn(minHeight = 48.dp)
                         ) {
-                            Icon(Icons.Rounded.AccountBalance, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Rounded.AccountBalance, contentDescription = null, tint = SplitMateTheme.ScreenBg, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Pay via UPI", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp)
+                            Text("Pay via UPI", fontFamily = SplitMateTheme.FontRounded, fontWeight = FontWeight.Bold, color = SplitMateTheme.ScreenBg, fontSize = 13.sp)
                         }
 
                         OutlinedButton(
@@ -1177,7 +1153,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                 .weight(1f)
                                 .sizeIn(minHeight = 48.dp)
                         ) {
-                            Text("Mark as Paid", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("Mark as Paid", fontFamily = SplitMateTheme.FontRounded, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         }
                     }
 
@@ -1231,13 +1207,13 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                     }
                     Spacer(modifier = Modifier.height(10.dp))
                     Text("All Accounts Balanced", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = SplitMateTheme.PrimaryDark)
-                    Text("Zero debt loop detected · Certified 0.00¢ drift", fontSize = 12.sp, color = SplitMateTheme.TextSecondary)
+                    Text("Zero debt loop detected · Exact Split Certified", fontSize = 12.sp, color = SplitMateTheme.TextSecondary)
                     Spacer(modifier = Modifier.height(12.dp))
                     Surface(
                         shape = SplitMateTheme.RadiusBadge,
                         color = SplitMateTheme.PrimaryDark
                     ) {
-                        Text("Equilibrium Reached", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
+                        Text("Equilibrium Reached", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SplitMateTheme.ScreenBg, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
                     }
                 }
             }
@@ -1251,7 +1227,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
 @Composable
 fun AuditVaultScreen(viewModel: SplitMateViewModel) {
     val uiState by viewModel.uiState.collectAsState()
-    val sym = uiState.activeCurrency.symbol
+    val sym = "₹"
 
     LazyColumn(
         modifier = Modifier
@@ -1263,12 +1239,14 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
         item {
             Text(
                 text = "Audit & Local Vault",
+                fontFamily = SplitMateTheme.FontDisplay,
                 fontSize = 26.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = SplitMateTheme.PrimaryDark
             )
             Text(
                 text = "Cryptographic ledger footprint and SQLite persistence",
+                fontFamily = SplitMateTheme.FontRounded,
                 fontSize = 13.sp,
                 color = SplitMateTheme.TextSecondary
             )
@@ -1297,12 +1275,12 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
                                 .background(SplitMateTheme.AccentSage),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Rounded.Storage, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
+                            Icon(Icons.Rounded.Storage, contentDescription = null, tint = Color(0xFF23201E))
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text("Private On-Device Vault", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = SplitMateTheme.PrimaryDark)
-                            Text("Room SQLite · ${uiState.currencyRates.size} Currencies Cached", fontSize = 12.sp, color = SplitMateTheme.TextSecondary)
+                            Text("Room SQLite · Native ₹ INR Vault", fontSize = 12.sp, color = SplitMateTheme.TextSecondary)
                         }
                     }
 
@@ -1369,7 +1347,7 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
                             Column {
                                 Text(expense.title, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = SplitMateTheme.PrimaryDark)
                                 Text(
-                                    text = "Paid by ${payer?.name ?: "You"} · Rate ${expense.lockedExchangeRate} (${expense.syncStatus})",
+                                    text = "Paid by ${payer?.name ?: "You"} · ₹ INR (${expense.syncStatus})",
                                     fontSize = 12.sp,
                                     color = SplitMateTheme.TextSecondary
                                 )
@@ -1443,9 +1421,9 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
                         .weight(1f)
                         .sizeIn(minHeight = 48.dp)
                 ) {
-                    Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp), tint = SplitMateTheme.PrimaryDark)
+                    Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF23201E))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Recalculate & Sync", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = SplitMateTheme.PrimaryDark)
+                    Text("Recalculate & Sync", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF23201E))
                 }
             }
         }
@@ -1463,10 +1441,11 @@ fun AvatarToken(
     size: Int = 36
 ) {
     val context = LocalContext.current
-    val cleanSeed = Uri.encode(initials.ifBlank { "SplitMateGuest" })
-    val diceBearSvgUrl = "https://api.dicebear.com/9.x/open-peeps/svg?seed=$cleanSeed&backgroundColor=f4efe6,d7e8b6,fed8c8,dce3fd"
+    val diceBearSvgUrl = remember(initials) {
+        buildDiceBearOpenPeepsUrl(initials)
+    }
     val cleanInitials = remember(initials) {
-        initials.trim().substringBefore("_").take(2).uppercase().ifBlank { "SM" }
+        initials.trim().substringBefore("|").substringBefore("_").take(2).uppercase().ifBlank { "SM" }
     }
 
     Box(
@@ -1474,11 +1453,12 @@ fun AvatarToken(
             .size(size.dp)
             .clip(CircleShape)
             .background(bg)
-            .border(2.dp, Color.White, CircleShape),
+            .border(2.dp, SplitMateTheme.SurfaceWhite, CircleShape),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = cleanInitials,
+            fontFamily = SplitMateTheme.FontDisplay,
             fontSize = (size * 0.34f).sp,
             fontWeight = FontWeight.ExtraBold,
             color = textColor

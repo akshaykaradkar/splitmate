@@ -7,8 +7,6 @@ import com.splitmate.app.data.CurrencyRateEntity
 import com.splitmate.app.data.ExpenseEntity
 import com.splitmate.app.data.ExpenseGroupEntity
 import com.splitmate.app.data.ExpenseSplitEntity
-import com.splitmate.app.data.FrankfurterApiService
-import com.splitmate.app.data.FrankfurterNetwork
 import com.splitmate.app.data.GroupMemberEntity
 import com.splitmate.app.data.SettlementEntity
 import com.splitmate.app.data.SplitMateDao
@@ -25,7 +23,6 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 
 import com.splitmate.app.data.UserProfileEntity
-import com.splitmate.app.data.WorldCurrencyMetadata
 
 data class ReceiptLineItem(
     val itemId: String,
@@ -37,7 +34,7 @@ data class ReceiptLineItem(
 data class SplitMateUiState(
     val hasRegisteredProfile: Boolean = true,
     val currentUserName: String = "Akshay",
-    val currentUserSeed: String = "Akshay",
+    val currentUserSeed: String = "Akshay|Masculine",
     val currentUserCountry: String = "India",
     val userUpiId: String = "akshay@okhdfcbank",
     val isDarkTheme: Boolean = false,
@@ -51,7 +48,6 @@ data class SplitMateUiState(
     val expenses: List<ExpenseEntity> = emptyList(),
     val splits: List<ExpenseSplitEntity> = emptyList(),
     val settlements: List<SettlementEntity> = emptyList(),
-    // Collaborative Manual Entry / Live Receipt Matrix State (Bypasses "Split Equally" default)
     val receiptTitle: String = "Osteria Del Sole · Table 14",
     val receiptPayerId: String = "m_1",
     val activeClaimerPersonaId: String = "m_1",
@@ -61,8 +57,7 @@ data class SplitMateUiState(
     val statusBannerMessage: String? = null
 ) {
     val activeCurrency: CurrencyRateEntity
-        get() = currencyRates.find { it.currencyCode == activeCurrencyCode }
-            ?: CurrencyRateEntity("INR", "Indian Rupee", "₹", 83.95)
+        get() = CurrencyRateEntity("INR", "Indian Rupee", "₹", 83.95)
 
     val activeGroup: ExpenseGroupEntity?
         get() = groups.find { it.groupId == activeGroupId } ?: groups.firstOrNull()
@@ -71,23 +66,9 @@ data class SplitMateUiState(
         get() = members.filter { it.groupId == activeGroupId }
 }
 
-fun defaultSeedCurrencies(): List<CurrencyRateEntity> =
-    WorldCurrencyMetadata.allCurrencies.mapIndexed { idx, info ->
-        val defaultRate = when (info.code) {
-            "INR" -> 83.95
-            "USD" -> 1.00
-            "EUR" -> 0.92
-            "GBP" -> 0.79
-            "JPY" -> 151.40
-            "AED" -> 3.67
-            "AUD" -> 1.52
-            "CAD" -> 1.36
-            "CHF" -> 0.88
-            "SGD" -> 1.34
-            else -> 1.0 + (idx * 0.15)
-        }
-        CurrencyRateEntity(info.code, info.name, info.symbol, defaultRate)
-    }
+fun defaultSeedCurrencies(): List<CurrencyRateEntity> = listOf(
+    CurrencyRateEntity("INR", "Indian Rupee", "₹", 83.95)
+)
 
 fun defaultSeedReceiptItems(): List<ReceiptLineItem> = listOf(
     ReceiptLineItem("item_1", "Truffle Tagliatelle", 2800L, setOf("m_1")),
@@ -123,7 +104,6 @@ data class SettlementTransferUiModel(
 
 class SplitMateViewModel(
     private val dao: SplitMateDao? = null,
-    private val api: FrankfurterApiService = FrankfurterNetwork.api,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : ViewModel() {
 
@@ -133,7 +113,7 @@ class SplitMateViewModel(
     val uiState: StateFlow<SplitMateUiState> = _uiState.asStateFlow()
 
     val totalBalance: StateFlow<String> = _uiState.map { state ->
-        val sym = state.activeCurrency.symbol
+        val sym = "₹"
         if (state.groups.isEmpty() || state.expenses.isEmpty()) {
             "${sym}0.00"
         } else {
@@ -151,7 +131,7 @@ class SplitMateViewModel(
         if (state.groups.isEmpty()) {
             emptyList()
         } else {
-            val sym = state.activeCurrency.symbol
+            val sym = "₹"
             state.groups.map { group ->
                 val groupMembers = state.members.filter { it.groupId == group.groupId }
                 val groupExpenses = state.expenses.filter { it.groupId == group.groupId }
@@ -200,7 +180,7 @@ class SplitMateViewModel(
         if (state.groups.isEmpty()) {
             emptyList()
         } else {
-            val sym = state.activeCurrency.symbol
+            val sym = "₹"
             val groupMembers = state.activeGroupMembers
             val groupExpenses = state.expenses.filter { it.groupId == state.activeGroupId }
             val groupExpenseIds = groupExpenses.map { it.expenseId }.toSet()
@@ -218,7 +198,7 @@ class SplitMateViewModel(
                 val fromMember = groupMembers.find { it.memberId == tr.fromMemberId }
                 val toMember = groupMembers.find { it.memberId == tr.toMemberId }
                 val cleanHandle = tr.toName.lowercase(Locale.US).replace(Regex("[^a-z0-9]"), "").ifEmpty { "splitmate" }
-                val resolvedUpiId = toMember?.upiId?.takeIf { it.isNotBlank() } ?: "$cleanHandle@okhdfcbank"
+                val resolvedUpiId = toMember?.upiId?.takeIf { it.isNotBlank() } ?: "$cleanHandle@upi"
                 val majorStr = String.format(Locale.US, "%.2f", tr.amountCents / 100.0)
                 SettlementTransferUiModel(
                     transfer = tr,
@@ -240,7 +220,6 @@ class SplitMateViewModel(
     init {
         if (dao != null) {
             observeRoomDatabase(dao)
-            syncLiveCurrencyRatesFromFrankfurter()
         }
     }
 
@@ -439,13 +418,19 @@ class SplitMateViewModel(
         }
     }
 
-    fun updateFriendUpi(memberId: String, newName: String, newUpiId: String) {
+    fun updateFriendUpi(
+        memberId: String,
+        newName: String,
+        newUpiId: String,
+        newAvatarSeed: String? = null
+    ) {
         val cleanName = newName.trim().ifEmpty { "Friend" }
         val cleanUpi = newUpiId.trim()
+        val effectiveSeed = newAvatarSeed?.trim()?.ifEmpty { cleanName } ?: cleanName
         _uiState.update { state ->
             val updatedMembers = state.members.map { m ->
                 if (m.memberId == memberId) {
-                    m.copy(name = cleanName, avatarSeed = cleanName, upiId = cleanUpi)
+                    m.copy(name = cleanName, avatarSeed = effectiveSeed, upiId = cleanUpi)
                 } else m
             }
             state.copy(
@@ -454,13 +439,13 @@ class SplitMateViewModel(
             )
         }
         viewModelScope.launch(ioDispatcher) {
-            dao?.updateMemberProfile(memberId, cleanName, cleanUpi)
+            dao?.updateMemberProfile(memberId, cleanName, cleanUpi, effectiveSeed)
         }
     }
 
     /**
      * Commits a Quick Equal Expense from QuickExpenseScreen:
-     * Strictly divides [totalAmountCents] equally among [selectedMemberIds] with 0.00¢ drift.
+     * Strictly divides [totalAmountCents] equally among [selectedMemberIds] with Exact Split.
      */
     fun commitQuickEqualExpense(
         title: String,
@@ -496,7 +481,7 @@ class SplitMateViewModel(
             totalAmountCents = totalAmountCents,
             lockedMultiplier = 1.0,
             unassignedBaseCents = 0L,
-            currencyCode = state.activeCurrencyCode,
+            currencyCode = "INR",
             lockedExchangeRate = lockedRate,
             syncStatus = syncStatus
         )
@@ -516,7 +501,7 @@ class SplitMateViewModel(
             curr.copy(
                 expenses = listOf(expenseEntity) + curr.expenses,
                 splits = curr.splits + splitEntities,
-                statusBannerMessage = "Split \"${expenseEntity.title}\" equally among ${chosenMembers.size} people"
+                statusBannerMessage = "Split \"${expenseEntity.title}\" equally among ${chosenMembers.size} people (Exact Split)"
             )
         }
 
@@ -525,66 +510,13 @@ class SplitMateViewModel(
         }
     }
 
-    /**
-     * Fetches live conversion rates at runtime from `https://open.er-api.com/v6/latest/USD` (160+ world currencies)
-     * and caches them immediately into Jetpack Room (`CurrencyRateEntity`) for offline use.
-     */
-    fun syncLiveCurrencyRatesFromFrankfurter(base: String = "USD") {
-        viewModelScope.launch(ioDispatcher) {
-            _uiState.update { it.copy(isSyncingRates = true) }
-            try {
-                val latest = api.getLatestRates(base)
-                val existingByCode = _uiState.value.currencyRates.associateBy { it.currencyCode }
-
-                val merged = latest.rates.map { (code, rate) ->
-                    val prev = existingByCode[code]
-                    CurrencyRateEntity(
-                        currencyCode = code,
-                        currencyName = com.splitmate.app.data.WorldCurrencyMetadata.nameFor(code).takeIf { it != code }
-                            ?: prev?.currencyName ?: code,
-                        symbol = com.splitmate.app.data.WorldCurrencyMetadata.symbolFor(code).takeIf { it != code }
-                            ?: prev?.symbol ?: currencySymbolFor(code),
-                        rateFromBase = rate,
-                        baseCurrency = latest.base.ifBlank { base },
-                        updatedAt = System.currentTimeMillis()
-                    )
-                }.toMutableList()
-
-                // Ensure base currency itself is included at 1.00
-                if (merged.none { it.currencyCode == base }) {
-                    merged.add(
-                        0,
-                        CurrencyRateEntity(
-                            base,
-                            com.splitmate.app.data.WorldCurrencyMetadata.nameFor(base),
-                            com.splitmate.app.data.WorldCurrencyMetadata.symbolFor(base),
-                            1.0,
-                            base
-                        )
-                    )
-                }
-
-                dao?.upsertCurrencyRates(merged)
-                dao?.markPendingExpensesSynced()
-
-                _uiState.update {
-                    it.copy(
-                        isSyncingRates = false,
-                        isOfflineMode = false,
-                        currencyRates = merged.sortedBy { c -> c.currencyCode },
-                        statusBannerMessage = "Synced ${merged.size} live currency rates from Open Exchange Rates API"
-                    )
-                }
-            } catch (e: Exception) {
-                // Offline-First Graceful Fallback: keep cached Room rates & flag offline state
-                _uiState.update {
-                    it.copy(
-                        isSyncingRates = false,
-                        isOfflineMode = true,
-                        statusBannerMessage = "Offline mode active · Using Room cached currency rates"
-                    )
-                }
-            }
+    fun syncLiveCurrencyRatesFromFrankfurter(base: String = "INR") {
+        _uiState.update {
+            it.copy(
+                isSyncingRates = false,
+                isOfflineMode = false,
+                activeCurrencyCode = "INR"
+            )
         }
     }
 
@@ -595,13 +527,15 @@ class SplitMateViewModel(
     fun updateUserProfile(newName: String, newCurrencyCode: String) {
         val cleanName = newName.trim().ifEmpty { "Akshay" }
         _uiState.update { state ->
+            val currentStyle = state.currentUserSeed.substringAfter('|', "Masculine")
+            val updatedSeed = "$cleanName|$currentStyle"
             val updatedMembers = state.members.map { m ->
-                if (m.isCurrentUser) m.copy(name = cleanName, avatarSeed = cleanName) else m
+                if (m.isCurrentUser) m.copy(name = cleanName, avatarSeed = updatedSeed) else m
             }
             state.copy(
                 currentUserName = cleanName,
-                currentUserSeed = cleanName,
-                activeCurrencyCode = newCurrencyCode,
+                currentUserSeed = updatedSeed,
+                activeCurrencyCode = "INR",
                 members = updatedMembers
             )
         }
@@ -622,7 +556,7 @@ class SplitMateViewModel(
     fun createNewGroup(name: String, currencyCode: String, friendNamesCsv: String) {
         val cleanGroup = name.trim().ifEmpty { "New Group" }
         val groupId = "g_${System.currentTimeMillis()}"
-        val newGroup = ExpenseGroupEntity(groupId, cleanGroup, currencyCode)
+        val newGroup = ExpenseGroupEntity(groupId, cleanGroup, "INR")
 
         val friendList = friendNamesCsv.split(",").map { it.trim() }.filter { it.isNotEmpty() }
         val meMember = GroupMemberEntity(
@@ -637,7 +571,7 @@ class SplitMateViewModel(
                 memberId = "${groupId}_f$index",
                 groupId = groupId,
                 name = fName,
-                avatarSeed = fName,
+                avatarSeed = "$fName|Neutral",
                 isCurrentUser = false
             )
         }
@@ -668,7 +602,7 @@ class SplitMateViewModel(
             memberId = "m_${System.currentTimeMillis()}",
             groupId = groupId,
             name = clean,
-            avatarSeed = clean,
+            avatarSeed = "$clean|Neutral",
             isCurrentUser = false
         )
         _uiState.update { state ->
@@ -732,7 +666,7 @@ class SplitMateViewModel(
             }
             state.copy(
                 receiptItems = updatedItems,
-                statusBannerMessage = "Unassigned remainder split equally across all members (0.00¢ drift)"
+                statusBannerMessage = "Unassigned remainder split equally across all members (Exact Split)"
             )
         }
     }

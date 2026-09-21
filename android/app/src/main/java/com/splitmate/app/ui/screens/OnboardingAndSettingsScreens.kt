@@ -1,6 +1,5 @@
 package com.splitmate.app.ui.screens
 
-import android.net.Uri
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -34,23 +33,33 @@ import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.splitmate.app.R
+import com.splitmate.app.SplitMateTheme
+import com.splitmate.app.ui.SplitMateBrandFontFamily
+import com.splitmate.app.ui.SplitMateDisplayFontFamily
+import com.splitmate.app.ui.buildDiceBearOpenPeepsUrl
 
 // ==============================================================================
-// SPLITMATE M3 EXPRESSIVE THEME TOKENS & SHAPES
+// SPLITMATE M3 EXPRESSIVE THEME TOKENS & SHAPES (DARK-MODE ADAPTIVE)
 // ==============================================================================
 object SplitMateThemeTokens {
-    val ScreenBg = Color(0xFFFAF7F2)               // Warm Cream Eggshell
-    val PrimaryDark = Color(0xFF23201E)            // Charcoal Espresso
+    val ScreenBg: Color
+        get() = if (SplitMateTheme.isDark) Color(0xFF121212) else Color(0xFFFAF7F2)
+    val PrimaryDark: Color
+        get() = if (SplitMateTheme.isDark) Color(0xFFFAF7F2) else Color(0xFF23201E)
     val AccentSage = Color(0xFFD7E8B6)             // Active Pill / Secondary Accent
     val SageSurface = Color(0xFFEAF3DC)            // Soft Sage Surface
     val SageText = Color(0xFF2D4810)               // Deep Green Text
     val TerracottaSurface = Color(0xFFFCECE7)      // Blush Terracotta Surface
     val TerracottaText = Color(0xFFC23E2A)         // Terracotta Accent Text
     val BrandCoral = Color(0xFFE06B52)             // Signature Leaf Brand
-    val SurfaceWhite = Color(0xFFFFFFFF)
-    val SurfaceMuted = Color(0xFFF2EFE9)
-    val BorderLight = Color(0xFFE6E1D6)
-    val TextSecondary = Color(0xFF756F68)
+    val SurfaceWhite: Color
+        get() = if (SplitMateTheme.isDark) Color(0xFF1E1D1B) else Color(0xFFFFFFFF)
+    val SurfaceMuted: Color
+        get() = if (SplitMateTheme.isDark) Color(0xFF282521) else Color(0xFFF2EFE9)
+    val BorderLight: Color
+        get() = if (SplitMateTheme.isDark) Color(0xFF38332D) else Color(0xFFE6E1D6)
+    val TextSecondary: Color
+        get() = if (SplitMateTheme.isDark) Color(0xFFB5ADA3) else Color(0xFF756F68)
 
     // Exaggerated Expressive Radii
     val RadiusHero = RoundedCornerShape(32.dp)
@@ -60,7 +69,7 @@ object SplitMateThemeTokens {
     val RadiusPill = RoundedCornerShape(999.dp)
 }
 
-// Data models for Currencies & Countries (Circular symbol badges, zero emoji flags)
+// Data model locked strictly to India - INR (₹)
 data class CountryCurrency(
     val code: String,
     val country: String,
@@ -71,16 +80,7 @@ data class CountryCurrency(
 )
 
 val SupportedCurrencies = listOf(
-    CountryCurrency("INR", "India", "Indian Rupee", "₹", Color(0xFFD7E8B6), Color(0xFF2D4810)),
-    CountryCurrency("USD", "United States", "US Dollar", "$", Color(0xFFFFD8CC), Color(0xFF8A2E1A)),
-    CountryCurrency("EUR", "European Union", "Euro", "€", Color(0xFFD0E2FF), Color(0xFF143E82)),
-    CountryCurrency("GBP", "United Kingdom", "British Pound", "£", Color(0xFFFFD5E5), Color(0xFF801844)),
-    CountryCurrency("JPY", "Japan", "Japanese Yen", "¥", Color(0xFFE5DCFF), Color(0xFF452285)),
-    CountryCurrency("CAD", "Canada", "Canadian Dollar", "C$", Color(0xFFD2F5DC), Color(0xFF1B6331)),
-    CountryCurrency("AUD", "Australia", "Australian Dollar", "A$", Color(0xFFD7E8B6), Color(0xFF2D4810)),
-    CountryCurrency("SGD", "Singapore", "Singapore Dollar", "S$", Color(0xFFFFD8CC), Color(0xFF8A2E1A)),
-    CountryCurrency("AED", "United Arab Emirates", "UAE Dirham", "د.إ", Color(0xFFD0E2FF), Color(0xFF143E82)),
-    CountryCurrency("CHF", "Switzerland", "Swiss Franc", "Fr", Color(0xFFE5DCFF), Color(0xFF452285))
+    CountryCurrency("INR", "India", "Indian Rupee", "₹", Color(0xFFD7E8B6), Color(0xFF2D4810))
 )
 
 // ==============================================================================
@@ -94,14 +94,14 @@ fun OnboardingSetupScreen(
     val context = LocalContext.current
     var nameText by remember { mutableStateOf("") }
     var randomSeedSuffix by remember { mutableStateOf(101) }
-    var selectedCurrency by remember { mutableStateOf(SupportedCurrencies[0]) } // Default India - INR
-    var isCurrencyDropdownExpanded by remember { mutableStateOf(false) }
+    var selectedPresentationStyle by remember { mutableStateOf("Masculine") }
+    val selectedCurrency = SupportedCurrencies[0] // Strictly locked to INR (₹)
 
     val effectiveSeed = remember(nameText, randomSeedSuffix) {
         if (nameText.isBlank()) "Explorer_$randomSeedSuffix" else "${nameText.trim()}_$randomSeedSuffix"
     }
-    val diceBearSvgUrl = remember(effectiveSeed) {
-        "https://api.dicebear.com/9.x/open-peeps/svg?seed=${Uri.encode(effectiveSeed)}&backgroundColor=d7e8b6,fed8c8,dce3fd"
+    val diceBearSvgUrl = remember(effectiveSeed, selectedPresentationStyle) {
+        buildDiceBearOpenPeepsUrl(effectiveSeed, selectedPresentationStyle)
     }
 
     Scaffold(
@@ -120,13 +120,13 @@ fun OnboardingSetupScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // Brand Pill / Badge
                 Surface(
                     shape = SplitMateThemeTokens.RadiusPill,
                     color = SplitMateThemeTokens.SageSurface,
-                    modifier = Modifier.padding(bottom = 16.dp)
+                    modifier = Modifier.padding(bottom = 14.dp)
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
@@ -140,7 +140,8 @@ fun OnboardingSetupScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Zero-Signup · Private Local Vault",
+                            text = "Zero-Signup · Native INR (₹) Vault",
+                            fontFamily = SplitMateBrandFontFamily,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = SplitMateThemeTokens.SageText
@@ -151,6 +152,7 @@ fun OnboardingSetupScreen(
                 // Header
                 Text(
                     text = "Welcome to SplitMate",
+                    fontFamily = SplitMateDisplayFontFamily,
                     fontSize = 32.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = SplitMateThemeTokens.PrimaryDark,
@@ -159,14 +161,15 @@ fun OnboardingSetupScreen(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Let's set up your profile.",
-                    fontSize = 16.sp,
+                    text = "Let's set up your profile & avatar persona.",
+                    fontFamily = SplitMateBrandFontFamily,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
                     color = SplitMateThemeTokens.TextSecondary,
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
                 // Avatar Preview (120dp circular placeholder with live DiceBear Open-Peeps SVG)
                 Box(
@@ -215,11 +218,12 @@ fun OnboardingSetupScreen(
                                 .offset(y = (-4).dp)
                         ) {
                             Text(
-                                text = "dicebear.svg",
+                                text = selectedPresentationStyle,
+                                fontFamily = SplitMateBrandFontFamily,
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = SplitMateThemeTokens.ScreenBg,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                             )
                         }
                     }
@@ -227,21 +231,75 @@ fun OnboardingSetupScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
-                    text = "Tap to randomize avatar",
+                    text = "Tap avatar to randomize look",
+                    fontFamily = SplitMateBrandFontFamily,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = SplitMateThemeTokens.TextSecondary,
                     modifier = Modifier.clickable { randomSeedSuffix = (100..999).random() }
                 )
 
-                Spacer(modifier = Modifier.height(36.dp))
+                Spacer(modifier = Modifier.height(22.dp))
 
-                // Input 1: Material 3 OutlinedTextField for "Your Name"
+                // Input 1: Presentation Style Toggle (Masculine, Feminine, Neutral)
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.Start
+                ) {
+                    Text(
+                        text = "Presentation Style",
+                        fontFamily = SplitMateBrandFontFamily,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SplitMateThemeTokens.PrimaryDark,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                    )
+                    Surface(
+                        shape = SplitMateThemeTokens.RadiusPill,
+                        color = SplitMateThemeTokens.SurfaceMuted,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, SplitMateThemeTokens.BorderLight, SplitMateThemeTokens.RadiusPill)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf("Masculine", "Feminine", "Neutral").forEach { style ->
+                                val isSelected = selectedPresentationStyle == style
+                                Surface(
+                                    onClick = { selectedPresentationStyle = style },
+                                    shape = SplitMateThemeTokens.RadiusPill,
+                                    color = if (isSelected) SplitMateThemeTokens.PrimaryDark else Color.Transparent,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(42.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            text = style,
+                                            fontFamily = SplitMateBrandFontFamily,
+                                            fontSize = 13.sp,
+                                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                            color = if (isSelected) SplitMateThemeTokens.ScreenBg else SplitMateThemeTokens.TextSecondary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // Input 2: Material 3 OutlinedTextField for "Your Name"
                 OutlinedTextField(
                     value = nameText,
                     onValueChange = { nameText = it },
-                    label = { Text("Your Name", fontWeight = FontWeight.SemiBold) },
-                    placeholder = { Text("e.g. Maya Lin") },
+                    label = { Text("Your Name", fontFamily = SplitMateBrandFontFamily, fontWeight = FontWeight.SemiBold) },
+                    placeholder = { Text("e.g. Akshay Karadkar", fontFamily = SplitMateBrandFontFamily) },
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Rounded.Person,
@@ -252,6 +310,8 @@ fun OnboardingSetupScreen(
                     singleLine = true,
                     shape = SplitMateThemeTokens.RadiusCard,
                     colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = SplitMateThemeTokens.PrimaryDark,
+                        unfocusedTextColor = SplitMateThemeTokens.PrimaryDark,
                         focusedContainerColor = SplitMateThemeTokens.SurfaceWhite,
                         unfocusedContainerColor = SplitMateThemeTokens.SurfaceWhite,
                         focusedBorderColor = SplitMateThemeTokens.PrimaryDark,
@@ -266,116 +326,6 @@ fun OnboardingSetupScreen(
                 )
 
                 Spacer(modifier = Modifier.height(18.dp))
-
-                // Input 2: Exposed Dropdown Selector for "Home Country & Currency" with Circular Symbol Badges
-                ExposedDropdownMenuBox(
-                    expanded = isCurrencyDropdownExpanded,
-                    onExpandedChange = { isCurrencyDropdownExpanded = !isCurrencyDropdownExpanded },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    OutlinedTextField(
-                        value = "${selectedCurrency.country} (${selectedCurrency.code} · ${selectedCurrency.symbol})",
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Home Country & Currency", fontWeight = FontWeight.SemiBold) },
-                        leadingIcon = {
-                            Box(
-                                modifier = Modifier
-                                    .padding(start = 8.dp)
-                                    .size(34.dp)
-                                    .clip(CircleShape)
-                                    .background(selectedCurrency.badgeBg),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = selectedCurrency.symbol,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = selectedCurrency.badgeFg
-                                )
-                            }
-                        },
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = isCurrencyDropdownExpanded)
-                        },
-                        shape = SplitMateThemeTokens.RadiusCard,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = SplitMateThemeTokens.SurfaceWhite,
-                            unfocusedContainerColor = SplitMateThemeTokens.SurfaceWhite,
-                            focusedBorderColor = SplitMateThemeTokens.PrimaryDark,
-                            unfocusedBorderColor = SplitMateThemeTokens.BorderLight,
-                            focusedLabelColor = SplitMateThemeTokens.PrimaryDark,
-                            unfocusedLabelColor = SplitMateThemeTokens.TextSecondary
-                        ),
-                        modifier = Modifier
-                            .menuAnchor()
-                            .fillMaxWidth()
-                            .sizeIn(minHeight = 56.dp)
-                    )
-
-                    ExposedDropdownMenu(
-                        expanded = isCurrencyDropdownExpanded,
-                        onDismissRequest = { isCurrencyDropdownExpanded = false },
-                        modifier = Modifier
-                            .background(SplitMateThemeTokens.SurfaceWhite)
-                            .clip(SplitMateThemeTokens.RadiusCard)
-                    ) {
-                        SupportedCurrencies.forEach { item ->
-                            DropdownMenuItem(
-                                text = {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(36.dp)
-                                                .clip(CircleShape)
-                                                .background(item.badgeBg),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = item.symbol,
-                                                fontSize = 14.sp,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = item.badgeFg
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = "${item.country} (${item.code})",
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 14.sp,
-                                                color = SplitMateThemeTokens.PrimaryDark
-                                            )
-                                            Text(
-                                                text = "${item.currencyName} · Symbol: ${item.symbol}",
-                                                fontSize = 12.sp,
-                                                color = SplitMateThemeTokens.TextSecondary
-                                            )
-                                        }
-                                        if (item.code == selectedCurrency.code) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.CheckCircle,
-                                                contentDescription = null,
-                                                tint = SplitMateThemeTokens.SageText,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
-                                    }
-                                },
-                                onClick = {
-                                    selectedCurrency = item
-                                    isCurrencyDropdownExpanded = false
-                                },
-                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
 
                 // Math & Vault Trust Indicator
                 Surface(
@@ -396,37 +346,40 @@ fun OnboardingSetupScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "Zero Rounding Drift Engine",
+                                text = "Exact Split Precision Engine (₹ INR)",
+                                fontFamily = SplitMateBrandFontFamily,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp,
                                 color = SplitMateThemeTokens.SageText
                             )
                             Text(
-                                text = "Integer-cent precision with local Room SQLite storage.",
+                                text = "Integer-paise precision with local Room SQLite storage.",
+                                fontFamily = SplitMateBrandFontFamily,
                                 fontSize = 12.sp,
-                                color = SplitMateThemeTokens.PrimaryDark
+                                color = Color(0xFF23201E)
                             )
                         }
                     }
                 }
             }
 
-            // CTA: Massive, pill-shaped primary button at bottom (#23201E background, white text)
+            // CTA: Massive, pill-shaped primary button at bottom
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 32.dp, bottom = 12.dp),
+                    .padding(top = 28.dp, bottom = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Button(
                     onClick = {
                         val finalName = if (nameText.isBlank()) "Explorer" else nameText.trim()
-                        onCompleteProfile(finalName, selectedCurrency, effectiveSeed)
+                        val styledSeed = "$effectiveSeed|$selectedPresentationStyle"
+                        onCompleteProfile(finalName, selectedCurrency, styledSeed)
                     },
                     shape = SplitMateThemeTokens.RadiusPill,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = SplitMateThemeTokens.PrimaryDark,
-                        contentColor = Color.White
+                        contentColor = SplitMateThemeTokens.ScreenBg
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -439,15 +392,16 @@ fun OnboardingSetupScreen(
                     ) {
                         Text(
                             text = "Create Profile & Enter Vault",
+                            fontFamily = SplitMateBrandFontFamily,
                             fontSize = 17.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color.White
+                            color = SplitMateThemeTokens.ScreenBg
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = SplitMateThemeTokens.ScreenBg,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -456,6 +410,7 @@ fun OnboardingSetupScreen(
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = "Encrypted On-Device · No External Accounts Needed",
+                    fontFamily = SplitMateBrandFontFamily,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = SplitMateThemeTokens.TextSecondary
@@ -471,9 +426,9 @@ fun OnboardingSetupScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UserSettingsScreen(
-    userName: String = "Maya Lin",
+    userName: String = "Akshay",
     avatarSeed: String = userName,
-    upiId: String = "mayalin@okaxis",
+    upiId: String = "akshay@okaxis",
     defaultCurrencyCode: String = "INR (₹)",
     totalBalanceText: String = "+₹0.00",
     activeGroupsCount: Int = 0,
@@ -490,17 +445,16 @@ fun UserSettingsScreen(
     var isDarkTheme by remember(isDarkThemeInitial) { mutableStateOf(isDarkThemeInitial) }
     var showClearVaultDialog by remember { mutableStateOf(false) }
     var showEditUpiDialog by remember { mutableStateOf(false) }
-    var showEditCurrencyDialog by remember { mutableStateOf(false) }
 
-    val screenBg = if (isDarkTheme) Color(0xFF141311) else SplitMateThemeTokens.ScreenBg
-    val cardBg = if (isDarkTheme) Color(0xFF1F1D1A) else SplitMateThemeTokens.SurfaceWhite
-    val mutedBg = if (isDarkTheme) Color(0xFF282521) else SplitMateThemeTokens.SurfaceMuted
-    val textPrimary = if (isDarkTheme) Color(0xFFF6F2EA) else SplitMateThemeTokens.PrimaryDark
-    val textSecondary = if (isDarkTheme) Color(0xFFB5ADA3) else SplitMateThemeTokens.TextSecondary
-    val borderColor = if (isDarkTheme) Color(0xFF38332D) else SplitMateThemeTokens.BorderLight
+    val screenBg = if (isDarkTheme) Color(0xFF121212) else Color(0xFFFAF7F2)
+    val cardBg = if (isDarkTheme) Color(0xFF1E1D1B) else Color(0xFFFFFFFF)
+    val mutedBg = if (isDarkTheme) Color(0xFF282521) else Color(0xFFF2EFE9)
+    val textPrimary = if (isDarkTheme) Color(0xFFFAF7F2) else Color(0xFF23201E)
+    val textSecondary = if (isDarkTheme) Color(0xFFB5ADA3) else Color(0xFF756F68)
+    val borderColor = if (isDarkTheme) Color(0xFF38332D) else Color(0xFFE6E1D6)
 
     val diceBearSvgUrl = remember(avatarSeed) {
-        "https://api.dicebear.com/9.x/open-peeps/svg?seed=${Uri.encode(avatarSeed)}&backgroundColor=d7e8b6,fed8c8,dce3fd"
+        buildDiceBearOpenPeepsUrl(avatarSeed)
     }
 
     Scaffold(
@@ -510,6 +464,7 @@ fun UserSettingsScreen(
                 title = {
                     Text(
                         text = "Settings",
+                        fontFamily = SplitMateDisplayFontFamily,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 20.sp,
                         color = textPrimary
@@ -545,7 +500,8 @@ fun UserSettingsScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "v6.0 Online",
+                                text = "v7.0 INR Vault",
+                                fontFamily = SplitMateBrandFontFamily,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = SplitMateThemeTokens.SageText
@@ -594,6 +550,7 @@ fun UserSettingsScreen(
                         ) {
                             Text(
                                 text = userName,
+                                fontFamily = SplitMateDisplayFontFamily,
                                 fontSize = 24.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = textPrimary
@@ -620,6 +577,7 @@ fun UserSettingsScreen(
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
                                         text = upiId,
+                                        fontFamily = SplitMateBrandFontFamily,
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = textPrimary
@@ -650,9 +608,9 @@ fun UserSettingsScreen(
                                         modifier = Modifier.padding(12.dp),
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
-                                        Text("Balance", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SplitMateThemeTokens.SageText)
+                                        Text("Balance", fontFamily = SplitMateBrandFontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SplitMateThemeTokens.SageText)
                                         Spacer(modifier = Modifier.height(2.dp))
-                                        Text(totalBalanceText, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = SplitMateThemeTokens.SageText)
+                                        Text(totalBalanceText, fontFamily = SplitMateDisplayFontFamily, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = SplitMateThemeTokens.SageText)
                                     }
                                 }
 
@@ -665,9 +623,9 @@ fun UserSettingsScreen(
                                         modifier = Modifier.padding(12.dp),
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
-                                        Text("Active Groups", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = textSecondary)
+                                        Text("Active Groups", fontFamily = SplitMateBrandFontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = textSecondary)
                                         Spacer(modifier = Modifier.height(2.dp))
-                                        Text("$activeGroupsCount Ledgers", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = textPrimary)
+                                        Text("$activeGroupsCount Ledgers", fontFamily = SplitMateDisplayFontFamily, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = textPrimary)
                                     }
                                 }
                             }
@@ -693,6 +651,7 @@ fun UserSettingsScreen(
                     ) {
                         Text(
                             text = userName.trim().take(2).uppercase().ifEmpty { "SM" },
+                            fontFamily = SplitMateDisplayFontFamily,
                             fontSize = 24.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = SplitMateThemeTokens.SageText
@@ -713,11 +672,12 @@ fun UserSettingsScreen(
                 }
             }
 
-            // Section 1: "Payment & Currency"
+            // Section 1: "Payment & Native INR Vault"
             item {
                 Column {
                     Text(
-                        text = "Payment & Currency",
+                        text = "Payment & UPI Settings",
+                        fontFamily = SplitMateDisplayFontFamily,
                         fontSize = 17.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = textPrimary,
@@ -734,7 +694,7 @@ fun UserSettingsScreen(
                         Column {
                             // Row 1: Edit UPI ID
                             SettingsRowItem(
-                                icon = Icons.Rounded.QrCodeScanner,
+                                icon = Icons.Rounded.AccountBalanceWallet,
                                 iconBg = SplitMateThemeTokens.SageSurface,
                                 iconTint = SplitMateThemeTokens.SageText,
                                 title = "UPI Virtual Payment Address",
@@ -746,6 +706,7 @@ fun UserSettingsScreen(
                                     ) {
                                         Text(
                                             text = "Edit",
+                                            fontFamily = SplitMateBrandFontFamily,
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = textPrimary,
@@ -761,21 +722,29 @@ fun UserSettingsScreen(
                                 modifier = Modifier.padding(horizontal = 16.dp)
                             )
 
-                            // Row 2: Default Currency (160+ World Currencies ModalBottomSheet)
+                            // Row 2: Native INR Currency (Locked)
                             SettingsRowItem(
-                                icon = Icons.Rounded.CurrencyExchange,
-                                iconBg = SplitMateThemeTokens.TerracottaSurface,
-                                iconTint = SplitMateThemeTokens.TerracottaText,
-                                title = "Default Ledger Currency (160+ World)",
-                                subtitle = defaultCurrencyCode,
+                                icon = Icons.Rounded.AccountBalanceWallet,
+                                iconBg = SplitMateThemeTokens.SageSurface,
+                                iconTint = SplitMateThemeTokens.SageText,
+                                title = "Native Ledger Currency",
+                                subtitle = "Indian Rupee (₹ INR) · UPI Native",
                                 trailingContent = {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                                        contentDescription = null,
-                                        tint = textSecondary
-                                    )
+                                    Surface(
+                                        shape = SplitMateThemeTokens.RadiusPill,
+                                        color = SplitMateThemeTokens.SageSurface
+                                    ) {
+                                        Text(
+                                            text = "₹ INR",
+                                            fontFamily = SplitMateBrandFontFamily,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = SplitMateThemeTokens.SageText,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                        )
+                                    }
                                 },
-                                onClick = { showEditCurrencyDialog = true }
+                                onClick = {}
                             )
                         }
                     }
@@ -787,6 +756,7 @@ fun UserSettingsScreen(
                 Column {
                     Text(
                         text = "App Preferences",
+                        fontFamily = SplitMateDisplayFontFamily,
                         fontSize = 17.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = textPrimary,
@@ -807,7 +777,7 @@ fun UserSettingsScreen(
                                 iconBg = Color(0xFFE8EDFB),
                                 iconTint = Color(0xFF244896),
                                 title = "Dark / Light Theme",
-                                subtitle = if (isDarkTheme) "Dark Espresso mode enabled" else "Warm Cream Eggshell",
+                                subtitle = if (isDarkTheme) "Dark Mode (#121212) enabled" else "Warm Cream Eggshell (#FAF7F2)",
                                 trailingContent = {
                                     Switch(
                                         checked = isDarkTheme,
@@ -816,10 +786,10 @@ fun UserSettingsScreen(
                                             onThemeToggle(it)
                                         },
                                         colors = SwitchDefaults.colors(
-                                            checkedThumbColor = SplitMateThemeTokens.SurfaceWhite,
-                                            checkedTrackColor = SplitMateThemeTokens.AccentSage,
-                                            uncheckedThumbColor = SplitMateThemeTokens.PrimaryDark,
-                                            uncheckedTrackColor = SplitMateThemeTokens.SurfaceMuted
+                                            checkedThumbColor = Color.White,
+                                            checkedTrackColor = Color(0xFF416913),
+                                            uncheckedThumbColor = Color(0xFF23201E),
+                                            uncheckedTrackColor = mutedBg
                                         )
                                     )
                                 },
@@ -877,14 +847,16 @@ fun UserSettingsScreen(
                         Column {
                             Text(
                                 text = "Cryptographic Ledger Sovereignty",
+                                fontFamily = SplitMateBrandFontFamily,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = SplitMateThemeTokens.SageText
                             )
                             Text(
-                                text = "All splits calculated with 0.00¢ remainder parity and held securely in local SQLite.",
+                                text = "All splits calculated with Exact Split parity and held securely in local SQLite.",
+                                fontFamily = SplitMateBrandFontFamily,
                                 fontSize = 11.sp,
-                                color = SplitMateThemeTokens.PrimaryDark
+                                color = Color(0xFF23201E)
                             )
                         }
                     }
@@ -921,13 +893,15 @@ fun UserSettingsScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
                             text = "Clear Local Vault?",
+                            fontFamily = SplitMateDisplayFontFamily,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = textPrimary
                         )
                     }
                     Text(
-                        text = "This will erase all cached receipts, group ledgers, and participant claim records stored on this device. This action cannot be undone.",
+                        text = "This will erase all cached expenses, group ledgers, and participant claim records stored on this device. This action cannot be undone.",
+                        fontFamily = SplitMateBrandFontFamily,
                         color = textSecondary,
                         fontSize = 14.sp,
                         lineHeight = 20.sp
@@ -940,7 +914,7 @@ fun UserSettingsScreen(
                             onClick = { showClearVaultDialog = false },
                             shape = SplitMateThemeTokens.RadiusButton
                         ) {
-                            Text("Cancel", fontWeight = FontWeight.Bold, color = textPrimary)
+                            Text("Cancel", fontFamily = SplitMateBrandFontFamily, fontWeight = FontWeight.Bold, color = textPrimary)
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
@@ -951,7 +925,7 @@ fun UserSettingsScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = SplitMateThemeTokens.TerracottaText),
                             shape = SplitMateThemeTokens.RadiusButton
                         ) {
-                            Text("Clear All Data", fontWeight = FontWeight.Bold, color = Color.White)
+                            Text("Clear All Data", fontFamily = SplitMateBrandFontFamily, fontWeight = FontWeight.Bold, color = Color.White)
                         }
                     }
                 }
@@ -977,6 +951,7 @@ fun UserSettingsScreen(
                 ) {
                     Text(
                         text = "Update UPI ID",
+                        fontFamily = SplitMateDisplayFontFamily,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = textPrimary
@@ -984,10 +959,18 @@ fun UserSettingsScreen(
                     OutlinedTextField(
                         value = upiInput,
                         onValueChange = { upiInput = it },
-                        label = { Text("UPI Virtual Payment Address") },
-                        placeholder = { Text("e.g. yourname@okhdfcbank") },
+                        label = { Text("UPI Virtual Payment Address", fontFamily = SplitMateBrandFontFamily) },
+                        placeholder = { Text("e.g. yourname@okhdfcbank", fontFamily = SplitMateBrandFontFamily) },
                         singleLine = true,
                         shape = RoundedCornerShape(20.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = textPrimary,
+                            unfocusedTextColor = textPrimary,
+                            focusedContainerColor = mutedBg,
+                            unfocusedContainerColor = mutedBg,
+                            focusedBorderColor = textPrimary,
+                            unfocusedBorderColor = borderColor
+                        ),
                         modifier = Modifier.fillMaxWidth()
                     )
                     Row(
@@ -995,7 +978,7 @@ fun UserSettingsScreen(
                         horizontalArrangement = Arrangement.End
                     ) {
                         TextButton(onClick = { showEditUpiDialog = false }) {
-                            Text("Cancel", fontWeight = FontWeight.Bold, color = textPrimary)
+                            Text("Cancel", fontFamily = SplitMateBrandFontFamily, fontWeight = FontWeight.Bold, color = textPrimary)
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
@@ -1003,29 +986,18 @@ fun UserSettingsScreen(
                                 onUpdateUpiId(upiInput)
                                 showEditUpiDialog = false
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = SplitMateThemeTokens.PrimaryDark),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = textPrimary,
+                                contentColor = screenBg
+                            ),
                             shape = SplitMateThemeTokens.RadiusButton
                         ) {
-                            Text("Save VPA", fontWeight = FontWeight.Bold, color = Color.White)
+                            Text("Save VPA", fontFamily = SplitMateBrandFontFamily, fontWeight = FontWeight.Bold, color = screenBg)
                         }
                     }
                 }
             }
         }
-    }
-
-    // M3 Expressive ModalBottomSheet 3: Select Default Currency from 160+ World Currencies
-    if (showEditCurrencyDialog) {
-        CurrencyModalBottomSheet(
-            currencies = allCurrencies,
-            activeCurrencyCode = defaultCurrencyCode.substringBefore(" ").trim(),
-            onSelectCurrency = { code ->
-                onUpdateCurrencyCode(code)
-                showEditCurrencyDialog = false
-            },
-            onSyncLiveRates = onSyncLiveRates,
-            onDismiss = { showEditCurrencyDialog = false }
-        )
     }
 }
 
@@ -1081,6 +1053,7 @@ fun SettingsRowItem(
                 Column {
                     Text(
                         text = title,
+                        fontFamily = SplitMateBrandFontFamily,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (isDestructive) SplitMateThemeTokens.TerracottaText else SplitMateThemeTokens.PrimaryDark
@@ -1088,6 +1061,7 @@ fun SettingsRowItem(
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = subtitle,
+                        fontFamily = SplitMateBrandFontFamily,
                         fontSize = 12.sp,
                         color = SplitMateThemeTokens.TextSecondary,
                         maxLines = 1
