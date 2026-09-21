@@ -24,6 +24,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Locale
 
+import com.splitmate.app.data.UserProfileEntity
+
 data class ReceiptLineItem(
     val itemId: String,
     val title: String,
@@ -32,8 +34,12 @@ data class ReceiptLineItem(
 )
 
 data class SplitMateUiState(
+    val hasRegisteredProfile: Boolean = true,
     val currentUserName: String = "Akshay",
     val currentUserSeed: String = "Akshay",
+    val currentUserCountry: String = "India",
+    val userUpiId: String = "akshay@okhdfcbank",
+    val isDarkTheme: Boolean = false,
     val activeCurrencyCode: String = "INR",
     val isOfflineMode: Boolean = false,
     val isSyncingRates: Boolean = false,
@@ -124,7 +130,9 @@ class SplitMateViewModel(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow( createInitialSeededState() )
+    private val _uiState = MutableStateFlow(
+        if (dao == null) createInitialSeededState() else createCleanProductionInitialState()
+    )
     val uiState: StateFlow<SplitMateUiState> = _uiState.asStateFlow()
 
     val totalBalance: StateFlow<String> = _uiState.map { state ->
@@ -136,7 +144,7 @@ class SplitMateViewModel(
             netCents < 0L -> "-$sym$absMajor"
             else -> "${sym}0.00"
         }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, "+₹28.33")
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, "₹0.00")
 
     val activeGroups: StateFlow<List<ActiveGroupCardUiModel>> = _uiState.map { state ->
         val sym = state.activeCurrency.symbol
@@ -224,6 +232,20 @@ class SplitMateViewModel(
         }
     }
 
+    private fun createCleanProductionInitialState(): SplitMateUiState = SplitMateUiState(
+        hasRegisteredProfile = false,
+        currentUserName = "",
+        currentUserSeed = "SplitMateExplorer",
+        currentUserCountry = "India",
+        userUpiId = "explorer@okaxis",
+        activeCurrencyCode = "INR",
+        groups = emptyList(),
+        members = emptyList(),
+        expenses = emptyList(),
+        splits = emptyList(),
+        settlements = emptyList()
+    )
+
     private fun createInitialSeededState(): SplitMateUiState {
         val initialGroups = listOf(
             ExpenseGroupEntity("g_tahoe", "Lake Tahoe Cabin", "INR"),
@@ -270,13 +292,55 @@ class SplitMateViewModel(
 
     private fun observeRoomDatabase(roomDao: SplitMateDao) {
         viewModelScope.launch(ioDispatcher) {
-            // Seed Room if empty
-            val current = _uiState.value
-            current.groups.forEach { roomDao.insertGroup(it) }
-            roomDao.insertMembers(current.members)
-            roomDao.upsertCurrencyRates(current.currencyRates)
-            current.expenses.forEach { roomDao.insertExpense(it) }
-            roomDao.insertExpenseSplits(current.splits)
+            roomDao.upsertCurrencyRates(_uiState.value.currencyRates)
+        }
+        viewModelScope.launch(ioDispatcher) {
+            roomDao.observeUserProfile().collect { profile ->
+                if (profile != null) {
+                    _uiState.update {
+                        it.copy(
+                            hasRegisteredProfile = true,
+                            currentUserName = profile.name,
+                            currentUserSeed = profile.avatarSeed,
+                            currentUserCountry = profile.countryName,
+                            activeCurrencyCode = profile.currencyCode,
+                            userUpiId = profile.upiId,
+                            isDarkTheme = profile.isDarkTheme
+                        )
+                    }
+                } else {
+                    _uiState.update { it.copy(hasRegisteredProfile = false) }
+                }
+            }
+        }
+        viewModelScope.launch(ioDispatcher) {
+            roomDao.observeGroups().collect { groups ->
+                _uiState.update { curr ->
+                    val nextActiveGroup = curr.activeGroupId.takeIf { id -> groups.any { it.groupId == id } }
+                        ?: groups.firstOrNull()?.groupId.orEmpty()
+                    curr.copy(groups = groups, activeGroupId = nextActiveGroup)
+                }
+            }
+        }
+        viewModelScope.launch(ioDispatcher) {
+            roomDao.observeAllMembers().collect { members ->
+                _uiState.update { it.copy(members = members) }
+            }
+        }
+        viewModelScope.launch(ioDispatcher) {
+            roomDao.observeAllExpenses().collect { expenses ->
+                _uiState.update { it.copy(expenses = expenses) }
+            }
+        }
+        viewModelScope.launch(ioDispatcher) {
+            roomDao.observeAllSplits().collect { splits ->
+                _uiState.update { it.copy(splits = splits) }
+            }
+        }
+        viewModelScope.launch(ioDispatcher) {
+            roomDao.observeAllSettlements().collect { settlements ->
+                _uiState.update { it.copy(settlements = settlements) }
+            }
         }
         viewModelScope.launch(ioDispatcher) {
             roomDao.observeCurrencyRates().collect { rates ->
@@ -284,6 +348,81 @@ class SplitMateViewModel(
                     _uiState.update { it.copy(currencyRates = rates) }
                 }
             }
+        }
+    }
+
+    fun completeOnboarding(
+        name: String,
+        countryName: String,
+        currencyCode: String,
+        currencySymbol: String,
+        avatarSeed: String = name
+    ) {
+        val cleanName = name.trim().ifEmpty { "Explorer" }
+        val cleanSeed = avatarSeed.trim().ifEmpty { cleanName }
+        val cleanHandle = cleanName.lowercase(Locale.US).replace(Regex("[^a-z0-9]"), "").ifEmpty { "explorer" }
+        val defaultUpi = "$cleanHandle@okaxis"
+        val profile = UserProfileEntity(
+            profileId = "me",
+            name = cleanName,
+            avatarSeed = cleanSeed,
+            countryName = countryName,
+            currencyCode = currencyCode,
+            currencySymbol = currencySymbol,
+            upiId = defaultUpi,
+            isDarkTheme = _uiState.value.isDarkTheme
+        )
+        _uiState.update {
+            it.copy(
+                hasRegisteredProfile = true,
+                currentUserName = cleanName,
+                currentUserSeed = cleanSeed,
+                currentUserCountry = countryName,
+                activeCurrencyCode = currencyCode,
+                userUpiId = defaultUpi,
+                statusBannerMessage = "Welcome $cleanName · Profile saved to local SQLite Vault"
+            )
+        }
+        viewModelScope.launch(ioDispatcher) {
+            dao?.upsertUserProfile(profile)
+        }
+    }
+
+    fun updateUpiId(newUpiId: String) {
+        val cleanUpi = newUpiId.trim().ifEmpty { _uiState.value.userUpiId }
+        _uiState.update { it.copy(userUpiId = cleanUpi) }
+        viewModelScope.launch(ioDispatcher) {
+            val existing = dao?.getUserProfile()
+            if (existing != null) {
+                dao?.upsertUserProfile(existing.copy(upiId = cleanUpi))
+            }
+        }
+    }
+
+    fun toggleDarkTheme(isDark: Boolean) {
+        _uiState.update { it.copy(isDarkTheme = isDark) }
+        viewModelScope.launch(ioDispatcher) {
+            val existing = dao?.getUserProfile()
+            if (existing != null) {
+                dao?.upsertUserProfile(existing.copy(isDarkTheme = isDark))
+            }
+        }
+    }
+
+    fun clearLocalVault() {
+        _uiState.update {
+            it.copy(
+                groups = emptyList(),
+                members = emptyList(),
+                expenses = emptyList(),
+                splits = emptyList(),
+                settlements = emptyList(),
+                activeGroupId = "",
+                statusBannerMessage = "Local SQLite Vault cleared"
+            )
+        }
+        viewModelScope.launch(ioDispatcher) {
+            dao?.clearAllLedgerData()
         }
     }
 
@@ -629,6 +768,10 @@ class SplitMateViewModel(
                 splits = curr.splits.filterNot { it.expenseId == expenseId },
                 statusBannerMessage = "Rolled back \"${removed?.title ?: "Expense"}\""
             )
+        }
+        viewModelScope.launch(ioDispatcher) {
+            dao?.deleteSplitsForExpense(expenseId)
+            dao?.deleteExpense(expenseId)
         }
     }
 

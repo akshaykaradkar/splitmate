@@ -69,33 +69,63 @@ private val SplitMateDarkColorScheme = darkColorScheme(
     onSurface = BuckwheatCanvas
 )
 
+val SplitMateBrandFontFamily = FontFamily.SansSerif
+
 private val SplitMateTypography = Typography(
+    displayLarge = TextStyle(
+        fontFamily = SplitMateBrandFontFamily,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 54.sp,
+        lineHeight = 60.sp,
+        letterSpacing = (-1.2).sp
+    ),
+    displayMedium = TextStyle(
+        fontFamily = SplitMateBrandFontFamily,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 42.sp,
+        lineHeight = 48.sp,
+        letterSpacing = (-0.8).sp
+    ),
     headlineLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = SplitMateBrandFontFamily,
         fontWeight = FontWeight.ExtraBold,
         fontSize = 32.sp,
-        lineHeight = 38.sp
+        lineHeight = 38.sp,
+        letterSpacing = (-0.5).sp
+    ),
+    headlineMedium = TextStyle(
+        fontFamily = SplitMateBrandFontFamily,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 26.sp,
+        lineHeight = 32.sp,
+        letterSpacing = (-0.3).sp
     ),
     titleLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = SplitMateBrandFontFamily,
         fontWeight = FontWeight.ExtraBold,
         fontSize = 20.sp,
         lineHeight = 26.sp
     ),
     titleMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = SplitMateBrandFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 16.sp,
         lineHeight = 22.sp
     ),
+    bodyLarge = TextStyle(
+        fontFamily = SplitMateBrandFontFamily,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 15.sp,
+        lineHeight = 22.sp
+    ),
     bodyMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = SplitMateBrandFontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 14.sp,
         lineHeight = 20.sp
     ),
     labelLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = SplitMateBrandFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 13.sp,
         lineHeight = 18.sp

@@ -73,4 +73,42 @@ interface SplitMateDao {
 
     @Query("UPDATE expenses SET syncStatus = 'SYNCED' WHERE syncStatus = 'PENDING'")
     suspend fun markPendingExpensesSynced()
+
+    // --- User Profile & Onboarding ---
+    @Query("SELECT * FROM user_profile WHERE profileId = 'me' LIMIT 1")
+    fun observeUserProfile(): Flow<UserProfileEntity?>
+
+    @Query("SELECT * FROM user_profile WHERE profileId = 'me' LIMIT 1")
+    suspend fun getUserProfile(): UserProfileEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertUserProfile(profile: UserProfileEntity)
+
+    @Query("DELETE FROM user_profile")
+    suspend fun deleteUserProfile()
+
+    @Query("DELETE FROM expense_groups")
+    suspend fun deleteAllGroups()
+
+    @Query("DELETE FROM group_members")
+    suspend fun deleteAllMembers()
+
+    @Query("DELETE FROM expenses")
+    suspend fun deleteAllExpenses()
+
+    @Query("DELETE FROM expense_splits")
+    suspend fun deleteAllSplits()
+
+    @Query("DELETE FROM settlements")
+    suspend fun deleteAllSettlements()
+
+    @Transaction
+    suspend fun clearAllLedgerData() {
+        deleteAllSplits()
+        deleteAllExpenses()
+        deleteAllSettlements()
+        deleteAllMembers()
+        deleteAllGroups()
+    }
 }
+

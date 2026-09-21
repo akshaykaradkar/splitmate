@@ -11,14 +11,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
+import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -30,15 +32,18 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
-import com.splitmate.app.ui.ActiveGroupCardUiModel
-import com.splitmate.app.ui.SettlementTransferUiModel
 import com.splitmate.app.ui.SplitMateViewModel
+import com.splitmate.app.ui.screens.OnboardingSetupScreen
+import com.splitmate.app.ui.screens.UserSettingsScreen
 import java.util.Locale
 
 // ==============================================================================
@@ -63,32 +68,138 @@ object SplitMateTheme {
     val RadiusCard = RoundedCornerShape(24.dp)
     val RadiusPanel = RoundedCornerShape(20.dp)
     val RadiusButton = RoundedCornerShape(16.dp)
+    val RadiusDialog = RoundedCornerShape(28.dp)
+    val RadiusInput = RoundedCornerShape(20.dp)
     val RadiusBadge = RoundedCornerShape(999.dp)
+
+    val FontRounded = FontFamily.SansSerif
 }
 
 // ==============================================================================
-// 2. ROOT SCAFFOLD & BOTTOM NAVIGATION BAR
+// 2. ROOT NAVIGATION HOST & SCAFFOLD
 // ==============================================================================
 enum class SplitMateTab(val label: String, val icon: ImageVector) {
     LEDGERS("Ledgers", Icons.Rounded.AccountBalanceWallet),
-    SPLIT("Split", Icons.Rounded.ReceiptLong),
+    SPLIT("Split", Icons.AutoMirrored.Rounded.ReceiptLong),
     SETTLE("Settle", Icons.Rounded.SwapHoriz),
     AUDIT("Audit", Icons.Rounded.HistoryEdu)
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SplitMateApp(viewModel: SplitMateViewModel) {
+    val navController = rememberNavController()
+    val uiState by viewModel.uiState.collectAsState()
+    val totalBalance by viewModel.totalBalance.collectAsState()
+    val activeGroups by viewModel.activeGroups.collectAsState()
+
+    val startRoute = if (uiState.hasRegisteredProfile) "dashboard" else "onboarding"
+
+    LaunchedEffect(uiState.hasRegisteredProfile) {
+        val currentRoute = navController.currentBackStackEntry?.destination?.route
+        if (!uiState.hasRegisteredProfile && currentRoute != "onboarding") {
+            navController.navigate("onboarding") {
+                popUpTo(0) { inclusive = true }
+            }
+        } else if (uiState.hasRegisteredProfile && currentRoute == "onboarding") {
+            navController.navigate("dashboard") {
+                popUpTo("onboarding") { inclusive = true }
+            }
+        }
+    }
+
+    NavHost(
+        navController = navController,
+        startDestination = startRoute
+    ) {
+        composable("onboarding") {
+            OnboardingSetupScreen(
+                onCompleteProfile = { name, currency, avatarSeed ->
+                    viewModel.completeOnboarding(
+                        name = name,
+                        countryName = currency.country,
+                        currencyCode = currency.code,
+                        currencySymbol = currency.symbol,
+                        avatarSeed = avatarSeed
+                    )
+                    navController.navigate("dashboard") {
+                        popUpTo("onboarding") { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable("dashboard") {
+            SplitMateMainDashboardScaffold(
+                viewModel = viewModel,
+                onOpenSettings = { navController.navigate("settings") }
+            )
+        }
+
+        composable("settings") {
+            UserSettingsScreen(
+                userName = uiState.currentUserName.ifBlank { "Explorer" },
+                avatarSeed = uiState.currentUserSeed,
+                upiId = uiState.userUpiId,
+                defaultCurrencyCode = "${uiState.activeCurrency.currencyCode} (${uiState.activeCurrency.symbol})",
+                totalBalanceText = totalBalance,
+                activeGroupsCount = activeGroups.size,
+                isDarkThemeInitial = uiState.isDarkTheme,
+                onBackClick = { navController.popBackStack() },
+                onUpdateUpiId = { newUpi -> viewModel.updateUpiId(newUpi) },
+                onUpdateCurrencyCode = { newCode ->
+                    viewModel.updateUserProfile(uiState.currentUserName, newCode)
+                },
+                onThemeToggle = { isDark -> viewModel.toggleDarkTheme(isDark) },
+                onClearVaultClick = { viewModel.clearLocalVault() }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SplitMateMainDashboardScaffold(
+    viewModel: SplitMateViewModel,
+    onOpenSettings: () -> Unit
+) {
     var currentTab by remember { mutableStateOf(SplitMateTab.LEDGERS) }
+    var showQuickExpenseDialog by remember { mutableStateOf(false) }
     val uiState by viewModel.uiState.collectAsState()
     val unassignedBase = uiState.receiptItems.filter { it.claimedByMemberIds.isEmpty() }.sumOf { it.priceCents }
 
     Scaffold(
         containerColor = SplitMateTheme.ScreenBg,
+        floatingActionButton = {
+            if (currentTab == SplitMateTab.LEDGERS) {
+                ExtendedFloatingActionButton(
+                    onClick = { showQuickExpenseDialog = true },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Rounded.Add,
+                            contentDescription = "Log Expense",
+                            tint = Color.White
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = "Log Expense",
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White,
+                            fontFamily = SplitMateTheme.FontRounded
+                        )
+                    },
+                    containerColor = SplitMateTheme.PrimaryDark,
+                    contentColor = Color.White,
+                    shape = SplitMateTheme.RadiusBadge,
+                    modifier = Modifier.shadow(10.dp, SplitMateTheme.RadiusBadge)
+                )
+            }
+        },
         bottomBar = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
                     .testTag("HorizontalFloatingToolbar")
             ) {
                 // Quick Remainder Verification Bar for Instant 1-Tap Resolution across Tabs
@@ -99,6 +210,7 @@ fun SplitMateApp(viewModel: SplitMateViewModel) {
                             .fillMaxWidth()
                             .padding(horizontal = 18.dp, vertical = 4.dp)
                             .clip(SplitMateTheme.RadiusBadge)
+                            .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
                             .testTag("UnassignedRemainderCard")
                     ) {
                         Row(
@@ -137,6 +249,7 @@ fun SplitMateApp(viewModel: SplitMateViewModel) {
                             .fillMaxWidth()
                             .padding(horizontal = 18.dp, vertical = 4.dp)
                             .clip(SplitMateTheme.RadiusBadge)
+                            .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
                             .testTag("ZeroRemainderVerifiedCard")
                     ) {
                         Row(
@@ -177,11 +290,117 @@ fun SplitMateApp(viewModel: SplitMateViewModel) {
             when (currentTab) {
                 SplitMateTab.LEDGERS -> LedgersDashboardScreen(
                     viewModel = viewModel,
-                    onNavigateToSplit = { currentTab = SplitMateTab.SPLIT }
+                    onNavigateToSplit = { currentTab = SplitMateTab.SPLIT },
+                    onAvatarSettingsClick = onOpenSettings
                 )
                 SplitMateTab.SPLIT -> ItemizedSplitScreen(viewModel = viewModel)
                 SplitMateTab.SETTLE -> GreedySettlementScreen(viewModel = viewModel)
                 SplitMateTab.AUDIT -> AuditVaultScreen(viewModel = viewModel)
+            }
+        }
+    }
+
+    // Custom M3 Expressive Dialog for Global ExtendedFloatingActionButton ("Log Expense")
+    if (showQuickExpenseDialog) {
+        var expenseTitle by remember { mutableStateOf("Dinner & Drinks") }
+        var expenseAmountMajor by remember { mutableStateOf("1200.00") }
+
+        Dialog(onDismissRequest = { showQuickExpenseDialog = false }) {
+            Surface(
+                shape = SplitMateTheme.RadiusDialog,
+                color = SplitMateTheme.SurfaceWhite,
+                shadowElevation = 18.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusDialog)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(SplitMateTheme.AccentSage),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.AutoMirrored.Rounded.ReceiptLong, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Log New Expense",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = SplitMateTheme.PrimaryDark
+                            )
+                            Text(
+                                text = "Zero-drift integer-cent split",
+                                fontSize = 12.sp,
+                                color = SplitMateTheme.TextSecondary
+                            )
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = expenseTitle,
+                        onValueChange = { expenseTitle = it },
+                        label = { Text("Expense Description") },
+                        singleLine = true,
+                        shape = SplitMateTheme.RadiusInput,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = expenseAmountMajor,
+                        onValueChange = { expenseAmountMajor = it },
+                        label = { Text("Total Amount (${uiState.activeCurrency.symbol})") },
+                        singleLine = true,
+                        shape = SplitMateTheme.RadiusInput,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = {
+                                showQuickExpenseDialog = false
+                                currentTab = SplitMateTab.SPLIT
+                            }
+                        ) {
+                            Text("Itemize Receipt →", fontWeight = FontWeight.Bold, color = SplitMateTheme.SageText)
+                        }
+
+                        Row {
+                            TextButton(onClick = { showQuickExpenseDialog = false }) {
+                                Text("Cancel", fontWeight = FontWeight.Bold, color = SplitMateTheme.TextSecondary)
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Button(
+                                onClick = {
+                                    if (uiState.groups.isEmpty()) {
+                                        viewModel.createNewGroup("Weekend Trip", uiState.activeCurrencyCode, "Priya, Sam")
+                                    }
+                                    val cents = ((expenseAmountMajor.toDoubleOrNull() ?: 0.0) * 100).toLong()
+                                    viewModel.commitCollaborativeExpense(
+                                        title = expenseTitle,
+                                        customTotalCents = cents
+                                    )
+                                    showQuickExpenseDialog = false
+                                },
+                                shape = SplitMateTheme.RadiusButton,
+                                colors = ButtonDefaults.buttonColors(containerColor = SplitMateTheme.PrimaryDark)
+                            ) {
+                                Text("Save Split", fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -242,29 +461,30 @@ fun SplitMateBottomNavigationBar(
 }
 
 // ==============================================================================
-// TAB 1: LEDGERS (Dashboard Screen - Wired to ViewModel)
+// TAB 1: LEDGERS (Dashboard Screen - Wired to ViewModel, Empty State & Logo Sync)
 // ==============================================================================
 @Composable
 fun LedgersDashboardScreen(
     viewModel: SplitMateViewModel,
-    onNavigateToSplit: () -> Unit = {}
+    onNavigateToSplit: () -> Unit = {},
+    onAvatarSettingsClick: () -> Unit = {}
 ) {
     val totalBalance by viewModel.totalBalance.collectAsState()
     val activeGroups by viewModel.activeGroups.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     var showNewGroupDialog by remember { mutableStateOf(false) }
 
-    val activeGroupName = uiState.groups.find { it.groupId == uiState.activeGroupId }?.name ?: "Lake Tahoe Cabin"
+    val activeGroupName = uiState.groups.find { it.groupId == uiState.activeGroupId }?.name ?: "All Ledgers"
     val isNegativeBalance = totalBalance.startsWith("-")
 
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 18.dp),
-        contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(top = 12.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. Custom Top Bar
+        // 1. Custom Top Bar (Synced with ic_launcher_foreground.xml vector logo & clickable Avatar -> UserSettingsScreen)
         item {
             Row(
                 modifier = Modifier
@@ -274,18 +494,21 @@ fun LedgersDashboardScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Direct reference to ic_launcher_foreground.xml vector drawable (home screen icon sync)
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(SplitMateTheme.BrandCoral),
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFFFAF6F0))
+                            .border(1.dp, SplitMateTheme.BorderLight, RoundedCornerShape(14.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Eco,
-                            contentDescription = "SplitMate Logo",
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                            contentDescription = "SplitMate Official App Logo",
+                            modifier = Modifier
+                                .size(44.dp)
+                                .scale(1.25f)
                         )
                     }
                     Spacer(modifier = Modifier.width(10.dp))
@@ -294,7 +517,8 @@ fun LedgersDashboardScreen(
                             text = "SplitMate",
                             fontSize = 20.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = SplitMateTheme.PrimaryDark
+                            color = SplitMateTheme.PrimaryDark,
+                            fontFamily = SplitMateTheme.FontRounded
                         )
                         Text(
                             text = "LEDGERS & GROUPS",
@@ -307,35 +531,46 @@ fun LedgersDashboardScreen(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        onClick = {
-                            val nextIdx = (uiState.groups.indexOfFirst { it.groupId == uiState.activeGroupId } + 1) %
-                                uiState.groups.size.coerceAtLeast(1)
-                            uiState.groups.getOrNull(nextIdx)?.let { viewModel.selectActiveGroup(it.groupId) }
-                        },
-                        shape = SplitMateTheme.RadiusBadge,
-                        color = SplitMateTheme.SurfaceMuted,
-                        modifier = Modifier.sizeIn(minHeight = 36.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                    if (uiState.groups.isNotEmpty()) {
+                        Surface(
+                            onClick = {
+                                val nextIdx = (uiState.groups.indexOfFirst { it.groupId == uiState.activeGroupId } + 1) %
+                                    uiState.groups.size.coerceAtLeast(1)
+                                uiState.groups.getOrNull(nextIdx)?.let { viewModel.selectActiveGroup(it.groupId) }
+                            },
+                            shape = SplitMateTheme.RadiusBadge,
+                            color = SplitMateTheme.SurfaceMuted,
+                            modifier = Modifier.sizeIn(minHeight = 36.dp)
                         ) {
-                            Text(activeGroupName, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = SplitMateTheme.PrimaryDark)
-                            Icon(Icons.Rounded.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(activeGroupName, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = SplitMateTheme.PrimaryDark)
+                                Icon(Icons.Rounded.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
+                            }
                         }
+                        Spacer(modifier = Modifier.width(8.dp))
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    AvatarToken(
-                        initials = uiState.currentUserSeed,
-                        bg = SplitMateTheme.AccentSage,
-                        textColor = SplitMateTheme.PrimaryDark
-                    )
+
+                    // Clickable Top-Right Avatar routing to UserSettingsScreen
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable(onClick = onAvatarSettingsClick)
+                    ) {
+                        AvatarToken(
+                            initials = uiState.currentUserSeed,
+                            bg = SplitMateTheme.AccentSage,
+                            textColor = SplitMateTheme.PrimaryDark,
+                            size = 38
+                        )
+                    }
                 }
             }
         }
 
-        // 2. Hero Balance Card (32dp Radius, Expressive Gradient, Wired to viewModel.totalBalance)
+        // 2. Hero Balance Card (32dp Radius, Expressive Gradient, Spring Bounce Animation)
         item {
             Card(
                 shape = SplitMateTheme.RadiusHero,
@@ -343,6 +578,7 @@ fun LedgersDashboardScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .border(1.dp, Color(0x33D7E8B6), SplitMateTheme.RadiusHero)
+                    .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
             ) {
                 Box(
                     modifier = Modifier
@@ -394,7 +630,8 @@ fun LedgersDashboardScreen(
                             text = totalBalance,
                             fontSize = 54.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = SplitMateTheme.PrimaryDark
+                            color = SplitMateTheme.PrimaryDark,
+                            fontFamily = SplitMateTheme.FontRounded
                         )
 
                         Text(
@@ -489,7 +726,73 @@ fun LedgersDashboardScreen(
             }
         }
 
-        // 4. Dynamic Group Cards (24dp radius, Wired to viewModel.activeGroups)
+        // 4. Illustrated M3 Empty State Card when activeGroups is empty (Point 3)
+        item {
+            AnimatedVisibility(
+                visible = activeGroups.isEmpty(),
+                enter = fadeIn() + expandVertically(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy)),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Card(
+                    shape = SplitMateTheme.RadiusHero,
+                    colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusHero)
+                        .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(76.dp)
+                                .clip(CircleShape)
+                                .background(SplitMateTheme.SageSurface),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Explore,
+                                contentDescription = "No Active Trips Illustration",
+                                tint = SplitMateTheme.SageText,
+                                modifier = Modifier.size(38.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "No active trips. Tap the + button below to create your first group!",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = SplitMateTheme.PrimaryDark,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 22.sp
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Create a trip or roommate ledger with zero penny rounding drift.",
+                            fontSize = 13.sp,
+                            color = SplitMateTheme.TextSecondary,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(18.dp))
+                        Button(
+                            onClick = { showNewGroupDialog = true },
+                            shape = SplitMateTheme.RadiusBadge,
+                            colors = ButtonDefaults.buttonColors(containerColor = SplitMateTheme.PrimaryDark)
+                        ) {
+                            Icon(Icons.Rounded.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Create First Group", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
+        // 5. Dynamic Group Cards (24dp radius, Spring Bounce Animation)
         items(activeGroups, key = { it.groupId }) { groupCard ->
             val cardSurfaceColor = when {
                 groupCard.netBalanceCents > 0L -> SplitMateTheme.SageSurface
@@ -513,6 +816,7 @@ fun LedgersDashboardScreen(
                 colors = CardDefaults.cardColors(containerColor = cardSurfaceColor),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
                     .then(
                         if (groupCard.netBalanceCents == 0L) {
                             Modifier.border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusCard)
@@ -581,80 +885,132 @@ fun LedgersDashboardScreen(
             }
         }
 
-        // 5. Recent Activity Preview (Wired to live expenses)
-        item {
-            Column(modifier = Modifier.padding(top = 8.dp)) {
-                Text(
-                    text = "Recent Activity",
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = SplitMateTheme.PrimaryDark
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                uiState.expenses.take(3).forEach { expense ->
-                    val payer = uiState.members.find { it.memberId == expense.payerId }
-                    val isMePayer = payer?.isCurrentUser == true
-                    val sym = uiState.activeCurrency.symbol
-                    val formattedAmt = (if (isMePayer) "+" else "-") +
-                        sym + String.format(Locale.US, "%.2f", expense.totalAmountCents / 100.0)
-                    ActivityItemRow(
-                        icon = Icons.Rounded.Restaurant,
-                        iconBg = if (isMePayer) Color(0xFFE0E7FF) else Color(0xFFFFE4E6),
-                        title = expense.title,
-                        subtitle = "Paid by ${if (isMePayer) "you" else (payer?.name ?: "Member")} · Rate ${expense.lockedExchangeRate}",
-                        amount = formattedAmt,
-                        isPositive = isMePayer
+        // 6. Recent Activity Preview (Spring Bounce Animation)
+        if (uiState.expenses.isNotEmpty()) {
+            item {
+                Column(
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
+                ) {
+                    Text(
+                        text = "Recent Activity",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = SplitMateTheme.PrimaryDark
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
+                    uiState.expenses.take(3).forEach { expense ->
+                        val payer = uiState.members.find { it.memberId == expense.payerId }
+                        val isMePayer = payer?.isCurrentUser == true
+                        val sym = uiState.activeCurrency.symbol
+                        val formattedAmt = (if (isMePayer) "+" else "-") +
+                            sym + String.format(Locale.US, "%.2f", expense.totalAmountCents / 100.0)
+                        ActivityItemRow(
+                            icon = Icons.Rounded.Restaurant,
+                            iconBg = if (isMePayer) Color(0xFFE0E7FF) else Color(0xFFFFE4E6),
+                            title = expense.title,
+                            subtitle = "Paid by ${if (isMePayer) "you" else (payer?.name ?: "Member")} · Rate ${expense.lockedExchangeRate}",
+                            amount = formattedAmt,
+                            isPositive = isMePayer
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
                 }
             }
         }
     }
 
+    // Custom M3 Expressive Dialog for "+ New Group" (28dp radius, 20dp input radius)
     if (showNewGroupDialog) {
         var groupNameInput by remember { mutableStateOf("") }
         var friendsInput by remember { mutableStateOf("Priya, Sam, Maya") }
-        AlertDialog(
-            onDismissRequest = { showNewGroupDialog = false },
-            title = { Text("Create New Ledger Group", fontWeight = FontWeight.ExtraBold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+
+        Dialog(onDismissRequest = { showNewGroupDialog = false }) {
+            Surface(
+                shape = SplitMateTheme.RadiusDialog,
+                color = SplitMateTheme.SurfaceWhite,
+                shadowElevation = 18.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusDialog)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(SplitMateTheme.AccentSage),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Rounded.GroupAdd, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Create Ledger Group",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = SplitMateTheme.PrimaryDark
+                            )
+                            Text(
+                                text = "Add friends with DiceBear Open-Peeps avatars",
+                                fontSize = 12.sp,
+                                color = SplitMateTheme.TextSecondary
+                            )
+                        }
+                    }
+
                     OutlinedTextField(
                         value = groupNameInput,
                         onValueChange = { groupNameInput = it },
                         label = { Text("Group Name") },
-                        singleLine = true
+                        placeholder = { Text("e.g. Goa Beach Villa") },
+                        singleLine = true,
+                        shape = SplitMateTheme.RadiusInput,
+                        modifier = Modifier.fillMaxWidth()
                     )
+
                     OutlinedTextField(
                         value = friendsInput,
                         onValueChange = { friendsInput = it },
                         label = { Text("Members (comma-separated)") },
-                        singleLine = true
+                        singleLine = true,
+                        shape = SplitMateTheme.RadiusInput,
+                        modifier = Modifier.fillMaxWidth()
                     )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.createNewGroup(groupNameInput, uiState.activeCurrencyCode, friendsInput)
-                        showNewGroupDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = SplitMateTheme.PrimaryDark)
-                ) {
-                    Text("Create Group", color = Color.White)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showNewGroupDialog = false }) {
-                    Text("Cancel")
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { showNewGroupDialog = false }) {
+                            Text("Cancel", fontWeight = FontWeight.Bold, color = SplitMateTheme.TextSecondary)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                viewModel.createNewGroup(groupNameInput, uiState.activeCurrencyCode, friendsInput)
+                                showNewGroupDialog = false
+                            },
+                            shape = SplitMateTheme.RadiusButton,
+                            colors = ButtonDefaults.buttonColors(containerColor = SplitMateTheme.PrimaryDark)
+                        ) {
+                            Text("Create Group", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
-        )
+        }
     }
 }
 
 // ==============================================================================
-// TAB 2: SPLIT (Itemized Bill & Remainder Engine - Wired to ViewModel)
+// TAB 2: SPLIT (Itemized Bill & Remainder Engine - Spring Bounce & M3 Dialog)
 // ==============================================================================
 @Composable
 fun ItemizedSplitScreen(viewModel: SplitMateViewModel) {
@@ -700,7 +1056,9 @@ fun ItemizedSplitScreen(viewModel: SplitMateViewModel) {
                 Card(
                     shape = SplitMateTheme.RadiusCard,
                     colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
                 ) {
                     Column(modifier = Modifier.padding(18.dp)) {
                         Row(
@@ -806,12 +1164,14 @@ fun ItemizedSplitScreen(viewModel: SplitMateViewModel) {
                 }
             }
 
-            // 2. Real-Time Remainder Bar
+            // 2. Real-Time Remainder Bar (Spring Bouncy Animation)
             item {
                 Card(
                     shape = SplitMateTheme.RadiusPanel,
                     colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(
@@ -853,13 +1213,13 @@ fun ItemizedSplitScreen(viewModel: SplitMateViewModel) {
                                 .clip(SplitMateTheme.RadiusBadge)
                                 .background(SplitMateTheme.SurfaceMuted)
                         ) {
-                            Box(modifier = Modifier.weight(0.40f).fillMaxHeight().background(Color(0xFF818CF8))) // Member A
+                            Box(modifier = Modifier.weight(0.40f).fillMaxHeight().background(Color(0xFF818CF8)))
                             Spacer(modifier = Modifier.width(2.dp))
-                            Box(modifier = Modifier.weight(0.30f).fillMaxHeight().background(Color(0xFF34D399))) // Member B
+                            Box(modifier = Modifier.weight(0.30f).fillMaxHeight().background(Color(0xFF34D399)))
                             Spacer(modifier = Modifier.width(2.dp))
-                            Box(modifier = Modifier.weight(0.20f).fillMaxHeight().background(Color(0xFFF472B6))) // Member C
+                            Box(modifier = Modifier.weight(0.20f).fillMaxHeight().background(Color(0xFFF472B6)))
                             Spacer(modifier = Modifier.width(2.dp))
-                            Box(modifier = Modifier.weight(0.10f).fillMaxHeight().background(Color(0xFFFBBF24))) // Remainder
+                            Box(modifier = Modifier.weight(0.10f).fillMaxHeight().background(Color(0xFFFBBF24)))
                         }
 
                         if (unassignedBaseCents > 0L) {
@@ -896,7 +1256,11 @@ fun ItemizedSplitScreen(viewModel: SplitMateViewModel) {
                     groupMembers.find { it.memberId == id }?.avatarSeed
                 }
                 val unclaimedNames = groupMembers.filterNot { item.claimedByMemberIds.contains(it.memberId) }.map { it.avatarSeed }
-                Box(modifier = Modifier.clickable { viewModel.toggleReceiptItemClaim(item.itemId) }) {
+                Box(
+                    modifier = Modifier
+                        .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
+                        .clickable { viewModel.toggleReceiptItemClaim(item.itemId) }
+                ) {
                     ClaimItemRow(
                         title = item.title,
                         amount = "$sym${String.format(Locale.US, "%.2f", item.priceCents / 100.0)}",
@@ -927,7 +1291,9 @@ fun ItemizedSplitScreen(viewModel: SplitMateViewModel) {
                 Card(
                     shape = SplitMateTheme.RadiusPanel,
                     colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(
@@ -973,56 +1339,80 @@ fun ItemizedSplitScreen(viewModel: SplitMateViewModel) {
             ) {
                 Text("Save & Distribute Split", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Spacer(modifier = Modifier.width(8.dp))
-                Icon(Icons.Rounded.ArrowForward, contentDescription = null, tint = Color.White)
+                Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, tint = Color.White)
             }
         }
     }
 
+    // Custom M3 Expressive Dialog for "+ Add Item" (28dp radius, 20dp input radius)
     if (showAddItemDialog) {
         var itemTitle by remember { mutableStateOf("") }
         var itemPriceMajor by remember { mutableStateOf("18.50") }
-        AlertDialog(
-            onDismissRequest = { showAddItemDialog = false },
-            title = { Text("Add Receipt Line Item", fontWeight = FontWeight.ExtraBold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+
+        Dialog(onDismissRequest = { showAddItemDialog = false }) {
+            Surface(
+                shape = SplitMateTheme.RadiusDialog,
+                color = SplitMateTheme.SurfaceWhite,
+                shadowElevation = 18.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusDialog)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = "Add Receipt Line Item",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = SplitMateTheme.PrimaryDark
+                    )
                     OutlinedTextField(
                         value = itemTitle,
                         onValueChange = { itemTitle = it },
                         label = { Text("Item Title") },
-                        singleLine = true
+                        placeholder = { Text("e.g. Matcha Tiramisu") },
+                        singleLine = true,
+                        shape = SplitMateTheme.RadiusInput,
+                        modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = itemPriceMajor,
                         onValueChange = { itemPriceMajor = it },
                         label = { Text("Price (${uiState.activeCurrency.symbol})") },
-                        singleLine = true
+                        singleLine = true,
+                        shape = SplitMateTheme.RadiusInput,
+                        modifier = Modifier.fillMaxWidth()
                     )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val cents = ((itemPriceMajor.toDoubleOrNull() ?: 0.0) * 100).toLong()
-                        viewModel.addReceiptLineItem(itemTitle, cents)
-                        showAddItemDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = SplitMateTheme.PrimaryDark)
-                ) {
-                    Text("Add Item", color = Color.White)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAddItemDialog = false }) {
-                    Text("Cancel")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { showAddItemDialog = false }) {
+                            Text("Cancel", fontWeight = FontWeight.Bold, color = SplitMateTheme.TextSecondary)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                val cents = ((itemPriceMajor.toDoubleOrNull() ?: 0.0) * 100).toLong()
+                                viewModel.addReceiptLineItem(itemTitle, cents)
+                                showAddItemDialog = false
+                            },
+                            shape = SplitMateTheme.RadiusButton,
+                            colors = ButtonDefaults.buttonColors(containerColor = SplitMateTheme.PrimaryDark)
+                        ) {
+                            Text("Add Item", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
-        )
+        }
     }
 }
 
 // ==============================================================================
-// TAB 3: SETTLE (Greedy Debt Simplification & UPI Deep Linking - Wired to ViewModel)
+// TAB 3: SETTLE (Greedy Debt Simplification & UPI Deep Linking)
 // ==============================================================================
 @Composable
 fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
@@ -1057,7 +1447,9 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
             Card(
                 shape = SplitMateTheme.RadiusPanel,
                 colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SageSurface),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
             ) {
                 Row(
                     modifier = Modifier.padding(16.dp),
@@ -1085,7 +1477,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
             }
         }
 
-        // 2. Settlement Action Cards (Wired to viewModel.settlementPlan.collectAsState())
+        // 2. Settlement Action Cards
         item {
             Text(
                 text = "Required Direct Transfers (${settlementPlan.size})",
@@ -1102,6 +1494,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusCard)
+                    .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
                     Row(
@@ -1147,7 +1540,6 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                     ) {
                         Button(
                             onClick = {
-                                // Launch standard India UPI Intent with dynamic upiId & amount
                                 val upiUri = Uri.parse(
                                     "upi://pay?pa=${transfer.upiId}&pn=${Uri.encode(transfer.toName)}&am=${transfer.amount}&cu=INR"
                                 )
@@ -1206,7 +1598,9 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
             Card(
                 shape = SplitMateTheme.RadiusCard,
                 colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SageSurface),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
             ) {
                 Column(
                     modifier = Modifier
@@ -1240,7 +1634,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
 }
 
 // ==============================================================================
-// TAB 4: AUDIT (History, Rollback & Offline Vault - Wired to ViewModel)
+// TAB 4: AUDIT (History, Rollback & Offline Vault)
 // ==============================================================================
 @Composable
 fun AuditVaultScreen(viewModel: SplitMateViewModel) {
@@ -1276,6 +1670,7 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusPanel)
+                    .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
             ) {
                 Row(
                     modifier = Modifier.padding(16.dp),
@@ -1334,7 +1729,9 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
             Card(
                 shape = SplitMateTheme.RadiusCard,
                 colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
@@ -1396,7 +1793,7 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Rounded.Undo, contentDescription = null, modifier = Modifier.size(16.dp), tint = SplitMateTheme.PrimaryDark)
+                                Icon(Icons.AutoMirrored.Rounded.Undo, contentDescription = null, modifier = Modifier.size(16.dp), tint = SplitMateTheme.PrimaryDark)
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("Undo / Rollback", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SplitMateTheme.PrimaryDark)
                             }
@@ -1450,7 +1847,7 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
 fun AvatarToken(
     initials: String,
     bg: Color,
-    textColor: Color,
+    @Suppress("UNUSED_PARAMETER") textColor: Color,
     size: Int = 36
 ) {
     val context = LocalContext.current
@@ -1523,7 +1920,9 @@ fun ActivityItemRow(
     Card(
         shape = SplitMateTheme.RadiusCard,
         colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
     ) {
         Row(
             modifier = Modifier
@@ -1564,12 +1963,14 @@ fun ClaimItemRow(
     title: String,
     amount: String,
     claimedBy: List<String>,
-    unclaimed: List<String>
+    @Suppress("UNUSED_PARAMETER") unclaimed: List<String>
 ) {
     Card(
         shape = SplitMateTheme.RadiusCard,
         colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
     ) {
         Row(
             modifier = Modifier

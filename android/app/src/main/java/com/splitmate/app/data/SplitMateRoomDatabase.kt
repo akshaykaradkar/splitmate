@@ -12,9 +12,10 @@ import androidx.room.RoomDatabase
         GroupMemberEntity::class,
         ExpenseEntity::class,
         ExpenseSplitEntity::class,
-        SettlementEntity::class
+        SettlementEntity::class,
+        UserProfileEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class SplitMateRoomDatabase : RoomDatabase() {

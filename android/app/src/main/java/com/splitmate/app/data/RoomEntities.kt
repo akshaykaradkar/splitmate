@@ -110,3 +110,20 @@ data class SettlementEntity(
     val syncStatus: String = "SYNCED",
     val settledAt: Long = System.currentTimeMillis()
 )
+
+/**
+ * 7. User Profile Entity persisted in local Room SQLite for Onboarding & Settings state.
+ */
+@Entity(tableName = "user_profile")
+data class UserProfileEntity(
+    @PrimaryKey val profileId: String = "me",
+    val name: String,
+    val avatarSeed: String,
+    val countryName: String,
+    val currencyCode: String,
+    val currencySymbol: String,
+    val upiId: String,
+    val isDarkTheme: Boolean = false,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
