@@ -8,7 +8,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.splitmate.app.data.SplitMateRoomDatabase
 import com.splitmate.app.ui.SplitMateMaterial3ExpressiveTheme
-import com.splitmate.app.ui.SplitMateNativeApp
 import com.splitmate.app.ui.SplitMateViewModel
 
 /**
@@ -34,7 +33,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             SplitMateMaterial3ExpressiveTheme {
-                SplitMateNativeApp(viewModel = viewModel)
+                SplitMateApp(viewModel = viewModel)
             }
         }
     }

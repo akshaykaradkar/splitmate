@@ -15,10 +15,14 @@ import com.splitmate.app.data.SplitMateDao
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 data class ReceiptLineItem(
     val itemId: String,
@@ -91,6 +95,29 @@ fun defaultSeedReceiptItems(): List<ReceiptLineItem> = listOf(
     ReceiptLineItem("item_4", "Shared Antipasto Misto", 2600L, emptySet()) // Unclaimed Remainder!
 )
 
+data class ActiveGroupCardUiModel(
+    val groupId: String,
+    val name: String,
+    val memberCount: Int,
+    val memberSeeds: List<String>,
+    val remainingCount: Int,
+    val netBalanceCents: Long,
+    val formattedBadgeText: String,
+    val statusPillText: String
+)
+
+data class SettlementTransferUiModel(
+    val transfer: SplitMateMathEngine.SimplifiedTransfer,
+    val fromName: String,
+    val fromSeed: String,
+    val toName: String,
+    val toSeed: String,
+    val upiId: String,
+    val amount: String,
+    val formattedDisplayAmount: String,
+    val isCurrentUserDebtor: Boolean
+)
+
 class SplitMateViewModel(
     private val dao: SplitMateDao? = null,
     private val api: FrankfurterApiService = FrankfurterNetwork.api,
@@ -99,6 +126,96 @@ class SplitMateViewModel(
 
     private val _uiState = MutableStateFlow( createInitialSeededState() )
     val uiState: StateFlow<SplitMateUiState> = _uiState.asStateFlow()
+
+    val totalBalance: StateFlow<String> = _uiState.map { state ->
+        val sym = state.activeCurrency.symbol
+        val netCents = computeOverallUserBalanceCents(state)
+        val absMajor = String.format(Locale.US, "%.2f", kotlin.math.abs(netCents) / 100.0)
+        when {
+            netCents > 0L -> "+$sym$absMajor"
+            netCents < 0L -> "-$sym$absMajor"
+            else -> "${sym}0.00"
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, "+₹28.33")
+
+    val activeGroups: StateFlow<List<ActiveGroupCardUiModel>> = _uiState.map { state ->
+        val sym = state.activeCurrency.symbol
+        state.groups.map { group ->
+            val groupMembers = state.members.filter { it.groupId == group.groupId }
+            val groupExpenses = state.expenses.filter { it.groupId == group.groupId }
+            val groupExpenseIds = groupExpenses.map { it.expenseId }.toSet()
+            val groupSplits = state.splits.filter { groupExpenseIds.contains(it.expenseId) }
+            val groupSettlements = state.settlements.filter { it.groupId == group.groupId }
+
+            val meMember = groupMembers.find { it.isCurrentUser } ?: groupMembers.firstOrNull()
+            val balances = computeGroupNetBalances(groupMembers, groupExpenses, groupSplits, groupSettlements)
+            val myNetCents = if (meMember != null) (balances[meMember.memberId] ?: 0L) else 0L
+            val simplified = SplitMateMathEngine.simplifyDebtsGreedy(
+                groupMembers.map { m ->
+                    SplitMateMathEngine.MemberNetBalance(m.memberId, m.name, balances[m.memberId] ?: 0L)
+                }
+            )
+            val absStr = String.format(Locale.US, "%.2f", kotlin.math.abs(myNetCents) / 100.0)
+            val badgeText = when {
+                myNetCents > 0L -> "YOU GET BACK $sym$absStr"
+                myNetCents < 0L -> "YOU OWE $sym$absStr"
+                else -> "✓ ${sym}0.00 All settled up"
+            }
+            val rawEdges = (groupExpenses.size * groupMembers.size).coerceAtLeast(simplified.size)
+            val pillText = if (simplified.isEmpty()) {
+                "Equilibrium Reached"
+            } else {
+                "⚡ Greedy: $rawEdges → ${simplified.size} transfers"
+            }
+            val visibleSeeds = groupMembers.take(4).map { it.avatarSeed }
+            val rem = (groupMembers.size - visibleSeeds.size).coerceAtLeast(0)
+
+            ActiveGroupCardUiModel(
+                groupId = group.groupId,
+                name = group.name,
+                memberCount = groupMembers.size,
+                memberSeeds = visibleSeeds,
+                remainingCount = rem,
+                netBalanceCents = myNetCents,
+                formattedBadgeText = badgeText,
+                statusPillText = pillText
+            )
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val settlementPlan: StateFlow<List<SettlementTransferUiModel>> = _uiState.map { state ->
+        val sym = state.activeCurrency.symbol
+        val groupMembers = state.activeGroupMembers
+        val groupExpenses = state.expenses.filter { it.groupId == state.activeGroupId }
+        val groupExpenseIds = groupExpenses.map { it.expenseId }.toSet()
+        val groupSplits = state.splits.filter { groupExpenseIds.contains(it.expenseId) }
+        val groupSettlements = state.settlements.filter { it.groupId == state.activeGroupId }
+        val balances = computeGroupNetBalances(groupMembers, groupExpenses, groupSplits, groupSettlements)
+        val meMember = groupMembers.find { it.isCurrentUser }
+
+        val transfers = SplitMateMathEngine.simplifyDebtsGreedy(
+            groupMembers.map { m ->
+                SplitMateMathEngine.MemberNetBalance(m.memberId, m.name, balances[m.memberId] ?: 0L)
+            }
+        )
+        transfers.map { tr ->
+            val fromMember = groupMembers.find { it.memberId == tr.fromMemberId }
+            val toMember = groupMembers.find { it.memberId == tr.toMemberId }
+            val cleanHandle = tr.toName.lowercase(Locale.US).replace(Regex("[^a-z0-9]"), "").ifEmpty { "splitmate" }
+            val majorStr = String.format(Locale.US, "%.2f", tr.amountCents / 100.0)
+            SettlementTransferUiModel(
+                transfer = tr,
+                fromName = if (fromMember?.isCurrentUser == true) "You" else tr.fromName,
+                fromSeed = fromMember?.avatarSeed ?: tr.fromName,
+                toName = if (toMember?.isCurrentUser == true) "You" else tr.toName,
+                toSeed = toMember?.avatarSeed ?: tr.toName,
+                upiId = "$cleanHandle@okhdfcbank",
+                amount = majorStr,
+                formattedDisplayAmount = "$sym$majorStr",
+                isCurrentUserDebtor = (tr.fromMemberId == meMember?.memberId) || (fromMember?.isCurrentUser == true)
+            )
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     init {
         if (dao != null) {
@@ -501,6 +618,50 @@ class SplitMateViewModel(
 
         viewModelScope.launch(ioDispatcher) {
             dao?.insertSettlement(settlement)
+        }
+    }
+
+    fun rollbackExpense(expenseId: String) {
+        _uiState.update { curr ->
+            val removed = curr.expenses.find { it.expenseId == expenseId }
+            curr.copy(
+                expenses = curr.expenses.filterNot { it.expenseId == expenseId },
+                splits = curr.splits.filterNot { it.expenseId == expenseId },
+                statusBannerMessage = "Rolled back \"${removed?.title ?: "Expense"}\""
+            )
+        }
+    }
+
+    private fun computeGroupNetBalances(
+        groupMembers: List<GroupMemberEntity>,
+        groupExpenses: List<ExpenseEntity>,
+        groupSplits: List<ExpenseSplitEntity>,
+        groupSettlements: List<SettlementEntity>
+    ): Map<String, Long> {
+        val netMap = groupMembers.associate { it.memberId to 0L }.toMutableMap()
+        groupExpenses.forEach { exp ->
+            netMap[exp.payerId] = (netMap[exp.payerId] ?: 0L) + exp.totalAmountCents
+        }
+        groupSplits.forEach { sp ->
+            netMap[sp.memberId] = (netMap[sp.memberId] ?: 0L) - sp.finalOwedCents
+        }
+        groupSettlements.forEach { st ->
+            netMap[st.fromMemberId] = (netMap[st.fromMemberId] ?: 0L) + st.amountCents
+            netMap[st.toMemberId] = (netMap[st.toMemberId] ?: 0L) - st.amountCents
+        }
+        return netMap
+    }
+
+    private fun computeOverallUserBalanceCents(state: SplitMateUiState): Long {
+        return state.groups.sumOf { group ->
+            val gMembers = state.members.filter { it.groupId == group.groupId }
+            val gExpenses = state.expenses.filter { it.groupId == group.groupId }
+            val gExpenseIds = gExpenses.map { it.expenseId }.toSet()
+            val gSplits = state.splits.filter { gExpenseIds.contains(it.expenseId) }
+            val gSettlements = state.settlements.filter { it.groupId == group.groupId }
+            val me = gMembers.find { it.isCurrentUser } ?: gMembers.firstOrNull()
+            val netMap = computeGroupNetBalances(gMembers, gExpenses, gSplits, gSettlements)
+            if (me != null) (netMap[me.memberId] ?: 0L) else 0L
         }
     }
 

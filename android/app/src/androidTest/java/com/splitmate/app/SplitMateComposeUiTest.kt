@@ -5,7 +5,6 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import com.splitmate.app.ui.SplitMateMaterial3ExpressiveTheme
-import com.splitmate.app.ui.SplitMateNativeApp
 import com.splitmate.app.ui.SplitMateViewModel
 import org.junit.Rule
 import org.junit.Test
@@ -26,7 +25,7 @@ class SplitMateComposeUiTest {
 
         composeTestRule.setContent {
             SplitMateMaterial3ExpressiveTheme {
-                SplitMateNativeApp(viewModel = vm)
+                SplitMateApp(viewModel = vm)
             }
         }
 
