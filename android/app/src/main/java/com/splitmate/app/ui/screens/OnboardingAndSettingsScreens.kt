@@ -60,24 +60,27 @@ object SplitMateThemeTokens {
     val RadiusPill = RoundedCornerShape(999.dp)
 }
 
-// Data models for Currencies & Countries
+// Data models for Currencies & Countries (Circular symbol badges, zero emoji flags)
 data class CountryCurrency(
     val code: String,
     val country: String,
     val currencyName: String,
     val symbol: String,
-    val flag: String
+    val badgeBg: Color = Color(0xFFD7E8B6),
+    val badgeFg: Color = Color(0xFF2D4810)
 )
 
 val SupportedCurrencies = listOf(
-    CountryCurrency("INR", "India", "Indian Rupee", "₹", "🇮🇳"),
-    CountryCurrency("USD", "United States", "US Dollar", "$", "🇺🇸"),
-    CountryCurrency("EUR", "European Union", "Euro", "€", "🇪🇺"),
-    CountryCurrency("GBP", "United Kingdom", "British Pound", "£", "🇬🇧"),
-    CountryCurrency("JPY", "Japan", "Japanese Yen", "¥", "🇯🇵"),
-    CountryCurrency("CAD", "Canada", "Canadian Dollar", "$", "🇨🇦"),
-    CountryCurrency("AUD", "Australia", "Australian Dollar", "$", "🇦🇺"),
-    CountryCurrency("SGD", "Singapore", "Singapore Dollar", "$", "🇸🇬")
+    CountryCurrency("INR", "India", "Indian Rupee", "₹", Color(0xFFD7E8B6), Color(0xFF2D4810)),
+    CountryCurrency("USD", "United States", "US Dollar", "$", Color(0xFFFFD8CC), Color(0xFF8A2E1A)),
+    CountryCurrency("EUR", "European Union", "Euro", "€", Color(0xFFD0E2FF), Color(0xFF143E82)),
+    CountryCurrency("GBP", "United Kingdom", "British Pound", "£", Color(0xFFFFD5E5), Color(0xFF801844)),
+    CountryCurrency("JPY", "Japan", "Japanese Yen", "¥", Color(0xFFE5DCFF), Color(0xFF452285)),
+    CountryCurrency("CAD", "Canada", "Canadian Dollar", "C$", Color(0xFFD2F5DC), Color(0xFF1B6331)),
+    CountryCurrency("AUD", "Australia", "Australian Dollar", "A$", Color(0xFFD7E8B6), Color(0xFF2D4810)),
+    CountryCurrency("SGD", "Singapore", "Singapore Dollar", "S$", Color(0xFFFFD8CC), Color(0xFF8A2E1A)),
+    CountryCurrency("AED", "United Arab Emirates", "UAE Dirham", "د.إ", Color(0xFFD0E2FF), Color(0xFF143E82)),
+    CountryCurrency("CHF", "Switzerland", "Swiss Franc", "Fr", Color(0xFFE5DCFF), Color(0xFF452285))
 )
 
 // ==============================================================================
@@ -264,23 +267,33 @@ fun OnboardingSetupScreen(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
-                // Input 2: Exposed Dropdown Selector for "Home Country & Currency"
+                // Input 2: Exposed Dropdown Selector for "Home Country & Currency" with Circular Symbol Badges
                 ExposedDropdownMenuBox(
                     expanded = isCurrencyDropdownExpanded,
                     onExpandedChange = { isCurrencyDropdownExpanded = !isCurrencyDropdownExpanded },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     OutlinedTextField(
-                        value = "${selectedCurrency.flag}  ${selectedCurrency.country} (${selectedCurrency.code} - ${selectedCurrency.symbol})",
+                        value = "${selectedCurrency.country} (${selectedCurrency.code} · ${selectedCurrency.symbol})",
                         onValueChange = {},
                         readOnly = true,
                         label = { Text("Home Country & Currency", fontWeight = FontWeight.SemiBold) },
                         leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Rounded.AccountBalanceWallet,
-                                contentDescription = null,
-                                tint = SplitMateThemeTokens.PrimaryDark
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .padding(start = 8.dp)
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(selectedCurrency.badgeBg),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = selectedCurrency.symbol,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = selectedCurrency.badgeFg
+                                )
+                            }
                         },
                         trailingIcon = {
                             ExposedDropdownMenuDefaults.TrailingIcon(expanded = isCurrencyDropdownExpanded)
@@ -314,7 +327,20 @@ fun OnboardingSetupScreen(
                                         verticalAlignment = Alignment.CenterVertically,
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Text(text = item.flag, fontSize = 20.sp)
+                                        Box(
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clip(CircleShape)
+                                                .background(item.badgeBg),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = item.symbol,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = item.badgeFg
+                                            )
+                                        }
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(
@@ -452,6 +478,8 @@ fun UserSettingsScreen(
     totalBalanceText: String = "+₹0.00",
     activeGroupsCount: Int = 0,
     isDarkThemeInitial: Boolean = false,
+    allCurrencies: List<com.splitmate.app.data.CurrencyRateEntity> = emptyList(),
+    onSyncLiveRates: () -> Unit = {},
     onBackClick: () -> Unit = {},
     onUpdateUpiId: (String) -> Unit = {},
     onUpdateCurrencyCode: (String) -> Unit = {},
@@ -464,12 +492,19 @@ fun UserSettingsScreen(
     var showEditUpiDialog by remember { mutableStateOf(false) }
     var showEditCurrencyDialog by remember { mutableStateOf(false) }
 
+    val screenBg = if (isDarkTheme) Color(0xFF141311) else SplitMateThemeTokens.ScreenBg
+    val cardBg = if (isDarkTheme) Color(0xFF1F1D1A) else SplitMateThemeTokens.SurfaceWhite
+    val mutedBg = if (isDarkTheme) Color(0xFF282521) else SplitMateThemeTokens.SurfaceMuted
+    val textPrimary = if (isDarkTheme) Color(0xFFF6F2EA) else SplitMateThemeTokens.PrimaryDark
+    val textSecondary = if (isDarkTheme) Color(0xFFB5ADA3) else SplitMateThemeTokens.TextSecondary
+    val borderColor = if (isDarkTheme) Color(0xFF38332D) else SplitMateThemeTokens.BorderLight
+
     val diceBearSvgUrl = remember(avatarSeed) {
         "https://api.dicebear.com/9.x/open-peeps/svg?seed=${Uri.encode(avatarSeed)}&backgroundColor=d7e8b6,fed8c8,dce3fd"
     }
 
     Scaffold(
-        containerColor = SplitMateThemeTokens.ScreenBg,
+        containerColor = screenBg,
         topBar = {
             TopAppBar(
                 title = {
@@ -477,7 +512,7 @@ fun UserSettingsScreen(
                         text = "Settings",
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 20.sp,
-                        color = SplitMateThemeTokens.PrimaryDark
+                        color = textPrimary
                     )
                 },
                 navigationIcon = {
@@ -488,7 +523,7 @@ fun UserSettingsScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                             contentDescription = "Back",
-                            tint = SplitMateThemeTokens.PrimaryDark
+                            tint = textPrimary
                         )
                     }
                 },
@@ -510,7 +545,7 @@ fun UserSettingsScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "v5.0 Online",
+                                text = "v6.0 Online",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = SplitMateThemeTokens.SageText
@@ -519,7 +554,7 @@ fun UserSettingsScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = SplitMateThemeTokens.ScreenBg
+                    containerColor = screenBg
                 )
             )
         }
@@ -543,11 +578,11 @@ fun UserSettingsScreen(
                     // Profile Card Container (24dp radius)
                     Card(
                         shape = SplitMateThemeTokens.RadiusCard,
-                        colors = CardDefaults.cardColors(containerColor = SplitMateThemeTokens.SurfaceWhite),
+                        colors = CardDefaults.cardColors(containerColor = cardBg),
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 50.dp)
-                            .border(1.dp, SplitMateThemeTokens.BorderLight, SplitMateThemeTokens.RadiusCard)
+                            .border(1.dp, borderColor, SplitMateThemeTokens.RadiusCard)
                             .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
                     ) {
                         Column(
@@ -561,7 +596,7 @@ fun UserSettingsScreen(
                                 text = userName,
                                 fontSize = 24.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = SplitMateThemeTokens.PrimaryDark
+                                color = textPrimary
                             )
 
                             Spacer(modifier = Modifier.height(6.dp))
@@ -569,7 +604,7 @@ fun UserSettingsScreen(
                             // UPI ID Chip with Edit Action
                             Surface(
                                 shape = SplitMateThemeTokens.RadiusPill,
-                                color = SplitMateThemeTokens.SurfaceMuted,
+                                color = mutedBg,
                                 onClick = { showEditUpiDialog = true }
                             ) {
                                 Row(
@@ -579,7 +614,7 @@ fun UserSettingsScreen(
                                     Icon(
                                         imageVector = Icons.Rounded.AccountBalance,
                                         contentDescription = null,
-                                        tint = SplitMateThemeTokens.PrimaryDark,
+                                        tint = textPrimary,
                                         modifier = Modifier.size(15.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
@@ -587,13 +622,13 @@ fun UserSettingsScreen(
                                         text = upiId,
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = SplitMateThemeTokens.PrimaryDark
+                                        color = textPrimary
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Icon(
                                         imageVector = Icons.Rounded.Edit,
                                         contentDescription = "Edit UPI",
-                                        tint = SplitMateThemeTokens.TextSecondary,
+                                        tint = textSecondary,
                                         modifier = Modifier.size(14.dp)
                                     )
                                 }
@@ -623,23 +658,23 @@ fun UserSettingsScreen(
 
                                 Surface(
                                     shape = SplitMateThemeTokens.RadiusPanel,
-                                    color = SplitMateThemeTokens.SurfaceMuted,
+                                    color = mutedBg,
                                     modifier = Modifier.weight(1f)
                                 ) {
                                     Column(
                                         modifier = Modifier.padding(12.dp),
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
-                                        Text("Active Groups", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SplitMateThemeTokens.TextSecondary)
+                                        Text("Active Groups", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = textSecondary)
                                         Spacer(modifier = Modifier.height(2.dp))
-                                        Text("$activeGroupsCount Ledgers", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = SplitMateThemeTokens.PrimaryDark)
+                                        Text("$activeGroupsCount Ledgers", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = textPrimary)
                                     }
                                 }
                             }
                         }
                     }
 
-                    // Overlapping Avatar (100dp with Coil DiceBear Open-Peeps SVG)
+                    // Overlapping Avatar (100dp with Coil DiceBear Open-Peeps SVG, zero raw SVG text)
                     Box(
                         modifier = Modifier
                             .size(100.dp)
@@ -652,19 +687,23 @@ fun UserSettingsScreen(
                                     )
                                 )
                             )
-                            .border(4.dp, SplitMateThemeTokens.SurfaceWhite, CircleShape)
+                            .border(4.dp, cardBg, CircleShape)
                             .shadow(elevation = 8.dp, shape = CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
+                        Text(
+                            text = userName.trim().take(2).uppercase().ifEmpty { "SM" },
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = SplitMateThemeTokens.SageText
+                        )
                         AsyncImage(
                             model = ImageRequest.Builder(context)
                                 .data(diceBearSvgUrl)
                                 .decoderFactory(SvgDecoder.Factory())
                                 .crossfade(true)
                                 .build(),
-                            placeholder = painterResource(id = R.drawable.ic_avatar_placeholder),
-                            error = painterResource(id = R.drawable.ic_avatar_placeholder),
-                            contentDescription = "User Avatar",
+                            contentDescription = null,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
                                 .fillMaxSize()
@@ -681,16 +720,16 @@ fun UserSettingsScreen(
                         text = "Payment & Currency",
                         fontSize = 17.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        color = SplitMateThemeTokens.PrimaryDark,
+                        color = textPrimary,
                         modifier = Modifier.padding(start = 4.dp, bottom = 10.dp)
                     )
 
                     Card(
                         shape = SplitMateThemeTokens.RadiusCard,
-                        colors = CardDefaults.cardColors(containerColor = SplitMateThemeTokens.SurfaceWhite),
+                        colors = CardDefaults.cardColors(containerColor = cardBg),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .border(1.dp, SplitMateThemeTokens.BorderLight, SplitMateThemeTokens.RadiusCard)
+                            .border(1.dp, borderColor, SplitMateThemeTokens.RadiusCard)
                     ) {
                         Column {
                             // Row 1: Edit UPI ID
@@ -703,13 +742,13 @@ fun UserSettingsScreen(
                                 trailingContent = {
                                     Surface(
                                         shape = SplitMateThemeTokens.RadiusPill,
-                                        color = SplitMateThemeTokens.SurfaceMuted
+                                        color = mutedBg
                                     ) {
                                         Text(
                                             text = "Edit",
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = SplitMateThemeTokens.PrimaryDark,
+                                            color = textPrimary,
                                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                                         )
                                     }
@@ -718,22 +757,22 @@ fun UserSettingsScreen(
                             )
 
                             HorizontalDivider(
-                                color = SplitMateThemeTokens.BorderLight.copy(alpha = 0.6f),
+                                color = borderColor.copy(alpha = 0.6f),
                                 modifier = Modifier.padding(horizontal = 16.dp)
                             )
 
-                            // Row 2: Default Currency
+                            // Row 2: Default Currency (160+ World Currencies ModalBottomSheet)
                             SettingsRowItem(
-                                icon = Icons.Rounded.CurrencyRupee,
+                                icon = Icons.Rounded.CurrencyExchange,
                                 iconBg = SplitMateThemeTokens.TerracottaSurface,
                                 iconTint = SplitMateThemeTokens.TerracottaText,
-                                title = "Default Ledger Currency",
+                                title = "Default Ledger Currency (160+ World)",
                                 subtitle = defaultCurrencyCode,
                                 trailingContent = {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                                         contentDescription = null,
-                                        tint = SplitMateThemeTokens.TextSecondary
+                                        tint = textSecondary
                                     )
                                 },
                                 onClick = { showEditCurrencyDialog = true }
@@ -750,16 +789,16 @@ fun UserSettingsScreen(
                         text = "App Preferences",
                         fontSize = 17.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        color = SplitMateThemeTokens.PrimaryDark,
+                        color = textPrimary,
                         modifier = Modifier.padding(start = 4.dp, bottom = 10.dp)
                     )
 
                     Card(
                         shape = SplitMateThemeTokens.RadiusCard,
-                        colors = CardDefaults.cardColors(containerColor = SplitMateThemeTokens.SurfaceWhite),
+                        colors = CardDefaults.cardColors(containerColor = cardBg),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .border(1.dp, SplitMateThemeTokens.BorderLight, SplitMateThemeTokens.RadiusCard)
+                            .border(1.dp, borderColor, SplitMateThemeTokens.RadiusCard)
                     ) {
                         Column {
                             // Row 1: Dark/Light Theme Switch
@@ -778,7 +817,7 @@ fun UserSettingsScreen(
                                         },
                                         colors = SwitchDefaults.colors(
                                             checkedThumbColor = SplitMateThemeTokens.SurfaceWhite,
-                                            checkedTrackColor = SplitMateThemeTokens.PrimaryDark,
+                                            checkedTrackColor = SplitMateThemeTokens.AccentSage,
                                             uncheckedThumbColor = SplitMateThemeTokens.PrimaryDark,
                                             uncheckedTrackColor = SplitMateThemeTokens.SurfaceMuted
                                         )
@@ -791,7 +830,7 @@ fun UserSettingsScreen(
                             )
 
                             HorizontalDivider(
-                                color = SplitMateThemeTokens.BorderLight.copy(alpha = 0.6f),
+                                color = borderColor.copy(alpha = 0.6f),
                                 modifier = Modifier.padding(horizontal = 16.dp)
                             )
 
@@ -859,11 +898,11 @@ fun UserSettingsScreen(
         Dialog(onDismissRequest = { showClearVaultDialog = false }) {
             Surface(
                 shape = RoundedCornerShape(28.dp),
-                color = SplitMateThemeTokens.SurfaceWhite,
+                color = cardBg,
                 shadowElevation = 16.dp,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, SplitMateThemeTokens.BorderLight, RoundedCornerShape(28.dp))
+                    .border(1.dp, borderColor, RoundedCornerShape(28.dp))
             ) {
                 Column(
                     modifier = Modifier.padding(24.dp),
@@ -884,12 +923,12 @@ fun UserSettingsScreen(
                             text = "Clear Local Vault?",
                             fontSize = 20.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = SplitMateThemeTokens.PrimaryDark
+                            color = textPrimary
                         )
                     }
                     Text(
                         text = "This will erase all cached receipts, group ledgers, and participant claim records stored on this device. This action cannot be undone.",
-                        color = SplitMateThemeTokens.TextSecondary,
+                        color = textSecondary,
                         fontSize = 14.sp,
                         lineHeight = 20.sp
                     )
@@ -901,7 +940,7 @@ fun UserSettingsScreen(
                             onClick = { showClearVaultDialog = false },
                             shape = SplitMateThemeTokens.RadiusButton
                         ) {
-                            Text("Cancel", fontWeight = FontWeight.Bold, color = SplitMateThemeTokens.PrimaryDark)
+                            Text("Cancel", fontWeight = FontWeight.Bold, color = textPrimary)
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
@@ -926,11 +965,11 @@ fun UserSettingsScreen(
         Dialog(onDismissRequest = { showEditUpiDialog = false }) {
             Surface(
                 shape = RoundedCornerShape(28.dp),
-                color = SplitMateThemeTokens.SurfaceWhite,
+                color = cardBg,
                 shadowElevation = 16.dp,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, SplitMateThemeTokens.BorderLight, RoundedCornerShape(28.dp))
+                    .border(1.dp, borderColor, RoundedCornerShape(28.dp))
             ) {
                 Column(
                     modifier = Modifier.padding(24.dp),
@@ -940,7 +979,7 @@ fun UserSettingsScreen(
                         text = "Update UPI ID",
                         fontSize = 20.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        color = SplitMateThemeTokens.PrimaryDark
+                        color = textPrimary
                     )
                     OutlinedTextField(
                         value = upiInput,
@@ -956,7 +995,7 @@ fun UserSettingsScreen(
                         horizontalArrangement = Arrangement.End
                     ) {
                         TextButton(onClick = { showEditUpiDialog = false }) {
-                            Text("Cancel", fontWeight = FontWeight.Bold, color = SplitMateThemeTokens.PrimaryDark)
+                            Text("Cancel", fontWeight = FontWeight.Bold, color = textPrimary)
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
@@ -975,50 +1014,18 @@ fun UserSettingsScreen(
         }
     }
 
-    // M3 Expressive Dialog 3: Edit Default Currency
+    // M3 Expressive ModalBottomSheet 3: Select Default Currency from 160+ World Currencies
     if (showEditCurrencyDialog) {
-        Dialog(onDismissRequest = { showEditCurrencyDialog = false }) {
-            Surface(
-                shape = RoundedCornerShape(28.dp),
-                color = SplitMateThemeTokens.SurfaceWhite,
-                shadowElevation = 16.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, SplitMateThemeTokens.BorderLight, RoundedCornerShape(28.dp))
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = "Select Home Currency",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = SplitMateThemeTokens.PrimaryDark
-                    )
-                    SupportedCurrencies.forEach { item ->
-                        Surface(
-                            onClick = {
-                                onUpdateCurrencyCode(item.code)
-                                showEditCurrencyDialog = false
-                            },
-                            shape = RoundedCornerShape(18.dp),
-                            color = SplitMateThemeTokens.SurfaceMuted,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("${item.flag}  ${item.country} (${item.code})", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = SplitMateThemeTokens.PrimaryDark)
-                                Text(item.symbol, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp, color = SplitMateThemeTokens.SageText)
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        CurrencyModalBottomSheet(
+            currencies = allCurrencies,
+            activeCurrencyCode = defaultCurrencyCode.substringBefore(" ").trim(),
+            onSelectCurrency = { code ->
+                onUpdateCurrencyCode(code)
+                showEditCurrencyDialog = false
+            },
+            onSyncLiveRates = onSyncLiveRates,
+            onDismiss = { showEditCurrencyDialog = false }
+        )
     }
 }
 

@@ -25,6 +25,7 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 
 import com.splitmate.app.data.UserProfileEntity
+import com.splitmate.app.data.WorldCurrencyMetadata
 
 data class ReceiptLineItem(
     val itemId: String,
@@ -63,42 +64,36 @@ data class SplitMateUiState(
         get() = currencyRates.find { it.currencyCode == activeCurrencyCode }
             ?: CurrencyRateEntity("INR", "Indian Rupee", "₹", 83.95)
 
+    val activeGroup: ExpenseGroupEntity?
+        get() = groups.find { it.groupId == activeGroupId } ?: groups.firstOrNull()
+
     val activeGroupMembers: List<GroupMemberEntity>
         get() = members.filter { it.groupId == activeGroupId }
 }
 
-fun defaultSeedCurrencies(): List<CurrencyRateEntity> = listOf(
-    CurrencyRateEntity("INR", "Indian Rupee", "₹", 83.95),
-    CurrencyRateEntity("USD", "United States Dollar", "$", 1.00),
-    CurrencyRateEntity("EUR", "Euro", "€", 0.92),
-    CurrencyRateEntity("GBP", "British Pound Sterling", "£", 0.79),
-    CurrencyRateEntity("JPY", "Japanese Yen", "¥", 151.40),
-    CurrencyRateEntity("AUD", "Australian Dollar", "A$", 1.52),
-    CurrencyRateEntity("CAD", "Canadian Dollar", "CA$", 1.36),
-    CurrencyRateEntity("CHF", "Swiss Franc", "Fr", 0.88),
-    CurrencyRateEntity("SGD", "Singapore Dollar", "S$", 1.34),
-    CurrencyRateEntity("AED", "UAE Dirham", "د.إ", 3.67),
-    CurrencyRateEntity("THB", "Thai Baht", "฿", 35.80),
-    CurrencyRateEntity("MYR", "Malaysian Ringgit", "RM", 4.68),
-    CurrencyRateEntity("IDR", "Indonesian Rupiah", "Rp", 15650.0),
-    CurrencyRateEntity("KRW", "South Korean Won", "₩", 1345.0),
-    CurrencyRateEntity("BRL", "Brazilian Real", "R$", 5.05),
-    CurrencyRateEntity("MXN", "Mexican Peso", "Mex$", 16.80),
-    CurrencyRateEntity("ZAR", "South African Rand", "R", 18.70),
-    CurrencyRateEntity("CNY", "Chinese Renminbi Yuan", "¥", 7.23),
-    CurrencyRateEntity("HKD", "Hong Kong Dollar", "HK$", 7.82),
-    CurrencyRateEntity("NZD", "New Zealand Dollar", "NZ$", 1.64),
-    CurrencyRateEntity("SEK", "Swedish Krona", "kr", 10.55),
-    CurrencyRateEntity("NOK", "Norwegian Krone", "kr", 10.72),
-    CurrencyRateEntity("DKK", "Danish Krone", "kr", 6.86),
-    CurrencyRateEntity("PLN", "Polish Złoty", "zł", 3.98)
-)
+fun defaultSeedCurrencies(): List<CurrencyRateEntity> =
+    WorldCurrencyMetadata.allCurrencies.mapIndexed { idx, info ->
+        val defaultRate = when (info.code) {
+            "INR" -> 83.95
+            "USD" -> 1.00
+            "EUR" -> 0.92
+            "GBP" -> 0.79
+            "JPY" -> 151.40
+            "AED" -> 3.67
+            "AUD" -> 1.52
+            "CAD" -> 1.36
+            "CHF" -> 0.88
+            "SGD" -> 1.34
+            else -> 1.0 + (idx * 0.15)
+        }
+        CurrencyRateEntity(info.code, info.name, info.symbol, defaultRate)
+    }
 
 fun defaultSeedReceiptItems(): List<ReceiptLineItem> = listOf(
     ReceiptLineItem("item_1", "Truffle Tagliatelle", 2800L, setOf("m_1")),
     ReceiptLineItem("item_2", "Wood-Fired Diavola Pizza", 2400L, setOf("m_2")),
     ReceiptLineItem("item_3", "Artisanal Carafe Wine", 4200L, setOf("m_1", "m_2", "m_3")),
-    ReceiptLineItem("item_4", "Shared Antipasto Misto", 2600L, emptySet()) // Unclaimed Remainder!
+    ReceiptLineItem("item_4", "Shared Antipasto Misto", 2600L, emptySet())
 )
 
 data class ActiveGroupCardUiModel(
@@ -114,8 +109,10 @@ data class ActiveGroupCardUiModel(
 
 data class SettlementTransferUiModel(
     val transfer: SplitMateMathEngine.SimplifiedTransfer,
+    val fromMemberId: String,
     val fromName: String,
     val fromSeed: String,
+    val toMemberId: String,
     val toName: String,
     val toSeed: String,
     val upiId: String,
@@ -137,91 +134,106 @@ class SplitMateViewModel(
 
     val totalBalance: StateFlow<String> = _uiState.map { state ->
         val sym = state.activeCurrency.symbol
-        val netCents = computeOverallUserBalanceCents(state)
-        val absMajor = String.format(Locale.US, "%.2f", kotlin.math.abs(netCents) / 100.0)
-        when {
-            netCents > 0L -> "+$sym$absMajor"
-            netCents < 0L -> "-$sym$absMajor"
-            else -> "${sym}0.00"
+        if (state.groups.isEmpty() || state.expenses.isEmpty()) {
+            "${sym}0.00"
+        } else {
+            val netCents = computeOverallUserBalanceCents(state)
+            val absMajor = String.format(Locale.US, "%.2f", kotlin.math.abs(netCents) / 100.0)
+            when {
+                netCents > 0L -> "+$sym$absMajor"
+                netCents < 0L -> "-$sym$absMajor"
+                else -> "${sym}0.00"
+            }
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, "₹0.00")
 
     val activeGroups: StateFlow<List<ActiveGroupCardUiModel>> = _uiState.map { state ->
-        val sym = state.activeCurrency.symbol
-        state.groups.map { group ->
-            val groupMembers = state.members.filter { it.groupId == group.groupId }
-            val groupExpenses = state.expenses.filter { it.groupId == group.groupId }
-            val groupExpenseIds = groupExpenses.map { it.expenseId }.toSet()
-            val groupSplits = state.splits.filter { groupExpenseIds.contains(it.expenseId) }
-            val groupSettlements = state.settlements.filter { it.groupId == group.groupId }
+        if (state.groups.isEmpty()) {
+            emptyList()
+        } else {
+            val sym = state.activeCurrency.symbol
+            state.groups.map { group ->
+                val groupMembers = state.members.filter { it.groupId == group.groupId }
+                val groupExpenses = state.expenses.filter { it.groupId == group.groupId }
+                val groupExpenseIds = groupExpenses.map { it.expenseId }.toSet()
+                val groupSplits = state.splits.filter { groupExpenseIds.contains(it.expenseId) }
+                val groupSettlements = state.settlements.filter { it.groupId == group.groupId }
 
-            val meMember = groupMembers.find { it.isCurrentUser } ?: groupMembers.firstOrNull()
-            val balances = computeGroupNetBalances(groupMembers, groupExpenses, groupSplits, groupSettlements)
-            val myNetCents = if (meMember != null) (balances[meMember.memberId] ?: 0L) else 0L
-            val simplified = SplitMateMathEngine.simplifyDebtsGreedy(
-                groupMembers.map { m ->
-                    SplitMateMathEngine.MemberNetBalance(m.memberId, m.name, balances[m.memberId] ?: 0L)
+                val meMember = groupMembers.find { it.isCurrentUser } ?: groupMembers.firstOrNull()
+                val balances = computeGroupNetBalances(groupMembers, groupExpenses, groupSplits, groupSettlements)
+                val myNetCents = if (meMember != null) (balances[meMember.memberId] ?: 0L) else 0L
+                val simplified = SplitMateMathEngine.simplifyDebtsGreedy(
+                    groupMembers.map { m ->
+                        SplitMateMathEngine.MemberNetBalance(m.memberId, m.name, balances[m.memberId] ?: 0L)
+                    }
+                )
+                val absStr = String.format(Locale.US, "%.2f", kotlin.math.abs(myNetCents) / 100.0)
+                val badgeText = when {
+                    myNetCents > 0L -> "YOU GET BACK $sym$absStr"
+                    myNetCents < 0L -> "YOU OWE $sym$absStr"
+                    else -> "✓ ${sym}0.00 All settled up"
                 }
-            )
-            val absStr = String.format(Locale.US, "%.2f", kotlin.math.abs(myNetCents) / 100.0)
-            val badgeText = when {
-                myNetCents > 0L -> "YOU GET BACK $sym$absStr"
-                myNetCents < 0L -> "YOU OWE $sym$absStr"
-                else -> "✓ ${sym}0.00 All settled up"
-            }
-            val rawEdges = (groupExpenses.size * groupMembers.size).coerceAtLeast(simplified.size)
-            val pillText = if (simplified.isEmpty()) {
-                "Equilibrium Reached"
-            } else {
-                "⚡ Greedy: $rawEdges → ${simplified.size} transfers"
-            }
-            val visibleSeeds = groupMembers.take(4).map { it.avatarSeed }
-            val rem = (groupMembers.size - visibleSeeds.size).coerceAtLeast(0)
+                val rawEdges = (groupExpenses.size * groupMembers.size).coerceAtLeast(simplified.size)
+                val pillText = if (simplified.isEmpty()) {
+                    "Equilibrium Reached"
+                } else {
+                    "⚡ Greedy: $rawEdges → ${simplified.size} transfers"
+                }
+                val visibleSeeds = groupMembers.take(4).map { it.avatarSeed }
+                val rem = (groupMembers.size - visibleSeeds.size).coerceAtLeast(0)
 
-            ActiveGroupCardUiModel(
-                groupId = group.groupId,
-                name = group.name,
-                memberCount = groupMembers.size,
-                memberSeeds = visibleSeeds,
-                remainingCount = rem,
-                netBalanceCents = myNetCents,
-                formattedBadgeText = badgeText,
-                statusPillText = pillText
-            )
+                ActiveGroupCardUiModel(
+                    groupId = group.groupId,
+                    name = group.name,
+                    memberCount = groupMembers.size,
+                    memberSeeds = visibleSeeds,
+                    remainingCount = rem,
+                    netBalanceCents = myNetCents,
+                    formattedBadgeText = badgeText,
+                    statusPillText = pillText
+                )
+            }
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val settlementPlan: StateFlow<List<SettlementTransferUiModel>> = _uiState.map { state ->
-        val sym = state.activeCurrency.symbol
-        val groupMembers = state.activeGroupMembers
-        val groupExpenses = state.expenses.filter { it.groupId == state.activeGroupId }
-        val groupExpenseIds = groupExpenses.map { it.expenseId }.toSet()
-        val groupSplits = state.splits.filter { groupExpenseIds.contains(it.expenseId) }
-        val groupSettlements = state.settlements.filter { it.groupId == state.activeGroupId }
-        val balances = computeGroupNetBalances(groupMembers, groupExpenses, groupSplits, groupSettlements)
-        val meMember = groupMembers.find { it.isCurrentUser }
+        if (state.groups.isEmpty()) {
+            emptyList()
+        } else {
+            val sym = state.activeCurrency.symbol
+            val groupMembers = state.activeGroupMembers
+            val groupExpenses = state.expenses.filter { it.groupId == state.activeGroupId }
+            val groupExpenseIds = groupExpenses.map { it.expenseId }.toSet()
+            val groupSplits = state.splits.filter { groupExpenseIds.contains(it.expenseId) }
+            val groupSettlements = state.settlements.filter { it.groupId == state.activeGroupId }
+            val balances = computeGroupNetBalances(groupMembers, groupExpenses, groupSplits, groupSettlements)
+            val meMember = groupMembers.find { it.isCurrentUser }
 
-        val transfers = SplitMateMathEngine.simplifyDebtsGreedy(
-            groupMembers.map { m ->
-                SplitMateMathEngine.MemberNetBalance(m.memberId, m.name, balances[m.memberId] ?: 0L)
-            }
-        )
-        transfers.map { tr ->
-            val fromMember = groupMembers.find { it.memberId == tr.fromMemberId }
-            val toMember = groupMembers.find { it.memberId == tr.toMemberId }
-            val cleanHandle = tr.toName.lowercase(Locale.US).replace(Regex("[^a-z0-9]"), "").ifEmpty { "splitmate" }
-            val majorStr = String.format(Locale.US, "%.2f", tr.amountCents / 100.0)
-            SettlementTransferUiModel(
-                transfer = tr,
-                fromName = if (fromMember?.isCurrentUser == true) "You" else tr.fromName,
-                fromSeed = fromMember?.avatarSeed ?: tr.fromName,
-                toName = if (toMember?.isCurrentUser == true) "You" else tr.toName,
-                toSeed = toMember?.avatarSeed ?: tr.toName,
-                upiId = "$cleanHandle@okhdfcbank",
-                amount = majorStr,
-                formattedDisplayAmount = "$sym$majorStr",
-                isCurrentUserDebtor = (tr.fromMemberId == meMember?.memberId) || (fromMember?.isCurrentUser == true)
+            val transfers = SplitMateMathEngine.simplifyDebtsGreedy(
+                groupMembers.map { m ->
+                    SplitMateMathEngine.MemberNetBalance(m.memberId, m.name, balances[m.memberId] ?: 0L)
+                }
             )
+            transfers.map { tr ->
+                val fromMember = groupMembers.find { it.memberId == tr.fromMemberId }
+                val toMember = groupMembers.find { it.memberId == tr.toMemberId }
+                val cleanHandle = tr.toName.lowercase(Locale.US).replace(Regex("[^a-z0-9]"), "").ifEmpty { "splitmate" }
+                val resolvedUpiId = toMember?.upiId?.takeIf { it.isNotBlank() } ?: "$cleanHandle@okhdfcbank"
+                val majorStr = String.format(Locale.US, "%.2f", tr.amountCents / 100.0)
+                SettlementTransferUiModel(
+                    transfer = tr,
+                    fromMemberId = tr.fromMemberId,
+                    fromName = if (fromMember?.isCurrentUser == true) "You" else tr.fromName,
+                    fromSeed = fromMember?.avatarSeed ?: tr.fromName,
+                    toMemberId = tr.toMemberId,
+                    toName = if (toMember?.isCurrentUser == true) "You" else tr.toName,
+                    toSeed = toMember?.avatarSeed ?: tr.toName,
+                    upiId = resolvedUpiId,
+                    amount = majorStr,
+                    formattedDisplayAmount = "$sym$majorStr",
+                    isCurrentUserDebtor = (tr.fromMemberId == meMember?.memberId) || (fromMember?.isCurrentUser == true)
+                )
+            }
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -417,6 +429,7 @@ class SplitMateViewModel(
                 expenses = emptyList(),
                 splits = emptyList(),
                 settlements = emptyList(),
+                receiptItems = emptyList(),
                 activeGroupId = "",
                 statusBannerMessage = "Local SQLite Vault cleared"
             )
@@ -426,8 +439,94 @@ class SplitMateViewModel(
         }
     }
 
+    fun updateFriendUpi(memberId: String, newName: String, newUpiId: String) {
+        val cleanName = newName.trim().ifEmpty { "Friend" }
+        val cleanUpi = newUpiId.trim()
+        _uiState.update { state ->
+            val updatedMembers = state.members.map { m ->
+                if (m.memberId == memberId) {
+                    m.copy(name = cleanName, avatarSeed = cleanName, upiId = cleanUpi)
+                } else m
+            }
+            state.copy(
+                members = updatedMembers,
+                statusBannerMessage = "Updated $cleanName's UPI ID (${cleanUpi.ifEmpty { "default" }})"
+            )
+        }
+        viewModelScope.launch(ioDispatcher) {
+            dao?.updateMemberProfile(memberId, cleanName, cleanUpi)
+        }
+    }
+
     /**
-     * Fetches live conversion rates at runtime from `https://api.frankfurter.dev/v1/latest`
+     * Commits a Quick Equal Expense from QuickExpenseScreen:
+     * Strictly divides [totalAmountCents] equally among [selectedMemberIds] with 0.00¢ drift.
+     */
+    fun commitQuickEqualExpense(
+        title: String,
+        totalAmountCents: Long,
+        selectedMemberIds: List<String>
+    ) {
+        if (totalAmountCents <= 0L) return
+        val state = _uiState.value
+        val groupMembers = state.activeGroupMembers
+        if (groupMembers.isEmpty()) return
+
+        val chosenMembers = groupMembers.filter { selectedMemberIds.contains(it.memberId) }
+            .ifEmpty { groupMembers }
+        val payer = groupMembers.find { it.isCurrentUser } ?: groupMembers.first()
+
+        val lockedRate = state.activeCurrency.rateFromBase
+        val syncStatus = if (state.isOfflineMode) "PENDING" else "SYNCED"
+        val expenseId = "exp_${System.currentTimeMillis()}"
+
+        val equalAllocations = SplitMateMathEngine.splitEquallyZeroDrift(
+            totalAmountCents,
+            chosenMembers.map { it.memberId to it.name }
+        )
+
+        val expenseEntity = ExpenseEntity(
+            expenseId = expenseId,
+            groupId = state.activeGroupId,
+            title = title.trim().ifBlank { "Quick Equal Split" },
+            payerId = payer.memberId,
+            baseSubtotalCents = totalAmountCents,
+            taxCents = 0L,
+            tipCents = 0L,
+            totalAmountCents = totalAmountCents,
+            lockedMultiplier = 1.0,
+            unassignedBaseCents = 0L,
+            currencyCode = state.activeCurrencyCode,
+            lockedExchangeRate = lockedRate,
+            syncStatus = syncStatus
+        )
+
+        val splitEntities = equalAllocations.mapIndexed { idx, alloc ->
+            ExpenseSplitEntity(
+                splitId = "${expenseId}_sp_$idx",
+                expenseId = expenseId,
+                memberId = alloc.memberId,
+                baseClaimedCents = alloc.baseClaimedCents,
+                finalOwedCents = alloc.finalCents,
+                plusOneCent = alloc.plusOneCent
+            )
+        }
+
+        _uiState.update { curr ->
+            curr.copy(
+                expenses = listOf(expenseEntity) + curr.expenses,
+                splits = curr.splits + splitEntities,
+                statusBannerMessage = "Split \"${expenseEntity.title}\" equally among ${chosenMembers.size} people"
+            )
+        }
+
+        viewModelScope.launch(ioDispatcher) {
+            dao?.insertExpenseWithSplits(expenseEntity, splitEntities)
+        }
+    }
+
+    /**
+     * Fetches live conversion rates at runtime from `https://open.er-api.com/v6/latest/USD` (160+ world currencies)
      * and caches them immediately into Jetpack Room (`CurrencyRateEntity`) for offline use.
      */
     fun syncLiveCurrencyRatesFromFrankfurter(base: String = "USD") {
@@ -435,24 +534,34 @@ class SplitMateViewModel(
             _uiState.update { it.copy(isSyncingRates = true) }
             try {
                 val latest = api.getLatestRates(base)
-                val namesMap = runCatching { api.getSupportedCurrencies() }.getOrDefault(emptyMap())
                 val existingByCode = _uiState.value.currencyRates.associateBy { it.currencyCode }
 
                 val merged = latest.rates.map { (code, rate) ->
                     val prev = existingByCode[code]
                     CurrencyRateEntity(
                         currencyCode = code,
-                        currencyName = namesMap[code] ?: prev?.currencyName ?: code,
-                        symbol = prev?.symbol ?: currencySymbolFor(code),
+                        currencyName = com.splitmate.app.data.WorldCurrencyMetadata.nameFor(code).takeIf { it != code }
+                            ?: prev?.currencyName ?: code,
+                        symbol = com.splitmate.app.data.WorldCurrencyMetadata.symbolFor(code).takeIf { it != code }
+                            ?: prev?.symbol ?: currencySymbolFor(code),
                         rateFromBase = rate,
-                        baseCurrency = latest.base,
+                        baseCurrency = latest.base.ifBlank { base },
                         updatedAt = System.currentTimeMillis()
                     )
                 }.toMutableList()
 
                 // Ensure base currency itself is included at 1.00
                 if (merged.none { it.currencyCode == base }) {
-                    merged.add(0, CurrencyRateEntity(base, namesMap[base] ?: base, currencySymbolFor(base), 1.0, base))
+                    merged.add(
+                        0,
+                        CurrencyRateEntity(
+                            base,
+                            com.splitmate.app.data.WorldCurrencyMetadata.nameFor(base),
+                            com.splitmate.app.data.WorldCurrencyMetadata.symbolFor(base),
+                            1.0,
+                            base
+                        )
+                    )
                 }
 
                 dao?.upsertCurrencyRates(merged)
@@ -463,7 +572,7 @@ class SplitMateViewModel(
                         isSyncingRates = false,
                         isOfflineMode = false,
                         currencyRates = merged.sortedBy { c -> c.currencyCode },
-                        statusBannerMessage = "Synced ${merged.size} live currency rates from Frankfurter API"
+                        statusBannerMessage = "Synced ${merged.size} live currency rates from Open Exchange Rates API"
                     )
                 }
             } catch (e: Exception) {

@@ -40,7 +40,8 @@ data class GroupMemberEntity(
     val groupId: String,
     val name: String,
     val avatarSeed: String,
-    val isCurrentUser: Boolean = false
+    val isCurrentUser: Boolean = false,
+    val upiId: String = ""
 ) {
     val diceBearSvgUrl: String
         get() = "https://api.dicebear.com/9.x/open-peeps/svg?seed=${avatarSeed.trim().replace(" ", "_")}&backgroundColor=d7e8b6,fed8c8,dce3fd"

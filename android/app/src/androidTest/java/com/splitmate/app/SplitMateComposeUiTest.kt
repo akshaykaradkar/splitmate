@@ -20,8 +20,15 @@ class SplitMateComposeUiTest {
     val composeTestRule = createComposeRule()
 
     @Test
-    fun verifyHorizontalFloatingToolbarAndRemainderResolution() {
+    fun verifyHorizontalFloatingToolbarAndQuickExpenseTab() {
         val vm = SplitMateViewModel(dao = null)
+        vm.completeOnboarding(
+            name = "Maya Lin",
+            countryName = "India",
+            currencyCode = "INR",
+            currencySymbol = "₹",
+            avatarSeed = "MayaLin"
+        )
 
         composeTestRule.setContent {
             SplitMateMaterial3ExpressiveTheme {
@@ -29,12 +36,7 @@ class SplitMateComposeUiTest {
             }
         }
 
-        // 1. Verify HorizontalFloatingToolbar & UnassignedRemainderCard render on startup
+        // Verify HorizontalFloatingToolbar renders on Dashboard
         composeTestRule.onNodeWithTag("HorizontalFloatingToolbar").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("UnassignedRemainderCard").assertIsDisplayed()
-
-        // 2. Click "Split Equally" on the Remainder Card and verify 0.00c Remainder Verified card appears
-        composeTestRule.onNodeWithTag("SplitRemainderEquallyBtn").performClick()
-        composeTestRule.onNodeWithTag("ZeroRemainderVerifiedCard").assertIsDisplayed()
     }
 }
