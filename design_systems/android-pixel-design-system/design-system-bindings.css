@@ -1,0 +1,75 @@
+/* @imports */
+/* Google Icons */
+@import url('https://fonts.googleapis.com/css2?family=Google+Symbols&display=block');
+/* gBreeze default values */
+@import url('https://unpkg.com/@material/web@nightly/labs/gb/styles/m3.css');
+
+/* Color */
+:root, :host {
+  color-scheme: light dark;
+  --apds-sys-color-black: #000000;
+  --apds-sys-color-brand-a: light-dark(#0058bc, #85adff);
+  --apds-sys-color-brand-b: light-dark(#92a6ff, #fbf8ff);
+  --apds-sys-color-brand-c: light-dark(#0072f1, #4c8eff);
+  --apds-sys-color-brand-d: light-dark(#c472cd, #fbb4ff);
+  --apds-sys-color-clock-hour: light-dark(#0058bc, #85adff);
+  --apds-sys-color-clock-minute: light-dark(#2680ff, #0075f5);
+  --apds-sys-color-clock-second: light-dark(#9749a1, #c774cf);
+  --apds-sys-color-error: light-dark(#b31b25, #ff716c);
+  --apds-sys-color-error-container: light-dark(#fb5151, #9f0519);
+  --apds-sys-color-inverse-on-surface: light-dark(#929bc6, #4a537a);
+  --apds-sys-color-inverse-primary: light-dark(#4c8eff, #005bc2);
+  --apds-sys-color-inverse-surface: light-dark(#020a2f, #fbf8ff);
+  --apds-sys-color-on-error: light-dark(#ffefee, #490006);
+  --apds-sys-color-on-error-container: light-dark(#570008, #ffa8a3);
+  --apds-sys-color-on-primary: light-dark(#f0f2ff, #002c65);
+  --apds-sys-color-on-primary-container: #00214f;
+  --apds-sys-color-on-primary-fixed: #000000;
+  --apds-sys-color-on-primary-fixed-variant: #002a61;
+  --apds-sys-color-on-secondary: light-dark(#f2f1ff, #00185e);
+  --apds-sys-color-on-secondary-container: light-dark(#213ea2, #c5ceff);
+  --apds-sys-color-on-secondary-fixed: #00288d;
+  --apds-sys-color-on-secondary-fixed-variant: #2c48ac;
+  --apds-sys-color-on-surface: light-dark(#232c51, #e1e4ff);
+  --apds-sys-color-on-surface-variant: light-dark(#515981, #a0a9d5);
+  --apds-sys-color-on-tertiary: light-dark(#ffeefb, #6d2179);
+  --apds-sys-color-on-tertiary-container: #62156e;
+  --apds-sys-color-on-tertiary-fixed: #450051;
+  --apds-sys-color-on-tertiary-fixed-variant: #6c2178;
+  --apds-sys-color-on-theme-app: light-dark(#001231, #000000);
+  --apds-sys-color-outline: light-dark(#6c759e, #6b739d);
+  --apds-sys-color-outline-variant: light-dark(#a2abd7, #3d466c);
+  --apds-sys-color-overview-background: light-dark(#9cabd1, #384667);
+  --apds-sys-color-primary: light-dark(#0058bc, #85adff);
+  --apds-sys-color-primary-container: #6d9fff;
+  --apds-sys-color-primary-fixed: #6d9fff;
+  --apds-sys-color-primary-fixed-dim: #5291ff;
+  --apds-sys-color-ref-p90: #d8e2ff;  /* Non-GM3 */
+  --apds-sys-color-scontainer-high: light-dark(#dde1ff, #0e1b4c);
+  --apds-sys-color-scontainer-highest: light-dark(#d5dbff, #132156);
+  --apds-sys-color-scontainer-low: light-dark(#efefff, #040f38);
+  --apds-sys-color-scontainer-lowest: light-dark(#ffffff, #000000);
+  --apds-sys-color-secondary: light-dark(#3953b7, #7f98ff);
+  --apds-sys-color-secondary-container: light-dark(#c7cfff, #203da1);
+  --apds-sys-color-secondary-fixed: #c7cfff;
+  --apds-sys-color-secondary-fixed-dim: #b4c1ff;
+  --apds-sys-color-surface: light-dark(#f7f5ff, #020a2f);
+  --apds-sys-color-surface-bright: light-dark(#f7f5ff, #182760);
+  --apds-sys-color-surface-container: light-dark(#e4e7ff, #091542);
+  --apds-sys-color-surface-dim: light-dark(#cad2ff, #020a2f);
+  --apds-sys-color-tertiary: light-dark(#883c93, #fbb4ff);
+  --apds-sys-color-tertiary-container: #f79ffe;
+  --apds-sys-color-tertiary-fixed: #f79ffe;
+  --apds-sys-color-tertiary-fixed-dim: #e891ef;
+  --apds-sys-color-theme-app: light-dark(#6d9fff, #017aff);
+  --apds-sys-color-theme-app-ring: light-dark(#006de7, #00377a);
+  --apds-sys-color-theme-notif: #faabff;
+  --apds-sys-color-white: #ffffff;  /* Non-GM3 */
+  --apds-sys-color-widget-background: light-dark(#e4e7ff, #182760);
+}
+
+/* Icons */
+:root, :host {
+  --md-icon-font: 'Google Symbols';  /* The font family to use for icons. */
+}
+

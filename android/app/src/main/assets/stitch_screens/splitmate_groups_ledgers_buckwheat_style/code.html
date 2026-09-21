@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+<meta content="mobile_tab" name="shell-type"/>
+<title>SplitMate</title>
+
+
+
+
+
+<link rel="stylesheet" href="../../vendor/fonts.css"/>
+<link rel="stylesheet" href="../../design_systems/google-material-3/design-system-bindings.css"/>
+<link rel="stylesheet" href="../../design_systems/android-motion/design-system-bindings.css"/>
+<link rel="stylesheet" href="../../design_systems/elements-3/design-system-bindings.css"/>
+<link rel="stylesheet" href="../../design_systems/android-pixel-design-system/design-system-bindings.css"/>
+<link rel="stylesheet" href="../../design_systems/splitmate-unified-bindings.css"/>
+<script src="../../vendor/tailwindcss.js"></script>
+
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "canvas-base": "#FAF6F0",
+            "canvas-card": "#FFFFFF",
+            "canvas-sunken": "#F4EFEA",
+            "text-primary": "#24201D",
+            "text-secondary": "#6A645D",
+            "text-tertiary": "#99928A",
+            "buck-green": "#DCE9B9",
+            "buck-green-dark": "#365314",
+            "buck-green-text": "#2B4810",
+            "buck-peach": "#FCE3D7",
+            "buck-peach-accent": "#EE8564",
+            "buck-peach-dark": "#7C2D12",
+            "buck-lavender": "#E3E7FB",
+            "buck-lavender-text": "#3730A3",
+            "border-soft": "#EDE7DF",
+            "error-soft": "#FEE2E2",
+            "error-text": "#B91C1C",
+          },
+          fontFamily: {
+            sans: ["Plus Jakarta Sans", "sans-serif"],
+          },
+          borderRadius: {
+            '2xl': '1.25rem',
+            '3xl': '1.75rem',
+            '4xl': '2rem',
+          }
+        }
+      }
+    };
+  </script>
+<style>
+    @layer base {
+      html, body {
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        background-color: #FAF6F0;
+        color: #24201D;
+        -webkit-tap-highlight-color: transparent;
+        font-family: 'Plus Jakarta Sans', sans-serif;
+      }
+      body {
+        overscroll-behavior-y: none;
+        min-height: max(884px, 100dvh);
+      }
+      .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+      .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+    }
+    ::-webkit-scrollbar { display: none; }
+  </style>
+</head>
+<body class="bg-canvas-base text-text-primary flex flex-col min-h-screen antialiased selection:bg-buck-green selection:text-buck-green-text">
+<!-- Header -->
+<header class="fixed top-0 w-full z-50 bg-[#FAF6F0]/90 backdrop-blur-md pt-safe transition-all">
+<div class="flex flex-col px-5 select-none">
+<!-- Hidden fake status bar for native Android --><div style=\"display:none !important\">
+<span class="text-[13px] text-text-primary font-bold tracking-tight">9:41</span>
+<div class="flex items-center gap-1.5 text-text-primary">
+<span class="material-symbols-outlined text-[15px]">signal_cellular_alt</span>
+<span class="material-symbols-outlined text-[15px]">wifi</span>
+<span class="material-symbols-outlined text-[17px]">battery_full</span>
+</div>
+</div>
+<!-- Brand & Controls Bar -->
+<div class="h-16 flex items-center justify-between pb-1">
+<div class="flex items-center gap-2.5">
+<!-- Warm Organic Logo Mark inspired by Buckwheat seed icon -->
+<div class="w-9 h-9 rounded-2xl bg-[#F08060] flex items-center justify-center shadow-sm shadow-[#F08060]/25 transform rotate-[-6deg]">
+<span class="material-symbols-outlined text-white text-[20px] transform rotate-[6deg]">spa</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[20px] font-extrabold tracking-tight text-text-primary leading-none">SplitMate</span>
+<span class="text-[11px] font-semibold text-text-tertiary tracking-wide uppercase mt-0.5">Ledgers &amp; Groups</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<!-- Active Context Dropdown -->
+<button aria-label="Switch Group" class="h-9 px-3 flex items-center gap-1.5 rounded-full bg-white/80 border border-border-soft hover:bg-white transition-all active:scale-95 shadow-sm">
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+<span class="text-[12px] font-bold text-text-primary">Tokyo Trip</span>
+<span class="material-symbols-outlined text-[16px] text-text-tertiary">expand_more</span>
+</button>
+<!-- User Profile Avatar -->
+<div class="w-9 h-9 rounded-full bg-buck-peach border border-border-soft flex items-center justify-center font-bold text-xs text-buck-peach-dark">
+<span>JD</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="flex flex-col relative w-full pt-28 pb-28 px-5 space-y-5">
+<!-- Hero Net Balance Card (Buckwheat Organic Bento Style) -->
+<section class="w-full bg-white rounded-[32px] p-5 shadow-[0_4px_24px_rgba(0,0,0,0.03)] border border-border-soft/60 relative overflow-hidden flex flex-col space-y-4">
+<!-- Dual-tone organic bento display inside hero -->
+<div class="relative w-full rounded-[26px] bg-gradient-to-r from-buck-green/80 via-[#E4F2C8] to-buck-peach/60 p-5 overflow-hidden">
+<!-- Abstract organic blob curves (Buckwheat motif) -->
+<div class="absolute -right-6 -top-6 w-36 h-36 rounded-full bg-buck-peach/80 blur-xl pointer-events-none"></div>
+<div class="absolute right-12 -bottom-10 w-32 h-32 rounded-full bg-[#D4E89F]/70 blur-xl pointer-events-none"></div>
+<div class="relative z-10 flex flex-col">
+<div class="flex items-center justify-between">
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/85 backdrop-blur-sm text-buck-green-dark text-[11px] font-bold shadow-xs">
+<span class="material-symbols-outlined text-[14px]">arrow_downward_alt</span>
+              You are owed overall
+            </span>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/5 text-text-secondary text-[11px] font-semibold">
+<span class="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+              Live Sync
+            </span>
+</div>
+<div class="pt-4 pb-1">
+<span class="text-[38px] font-extrabold tracking-tight text-text-primary leading-none tabular-nums">+$142.50</span>
+</div>
+<div class="flex items-center gap-1.5 pt-1 text-text-secondary text-[12px] font-medium">
+<span class="material-symbols-outlined text-[15px] text-buck-green-dark">check_circle</span>
+<span>Across 3 active groups · 0 penny drift</span>
+</div>
+</div>
+</div>
+<!-- Quick Action Buttons -->
+<div class="grid grid-cols-2 gap-2.5 pt-0.5">
+<button class="h-12 min-h-[48px] px-4 rounded-2xl bg-text-primary text-[#FAF6F0] text-[13px] font-bold flex items-center justify-center gap-2 active:scale-95 transition-all shadow-sm" type="button">
+<span class="material-symbols-outlined text-[18px]">group_add</span>
+<span>+ New Group</span>
+</button>
+<button class="h-12 min-h-[48px] px-4 rounded-2xl bg-buck-green text-buck-green-dark text-[13px] font-bold flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-[#d1e3a7]" type="button">
+<span class="material-symbols-outlined text-[18px]">document_scanner</span>
+<span>Scan Receipt</span>
+</button>
+</div>
+</section>
+<!-- Active Ledgers / Groups Section -->
+<section class="flex flex-col space-y-3">
+<div class="flex items-center justify-between px-1">
+<div class="flex items-center gap-2">
+<span class="text-[17px] font-bold text-text-primary tracking-tight">Active Groups</span>
+<span class="w-5 h-5 rounded-full bg-white border border-border-soft text-text-secondary text-[11px] flex items-center justify-center font-bold">3</span>
+</div>
+<button class="text-[12px] font-semibold text-text-secondary hover:text-text-primary flex items-center gap-0.5 py-1 px-2 rounded-full hover:bg-white/60 transition-colors" type="button">
+<span>Sort by balance</span>
+<span class="material-symbols-outlined text-[15px]">swap_vert</span>
+</button>
+</div>
+<!-- Group 1: Lake Tahoe Cabin Trip (Buckwheat Sage Card) -->
+<article class="w-full bg-[#EBF4DA] rounded-[28px] p-5 flex flex-col space-y-3.5 border border-[#D5E6B6]/70 shadow-xs transition-all duration-200">
+<div class="flex items-start justify-between">
+<div class="flex items-start gap-3 min-w-0">
+<div class="w-11 h-11 rounded-2xl bg-white/90 flex items-center justify-center shrink-0 shadow-xs">
+<span class="material-symbols-outlined text-buck-green-dark text-[24px]">cabin</span>
+</div>
+<div class="flex flex-col min-w-0 pt-0.5">
+<div class="flex items-center gap-1.5">
+<span class="text-[15px] font-bold text-text-primary truncate">Lake Tahoe Cabin Trip</span>
+<span class="w-2 h-2 rounded-full bg-amber-500"></span>
+</div>
+<span class="text-[12px] text-text-secondary font-medium mt-0.5">6 members · Next settle: Oct 28</span>
+</div>
+</div>
+<div class="flex flex-col items-end shrink-0 pl-2">
+<span class="text-[10px] text-buck-green-dark uppercase tracking-wider font-extrabold">You get back</span>
+<span class="text-[19px] font-extrabold text-buck-green-dark tabular-nums">$165.20</span>
+</div>
+</div>
+<!-- Avatars & Greedy Badge -->
+<div class="flex items-center justify-between pt-1">
+<div class="flex items-center -space-x-2 py-0.5">
+<div class="w-7 h-7 rounded-full bg-[#3B82F6] text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-[#EBF4DA]" title="Alex">A</div>
+<div class="w-7 h-7 rounded-full bg-[#8B5CF6] text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-[#EBF4DA]" title="Sam">S</div>
+<div class="w-7 h-7 rounded-full bg-[#EC4899] text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-[#EBF4DA]" title="Priya">P</div>
+<div class="w-7 h-7 rounded-full bg-[#F97316] text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-[#EBF4DA]" title="Maya">M</div>
+<div class="w-7 h-7 rounded-full bg-[#10B981] text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-[#EBF4DA]" title="Kai">K</div>
+<div class="w-7 h-7 rounded-full bg-white text-text-secondary text-[10px] font-bold flex items-center justify-center ring-2 ring-[#EBF4DA]">+1</div>
+</div>
+<div class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/90 text-buck-green-dark text-[11px] font-semibold shadow-xs">
+<span class="material-symbols-outlined text-[13px]">alt_route</span>
+<span>Greedy: 10 → 2 transfers</span>
+</div>
+</div>
+</article>
+<!-- Group 2: Mission Apt Roommates (Buckwheat Peach Card) -->
+<article class="w-full bg-[#FAEDE8] rounded-[28px] p-5 flex flex-col space-y-3.5 border border-[#F6D8CE]/70 shadow-xs transition-all duration-200">
+<div class="flex items-start justify-between">
+<div class="flex items-start gap-3 min-w-0">
+<div class="w-11 h-11 rounded-2xl bg-white/90 flex items-center justify-center shrink-0 shadow-xs">
+<span class="material-symbols-outlined text-buck-peach-accent text-[24px]">apartment</span>
+</div>
+<div class="flex flex-col min-w-0 pt-0.5">
+<span class="text-[15px] font-bold text-text-primary truncate">Mission Apt Roommates</span>
+<span class="text-[12px] text-text-secondary font-medium mt-0.5">4 members · Monthly recurring</span>
+</div>
+</div>
+<div class="flex flex-col items-end shrink-0 pl-2">
+<span class="text-[10px] text-buck-peach-dark uppercase tracking-wider font-extrabold">You owe</span>
+<span class="text-[19px] font-extrabold text-[#D94826] tabular-nums">$22.70</span>
+</div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<div class="flex items-center -space-x-2 py-0.5">
+<div class="w-7 h-7 rounded-full bg-[#06B6D4] text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-[#FAEDE8]" title="Jordan">J</div>
+<div class="w-7 h-7 rounded-full bg-[#EAB308] text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-[#FAEDE8]" title="Leo">L</div>
+<div class="w-7 h-7 rounded-full bg-[#A855F7] text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-[#FAEDE8]" title="Chloe">C</div>
+<div class="w-7 h-7 rounded-full bg-text-primary text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-[#FAEDE8]" title="You">You</div>
+</div>
+<div class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/90 text-buck-peach-dark text-[11px] font-semibold shadow-xs">
+<span class="material-symbols-outlined text-[13px]">tune</span>
+<span>Rent &amp; Utilities · Remainder Reconciled</span>
+</div>
+</div>
+</article>
+<!-- Group 3: Tokyo Food Odyssey (Settled State Warm Oat Card) -->
+<article class="w-full bg-white/80 rounded-[28px] p-5 flex flex-col space-y-3.5 border border-border-soft shadow-xs transition-all duration-200">
+<div class="flex items-start justify-between">
+<div class="flex items-start gap-3 min-w-0">
+<div class="w-11 h-11 rounded-2xl bg-canvas-sunken flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-text-tertiary text-[24px]">ramen_dining</span>
+</div>
+<div class="flex flex-col min-w-0 pt-0.5">
+<span class="text-[15px] font-bold text-text-primary truncate">Tokyo Food Odyssey</span>
+<span class="text-[12px] text-text-secondary font-medium mt-0.5">3 members · Archived trip</span>
+</div>
+</div>
+<div class="flex flex-col items-end shrink-0 pl-2">
+<span class="inline-flex items-center gap-1 text-emerald-700 font-bold text-[16px] tabular-nums">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+              $0.00
+            </span>
+<span class="text-[11px] text-text-tertiary font-medium">All settled up</span>
+</div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<div class="flex items-center -space-x-2 py-0.5">
+<div class="w-7 h-7 rounded-full bg-[#3B82F6] text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-white" title="T">T</div>
+<div class="w-7 h-7 rounded-full bg-[#EC4899] text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-white" title="M">M</div>
+<div class="w-7 h-7 rounded-full bg-[#10B981] text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-white" title="S">S</div>
+</div>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-buck-green/60 text-buck-green-text text-[11px] font-semibold">
+<span class="material-symbols-outlined text-[13px]">done_all</span>
+            Equilibrium Reached
+          </span>
+</div>
+</article>
+</section>
+<!-- Recent Ledger Activity Feed -->
+<section class="flex flex-col space-y-3 pt-1">
+<div class="flex items-center justify-between px-1">
+<span class="text-[17px] font-bold text-text-primary tracking-tight">Recent Ledger Activity</span>
+<button class="text-[12px] font-semibold text-text-secondary hover:text-text-primary flex items-center gap-0.5 py-1 px-2 rounded-full hover:bg-white/60 transition-colors" type="button">
+<span>View all</span>
+<span class="material-symbols-outlined text-[15px]">chevron_right</span>
+</button>
+</div>
+<!-- Feed Item 1 (Osteria Del Sole) -->
+<div class="w-full bg-white rounded-[22px] p-4 flex items-center justify-between border border-border-soft/70 shadow-xs">
+<div class="flex items-center gap-3.5 min-w-0">
+<div class="w-11 h-11 rounded-2xl bg-buck-lavender text-buck-lavender-text flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[20px]">restaurant</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="text-[14px] font-bold text-text-primary truncate">Osteria Del Sole</span>
+<span class="text-[12px] text-text-secondary font-medium truncate">Paid by you · 3 claimed · $0.00 rem.</span>
+</div>
+</div>
+<div class="flex flex-col items-end shrink-0 pl-3">
+<span class="text-[15px] font-extrabold text-buck-green-dark tabular-nums">+$99.00</span>
+<span class="text-[11px] text-text-tertiary font-medium">Total $148.50</span>
+</div>
+</div>
+<!-- Feed Item 2 (Whole Foods Grocery Run) -->
+<div class="w-full bg-white rounded-[22px] p-4 flex items-center justify-between border border-border-soft/70 shadow-xs">
+<div class="flex items-center gap-3.5 min-w-0">
+<div class="w-11 h-11 rounded-2xl bg-buck-peach text-buck-peach-dark flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[20px]">shopping_cart</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="text-[14px] font-bold text-text-primary truncate">Whole Foods Grocery Run</span>
+<span class="text-[12px] text-text-secondary font-medium truncate">Paid by Sam · Your share 1/3</span>
+</div>
+</div>
+<div class="flex flex-col items-end shrink-0 pl-3">
+<span class="text-[15px] font-extrabold text-[#D94826] tabular-nums">-$21.40</span>
+<span class="text-[11px] text-text-tertiary font-medium">Total $64.20</span>
+</div>
+</div>
+</section>
+</main>
+<!-- Buckwheat Inspired Cozy Docked Bottom Navigation -->
+<nav class="fixed bottom-0 w-full z-50 pb-safe bg-[#FAF6F0]/90 backdrop-blur-xl border-t border-border-soft">
+<div class="h-16 px-4 flex items-center justify-around">
+<!-- Active Item: Ledgers -->
+<a aria-current="page" class="flex flex-col items-center justify-center min-w-[64px] py-1 active:scale-95 transition-all text-text-primary" data-path="ledgers-groups" href="#">
+<div class="flex items-center justify-center w-12 h-7 rounded-full bg-buck-green text-buck-green-dark shadow-xs transition-all">
+<span class="material-symbols-outlined text-[20px]">receipt_long</span>
+</div>
+<span class="text-[11px] font-bold mt-1 tracking-tight">Ledgers</span>
+</a>
+<!-- Item: Split -->
+<a class="flex flex-col items-center justify-center min-w-[64px] py-1 text-text-tertiary hover:text-text-primary active:scale-95 transition-all" data-path="claim-split" href="#">
+<div class="flex items-center justify-center w-12 h-7 rounded-full hover:bg-white/60 transition-all">
+<span class="material-symbols-outlined text-[20px]">document_scanner</span>
+</div>
+<span class="text-[11px] font-semibold mt-1 tracking-tight">Split</span>
+</a>
+<!-- Item: Settle -->
+<a class="flex flex-col items-center justify-center min-w-[64px] py-1 text-text-tertiary hover:text-text-primary active:scale-95 transition-all" data-path="settle-debts" href="#">
+<div class="flex items-center justify-center w-12 h-7 rounded-full hover:bg-white/60 transition-all">
+<span class="material-symbols-outlined text-[20px]">account_balance</span>
+</div>
+<span class="text-[11px] font-semibold mt-1 tracking-tight">Settle</span>
+</a>
+<!-- Item: Audit -->
+<a class="flex flex-col items-center justify-center min-w-[64px] py-1 text-text-tertiary hover:text-text-primary active:scale-95 transition-all" data-path="activity-audit" href="#">
+<div class="flex items-center justify-center w-12 h-7 rounded-full hover:bg-white/60 transition-all">
+<span class="material-symbols-outlined text-[20px]">history</span>
+</div>
+<span class="text-[11px] font-semibold mt-1 tracking-tight">Audit</span>
+</a>
+</div>
+</nav>
+<script>
+    // Micro-interaction tactile spring compression for interactive cards
+    document.querySelectorAll('article').forEach(card => {
+      card.addEventListener('pointerdown', () => {
+        card.style.transform = 'scale(0.985)';
+        card.style.transition = 'transform 0.08s cubic-bezier(0.2, 0, 0, 1)';
+      });
+      const reset = () => {
+        card.style.transform = 'scale(1)';
+        card.style.transition = 'transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)';
+      };
+      card.addEventListener('pointerup', reset);
+      card.addEventListener('pointerleave', reset);
+      card.addEventListener('pointercancel', reset);
+    });
+  </script>
+<script src="../../stitch-interactive.js"></script>
+</body></html>

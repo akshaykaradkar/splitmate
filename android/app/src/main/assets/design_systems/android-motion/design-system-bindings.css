@@ -1,0 +1,202 @@
+/* @imports */
+/* Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans&family=Google+Sans+Text&display=swap');
+/* Google Icons */
+@import url('https://fonts.googleapis.com/css2?family=Google+Symbols&display=block');
+/* gBreeze default values */
+@import url('https://unpkg.com/@material/web@nightly/labs/gb/styles/m3.css');
+
+/* Color */
+:root, :host {
+  color-scheme: light dark;
+  --droid-ref-palette-black: #000000;
+  --droid-ref-palette-error0: #000000;
+  --droid-ref-palette-error10: #410e0b;
+  --droid-ref-palette-error100: #ffffff;
+  --droid-ref-palette-error20: #601410;
+  --droid-ref-palette-error30: #8c1d18;
+  --droid-ref-palette-error40: #b3261e;
+  --droid-ref-palette-error50: #dc362e;
+  --droid-ref-palette-error60: #e46962;
+  --droid-ref-palette-error70: #ec928e;
+  --droid-ref-palette-error80: #f2b8b5;
+  --droid-ref-palette-error90: #f9dedc;
+  --droid-ref-palette-error95: #fceeee;
+  --droid-ref-palette-error99: #fffbf9;
+  --droid-ref-palette-neutral-variant0: #000000;
+  --droid-ref-palette-neutral-variant10: #191d1c;
+  --droid-ref-palette-neutral-variant100: #ffffff;
+  --droid-ref-palette-neutral-variant20: #2d312f;
+  --droid-ref-palette-neutral-variant30: #444746;
+  --droid-ref-palette-neutral-variant40: #5c5f5e;
+  --droid-ref-palette-neutral-variant50: #747775;
+  --droid-ref-palette-neutral-variant60: #8e918f;
+  --droid-ref-palette-neutral-variant70: #a9acaa;
+  --droid-ref-palette-neutral-variant80: #c4c7c5;
+  --droid-ref-palette-neutral-variant90: #e1e3e1;
+  --droid-ref-palette-neutral-variant95: #eff2ef;
+  --droid-ref-palette-neutral-variant99: #fafdfb;
+  --droid-ref-palette-neutral0: #000000;
+  --droid-ref-palette-neutral10: #1f1f1f;
+  --droid-ref-palette-neutral100: #ffffff;
+  --droid-ref-palette-neutral20: #303030;
+  --droid-ref-palette-neutral30: #474747;
+  --droid-ref-palette-neutral40: #5e5e5e;
+  --droid-ref-palette-neutral50: #757575;
+  --droid-ref-palette-neutral60: #8f8f8f;
+  --droid-ref-palette-neutral70: #ababab;
+  --droid-ref-palette-neutral80: #c7c7c7;
+  --droid-ref-palette-neutral90: #e3e3e3;
+  --droid-ref-palette-neutral95: #f2f2f2;
+  --droid-ref-palette-neutral99: #fdfcfb;
+  --droid-ref-palette-primary0: #000000;
+  --droid-ref-palette-primary10: #041e49;
+  --droid-ref-palette-primary100: #ffffff;
+  --droid-ref-palette-primary20: #062e6f;
+  --droid-ref-palette-primary30: #0842a0;
+  --droid-ref-palette-primary40: #0b57d0;
+  --droid-ref-palette-primary50: #1b6ef3;
+  --droid-ref-palette-primary60: #4c8df6;
+  --droid-ref-palette-primary70: #7cacf8;
+  --droid-ref-palette-primary80: #a8c7fa;
+  --droid-ref-palette-primary90: #d3e3fd;
+  --droid-ref-palette-primary95: #ecf3fe;
+  --droid-ref-palette-primary99: #fafbff;
+  --droid-ref-palette-secondary0: #000000;
+  --droid-ref-palette-secondary10: #001d35;
+  --droid-ref-palette-secondary100: #ffffff;
+  --droid-ref-palette-secondary20: #003355;
+  --droid-ref-palette-secondary30: #004a77;
+  --droid-ref-palette-secondary40: #00639b;
+  --droid-ref-palette-secondary50: #047db7;
+  --droid-ref-palette-secondary60: #3998d3;
+  --droid-ref-palette-secondary70: #5ab3f0;
+  --droid-ref-palette-secondary80: #7fcfff;
+  --droid-ref-palette-secondary90: #c2e7ff;
+  --droid-ref-palette-secondary95: #dff3ff;
+  --droid-ref-palette-secondary99: #f7fcff;
+  --droid-ref-palette-tertiary0: #000000;
+  --droid-ref-palette-tertiary10: #072711;
+  --droid-ref-palette-tertiary100: #ffffff;
+  --droid-ref-palette-tertiary20: #0a3818;
+  --droid-ref-palette-tertiary30: #0f5223;
+  --droid-ref-palette-tertiary40: #146c2e;
+  --droid-ref-palette-tertiary50: #198639;
+  --droid-ref-palette-tertiary60: #1ea446;
+  --droid-ref-palette-tertiary70: #37be5f;
+  --droid-ref-palette-tertiary80: #6dd58c;
+  --droid-ref-palette-tertiary90: #c4eed0;
+  --droid-ref-palette-tertiary95: #e7f8ed;
+  --droid-ref-palette-tertiary99: #f2ffee;
+  --droid-ref-palette-white: #ffffff;
+  --droid-sys-color-background: light-dark(#fdfcfb, #1f1f1f);  /* Static color used behind scrollable content like text, not to be confused with surface (which can change through color and elevation) */
+  --droid-sys-color-error: light-dark(#b3261e, #f2b8b5);  /* Indicates errors, such as invalid input in a date picker */
+  --droid-sys-color-error-container: light-dark(#f9dedc, #8c1d18);
+  --droid-sys-color-inverse-on-surface: light-dark(#f2f2f2, #303030);  /* Used for text and icons shown against the inverse surface color */
+  --droid-sys-color-inverse-primary: light-dark(#a8c7fa, #0b57d0);  /* Displays opposite of the primary color */
+  --droid-sys-color-inverse-surface: light-dark(#303030, #e3e3e3);  /* Displays opposite color of the surrounding UI */
+  --droid-sys-color-on-background: light-dark(#1f1f1f, #e3e3e3);  /* Used for text and icons shown against the background color */
+  --droid-sys-color-on-error: light-dark(#ffffff, #601410);  /* Used for text and icons on the error color */
+  --droid-sys-color-on-error-container: light-dark(#410e0b, #f2b8b5);
+  --droid-sys-color-on-primary: light-dark(#ffffff, #062e6f);  /* Text and icons shown against the primary color */
+  --droid-sys-color-on-primary-container: light-dark(#041e49, #d3e3fd);  /* Contrast-passing color shown against the primary container */
+  --droid-sys-color-on-secondary: light-dark(#ffffff, #003355);  /* Text and icons shown against the secondary color */
+  --droid-sys-color-on-secondary-container: light-dark(#001d35, #c2e7ff);  /* Contrast-passing color shown against the secondary container */
+  --droid-sys-color-on-surface: light-dark(#1f1f1f, #e3e3e3);  /* Text and icons shown against the surface color */
+  --droid-sys-color-on-surface-variant: light-dark(#444746, #c4c7c5);  /* For text and icons to indicate active or inactive component state */
+  --droid-sys-color-on-tertiary: light-dark(#ffffff, #0a3818);
+  --droid-sys-color-on-tertiary-container: light-dark(#072711, #c4eed0);  /* Contrast-passing color shown against the tertiary container */
+  --droid-sys-color-outline: light-dark(#747775, #8e918f);  /* Subtle color used for boundaries */
+  --droid-sys-color-primary: light-dark(#0b57d0, #a8c7fa);  /* Main color used across screens and components */
+  --droid-sys-color-primary-container: light-dark(#d3e3fd, #0842a0);  /* Standout container color for key components */
+  --droid-sys-color-secondary: light-dark(#00639b, #7fcfff);  /* Accent color used across screens and components */
+  --droid-sys-color-secondary-container: light-dark(#c2e7ff, #004a77);  /* Less prominent container color, for components like tonal buttons */
+  --droid-sys-color-shadow: #000000;  /* For shadows applied to elevated components */
+  --droid-sys-color-surface: light-dark(#fdfcfb, #1f1f1f);  /* Surface color for components like cards, sheets, and menus */
+  --droid-sys-color-surface-tint-color: light-dark(#0b57d0, #a8c7fa);
+  --droid-sys-color-surface-variant: light-dark(#e1e3e1, #444746);  /* Alternate surface color, can be used for active states */
+  --droid-sys-color-tertiary: light-dark(#146c2e, #6dd58c);
+  --droid-sys-color-tertiary-container: light-dark(#c4eed0, #0f5223);  /* Contrasting container color, for components like input fields */
+}
+
+/* Typography */
+:root, :host {
+  --droid-sys-typescale-body-large: 1rem/1.5rem 'Google Sans Text';
+  --droid-sys-typescale-body-medium: 0.9rem/1.3rem 'Google Sans Text';
+  --droid-sys-typescale-body-small: 0.8rem/1rem 'Google Sans Text';
+  --droid-sys-typescale-body-small-tracking: 0;
+  --droid-sys-typescale-display-large: 3.6rem/4rem 'Google Sans';
+  --droid-sys-typescale-display-medium: 2.8rem/3.3rem 'Google Sans';
+  --droid-sys-typescale-display-small: 2.3rem/2.8rem 'Google Sans';
+  --droid-sys-typescale-headline-large: 2rem/2.5rem 'Google Sans';
+  --droid-sys-typescale-headline-medium: 1.8rem/2.3rem 'Google Sans';
+  --droid-sys-typescale-headline-small: 1.5rem/2rem 'Google Sans';
+  --droid-sys-typescale-label-large: 500 0.9rem/1.3rem 'Google Sans Text';
+  --droid-sys-typescale-label-medium: 500 0.8rem/1rem 'Google Sans Text';
+  --droid-sys-typescale-label-medium-tracking: 0;
+  --droid-sys-typescale-label-small: 500 0.7rem/1rem 'Google Sans Text';
+  --droid-sys-typescale-label-small-tracking: 0;
+  --droid-sys-typescale-title-large: 1.4rem/1.8rem 'Google Sans';
+  --droid-sys-typescale-title-medium: 500 1rem/1.5rem 'Google Sans Text';
+  --droid-sys-typescale-title-small: 500 0.9rem/1.3rem 'Google Sans Text';
+}
+
+/* Icons */
+:root, :host {
+  --md-icon-font: 'Google Symbols';  /* The font family to use for icons. */
+}
+
+/* Shape */
+:root, :host {
+  --droid-sys-shape-corner-extra-large: 28px;
+  --droid-sys-shape-corner-extra-large-top: 28px 28px 0 0;
+  --droid-sys-shape-corner-extra-small: 4px;
+  --droid-sys-shape-corner-extra-small-top: 4px 4px 0 0;
+  --droid-sys-shape-corner-full: max(50cqw, 50cqh);
+  --droid-sys-shape-corner-large: 16px;
+  --droid-sys-shape-corner-large-end: 0 16px 16px 0;
+  --droid-sys-shape-corner-large-top: 16px 16px 0 0;
+  --droid-sys-shape-corner-medium: 12px;
+  --droid-sys-shape-corner-none: 0;
+  --droid-sys-shape-corner-small: 8px;
+}
+
+/* Elevation */
+:root, :host {
+  --droid-sys-elevation-level0: 0;
+  --droid-sys-elevation-level1: 1px;
+  --droid-sys-elevation-level2: 3px;
+  --droid-sys-elevation-level3: 6px;
+  --droid-sys-elevation-level4: 8px;
+  --droid-sys-elevation-level5: 12px;
+}
+
+/* Motion */
+:root, :host {
+  --droid-sys-motion-duration-100: 100ms;
+  --droid-sys-motion-duration-150: 150ms;
+  --droid-sys-motion-duration-200: 200ms;
+  --droid-sys-motion-duration-250: 250ms;
+  --droid-sys-motion-duration-300: 300ms;
+  --droid-sys-motion-duration-350: 350ms;
+  --droid-sys-motion-duration-400: 400ms;
+  --droid-sys-motion-duration-450: 450ms;
+  --droid-sys-motion-duration-50: 50ms;
+  --droid-sys-motion-duration-500: 500ms;
+  --droid-sys-motion-duration-550: 550ms;
+  --droid-sys-motion-duration-600: 600ms;
+  --droid-sys-motion-duration-700: 700ms;
+  --droid-sys-motion-duration-800: 800ms;
+  --droid-sys-motion-duration-900: 900ms;
+  --droid-sys-motion-easing-emphasized: cubic-bezier(0.2, 0.0, 0.0, 1.0);
+  --droid-sys-motion-easing-emphasized-accelerate: cubic-bezier(0.3, 0.0, 0.8, 0.15);
+  --droid-sys-motion-easing-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1.0);
+  --droid-sys-motion-easing-legacy: cubic-bezier(0.4, 0.0, 0.2, 1.0);
+  --droid-sys-motion-easing-legacy-accelerate: cubic-bezier(0.4, 0.0, 1.0, 1.0);
+  --droid-sys-motion-easing-legacy-decelerate: cubic-bezier(0.0, 0.0, 0.2, 1.0);
+  --droid-sys-motion-easing-linear: cubic-bezier(0.0, 0.0, 1.0, 1.0);
+  --droid-sys-motion-easing-standard: cubic-bezier(0.2, 0.0, 0.0, 1.0);
+  --droid-sys-motion-easing-standard-accelerate: cubic-bezier(0.3, 0.0, 1.0, 1.0);
+  --droid-sys-motion-easing-standard-decelerate: cubic-bezier(0.0, 0.0, 0.0, 1.0);
+}
+

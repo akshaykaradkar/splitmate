@@ -1,0 +1,14 @@
+# Local Android SDK & Gradle build caches (exclude large toolchains)
+.android-sdk/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+
+# Keep the compiled, signed installable APK in root for 1-tap phone download!
+!splitmate-debug.apk
+
+# OS / Editor files
+.DS_Store
+*.iml
+.idea/

@@ -1,0 +1,266 @@
+/* ==========================================================================
+   SplitMate Design System Bindings (GM3 Expressive + Android Motion + Elements GM3)
+   ========================================================================== */
+
+/* Google Fonts & Symbols */
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,slnt,wdth,wght,GRAD,ROND@6,0,100,400,0,0;6,0,100,500,0,0;6,0,100,500,0,100;6,0,100,600,0,100&family=Google+Sans+Text:wght@400;500;700&family=Google+Sans:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Google+Symbols&display=block');
+
+:root, :host {
+  color-scheme: light dark;
+
+  /* ------------------------------------------------------------------------
+     1. GM3 Reference Palette (--md-ref-palette-*)
+     ------------------------------------------------------------------------ */
+  --md-ref-palette-black: #000000;
+  --md-ref-palette-white: #ffffff;
+
+  --md-ref-palette-primary0: #000000;
+  --md-ref-palette-primary10: #041e49;
+  --md-ref-palette-primary20: #062e6f;
+  --md-ref-palette-primary30: #0842a0;
+  --md-ref-palette-primary40: #0b57d0;
+  --md-ref-palette-primary50: #1b6ef3;
+  --md-ref-palette-primary60: #4c8df6;
+  --md-ref-palette-primary70: #7cacf8;
+  --md-ref-palette-primary80: #a8c7fa;
+  --md-ref-palette-primary90: #d3e3fd;
+  --md-ref-palette-primary95: #ecf3fe;
+  --md-ref-palette-primary98: #f7f9ff;
+  --md-ref-palette-primary99: #fafbff;
+  --md-ref-palette-primary100: #ffffff;
+
+  --md-ref-palette-secondary0: #000000;
+  --md-ref-palette-secondary10: #001d35;
+  --md-ref-palette-secondary20: #003355;
+  --md-ref-palette-secondary30: #004a77;
+  --md-ref-palette-secondary40: #00639b;
+  --md-ref-palette-secondary50: #047db7;
+  --md-ref-palette-secondary60: #3998d3;
+  --md-ref-palette-secondary70: #5ab3f0;
+  --md-ref-palette-secondary80: #7fcfff;
+  --md-ref-palette-secondary90: #c2e7ff;
+  --md-ref-palette-secondary95: #dff3ff;
+  --md-ref-palette-secondary98: #f4faff;
+  --md-ref-palette-secondary99: #f7fcff;
+  --md-ref-palette-secondary100: #ffffff;
+
+  --md-ref-palette-tertiary0: #000000;
+  --md-ref-palette-tertiary10: #072711;
+  --md-ref-palette-tertiary20: #0a3818;
+  --md-ref-palette-tertiary30: #0f5223;
+  --md-ref-palette-tertiary40: #146c2e;
+  --md-ref-palette-tertiary50: #198639;
+  --md-ref-palette-tertiary60: #1ea446;
+  --md-ref-palette-tertiary70: #37be5f;
+  --md-ref-palette-tertiary80: #6dd58c;
+  --md-ref-palette-tertiary90: #c4eed0;
+  --md-ref-palette-tertiary95: #e7f8ed;
+  --md-ref-palette-tertiary98: #ecfef2;
+  --md-ref-palette-tertiary99: #f2ffee;
+  --md-ref-palette-tertiary100: #ffffff;
+
+  --md-ref-palette-error0: #000000;
+  --md-ref-palette-error10: #410e0b;
+  --md-ref-palette-error20: #601410;
+  --md-ref-palette-error30: #8c1d18;
+  --md-ref-palette-error40: #b3261e;
+  --md-ref-palette-error50: #dc362e;
+  --md-ref-palette-error60: #e46962;
+  --md-ref-palette-error70: #ec928e;
+  --md-ref-palette-error80: #f2b8b5;
+  --md-ref-palette-error90: #f9dedc;
+  --md-ref-palette-error95: #fceeee;
+  --md-ref-palette-error98: #fff8f7;
+  --md-ref-palette-error99: #fffbf9;
+  --md-ref-palette-error100: #ffffff;
+
+  --md-ref-palette-neutral0: #000000;
+  --md-ref-palette-neutral4: #0e0e0f;
+  --md-ref-palette-neutral6: #131314;
+  --md-ref-palette-neutral10: #1f1f1f;
+  --md-ref-palette-neutral12: #1f2020;
+  --md-ref-palette-neutral17: #2a2a2a;
+  --md-ref-palette-neutral20: #303030;
+  --md-ref-palette-neutral22: #343535;
+  --md-ref-palette-neutral24: #393939;
+  --md-ref-palette-neutral30: #474747;
+  --md-ref-palette-neutral40: #5e5e5e;
+  --md-ref-palette-neutral50: #757575;
+  --md-ref-palette-neutral60: #8f8f8f;
+  --md-ref-palette-neutral70: #ababab;
+  --md-ref-palette-neutral80: #c7c7c7;
+  --md-ref-palette-neutral87: #dadada;
+  --md-ref-palette-neutral90: #e3e3e3;
+  --md-ref-palette-neutral92: #e9e8e8;
+  --md-ref-palette-neutral94: #efeded;
+  --md-ref-palette-neutral95: #f2f2f2;
+  --md-ref-palette-neutral96: #f4f3f2;
+  --md-ref-palette-neutral98: #faf9f8;
+  --md-ref-palette-neutral99: #fdfcfb;
+  --md-ref-palette-neutral100: #ffffff;
+
+  --md-ref-palette-neutral-variant0: #000000;
+  --md-ref-palette-neutral-variant10: #191d1c;
+  --md-ref-palette-neutral-variant20: #2d312f;
+  --md-ref-palette-neutral-variant30: #444746;
+  --md-ref-palette-neutral-variant40: #5c5f5e;
+  --md-ref-palette-neutral-variant50: #747775;
+  --md-ref-palette-neutral-variant60: #8e918f;
+  --md-ref-palette-neutral-variant70: #a9acaa;
+  --md-ref-palette-neutral-variant80: #c4c7c5;
+  --md-ref-palette-neutral-variant90: #e1e3e1;
+  --md-ref-palette-neutral-variant95: #eff2ef;
+  --md-ref-palette-neutral-variant98: #f7faf7;
+  --md-ref-palette-neutral-variant99: #fafdfb;
+  --md-ref-palette-neutral-variant100: #ffffff;
+
+  /* ------------------------------------------------------------------------
+     2. GM3 System Semantic Color Roles (--md-sys-color-*)
+     ------------------------------------------------------------------------ */
+  --md-sys-color-background: light-dark(#fdfcfb, #131314);
+  --md-sys-color-on-background: light-dark(#1f1f1f, #e3e3e3);
+  --md-sys-color-surface: light-dark(#fdfcfb, #131314);
+  --md-sys-color-surface-dim: light-dark(#d3dbe5, #131314);
+  --md-sys-color-surface-bright: light-dark(#ffffff, #37393b);
+  --md-sys-color-surface-container-lowest: light-dark(#ffffff, #0e0e0e);
+  --md-sys-color-surface-container-low: light-dark(#f8fafd, #1b1b1b);
+  --md-sys-color-surface-container: light-dark(#f0f4f9, #1e1f20);
+  --md-sys-color-surface-container-high: light-dark(#e9eef6, #282a2c);
+  --md-sys-color-surface-container-highest: light-dark(#dde3ea, #333537);
+  --md-sys-color-on-surface: light-dark(#1f1f1f, #e3e3e3);
+  --md-sys-color-on-surface-variant: light-dark(#444746, #c4c7c5);
+  --md-sys-color-outline: light-dark(#747775, #8e918f);
+  --md-sys-color-outline-variant: light-dark(#c4c7c5, #444746);
+
+  --md-sys-color-primary: light-dark(#0b57d0, #a8c7fa);
+  --md-sys-color-on-primary: light-dark(#ffffff, #062e6f);
+  --md-sys-color-primary-container: light-dark(#d3e3fd, #0842a0);
+  --md-sys-color-on-primary-container: light-dark(#0842a0, #d3e3fd);
+  --md-sys-color-primary-fixed: #d3e3fd;
+  --md-sys-color-primary-fixed-dim: #a8c7fa;
+  --md-sys-color-on-primary-fixed: #041e49;
+  --md-sys-color-on-primary-fixed-variant: #0842a0;
+
+  --md-sys-color-secondary: light-dark(#00639b, #7fcfff);
+  --md-sys-color-on-secondary: light-dark(#ffffff, #003355);
+  --md-sys-color-secondary-container: light-dark(#c2e7ff, #004a77);
+  --md-sys-color-on-secondary-container: light-dark(#004a77, #c2e7ff);
+  --md-sys-color-secondary-fixed: #c2e7ff;
+  --md-sys-color-secondary-fixed-dim: #7fcfff;
+  --md-sys-color-on-secondary-fixed: #001d35;
+  --md-sys-color-on-secondary-fixed-variant: #004a77;
+
+  --md-sys-color-tertiary: light-dark(#146c2e, #6dd58c);
+  --md-sys-color-on-tertiary: light-dark(#ffffff, #0a3818);
+  --md-sys-color-tertiary-container: light-dark(#c4eed0, #0f5223);
+  --md-sys-color-on-tertiary-container: light-dark(#0f5223, #c4eed0);
+  --md-sys-color-tertiary-fixed: #c4eed0;
+  --md-sys-color-tertiary-fixed-dim: #6dd58c;
+  --md-sys-color-on-tertiary-fixed: #072711;
+  --md-sys-color-on-tertiary-fixed-variant: #0f5223;
+
+  --md-sys-color-error: light-dark(#b3261e, #f2b8b5);
+  --md-sys-color-on-error: light-dark(#ffffff, #601410);
+  --md-sys-color-error-container: light-dark(#f9dedc, #8c1d18);
+  --md-sys-color-on-error-container: light-dark(#8c1d18, #f9dedc);
+
+  --md-sys-color-inverse-surface: light-dark(#303030, #e3e3e3);
+  --md-sys-color-inverse-on-surface: light-dark(#f2f2f2, #303030);
+  --md-sys-color-inverse-primary: light-dark(#a8c7fa, #0b57d0);
+  --md-sys-color-surface-tint-color: light-dark(#0b57d0, #a8c7fa);
+  --md-sys-color-shadow: #000000;
+  --md-sys-color-scrim: #000000;
+
+  /* ------------------------------------------------------------------------
+     3. Elements GM3 Extended Financial & Avatar Palette (--cee3-sys-color-*)
+     ------------------------------------------------------------------------ */
+  --cee3-sys-color-extended-success: light-dark(#006c35, #80da88);
+  --cee3-sys-color-extended-success-container: light-dark(#beefbb, #00522c);
+  --cee3-sys-color-extended-on-success-container: light-dark(#00522c, #beefbb);
+
+  --cee3-sys-color-extended-warning: light-dark(#8f4e06, #fcbd00);
+  --cee3-sys-color-extended-warning-container: light-dark(#ffe07c, #6d3a01);
+  --cee3-sys-color-extended-on-warning-container: light-dark(#6d3a01, #ffe07c);
+
+  --cee3-sys-color-extended-blue: light-dark(#1157ce, #a1c9ff);
+  --cee3-sys-color-extended-blue-container: light-dark(#d0e4ff, #04409f);
+  --cee3-sys-color-extended-green: light-dark(#006c35, #80da88);
+  --cee3-sys-color-extended-green-container: light-dark(#beefbb, #00522c);
+  --cee3-sys-color-extended-purple: light-dark(#7438d2, #d9bafd);
+  --cee3-sys-color-extended-purple-container: light-dark(#eedcfe, #5629a4);
+  --cee3-sys-color-extended-cyan: light-dark(#00687c, #60d5f3);
+  --cee3-sys-color-extended-cyan-container: light-dark(#acedff, #004e5d);
+  --cee3-sys-color-extended-orange: light-dark(#9a4600, #ffb683);
+  --cee3-sys-color-extended-orange-container: light-dark(#ffdcc3, #753403);
+  --cee3-sys-color-extended-pink: light-dark(#b60d6e, #ffaee4);
+  --cee3-sys-color-extended-pink-container: light-dark(#ffd8ef, #8d0053);
+
+  /* ------------------------------------------------------------------------
+     4. Typography Scale (--md-sys-typescale-*)
+     ------------------------------------------------------------------------ */
+  --md-sys-typescale-display-large: 500 3.6rem/4rem 'Google Sans', sans-serif;
+  --md-sys-typescale-display-medium: 500 2.8rem/3.3rem 'Google Sans', sans-serif;
+  --md-sys-typescale-display-small: 500 2.3rem/2.8rem 'Google Sans', sans-serif;
+  --md-sys-typescale-headline-large: 500 2rem/2.5rem 'Google Sans', sans-serif;
+  --md-sys-typescale-headline-medium: 500 1.8rem/2.3rem 'Google Sans', sans-serif;
+  --md-sys-typescale-headline-small: 500 1.5rem/2rem 'Google Sans', sans-serif;
+  --md-sys-typescale-title-large: 500 1.4rem/1.8rem 'Google Sans', sans-serif;
+  --md-sys-typescale-title-medium: 500 1rem/1.5rem 'Google Sans Text', sans-serif;
+  --md-sys-typescale-title-small: 500 0.9rem/1.3rem 'Google Sans Text', sans-serif;
+  --md-sys-typescale-body-large: 400 1rem/1.5rem 'Google Sans Text', sans-serif;
+  --md-sys-typescale-body-medium: 400 0.9rem/1.3rem 'Google Sans Text', sans-serif;
+  --md-sys-typescale-body-small: 400 0.8rem/1rem 'Google Sans Text', sans-serif;
+  --md-sys-typescale-label-large: 500 0.9rem/1.3rem 'Google Sans Text', sans-serif;
+  --md-sys-typescale-label-medium: 500 0.8rem/1rem 'Google Sans Text', sans-serif;
+  --md-sys-typescale-label-small: 500 0.7rem/1rem 'Google Sans Text', sans-serif;
+
+  /* ------------------------------------------------------------------------
+     5. Shapes & Corner Radii (--md-sys-shape-corner-*)
+     ------------------------------------------------------------------------ */
+  --md-sys-shape-corner-none: 0px;
+  --md-sys-shape-corner-extra-small: 4px;
+  --md-sys-shape-corner-small: 8px;
+  --md-sys-shape-corner-medium: 12px;
+  --md-sys-shape-corner-large: 16px;
+  --md-sys-shape-corner-large-increased: 20px;
+  --md-sys-shape-corner-extra-large: 28px;
+  --md-sys-shape-corner-extra-large-increased: 32px;
+  --md-sys-shape-corner-extra-extra-large: 48px;
+  --md-sys-shape-corner-full: 9999px;
+
+  /* ------------------------------------------------------------------------
+     6. 8dp Spacing & Touch Target Measurements (--md-sys-measurement-*)
+     ------------------------------------------------------------------------ */
+  --md-sys-measurement-space0: 0px;
+  --md-sys-measurement-space25: 2px;
+  --md-sys-measurement-space50: 4px;
+  --md-sys-measurement-space75: 6px;
+  --md-sys-measurement-space100: 8px;
+  --md-sys-measurement-space150: 12px;
+  --md-sys-measurement-space200: 16px;
+  --md-sys-measurement-space250: 20px;
+  --md-sys-measurement-space300: 24px;
+  --md-sys-measurement-space400: 32px;
+  --md-sys-measurement-space600: 48px;
+  --md-sys-measurement-space700: 56px;
+
+  /* ------------------------------------------------------------------------
+     7. Android Motion Physics & Easing (--droid-sys-motion-*)
+     ------------------------------------------------------------------------ */
+  --droid-sys-motion-duration-100: 100ms;
+  --droid-sys-motion-duration-150: 150ms;
+  --droid-sys-motion-duration-250: 250ms;
+  --droid-sys-motion-duration-350: 350ms;
+  --droid-sys-motion-duration-500: 500ms;
+  --droid-sys-motion-easing-emphasized: cubic-bezier(0.2, 0.0, 0.0, 1.0);
+  --droid-sys-motion-easing-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1.0);
+  --droid-sys-motion-easing-emphasized-accelerate: cubic-bezier(0.3, 0.0, 0.8, 0.15);
+  --droid-sys-motion-easing-standard: cubic-bezier(0.2, 0.0, 0.0, 1.0);
+}
+
+/* Mandatory Tabular Numerals for all Financial & Remainder Counters */
+.splitmate-tabular-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}

@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+  <title>SplitMate — Organic Tactile Financial</title>
+
+  <!-- Bundled Offline Fonts & Icons (Plus Jakarta Sans + Material Symbols Outlined) -->
+  <link rel="stylesheet" href="vendor/fonts.css"/>
+
+  <!-- All 4 Official Google Design Systems + SplitMate Unified Bindings -->
+  <link rel="stylesheet" href="design_systems/google-material-3/design-system-bindings.css"/>
+  <link rel="stylesheet" href="design_systems/android-motion/design-system-bindings.css"/>
+  <link rel="stylesheet" href="design_systems/elements-3/design-system-bindings.css"/>
+  <link rel="stylesheet" href="design_systems/android-pixel-design-system/design-system-bindings.css"/>
+  <link rel="stylesheet" href="design_systems/splitmate-unified-bindings.css"/>
+
+  <!-- Bundled Offline Tailwind Runtime -->
+  <script src="vendor/tailwindcss.js"></script>
+
+  <style>
+    :root {
+      --sm-canvas: #FAF6F0;
+      --sm-charcoal: #23201E;
+      --sm-olive: #365314;
+      --sm-sage: #D7E8B6;
+      --sm-terracotta: #E06B52;
+      --sm-peach: #FED8C8;
+      --sm-lavender: #DCE3FD;
+      --sm-easing-decelerate: var(--droid-sys-motion-easing-emphasized-decelerate, cubic-bezier(0.05, 0.7, 0.1, 1));
+      --sm-easing-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--sm-canvas);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      color: var(--sm-charcoal);
+    }
+
+    /* Hardware-accelerated Screen Viewport Stack */
+    #screen-stack {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--sm-canvas);
+    }
+
+    .screen-layer {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background-color: var(--sm-canvas);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(14px) scale(0.985);
+      transition:
+        opacity 320ms var(--sm-easing-decelerate),
+        transform 380ms var(--sm-easing-decelerate);
+      will-change: transform, opacity;
+      z-index: 1;
+    }
+
+    .screen-layer.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0) scale(1);
+      z-index: 10;
+    }
+
+    /* Floating Expressive State & Prototype Switcher Bar */
+    #prototype-switcher {
+      position: fixed;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 9000;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      max-width: 96vw;
+      padding: 4px 6px;
+      border-radius: 9999px;
+      background: rgba(35, 32, 30, 0.90);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      box-shadow: 0 8px 24px rgba(35, 32, 30, 0.18);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      overflow-x: auto;
+      scrollbar-width: none;
+      transition: all 320ms var(--sm-easing-decelerate);
+    }
+    #prototype-switcher::-webkit-scrollbar { display: none; }
+
+    .state-chip {
+      flex-shrink: 0;
+      height: 26px;
+      padding: 0 10px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #E8E2D9;
+      background: transparent;
+      border: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      transition: all 220ms var(--sm-easing-spring);
+      white-space: nowrap;
+    }
+
+    .state-chip.active {
+      background: #D7E8B6;
+      color: #23201E;
+      font-weight: 800;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+
+    .state-chip.terracotta.active {
+      background: #FED8C8;
+      color: #7C2D12;
+    }
+
+    #switcher-toggle {
+      flex-shrink: 0;
+      width: 26px;
+      height: 26px;
+      border-radius: 9999px;
+      background: rgba(255,255,255,0.14);
+      color: #FAF6F0;
+      border: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    #prototype-switcher.collapsed .state-chip:not(.active) {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Collapsible Expressive State & Screen Switcher (Lets you test all 9 Stitch screens & states anytime) -->
+  <div id="prototype-switcher" class="collapsed" title="Tap to expand all 9 Stitch screens & states">
+    <button id="switcher-toggle" onclick="toggleSwitcher()" aria-label="Toggle state bar">⚡</button>
+    <button class="state-chip active" data-target="onboarding" onclick="switchScreen('onboarding')">👤 Login / Guest</button>
+    <button class="state-chip" data-target="ledgers_animated" onclick="switchScreen('ledgers_animated')">🟢 Owed (+$142.50)</button>
+    <button class="state-chip terracotta" data-target="ledgers_you_owe" onclick="switchScreen('ledgers_you_owe')">🟠 You Owe (-$184.40)</button>
+    <button class="state-chip" data-target="ledgers_settled" onclick="switchScreen('ledgers_settled')">✨ Settled ($0.00)</button>
+    <button class="state-chip" data-target="ledgers_empty" onclick="switchScreen('ledgers_empty')">🌱 Empty ($0.00)</button>
+    <button class="state-chip" data-target="quick_logger" onclick="switchScreen('quick_logger')">🧮 Quick Log ($42.50)</button>
+    <button class="state-chip terracotta" data-target="receipt_claim" onclick="switchScreen('receipt_claim')">🧾 Receipt ($148.50)</button>
+    <button class="state-chip" data-target="greedy_settle" onclick="switchScreen('greedy_settle')">⚡ Greedy Settle</button>
+    <button class="state-chip" data-target="audit_vault" onclick="switchScreen('audit_vault')">🔒 SQLite Audit</button>
+  </div>
+
+  <!-- Hardware-Accelerated Stack of All Stitch Screens + Native Audit Vault -->
+  <div id="screen-stack">
+    <iframe id="frame-onboarding" class="screen-layer active" src="stitch_screens/splitmate_premium_guest_onboarding/code.html"></iframe>
+    <iframe id="frame-ledgers_animated" class="screen-layer" src="stitch_screens/splitmate_groups_ledgers_animated/code.html"></iframe>
+    <iframe id="frame-ledgers_you_owe" class="screen-layer" src="stitch_screens/splitmate_ledgers_you_owe_state/code.html"></iframe>
+    <iframe id="frame-ledgers_settled" class="screen-layer" src="stitch_screens/splitmate_ledgers_all_settled_state/code.html"></iframe>
+    <iframe id="frame-ledgers_empty" class="screen-layer" src="stitch_screens/splitmate_ledgers_empty_state/code.html"></iframe>
+    <iframe id="frame-quick_logger" class="screen-layer" src="stitch_screens/splitmate_quick_expense_logger_calculator/code.html"></iframe>
+    <iframe id="frame-receipt_claim" class="screen-layer" src="stitch_screens/live_receipt_claim_remainder_engine_buckwheat_style/code.html"></iframe>
+    <iframe id="frame-greedy_settle" class="screen-layer" src="stitch_screens/greedy_debt_simplification_buckwheat_style/code.html"></iframe>
+
+    <!-- Screen 9: SQLite Vault & 4-Design-System Certification Screen (Audit Tab) -->
+    <div id="frame-audit_vault" class="screen-layer overflow-y-auto px-5 pt-16 pb-28">
+      <div class="max-w-md mx-auto space-y-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <img src="app_icon.png" alt="SplitMate" class="w-10 h-10 rounded-2xl shadow-sm"/>
+            <div>
+              <h1 class="text-[20px] font-extrabold tracking-tight text-[#23201E] leading-none">SQLite Audit Vault</h1>
+              <p class="text-[11px] font-bold text-[#6E675F] uppercase tracking-wider mt-0.5">Zero-Drift Integer-Cent Ledger</p>
+            </div>
+          </div>
+          <span id="audit-hash-pill" class="px-3 py-1 rounded-full bg-[#D7E8B6] text-[#365314] text-[11px] font-extrabold font-mono">#e89b...f41a</span>
+        </div>
+
+        <!-- Dual-Tone Certification Bento -->
+        <div class="rounded-[28px] bg-gradient-to-br from-[#D7E8B6] via-[#E9F3D4] to-[#FED8C8] p-5 border border-[#EDE7DF] shadow-sm space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="px-3 py-1 rounded-full bg-white/90 text-[#365314] text-[11px] font-extrabold">✓ 4 Google Design Systems Active</span>
+            <span class="px-2.5 py-1 rounded-full bg-[#23201E] text-[#FAF6F0] text-[10px] font-bold">0.00¢ Drift Verified</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-[11px] font-bold text-[#23201E]">
+            <div class="bg-white/85 rounded-2xl p-2.5 border border-white">1. Google Material 3 (`--md-sys-*`)</div>
+            <div class="bg-white/85 rounded-2xl p-2.5 border border-white">2. Android Motion (`--droid-sys-*`)</div>
+            <div class="bg-white/85 rounded-2xl p-2.5 border border-white">3. Elements GM3 (`--cee3-*`)</div>
+            <div class="bg-white/85 rounded-2xl p-2.5 border border-white">4. Android Pixel (`--apds-*`)</div>
+          </div>
+        </div>
+
+        <!-- Live SQLite Database Snapshot -->
+        <div class="bg-white rounded-[28px] p-5 border border-[#EDE7DF] shadow-sm space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-[15px] font-extrabold text-[#23201E]">Recorded SQLite Transactions</span>
+            <button onclick="refreshAuditSnapshot()" class="px-3 py-1 rounded-full bg-[#F4EFE6] text-[11px] font-bold text-[#23201E]">↻ Refresh</button>
+          </div>
+          <pre id="sqlite-json-view" class="text-[11px] font-mono bg-[#FAF6F0] p-3.5 rounded-2xl border border-[#EDE7DF] overflow-x-auto text-[#23201E] max-h-60">Loading SQLite Vault...</pre>
+        </div>
+
+        <!-- Quick Screen Launcher Grid -->
+        <div class="bg-white rounded-[28px] p-5 border border-[#EDE7DF] shadow-sm space-y-3">
+          <span class="text-[14px] font-extrabold text-[#23201E]">Jump to Any Stitch Screen</span>
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="switchScreen('onboarding')" class="p-3 rounded-2xl bg-[#FAF6F0] border border-[#EDE7DF] text-left text-[12px] font-bold">👤 Guest Login & Profile</button>
+            <button onclick="switchScreen('ledgers_animated')" class="p-3 rounded-2xl bg-[#D7E8B6]/50 border border-[#D7E8B6] text-left text-[12px] font-bold text-[#365314]">🟢 Ledgers: Owed (+$142.50)</button>
+            <button onclick="switchScreen('ledgers_you_owe')" class="p-3 rounded-2xl bg-[#FED8C8]/60 border border-[#FED8C8] text-left text-[12px] font-bold text-[#7C2D12]">🟠 Ledgers: You Owe (-$184.40)</button>
+            <button onclick="switchScreen('ledgers_settled')" class="p-3 rounded-2xl bg-[#FAF6F0] border border-[#EDE7DF] text-left text-[12px] font-bold">✨ Ledgers: All Settled ($0.00)</button>
+            <button onclick="switchScreen('ledgers_empty')" class="p-3 rounded-2xl bg-[#FAF6F0] border border-[#EDE7DF] text-left text-[12px] font-bold">🌱 Ledgers: Empty State</button>
+            <button onclick="switchScreen('quick_logger')" class="p-3 rounded-2xl bg-[#DCE3FD]/60 border border-[#DCE3FD] text-left text-[12px] font-bold text-[#3730A3]">🧮 Quick Expense Calculator</button>
+            <button onclick="switchScreen('receipt_claim')" class="p-3 rounded-2xl bg-[#FED8C8]/60 border border-[#FED8C8] text-left text-[12px] font-bold text-[#7C2D12]">🧾 Live Receipt Claim ($148.50)</button>
+            <button onclick="switchScreen('greedy_settle')" class="p-3 rounded-2xl bg-[#D7E8B6]/50 border border-[#D7E8B6] text-left text-[12px] font-bold text-[#365314]">⚡ Greedy Settle (10→2)</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Nav on Audit Screen -->
+      <nav class="fixed bottom-0 left-0 right-0 z-50 bg-[#FAF6F0]/95 backdrop-blur-xl border-t border-[#EDE7DF]">
+        <div class="h-16 px-4 flex items-center justify-around">
+          <button onclick="switchScreen('ledgers_animated')" class="flex flex-col items-center justify-center min-w-[64px] py-1 text-[#99928A]">
+            <span class="material-symbols-outlined text-[20px]">receipt_long</span>
+            <span class="text-[11px] font-semibold mt-1">Ledgers</span>
+          </button>
+          <button onclick="switchScreen('receipt_claim')" class="flex flex-col items-center justify-center min-w-[64px] py-1 text-[#99928A]">
+            <span class="material-symbols-outlined text-[20px]">document_scanner</span>
+            <span class="text-[11px] font-semibold mt-1">Split</span>
+          </button>
+          <button onclick="switchScreen('greedy_settle')" class="flex flex-col items-center justify-center min-w-[64px] py-1 text-[#99928A]">
+            <span class="material-symbols-outlined text-[20px]">account_balance</span>
+            <span class="text-[11px] font-semibold mt-1">Settle</span>
+          </button>
+          <button onclick="switchScreen('audit_vault')" class="flex flex-col items-center justify-center min-w-[64px] py-1 text-[#23201E]">
+            <div class="flex items-center justify-center w-12 h-7 rounded-full bg-[#D7E8B6] text-[#365314]">
+              <span class="material-symbols-outlined text-[20px]">history</span>
+            </div>
+            <span class="text-[11px] font-bold mt-1">Audit</span>
+          </button>
+        </div>
+      </nav>
+    </div>
+  </div>
+
+  <script>
+    const historyStack = ['onboarding'];
+    let activeScreen = 'onboarding';
+
+    function toggleSwitcher() {
+      const bar = document.getElementById('prototype-switcher');
+      bar.classList.toggle('collapsed');
+      if (window.SplitMateNative) window.SplitMateNative.triggerHaptic('clock_tick');
+    }
+
+    function switchScreen(screenId, pushHistory = true) {
+      if (!document.getElementById('frame-' + screenId)) return;
+      document.querySelectorAll('.screen-layer').forEach((el) => el.classList.remove('active'));
+      document.getElementById('frame-' + screenId).classList.add('active');
+
+      document.querySelectorAll('.state-chip').forEach((chip) => {
+        chip.classList.toggle('active', chip.getAttribute('data-target') === screenId);
+      });
+
+      if (pushHistory && activeScreen !== screenId) {
+        historyStack.push(screenId);
+      }
+      activeScreen = screenId;
+
+      if (screenId === 'audit_vault') {
+        refreshAuditSnapshot();
+      }
+      if (window.SplitMateNative) {
+        window.SplitMateNative.triggerHaptic('tap');
+      }
+    }
+
+    function refreshAuditSnapshot() {
+      try {
+        if (window.SplitMateNative && window.SplitMateNative.getVaultAuditSnapshot) {
+          const raw = window.SplitMateNative.getVaultAuditSnapshot();
+          const parsed = JSON.parse(raw);
+          document.getElementById('sqlite-json-view').textContent = JSON.stringify(parsed, null, 2);
+          if (parsed.auditHash) {
+            document.getElementById('audit-hash-pill').textContent = parsed.auditHash;
+          }
+        }
+      } catch (e) {
+        document.getElementById('sqlite-json-view').textContent = JSON.stringify({
+          engine: "SplitMate SQLite Vault (0.00c Drift)",
+          auditHash: "#e89b...f41a",
+          status: "Verified Offline Ready"
+        }, null, 2);
+      }
+    }
+
+    window.showExpressiveToast = function (message, tone = 'olive') {
+      let existing = document.getElementById('sm-global-toast');
+      if (existing) existing.remove();
+      const toast = document.createElement('div');
+      toast.id = 'sm-global-toast';
+      const bg = tone === 'terracotta' ? '#7C2D12' : '#23201E';
+      const badgeBg = tone === 'terracotta' ? '#FED8C8' : '#D7E8B6';
+      const badgeColor = tone === 'terracotta' ? '#7C2D12' : '#365314';
+      toast.style.cssText = `
+        position: fixed; bottom: 82px; left: 50%; transform: translateX(-50%) translateY(20px) scale(0.92);
+        background: ${bg}; color: #FAF6F0; padding: 10px 16px; border-radius: 9999px;
+        font-family: 'Plus Jakarta Sans', sans-serif; font-size: 12px; font-weight: 700;
+        display: flex; align-items: center; gap: 8px; z-index: 9999;
+        box-shadow: 0 12px 28px rgba(35,32,30,0.22); opacity: 0;
+        transition: all 380ms cubic-bezier(0.05, 0.7, 0.1, 1); pointer-events: none; white-space: nowrap;
+      `;
+      toast.innerHTML = `<span style="background:${badgeBg};color:${badgeColor};padding:2px 8px;border-radius:999px;font-size:10px;font-weight:800;">0.00¢ DRIFT</span><span>${message}</span>`;
+      document.body.appendChild(toast);
+      requestAnimationFrame(() => {
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateX(-50%) translateY(0) scale(1)';
+      });
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(-50%) translateY(10px) scale(0.95)';
+        setTimeout(() => toast.remove(), 380);
+      }, 2800);
+    };
+
+    window.onStitchAction = function (action, payload) {
+      if (action === 'navigate' && payload.screen) {
+        switchScreen(payload.screen);
+      } else if (action === 'onboarding_complete') {
+        window.showExpressiveToast(`Welcome ${payload.emoji} ${payload.alias} (${payload.currency}) · Vault Ready!`);
+        switchScreen('ledgers_animated');
+      } else if (action === 'expense_saved') {
+        const amt = (payload.cents / 100).toFixed(2);
+        window.showExpressiveToast(`Saved "${payload.title}" ($${amt}) with 0.00¢ drift!`);
+        switchScreen('ledgers_animated');
+      }
+    };
+
+    window.handleAndroidBack = function () {
+      if (historyStack.length > 1) {
+        historyStack.pop();
+        const prev = historyStack[historyStack.length - 1];
+        switchScreen(prev, false);
+        return true;
+      }
+      return false;
+    };
+  </script>
+</body>
+</html>

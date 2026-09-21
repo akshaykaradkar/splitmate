@@ -1,0 +1,490 @@
+/* @imports */
+/* Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,slnt,wdth,wght,GRAD,ROND@6,0,100,400,0,0;6,0,100,500,0,0;6,0,100,500,0,100;6,0,100,600,0,100&family=Google+Sans+Text&family=Google+Sans:wght@400;500&display=swap');
+/* Google Icons */
+@import url('https://fonts.googleapis.com/css2?family=Google+Symbols&display=block');
+/* gBreeze default values */
+@import url('https://unpkg.com/@material/web@nightly/labs/gb/styles/m3.css');
+
+/* Color */
+:root, :host {
+  color-scheme: light dark;
+  --md-ref-palette-black: #000000;
+  --md-ref-palette-blue-variant0: #000000;
+  --md-ref-palette-blue-variant10: #001f2d;
+  --md-ref-palette-blue-variant100: #ffffff;
+  --md-ref-palette-blue-variant20: #003549;
+  --md-ref-palette-blue-variant30: #004d68;
+  --md-ref-palette-blue-variant40: #006788;
+  --md-ref-palette-blue-variant50: #0081a8;
+  --md-ref-palette-blue-variant60: #009dc9;
+  --md-ref-palette-blue-variant70: #00bbea;
+  --md-ref-palette-blue-variant80: #67d4ff;
+  --md-ref-palette-blue-variant90: #bde9ff;
+  --md-ref-palette-blue-variant95: #e0f4ff;
+  --md-ref-palette-blue-variant98: #f4faff;
+  --md-ref-palette-blue0: #000000;
+  --md-ref-palette-blue10: #001944;
+  --md-ref-palette-blue100: #ffffff;
+  --md-ref-palette-blue20: #012c6f;
+  --md-ref-palette-blue30: #04409f;
+  --md-ref-palette-blue40: #1157ce;
+  --md-ref-palette-blue50: #3271ea;
+  --md-ref-palette-blue60: #4e8ff8;
+  --md-ref-palette-blue70: #76acff;
+  --md-ref-palette-blue80: #a1c9ff;
+  --md-ref-palette-blue90: #d0e4ff;
+  --md-ref-palette-blue95: #e7f2ff;
+  --md-ref-palette-blue98: #f5faff;
+  --md-ref-palette-cyan0: #000000;
+  --md-ref-palette-cyan10: #001f26;
+  --md-ref-palette-cyan100: #ffffff;
+  --md-ref-palette-cyan20: #003641;
+  --md-ref-palette-cyan30: #004e5d;
+  --md-ref-palette-cyan40: #00687c;
+  --md-ref-palette-cyan50: #00839b;
+  --md-ref-palette-cyan60: #009ebb;
+  --md-ref-palette-cyan70: #00bbdf;
+  --md-ref-palette-cyan80: #60d5f3;
+  --md-ref-palette-cyan90: #acedff;
+  --md-ref-palette-cyan95: #d8f6ff;
+  --md-ref-palette-cyan98: #f0fbff;
+  --md-ref-palette-error0: #000000;
+  --md-ref-palette-error10: #410e0b;
+  --md-ref-palette-error100: #ffffff;
+  --md-ref-palette-error20: #601410;
+  --md-ref-palette-error30: #8c1d18;
+  --md-ref-palette-error40: #b3261e;
+  --md-ref-palette-error50: #dc362e;
+  --md-ref-palette-error60: #e46962;
+  --md-ref-palette-error70: #ec928e;
+  --md-ref-palette-error80: #f2b8b5;
+  --md-ref-palette-error90: #f9dedc;
+  --md-ref-palette-error95: #fceeee;
+  --md-ref-palette-error98: #fff8f7;
+  --md-ref-palette-error99: #fffbf9;
+  --md-ref-palette-green0: #000000;
+  --md-ref-palette-green10: #002110;
+  --md-ref-palette-green100: #ffffff;
+  --md-ref-palette-green20: #00381f;
+  --md-ref-palette-green30: #00522c;
+  --md-ref-palette-green40: #006c35;
+  --md-ref-palette-green50: #128937;
+  --md-ref-palette-green60: #1aa64a;
+  --md-ref-palette-green70: #44c265;
+  --md-ref-palette-green80: #80da88;
+  --md-ref-palette-green90: #beefbb;
+  --md-ref-palette-green95: #ddf8d8;
+  --md-ref-palette-green98: #f2fcef;
+  --md-ref-palette-grey-variant0: #000000;
+  --md-ref-palette-grey-variant10: #191d1c;
+  --md-ref-palette-grey-variant100: #ffffff;
+  --md-ref-palette-grey-variant20: #2d312f;
+  --md-ref-palette-grey-variant30: #444746;
+  --md-ref-palette-grey-variant40: #5c5f5e;
+  --md-ref-palette-grey-variant50: #747775;
+  --md-ref-palette-grey-variant60: #8e918f;
+  --md-ref-palette-grey-variant70: #a9acaa;
+  --md-ref-palette-grey-variant80: #c4c7c5;
+  --md-ref-palette-grey-variant90: #e1e3e1;
+  --md-ref-palette-grey-variant95: #eff2ef;
+  --md-ref-palette-grey-variant98: #f7faf7;
+  --md-ref-palette-grey0: #000000;
+  --md-ref-palette-grey10: #1b1b1c;
+  --md-ref-palette-grey100: #ffffff;
+  --md-ref-palette-grey20: #303030;
+  --md-ref-palette-grey30: #474747;
+  --md-ref-palette-grey40: #5e5e5e;
+  --md-ref-palette-grey50: #777777;
+  --md-ref-palette-grey60: #919191;
+  --md-ref-palette-grey70: #ababab;
+  --md-ref-palette-grey80: #c7c7c7;
+  --md-ref-palette-grey90: #e3e3e3;
+  --md-ref-palette-grey95: #f2f2f2;
+  --md-ref-palette-grey98: #f9f9f9;
+  --md-ref-palette-neutral-variant0: #000000;
+  --md-ref-palette-neutral-variant10: #191d1c;
+  --md-ref-palette-neutral-variant100: #ffffff;
+  --md-ref-palette-neutral-variant20: #2d312f;
+  --md-ref-palette-neutral-variant30: #444746;
+  --md-ref-palette-neutral-variant40: #5c5f5e;
+  --md-ref-palette-neutral-variant50: #747775;
+  --md-ref-palette-neutral-variant60: #8e918f;
+  --md-ref-palette-neutral-variant70: #a9acaa;
+  --md-ref-palette-neutral-variant80: #c4c7c5;
+  --md-ref-palette-neutral-variant90: #e1e3e1;
+  --md-ref-palette-neutral-variant95: #eff2ef;
+  --md-ref-palette-neutral-variant98: #f7faf7;
+  --md-ref-palette-neutral-variant99: #fafdfb;
+  --md-ref-palette-neutral0: #000000;
+  --md-ref-palette-neutral10: #1f1f1f;
+  --md-ref-palette-neutral100: #ffffff;
+  --md-ref-palette-neutral12: #1f2020;
+  --md-ref-palette-neutral17: #2a2a2a;
+  --md-ref-palette-neutral20: #303030;
+  --md-ref-palette-neutral22: #343535;
+  --md-ref-palette-neutral24: #393939;
+  --md-ref-palette-neutral30: #474747;
+  --md-ref-palette-neutral4: #0e0e0f;
+  --md-ref-palette-neutral40: #5e5e5e;
+  --md-ref-palette-neutral50: #757575;
+  --md-ref-palette-neutral6: #131314;
+  --md-ref-palette-neutral60: #8f8f8f;
+  --md-ref-palette-neutral70: #ababab;
+  --md-ref-palette-neutral80: #c7c7c7;
+  --md-ref-palette-neutral87: #dadada;
+  --md-ref-palette-neutral90: #e3e3e3;
+  --md-ref-palette-neutral92: #e9e8e8;
+  --md-ref-palette-neutral94: #efeded;
+  --md-ref-palette-neutral95: #f2f2f2;
+  --md-ref-palette-neutral96: #f4f3f2;
+  --md-ref-palette-neutral98: #faf9f8;
+  --md-ref-palette-neutral99: #fdfcfb;
+  --md-ref-palette-orange0: #000000;
+  --md-ref-palette-orange10: #321200;
+  --md-ref-palette-orange100: #ffffff;
+  --md-ref-palette-orange20: #522302;
+  --md-ref-palette-orange30: #753403;
+  --md-ref-palette-orange40: #9a4600;
+  --md-ref-palette-orange50: #c05a01;
+  --md-ref-palette-orange60: #e86e00;
+  --md-ref-palette-orange70: #ff8d41;
+  --md-ref-palette-orange80: #ffb683;
+  --md-ref-palette-orange90: #ffdcc3;
+  --md-ref-palette-orange95: #ffede1;
+  --md-ref-palette-orange98: #fff8f4;
+  --md-ref-palette-pink0: #000000;
+  --md-ref-palette-pink10: #3d0023;
+  --md-ref-palette-pink100: #ffffff;
+  --md-ref-palette-pink20: #620438;
+  --md-ref-palette-pink30: #8d0053;
+  --md-ref-palette-pink40: #b60d6e;
+  --md-ref-palette-pink50: #dc258d;
+  --md-ref-palette-pink60: #f94aab;
+  --md-ref-palette-pink70: #ff7dd2;
+  --md-ref-palette-pink80: #ffaee4;
+  --md-ref-palette-pink90: #ffd8ef;
+  --md-ref-palette-pink95: #ffecf6;
+  --md-ref-palette-pink98: #fff7fc;
+  --md-ref-palette-primary0: #000000;
+  --md-ref-palette-primary10: #041e49;
+  --md-ref-palette-primary100: #ffffff;
+  --md-ref-palette-primary20: #062e6f;
+  --md-ref-palette-primary30: #0842a0;
+  --md-ref-palette-primary40: #0b57d0;
+  --md-ref-palette-primary50: #1b6ef3;
+  --md-ref-palette-primary60: #4c8df6;
+  --md-ref-palette-primary70: #7cacf8;
+  --md-ref-palette-primary80: #a8c7fa;
+  --md-ref-palette-primary90: #d3e3fd;
+  --md-ref-palette-primary95: #ecf3fe;
+  --md-ref-palette-primary98: #f7f9ff;
+  --md-ref-palette-primary99: #fafbff;
+  --md-ref-palette-purple0: #000000;
+  --md-ref-palette-purple10: #280255;
+  --md-ref-palette-purple100: #ffffff;
+  --md-ref-palette-purple20: #400b84;
+  --md-ref-palette-purple30: #5629a4;
+  --md-ref-palette-purple40: #7438d2;
+  --md-ref-palette-purple50: #9254ea;
+  --md-ref-palette-purple60: #ad72ff;
+  --md-ref-palette-purple70: #c597ff;
+  --md-ref-palette-purple80: #d9bafd;
+  --md-ref-palette-purple90: #eedcfe;
+  --md-ref-palette-purple95: #f7ecfe;
+  --md-ref-palette-purple98: #fdf8ff;
+  --md-ref-palette-red0: #000000;
+  --md-ref-palette-red10: #3a0907;
+  --md-ref-palette-red100: #ffffff;
+  --md-ref-palette-red20: #60150f;
+  --md-ref-palette-red30: #8a1a16;
+  --md-ref-palette-red40: #b3251e;
+  --md-ref-palette-red50: #db372d;
+  --md-ref-palette-red60: #f55e57;
+  --md-ref-palette-red70: #ff8983;
+  --md-ref-palette-red80: #ffb3ae;
+  --md-ref-palette-red90: #ffdadc;
+  --md-ref-palette-red95: #ffecee;
+  --md-ref-palette-red98: #fff8f8;
+  --md-ref-palette-secondary0: #000000;
+  --md-ref-palette-secondary10: #001d35;
+  --md-ref-palette-secondary100: #ffffff;
+  --md-ref-palette-secondary20: #003355;
+  --md-ref-palette-secondary30: #004a77;
+  --md-ref-palette-secondary40: #00639b;
+  --md-ref-palette-secondary50: #047db7;
+  --md-ref-palette-secondary60: #3998d3;
+  --md-ref-palette-secondary70: #5ab3f0;
+  --md-ref-palette-secondary80: #7fcfff;
+  --md-ref-palette-secondary90: #c2e7ff;
+  --md-ref-palette-secondary95: #dff3ff;
+  --md-ref-palette-secondary98: #f4faff;
+  --md-ref-palette-secondary99: #f7fcff;
+  --md-ref-palette-tertiary0: #000000;
+  --md-ref-palette-tertiary10: #072711;
+  --md-ref-palette-tertiary100: #ffffff;
+  --md-ref-palette-tertiary20: #0a3818;
+  --md-ref-palette-tertiary30: #0f5223;
+  --md-ref-palette-tertiary40: #146c2e;
+  --md-ref-palette-tertiary50: #198639;
+  --md-ref-palette-tertiary60: #1ea446;
+  --md-ref-palette-tertiary70: #37be5f;
+  --md-ref-palette-tertiary80: #6dd58c;
+  --md-ref-palette-tertiary90: #c4eed0;
+  --md-ref-palette-tertiary95: #e7f8ed;
+  --md-ref-palette-tertiary98: #ecfef2;
+  --md-ref-palette-tertiary99: #f2ffee;
+  --md-ref-palette-white: #ffffff;
+  --md-ref-palette-yellow0: #000000;
+  --md-ref-palette-yellow10: #2f1400;
+  --md-ref-palette-yellow100: #ffffff;
+  --md-ref-palette-yellow20: #4d2600;
+  --md-ref-palette-yellow30: #6d3a01;
+  --md-ref-palette-yellow40: #8f4e06;
+  --md-ref-palette-yellow50: #b16300;
+  --md-ref-palette-yellow60: #d37b00;
+  --md-ref-palette-yellow70: #ef9800;
+  --md-ref-palette-yellow80: #fcbd00;
+  --md-ref-palette-yellow90: #ffe07c;
+  --md-ref-palette-yellow95: #fff2b4;
+  --md-ref-palette-yellow98: #fffade;
+  --md-sys-color-background: light-dark(#ffffff, #131314);  /* Note: Background is a legacy color role. It is recommended to use Surface instead of Background. */
+  --md-sys-color-error: light-dark(#b3261e, #f2b8b5);  /* Indicates errors, such as invalid input in a date picker */
+  --md-sys-color-error-container: light-dark(#f9dedc, #8c1d18);  /* Container color for error messages and badges */
+  --md-sys-color-inverse-on-surface: light-dark(#f2f2f2, #303030);  /* Used for text and icons shown against the inverse surface color */
+  --md-sys-color-inverse-primary: light-dark(#a8c7fa, #0b57d0);  /* Displays opposite of the primary color */
+  --md-sys-color-inverse-surface: light-dark(#303030, #e3e3e3);  /* Displays opposite color of the surrounding UI */
+  --md-sys-color-on-background: light-dark(#1f1f1f, #e3e3e3);  /* Used for text and icons shown against the background color */
+  --md-sys-color-on-error: light-dark(#ffffff, #601410);  /* Used for text and icons on the error color */
+  --md-sys-color-on-error-container: light-dark(#8c1d18, #f9dedc);  /* Used for text and icons on the error-container color */
+  --md-sys-color-on-primary: light-dark(#ffffff, #062e6f);  /* Text and icons shown against the primary color */
+  --md-sys-color-on-primary-container: light-dark(#0842a0, #d3e3fd);  /* Contrast-passing color shown against the primary container */
+  --md-sys-color-on-primary-fixed: #041e49;  /* Used for text and icons shown against the primary fixed color */
+  --md-sys-color-on-primary-fixed-variant: #0842a0;  /* Stronger hue variant used for text and icons shown against the primary fixed color */
+  --md-sys-color-on-secondary: light-dark(#ffffff, #003355);  /* Text and icons shown against the secondary color */
+  --md-sys-color-on-secondary-container: light-dark(#004a77, #c2e7ff);  /* Contrast-passing color shown against the secondary container */
+  --md-sys-color-on-secondary-fixed: #001d35;  /* Used for text and icons shown against the secondary fixed color */
+  --md-sys-color-on-secondary-fixed-variant: #004a77;  /* Stronger hue variant used for text and icons shown against the secondary fixed color */
+  --md-sys-color-on-surface: light-dark(#1f1f1f, #e3e3e3);  /* Text and icons shown against the surface color */
+  --md-sys-color-on-surface-variant: light-dark(#444746, #c4c7c5);  /* For text and icons to indicate active or inactive component state */
+  --md-sys-color-on-tertiary: light-dark(#ffffff, #0a3818);  /* Text and icons shown against the tertiary color */
+  --md-sys-color-on-tertiary-container: light-dark(#0f5223, #c4eed0);  /* Contrast-passing color shown against the tertiary container */
+  --md-sys-color-on-tertiary-fixed: #072711;  /* Used for text and icons shown against the tertiary fixed color */
+  --md-sys-color-on-tertiary-fixed-variant: #0f5223;  /* Stronger hue variant used for text and icons shown against the tertiary fixed color */
+  --md-sys-color-outline: light-dark(#747775, #8e918f);  /* Subtle color used for boundaries */
+  --md-sys-color-outline-variant: light-dark(#c4c7c5, #444746);  /* Outline-variant is used to define the border of a component where 3:1 contrast ratio isn’t required, a container, or a divider. */
+  --md-sys-color-primary: light-dark(#0b57d0, #a8c7fa);  /* Main color used across screens and components */
+  --md-sys-color-primary-container: light-dark(#d3e3fd, #0842a0);  /* Standout container color for key components */
+  --md-sys-color-primary-fixed: #d3e3fd;  /* Primary color that doesn't change for light or dark theme. */
+  --md-sys-color-primary-fixed-dim: #a8c7fa;  /* Dimmer version of primary fixed color that doesn't change for light or dark theme. */
+  --md-sys-color-scrim: #000000;  /* Used for scrims which help separate floating components from the background. */
+  --md-sys-color-secondary: light-dark(#00639b, #7fcfff);  /* Accent color used across screens and components */
+  --md-sys-color-secondary-container: light-dark(#c2e7ff, #004a77);  /* Less prominent container color, for components like tonal buttons */
+  --md-sys-color-secondary-fixed: #c2e7ff;  /* Secondary color that doesn't change for light or dark theme. */
+  --md-sys-color-secondary-fixed-dim: #7fcfff;  /* Dimmer version of secondary fixed color that doesn't change for light or dark theme. */
+  --md-sys-color-shadow: #000000;  /* For shadows applied to elevated components */
+  --md-sys-color-surface: light-dark(#ffffff, #131314);  /* Surface color for components like cards, sheets, and menus */
+  --md-sys-color-surface-bright: light-dark(#ffffff, #37393b);  /* Surface that is brighter in both light and dark theme. */
+  --md-sys-color-surface-container: light-dark(#f0f4f9, #1e1f20);
+  --md-sys-color-surface-container-high: light-dark(#e9eef6, #282a2c);
+  --md-sys-color-surface-container-highest: light-dark(#dde3ea, #333537);
+  --md-sys-color-surface-container-low: light-dark(#f8fafd, #1b1b1b);
+  --md-sys-color-surface-container-lowest: light-dark(#ffffff, #0e0e0e);
+  --md-sys-color-surface-dim: light-dark(#d3dbe5, #131314);  /* Surface that is dimmer in both light and dark theme. */
+  --md-sys-color-surface-tint: light-dark(#6991d6, #d1e1ff);
+  --md-sys-color-surface-tint-color: light-dark(#0b57d0, #a8c7fa);
+  --md-sys-color-surface-variant: light-dark(#e1e3e1, #444746);  /* Alternate surface color, can be used for active states */
+  --md-sys-color-tertiary: light-dark(#146c2e, #6dd58c);  /* Contrasting accent color used across screens and components */
+  --md-sys-color-tertiary-container: light-dark(#c4eed0, #0f5223);  /* Contrasting container color, for components like input fields */
+  --md-sys-color-tertiary-fixed: #c4eed0;  /* Tertiary color that doesn't change for light or dark theme. */
+  --md-sys-color-tertiary-fixed-dim: #6dd58c;  /* Dimmer version of tertiary fixed color that doesn't change for light or dark theme. */
+}
+
+/* Typography */
+:root, :host {
+  --md-sys-typescale-body-large: 1rem/1.5rem 'Google Sans Text';
+  --md-sys-typescale-body-medium: 0.9rem/1.3rem 'Google Sans Text';
+  --md-sys-typescale-body-small: 0.8rem/1rem 'Google Sans Text';
+  --md-sys-typescale-body-small-tracking: 0;
+  --md-sys-typescale-display-large: 3.6rem/4rem 'Google Sans';
+  --md-sys-typescale-display-medium: 2.8rem/3.3rem 'Google Sans';
+  --md-sys-typescale-display-small: 2.3rem/2.8rem 'Google Sans';
+  --md-sys-typescale-emphasized-body-large: 500 1rem/1.5rem 'Google Sans Text';
+  --md-sys-typescale-emphasized-body-medium: 500 0.9rem/1.3rem 'Google Sans Text';
+  --md-sys-typescale-emphasized-body-small: 500 0.8rem/1rem 'Google Sans Text';
+  --md-sys-typescale-emphasized-display-large: 500 3.6rem/4rem 'Google Sans';
+  --md-sys-typescale-emphasized-display-medium: 500 2.8rem/3.3rem 'Google Sans';
+  --md-sys-typescale-emphasized-display-small: 500 2.3rem/2.8rem 'Google Sans';
+  --md-sys-typescale-emphasized-headline-large: 500 2rem/2.5rem 'Google Sans';
+  --md-sys-typescale-emphasized-headline-medium: 500 1.8rem/2.3rem 'Google Sans';
+  --md-sys-typescale-emphasized-headline-small: 500 1.5rem/2rem 'Google Sans';
+  --md-sys-typescale-emphasized-label-large: 700 0.9rem/1.3rem 'Google Sans Text';
+  --md-sys-typescale-emphasized-label-medium: 700 0.8rem/1rem 'Google Sans Text';
+  --md-sys-typescale-emphasized-label-medium-tracking: 0;
+  --md-sys-typescale-emphasized-label-small: 700 0.7rem/1rem 'Google Sans Text';
+  --md-sys-typescale-emphasized-label-small-tracking: 0;
+  --md-sys-typescale-emphasized-title-large: 500 1.4rem/1.8rem 'Google Sans';
+  --md-sys-typescale-emphasized-title-medium: 700 1rem/1.5rem 'Google Sans Text';
+  --md-sys-typescale-emphasized-title-small: 700 0.9rem/1.3rem 'Google Sans Text';
+  --md-sys-typescale-headline-large: 2rem/2.5rem 'Google Sans';
+  --md-sys-typescale-headline-medium: 1.8rem/2.3rem 'Google Sans';
+  --md-sys-typescale-headline-small: 1.5rem/2rem 'Google Sans';
+  --md-sys-typescale-label-large: 500 0.9rem/1.3rem 'Google Sans Text';
+  --md-sys-typescale-label-medium: 500 0.8rem/1rem 'Google Sans Text';
+  --md-sys-typescale-label-medium-tracking: 0;
+  --md-sys-typescale-label-small: 500 0.7rem/1rem 'Google Sans Text';
+  --md-sys-typescale-label-small-tracking: 0;
+  --md-sys-typescale-title-large: 1.4rem/1.8rem 'Google Sans';
+  --md-sys-typescale-title-medium: 500 1rem/1.5rem 'Google Sans Text';
+  --md-sys-typescale-title-small: 500 0.9rem/1.3rem 'Google Sans Text';
+  --md-sys-typescale-variable-body-large: 1rem/1.5rem 'Google Sans Flex';
+  --md-sys-typescale-variable-body-large-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 0, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 400;
+  --md-sys-typescale-variable-body-medium: 0.9rem/1.3rem 'Google Sans Flex';
+  --md-sys-typescale-variable-body-medium-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 0, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 400;
+  --md-sys-typescale-variable-body-small: 0.8rem/1rem 'Google Sans Flex';
+  --md-sys-typescale-variable-body-small-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 0, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 400;
+  --md-sys-typescale-variable-display-large: 3.6rem/4rem 'Google Sans Flex';
+  --md-sys-typescale-variable-display-large-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 0, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 400;
+  --md-sys-typescale-variable-display-medium: 2.8rem/3.3rem 'Google Sans Flex';
+  --md-sys-typescale-variable-display-medium-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 0, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 400;
+  --md-sys-typescale-variable-display-small: 2.3rem/2.8rem 'Google Sans Flex';
+  --md-sys-typescale-variable-display-small-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 0, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 400;
+  --md-sys-typescale-variable-emphasized-body-large: 500 1rem/1.5rem 'Google Sans Flex';
+  --md-sys-typescale-variable-emphasized-body-large-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 100, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 500;
+  --md-sys-typescale-variable-emphasized-body-medium: 500 0.9rem/1.3rem 'Google Sans Flex';
+  --md-sys-typescale-variable-emphasized-body-medium-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 100, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 500;
+  --md-sys-typescale-variable-emphasized-body-small: 500 0.8rem/1rem 'Google Sans Flex';
+  --md-sys-typescale-variable-emphasized-body-small-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 100, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 500;
+  --md-sys-typescale-variable-emphasized-display-large: 500 3.6rem/4rem 'Google Sans Flex';
+  --md-sys-typescale-variable-emphasized-display-large-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 100, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 500;
+  --md-sys-typescale-variable-emphasized-display-medium: 500 2.8rem/3.3rem 'Google Sans Flex';
+  --md-sys-typescale-variable-emphasized-display-medium-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 100, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 500;
+  --md-sys-typescale-variable-emphasized-display-small: 500 2.3rem/2.8rem 'Google Sans Flex';
+  --md-sys-typescale-variable-emphasized-display-small-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 100, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 500;
+  --md-sys-typescale-variable-emphasized-headline-large: 500 2rem/2.5rem 'Google Sans Flex';
+  --md-sys-typescale-variable-emphasized-headline-large-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 100, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 500;
+  --md-sys-typescale-variable-emphasized-headline-medium: 500 1.8rem/2.3rem 'Google Sans Flex';
+  --md-sys-typescale-variable-emphasized-headline-medium-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 100, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 500;
+  --md-sys-typescale-variable-emphasized-headline-small: 500 1.5rem/2rem 'Google Sans Flex';
+  --md-sys-typescale-variable-emphasized-headline-small-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 100, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 500;
+  --md-sys-typescale-variable-emphasized-label-large: 600 0.9rem/1.3rem 'Google Sans Flex';
+  --md-sys-typescale-variable-emphasized-label-large-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 100, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 600;
+  --md-sys-typescale-variable-emphasized-label-medium: 600 0.8rem/1rem 'Google Sans Flex';
+  --md-sys-typescale-variable-emphasized-label-medium-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 100, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 600;
+  --md-sys-typescale-variable-emphasized-label-small: 600 0.7rem/1rem 'Google Sans Flex';
+  --md-sys-typescale-variable-emphasized-label-small-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 100, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 600;
+  --md-sys-typescale-variable-emphasized-title-large: 500 1.4rem/1.8rem 'Google Sans Flex';
+  --md-sys-typescale-variable-emphasized-title-large-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 100, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 500;
+  --md-sys-typescale-variable-emphasized-title-medium: 600 1rem/1.5rem 'Google Sans Flex';
+  --md-sys-typescale-variable-emphasized-title-medium-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 100, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 600;
+  --md-sys-typescale-variable-emphasized-title-small: 600 0.9rem/1.3rem 'Google Sans Flex';
+  --md-sys-typescale-variable-emphasized-title-small-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 100, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 600;
+  --md-sys-typescale-variable-headline-large: 2rem/2.5rem 'Google Sans Flex';
+  --md-sys-typescale-variable-headline-large-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 0, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 400;
+  --md-sys-typescale-variable-headline-medium: 1.8rem/2.3rem 'Google Sans Flex';
+  --md-sys-typescale-variable-headline-medium-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 0, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 400;
+  --md-sys-typescale-variable-headline-small: 1.5rem/2rem 'Google Sans Flex';
+  --md-sys-typescale-variable-headline-small-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 0, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 400;
+  --md-sys-typescale-variable-label-large: 500 0.9rem/1.3rem 'Google Sans Flex';
+  --md-sys-typescale-variable-label-large-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 0, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 500;
+  --md-sys-typescale-variable-label-medium: 500 0.8rem/1rem 'Google Sans Flex';
+  --md-sys-typescale-variable-label-medium-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 0, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 500;
+  --md-sys-typescale-variable-label-small: 500 0.7rem/1rem 'Google Sans Flex';
+  --md-sys-typescale-variable-label-small-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 0, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 500;
+  --md-sys-typescale-variable-title-large: 1.4rem/1.8rem 'Google Sans Flex';
+  --md-sys-typescale-variable-title-large-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 0, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 400;
+  --md-sys-typescale-variable-title-medium: 500 1rem/1.5rem 'Google Sans Flex';
+  --md-sys-typescale-variable-title-medium-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 0, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 500;
+  --md-sys-typescale-variable-title-small: 500 0.9rem/1.3rem 'Google Sans Flex';
+  --md-sys-typescale-variable-title-small-axes: 'CRSV' 0, 'GRAD' 0, 'ROND' 0, 'opsz' 6, 'slnt' 0, 'wdth' 100, 'wght' 500;
+}
+
+/* Icons */
+:root, :host {
+  --md-icon-font: 'Google Symbols';  /* The font family to use for icons. */
+}
+
+/* Shape */
+:root, :host {
+  --md-sys-shape-corner-extra-extra-large: 48px;
+  --md-sys-shape-corner-extra-large: 28px;
+  --md-sys-shape-corner-extra-large-increased: 32px;
+  --md-sys-shape-corner-extra-large-top: 28px 28px 0 0;
+  --md-sys-shape-corner-extra-small: 4px;
+  --md-sys-shape-corner-extra-small-top: 4px 4px 0 0;
+  --md-sys-shape-corner-full: max(50cqw, 50cqh);  /* Use for: Badge, Buttons, Icon buttons, Sliders, Switches, Search bar */
+  --md-sys-shape-corner-large: 16px;
+  --md-sys-shape-corner-large-increased: 20px;
+  --md-sys-shape-corner-large-end: 0 16px 16px 0;
+  --md-sys-shape-corner-large-start: 16px 0 0 16px;
+  --md-sys-shape-corner-large-top: 16px 16px 0 0;
+  --md-sys-shape-corner-medium: 12px;
+  --md-sys-shape-corner-none: 0;
+  --md-sys-shape-corner-small: 8px;
+}
+
+/* Measurement */
+:root, :host {
+  --md-sys-measurement-space0: 0;  /* 0 x base measurement */
+  --md-sys-measurement-space100: 8px;  /* Base measurement */
+  --md-sys-measurement-space125: 10px;  /* 1.25 x base measurement */
+  --md-sys-measurement-space150: 12px;  /* 1.5 x base measurement */
+  --md-sys-measurement-space175: 14px;  /* 1.75 x base measurement */
+  --md-sys-measurement-space200: 16px;  /* 2 x base measurement */
+  --md-sys-measurement-space25: 2px;  /* .25 x base measurement */
+  --md-sys-measurement-space250: 20px;  /* 2.5 x base measurement */
+  --md-sys-measurement-space300: 24px;  /* 3 x base measurement */
+  --md-sys-measurement-space400: 32px;  /* 4 x base measurement */
+  --md-sys-measurement-space450: 36px;  /* 4.5 x base measurement */
+  --md-sys-measurement-space50: 4px;  /* .5 x base measurement */
+  --md-sys-measurement-space500: 40px;  /* 5 x base measurement */
+  --md-sys-measurement-space600: 48px;  /* 6 x base measurement */
+  --md-sys-measurement-space700: 56px;  /* 7 x base measurement */
+  --md-sys-measurement-space75: 6px;  /* .75 x base measurement */
+  --md-sys-measurement-space800: 64px;  /* 8 x base measurement */
+  --md-sys-measurement-space900: 72px;  /* 9 x base measurement */
+  --md-sys-state-focus-indicator-inner-offset: -3px;
+  --md-sys-state-focus-indicator-outer-offset: 2px;
+  --md-sys-state-focus-indicator-thickness: 3px;
+}
+
+/* Elevation */
+:root, :host {
+  --md-sys-elevation-level0: 0;
+  --md-sys-elevation-level1: 1px;
+  --md-sys-elevation-level2: 3px;
+  --md-sys-elevation-level3: 6px;
+  --md-sys-elevation-level4: 8px;
+  --md-sys-elevation-level5: 12px;
+}
+
+/* Motion */
+:root, :host {
+  --md-sys-motion-duration-extra-long1: 700ms;
+  --md-sys-motion-duration-extra-long2: 800ms;
+  --md-sys-motion-duration-extra-long3: 900ms;
+  --md-sys-motion-duration-extra-long4: 1000ms;
+  --md-sys-motion-duration-long1: 450ms;
+  --md-sys-motion-duration-long2: 500ms;
+  --md-sys-motion-duration-long3: 550ms;
+  --md-sys-motion-duration-long4: 600ms;
+  --md-sys-motion-duration-medium1: 250ms;
+  --md-sys-motion-duration-medium2: 300ms;
+  --md-sys-motion-duration-medium3: 350ms;
+  --md-sys-motion-duration-medium4: 400ms;
+  --md-sys-motion-duration-short1: 50ms;
+  --md-sys-motion-duration-short2: 100ms;
+  --md-sys-motion-duration-short3: 150ms;
+  --md-sys-motion-duration-short4: 200ms;
+  --md-sys-motion-easing-emphasized: "M 0,0 C 0.05, 0, 0.133333, 0.06, 0.166666, 0.4 C 0.208333, 0.82, 0.25, 1, 1, 1";
+  --md-sys-motion-easing-emphasized-accelerate: cubic-bezier(0.3, 0.0, 0.8, 0.15);
+  --md-sys-motion-easing-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1.0);
+  --md-sys-motion-easing-legacy: cubic-bezier(0.4, 0.0, 0.2, 1.0);
+  --md-sys-motion-easing-legacy-accelerate: cubic-bezier(0.4, 0.0, 1.0, 1.0);
+  --md-sys-motion-easing-legacy-decelerate: cubic-bezier(0.0, 0.0, 0.2, 1.0);
+  --md-sys-motion-easing-linear: cubic-bezier(0.0, 0.0, 1.0, 1.0);
+  --md-sys-motion-easing-standard: cubic-bezier(0.2, 0.0, 0.0, 1.0);
+  --md-sys-motion-easing-standard-accelerate: cubic-bezier(0.3, 0.0, 1.0, 1.0);
+  --md-sys-motion-easing-standard-decelerate: cubic-bezier(0.0, 0.0, 0.0, 1.0);
+}
+
