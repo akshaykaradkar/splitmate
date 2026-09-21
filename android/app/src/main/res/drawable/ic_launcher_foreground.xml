@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Upper-Left Organic Split Hemisphere (Sage Olive #D7E8B6) -->
+    <path
+        android:fillColor="#D7E8B6"
+        android:pathData="M33,56 C30,42 41,30 56,32 L68,32 C70,32 71,35 69,37 L37,69 C35,71 32,70 32,68 Z" />
+
+    <!-- Lower-Right Organic Split Hemisphere (Terracotta Coral #E06B52) -->
+    <path
+        android:fillColor="#E06B52"
+        android:pathData="M75,52 C78,66 67,78 52,76 L40,76 C38,76 37,73 39,71 L71,39 C73,37 76,38 76,40 Z" />
+
+    <!-- Upper Equilibrium Dot (Deep Olive #365314) -->
+    <path
+        android:fillColor="#365314"
+        android:pathData="M45,45m-4.5,0a4.5,4.5 0,1 1,9 0a4.5,4.5 0,1 1,-9 0" />
+
+    <!-- Lower Equilibrium Dot (Warm Cream #FAF6F0) -->
+    <path
+        android:fillColor="#FAF6F0"
+        android:pathData="M63,63m-4.5,0a4.5,4.5 0,1 1,9 0a4.5,4.5 0,1 1,-9 0" />
+</vector>

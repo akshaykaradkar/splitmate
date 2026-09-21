@@ -1,6 +1,8 @@
 package com.splitmate.app
 
 import android.annotation.SuppressLint
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.view.HapticFeedbackConstants
 import android.webkit.JavascriptInterface
@@ -32,7 +34,9 @@ class MainActivity : AppCompatActivity() {
         settings.databaseEnabled = true
         settings.allowFileAccess = true
         settings.allowContentAccess = true
+        @Suppress("DEPRECATION")
         settings.allowFileAccessFromFileURLs = true
+        @Suppress("DEPRECATION")
         settings.allowUniversalAccessFromFileURLs = true
         settings.mediaPlaybackRequiresUserGesture = false
         settings.cacheMode = WebSettings.LOAD_DEFAULT
@@ -43,7 +47,6 @@ class MainActivity : AppCompatActivity() {
         webView.webViewClient = WebViewClient()
         webView.addJavascriptInterface(SplitMateBridge(), "SplitMateNative")
 
-        // Start directly in the unified Stitch + 4-Design-System Expressive Application Shell
         webView.loadUrl("file:///android_asset/index.html")
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -72,6 +75,33 @@ class MainActivity : AppCompatActivity() {
                     else -> HapticFeedbackConstants.VIRTUAL_KEY
                 }
                 webView.performHapticFeedback(flag)
+            }
+        }
+
+        @JavascriptInterface
+        fun savePrivateDeviceState(stateJson: String): Boolean {
+            val prefs = getSharedPreferences("splitmate_private_vault", Context.MODE_PRIVATE)
+            prefs.edit().putString("app_state_v2", stateJson).apply()
+            return true
+        }
+
+        @JavascriptInterface
+        fun loadPrivateDeviceState(): String {
+            val prefs = getSharedPreferences("splitmate_private_vault", Context.MODE_PRIVATE)
+            return prefs.getString("app_state_v2", "") ?: ""
+        }
+
+        @JavascriptInterface
+        fun shareLedgerExport(title: String, content: String) {
+            runOnUiThread {
+                val sendIntent = Intent().apply {
+                    action = Intent.ACTION_SEND
+                    putExtra(Intent.EXTRA_TITLE, title)
+                    putExtra(Intent.EXTRA_TEXT, content)
+                    type = "text/plain"
+                }
+                val shareIntent = Intent.createChooser(sendIntent, title)
+                startActivity(shareIntent)
             }
         }
 
