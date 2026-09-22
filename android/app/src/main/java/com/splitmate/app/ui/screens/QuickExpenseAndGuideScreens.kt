@@ -179,9 +179,10 @@ fun QuickExpenseScreen(
         }
     }
 
-    var amountDigits by remember { mutableStateOf("450") }
-    var expenseCategoryTitle by remember { mutableStateOf("Dinner & Food") }
+    var amountDigits by remember { mutableStateOf("0") }
+    var expenseCategoryTitle by remember { mutableStateOf("") }
     var showEditTitleDialog by remember { mutableStateOf(false) }
+    var pendingCommitAfterCategorySelection by remember { mutableStateOf(false) }
     var showGroupDropdown by remember { mutableStateOf(false) }
     var editingFriend by remember { mutableStateOf<GroupMemberEntity?>(null) }
 
@@ -208,36 +209,81 @@ fun QuickExpenseScreen(
     val remainder = if (memberCount > 0) numericVal % memberCount else 0L
 
     if (showEditTitleDialog) {
-        var draftTitle by remember { mutableStateOf(expenseCategoryTitle) }
+        val existingTicket = remember(expenseCategoryTitle) {
+            com.splitmate.app.ui.extractTravelTicketFromTitle(expenseCategoryTitle)
+        }
+        var draftTitle by remember {
+            mutableStateOf(
+                if (expenseCategoryTitle.contains("PNR:") || expenseCategoryTitle.contains("🚆")) "Train / PNR Ticket"
+                else expenseCategoryTitle
+            )
+        }
+        var isTravelTicketMode by remember {
+            mutableStateOf(
+                existingTicket != null ||
+                    draftTitle.contains("Train", ignoreCase = true) ||
+                    draftTitle.contains("Flight", ignoreCase = true) ||
+                    draftTitle.contains("Travel", ignoreCase = true) ||
+                    draftTitle.contains("PNR", ignoreCase = true)
+            )
+        }
+        var pnrInput by remember { mutableStateOf(existingTicket?.pnr ?: "") }
+        var trainNoInput by remember { mutableStateOf(existingTicket?.trainOrFlightNo ?: "") }
+        var fromStationInput by remember { mutableStateOf(existingTicket?.fromStation ?: "") }
+        var toStationInput by remember { mutableStateOf(existingTicket?.toStation ?: "") }
+        var depTimeInput by remember { mutableStateOf(existingTicket?.departureTime ?: "") }
+        var coachSeatsInput by remember { mutableStateOf(existingTicket?.coachAndSeats ?: "") }
+        var rawSmsPasteInput by remember { mutableStateOf("") }
+
         val presetCategories = remember {
             listOf(
+                "Train / PNR Ticket" to Icons.Rounded.Train,
                 "Dinner & Food" to Icons.Rounded.Restaurant,
                 "Travel & Flight" to Icons.Rounded.Flight,
+                "Stay & Hotel" to Icons.Rounded.Hotel,
+                "Cab & Local" to Icons.Rounded.LocalTaxi,
                 "Groceries" to Icons.Rounded.ShoppingCart,
-                "Home & Rent" to Icons.Rounded.Home,
-                "Party & Drinks" to Icons.Rounded.LocalBar,
-                "Coffee & Cafe" to Icons.Rounded.LocalCafe
+                "Party & Drinks" to Icons.Rounded.LocalBar
             )
         }
         AlertDialog(
-            onDismissRequest = { showEditTitleDialog = false },
+            onDismissRequest = {
+                showEditTitleDialog = false
+                pendingCommitAfterCategorySelection = false
+            },
             containerColor = surfaceColor,
             title = {
-                Text(
-                    "Log Expense Description",
-                    fontFamily = SplitMateDisplayFontFamily,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = textPrimary
-                )
+                Column {
+                    Text(
+                        if (pendingCommitAfterCategorySelection) "Which type of expense is this?" else "Expense Category & Travel PNR",
+                        fontFamily = SplitMateDisplayFontFamily,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 18.sp,
+                        color = textPrimary
+                    )
+                    Text(
+                        if (pendingCommitAfterCategorySelection) "Pick a category or enter a title to finish logging ₹$numericVal"
+                        else "Select category or attach Indian Railway PNR / Boarding Pass details",
+                        fontFamily = SplitMateBrandFontFamily,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 12.sp,
+                        color = textSecondary
+                    )
+                }
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(presetCategories) { (catLabel, catIcon) ->
                             val isSelected = draftTitle.equals(catLabel, ignoreCase = true)
                             FilterChip(
                                 selected = isSelected,
-                                onClick = { draftTitle = catLabel },
+                                onClick = {
+                                    draftTitle = catLabel
+                                    isTravelTicketMode = catLabel.contains("Train", ignoreCase = true) ||
+                                        catLabel.contains("Flight", ignoreCase = true) ||
+                                        catLabel.contains("PNR", ignoreCase = true)
+                                },
                                 leadingIcon = {
                                     Icon(
                                         imageVector = catIcon,
@@ -256,10 +302,12 @@ fun QuickExpenseScreen(
                             )
                         }
                     }
+
                     OutlinedTextField(
                         value = draftTitle,
                         onValueChange = { draftTitle = it },
-                        label = { Text("What was this expense for?", fontFamily = SplitMateBrandFontFamily) },
+                        label = { Text("Expense Title / Category *", fontFamily = SplitMateBrandFontFamily) },
+                        placeholder = { Text("e.g. Hampi Train Tickets, Beach Shack Lunch", fontFamily = SplitMateBrandFontFamily) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = textPrimary,
@@ -269,24 +317,190 @@ fun QuickExpenseScreen(
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Attach Train PNR / Flight Ticket?",
+                            fontFamily = SplitMateBrandFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = textPrimary
+                        )
+                        Switch(
+                            checked = isTravelTicketMode,
+                            onCheckedChange = { isTravelTicketMode = it }
+                        )
+                    }
+
+                    if (isTravelTicketMode) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = QuickExpenseThemeTokens.SageSurface.copy(alpha = 0.55f),
+                            border = BorderStroke(1.dp, QuickExpenseThemeTokens.AccentSage)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Surface(
+                                        onClick = {
+                                            val clip = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                            val clipText = clip?.primaryClip?.getItemAt(0)?.text?.toString().orEmpty()
+                                            val sampleOrClip = if (clipText.isNotBlank()) clipText else "PNR:8421094312,TRAIN:16592,DOJ:24-09-26,3A,SBC-HPT,Dep:22:00,B2-45 LB,B2-46 MB,Fare:3420"
+                                            rawSmsPasteInput = sampleOrClip
+                                            val parsed = com.splitmate.app.ui.parseIrctcOrTravelTicketText(sampleOrClip)
+                                            if (parsed.pnr.isNotBlank()) pnrInput = parsed.pnr
+                                            if (parsed.trainOrFlightNo.isNotBlank()) trainNoInput = parsed.trainOrFlightNo
+                                            if (parsed.fromStation.isNotBlank()) fromStationInput = parsed.fromStation
+                                            if (parsed.toStation.isNotBlank()) toStationInput = parsed.toStation
+                                            if (parsed.departureTime.isNotBlank()) depTimeInput = parsed.departureTime
+                                            if (parsed.coachAndSeats.isNotBlank()) coachSeatsInput = parsed.coachAndSeats
+                                            if (parsed.fareRupees.isNotBlank() && (amountDigits == "0" || amountDigits.isEmpty())) {
+                                                amountDigits = parsed.fareRupees.substringBefore(".")
+                                            }
+                                        },
+                                        shape = QuickExpenseThemeTokens.RadiusPill,
+                                        color = QuickExpenseThemeTokens.SageText
+                                    ) {
+                                        Text(
+                                            text = "📋 Paste IRCTC SMS / Sample PNR",
+                                            fontFamily = SplitMateBrandFontFamily,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            color = Color.White,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        )
+                                    }
+                                }
+
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    OutlinedTextField(
+                                        value = pnrInput,
+                                        onValueChange = { pnrInput = it.take(10) },
+                                        label = { Text("10-Digit PNR", fontSize = 11.sp) },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1.2f)
+                                    )
+                                    OutlinedTextField(
+                                        value = trainNoInput,
+                                        onValueChange = {
+                                            trainNoInput = it.take(8)
+                                            val enriched = com.splitmate.app.ui.enrichTicketWithOfflineCatalog(
+                                                com.splitmate.app.ui.ParsedTravelTicket(trainOrFlightNo = it.trim())
+                                            )
+                                            if (enriched.fromStation.isNotBlank() && fromStationInput.isBlank()) {
+                                                fromStationInput = enriched.fromStation
+                                            }
+                                            if (enriched.toStation.isNotBlank() && toStationInput.isBlank()) {
+                                                toStationInput = enriched.toStation
+                                            }
+                                        },
+                                        label = { Text("Train/Flight #", fontSize = 11.sp) },
+                                        placeholder = { Text("16592", fontSize = 11.sp) },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    OutlinedTextField(
+                                        value = fromStationInput,
+                                        onValueChange = { fromStationInput = it.uppercase().take(5) },
+                                        label = { Text("From (e.g. SBC)", fontSize = 11.sp) },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    OutlinedTextField(
+                                        value = toStationInput,
+                                        onValueChange = { toStationInput = it.uppercase().take(5) },
+                                        label = { Text("To (e.g. HPT)", fontSize = 11.sp) },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    OutlinedTextField(
+                                        value = depTimeInput,
+                                        onValueChange = { depTimeInput = it.take(8) },
+                                        label = { Text("Dep Time", fontSize = 11.sp) },
+                                        placeholder = { Text("22:00", fontSize = 11.sp) },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(0.9f)
+                                    )
+                                }
+
+                                OutlinedTextField(
+                                    value = coachSeatsInput,
+                                    onValueChange = { coachSeatsInput = it },
+                                    label = { Text("Coach & Seat/Berth Numbers (e.g. B2-45 LB, B2-46 MB)", fontSize = 11.sp) },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        if (draftTitle.isNotBlank()) expenseCategoryTitle = draftTitle.trim()
+                        val finalTitle = if (isTravelTicketMode) {
+                            com.splitmate.app.ui.formatTravelExpenseTitle(
+                                baseCategory = draftTitle.ifBlank { "Train / PNR Ticket" },
+                                ticket = com.splitmate.app.ui.ParsedTravelTicket(
+                                    pnr = pnrInput.trim(),
+                                    trainOrFlightNo = trainNoInput.trim(),
+                                    fromStation = fromStationInput.trim(),
+                                    toStation = toStationInput.trim(),
+                                    departureTime = depTimeInput.trim(),
+                                    coachAndSeats = coachSeatsInput.trim()
+                                )
+                            )
+                        } else {
+                            draftTitle.trim().ifEmpty { "General Expense" }
+                        }
+                        expenseCategoryTitle = finalTitle
                         showEditTitleDialog = false
+
+                        val currentAmount = amountDigits.toLongOrNull() ?: 0L
+                        if (pendingCommitAfterCategorySelection && hasSelectedGroup && currentAmount > 0L && selectedMemberIds.isNotEmpty()) {
+                            pendingCommitAfterCategorySelection = false
+                            val selected = participants.filter { selectedMemberIds.contains(it.id) }
+                            viewModel?.commitQuickEqualExpense(
+                                title = finalTitle,
+                                totalAmountCents = currentAmount * 100L,
+                                selectedMemberIds = selected.map { it.id }
+                            )
+                            onSaveSplit(currentAmount, selected)
+                        } else {
+                            pendingCommitAfterCategorySelection = false
+                        }
                     },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = textPrimary,
                         contentColor = screenBg
                     )
                 ) {
-                    Text("Save", fontFamily = SplitMateBrandFontFamily, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (pendingCommitAfterCategorySelection) "Save & Log Split" else "Save Category",
+                        fontFamily = SplitMateBrandFontFamily,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showEditTitleDialog = false }) {
+                TextButton(
+                    onClick = {
+                        showEditTitleDialog = false
+                        pendingCommitAfterCategorySelection = false
+                    }
+                ) {
                     Text("Cancel", fontFamily = SplitMateBrandFontFamily, color = textSecondary)
                 }
             }
@@ -522,12 +736,59 @@ fun QuickExpenseScreen(
                         .fillMaxWidth()
                         .padding(top = 2.dp, bottom = 4.dp)
                 ) {
+                    val quickCategoryPills = remember {
+                        listOf(
+                            "🚆 Train / PNR" to "Train / PNR Ticket",
+                            "🍽️ Food" to "Dinner & Food",
+                            "🚕 Cab" to "Cab & Local",
+                            "🏨 Stay" to "Stay & Hotel",
+                            "🛒 Groceries" to "Groceries",
+                            "🎉 Drinks" to "Party & Drinks"
+                        )
+                    }
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 6.dp)
+                    ) {
+                        items(quickCategoryPills) { (chipLabel, fullCategory) ->
+                            val isChosen = expenseCategoryTitle.startsWith(fullCategory, ignoreCase = true) ||
+                                (fullCategory == "Train / PNR Ticket" && (expenseCategoryTitle.contains("PNR:") || expenseCategoryTitle.contains("🚆")))
+                            Surface(
+                                onClick = {
+                                    if (fullCategory == "Train / PNR Ticket") {
+                                        expenseCategoryTitle = fullCategory
+                                        showEditTitleDialog = true
+                                    } else {
+                                        expenseCategoryTitle = fullCategory
+                                    }
+                                },
+                                shape = QuickExpenseThemeTokens.RadiusPill,
+                                color = if (isChosen) Color(0xFF23201E) else QuickExpenseThemeTokens.SageSurface,
+                                border = BorderStroke(1.dp, if (isChosen) Color(0xFF23201E) else QuickExpenseThemeTokens.AccentSage)
+                            ) {
+                                Text(
+                                    text = chipLabel,
+                                    fontFamily = SplitMateBrandFontFamily,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isChosen) Color.White else QuickExpenseThemeTokens.SageText,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                )
+                            }
+                        }
+                    }
+
                     Surface(
                         onClick = { showEditTitleDialog = true },
                         shape = QuickExpenseThemeTokens.RadiusPill,
                         color = surfaceColor,
                         shadowElevation = 2.dp,
-                        border = BorderStroke(1.dp, if (isDark) Color(0xFF4A332C) else Color(0xFFFFD9CE)),
+                        border = BorderStroke(
+                            1.dp,
+                            if (expenseCategoryTitle.isBlank()) QuickExpenseThemeTokens.TerracottaText else if (isDark) Color(0xFF4A332C) else Color(0xFFFFD9CE)
+                        ),
                         modifier = Modifier.padding(bottom = 6.dp)
                     ) {
                         Row(
@@ -545,18 +806,20 @@ fun QuickExpenseScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = resolveGroupCategoryIcon("", expenseCategoryTitle),
+                                imageVector = if (expenseCategoryTitle.isBlank()) Icons.Rounded.Category else resolveGroupCategoryIcon("", expenseCategoryTitle),
                                 contentDescription = null,
-                                tint = textPrimary,
+                                tint = if (expenseCategoryTitle.isBlank()) QuickExpenseThemeTokens.TerracottaText else textPrimary,
                                 modifier = Modifier.size(15.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = expenseCategoryTitle,
+                                text = expenseCategoryTitle.ifBlank { "Select Expense Type / Add PNR *" },
                                 fontFamily = SplitMateBrandFontFamily,
-                                fontSize = 13.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = textPrimary
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = if (expenseCategoryTitle.isBlank()) QuickExpenseThemeTokens.TerracottaText else textPrimary
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Icon(
@@ -963,13 +1226,18 @@ fun QuickExpenseScreen(
                                 onClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     if (canCommitSplit) {
-                                        val selected = participants.filter { selectedMemberIds.contains(it.id) }
-                                        viewModel?.commitQuickEqualExpense(
-                                            title = expenseCategoryTitle,
-                                            totalAmountCents = numericVal * 100L,
-                                            selectedMemberIds = selected.map { it.id }
-                                        )
-                                        onSaveSplit(numericVal, selected)
+                                        if (expenseCategoryTitle.isBlank()) {
+                                            pendingCommitAfterCategorySelection = true
+                                            showEditTitleDialog = true
+                                        } else {
+                                            val selected = participants.filter { selectedMemberIds.contains(it.id) }
+                                            viewModel?.commitQuickEqualExpense(
+                                                title = expenseCategoryTitle,
+                                                totalAmountCents = numericVal * 100L,
+                                                selectedMemberIds = selected.map { it.id }
+                                            )
+                                            onSaveSplit(numericVal, selected)
+                                        }
                                     }
                                 },
                                 shape = QuickExpenseThemeTokens.RadiusKeySquircle,

@@ -763,3 +763,376 @@ fun SplitMateExpressiveTheme(
 val SplitMateBrandFontFamily: FontFamily = FigtreeFontFamily
 val SplitMateDisplayFontFamily: FontFamily = FigtreeFontFamily
 
+// ==============================================================================
+// INDIAN RAILWAY (IRCTC) PNR & TRAVEL BOARDING PASS ENGINE
+// ==============================================================================
+data class ParsedTravelTicket(
+    val pnr: String = "",
+    val trainOrFlightNo: String = "",
+    val trainOrCarrierName: String = "",
+    val fromStation: String = "",
+    val toStation: String = "",
+    val departureDate: String = "",
+    val departureTime: String = "",
+    val coachAndSeats: String = "",
+    val fareRupees: String = "",
+    val cleanTitle: String = ""
+) {
+    val hasTicketMetadata: Boolean
+        get() = pnr.isNotBlank() || trainOrFlightNo.isNotBlank() || coachAndSeats.isNotBlank() || (fromStation.isNotBlank() && toStation.isNotBlank())
+
+    val route: String
+        get() = if (fromStation.isNotBlank() || toStation.isNotBlank()) "${fromStation}→${toStation}" else ""
+
+    val departureInfo: String
+        get() = listOf(departureDate, departureTime).filter { it.isNotBlank() }.joinToString(" ")
+}
+
+private val OfflineIndianTrainCatalog = mapOf(
+    "16592" to ("Hampi Express" to ("SBC" to "HPT")),
+    "16591" to ("Hampi Express" to ("HPT" to "SBC")),
+    "12628" to ("Karnataka Express" to ("NDLS" to "SBC")),
+    "12627" to ("Karnataka Express" to ("SBC" to "NDLS")),
+    "12952" to ("Mumbai Rajdhani" to ("NDLS" to "MMCT")),
+    "12951" to ("New Delhi Rajdhani" to ("MMCT" to "NDLS")),
+    "22436" to ("Vande Bharat Express" to ("NDLS" to "BSB")),
+    "12002" to ("Bhopal Shatabdi" to ("NDLS" to "RKMP")),
+    "12138" to ("Punjab Mail" to ("FZR" to "CSMT")),
+    "16345" to ("Netravati Express" to ("LTT" to "TVC")),
+    "11013" to ("Coimbatore Express" to ("LTT" to "CBE")),
+    "12051" to ("Jan Shatabdi Exp" to ("CSMT" to "MAO")),
+    "20111" to ("Konkan Kanya Exp" to ("CSMT" to "MAO"))
+)
+
+private val OfflineStationNames = mapOf(
+    "SBC" to "KSR Bengaluru",
+    "HPT" to "Hosapete (Hampi)",
+    "NDLS" to "New Delhi",
+    "MMCT" to "Mumbai Central",
+    "CSMT" to "Mumbai CSMT",
+    "LTT" to "Lokmanya Tilak",
+    "MAO" to "Madgaon (Goa)",
+    "PUNE" to "Pune Jn",
+    "HYB" to "Hyderabad",
+    "MAS" to "MGR Chennai",
+    "HWH" to "Howrah Jn",
+    "BSB" to "Varanasi Jn",
+    "JP" to "Jaipur Jn",
+    "ADI" to "Ahmedabad Jn",
+    "GOI" to "Goa Airport",
+    "DEL" to "Delhi Airport",
+    "BOM" to "Mumbai Airport",
+    "BLR" to "Bengaluru Airport"
+)
+
+fun resolveStationDisplayName(code: String): String {
+    val clean = code.trim().uppercase()
+    val fullName = OfflineStationNames[clean]
+    return if (fullName != null) "$clean ($fullName)" else clean
+}
+
+fun parseIrctcOrTravelTicketText(rawText: String): ParsedTravelTicket {
+    val text = rawText.trim()
+    if (text.isEmpty()) return ParsedTravelTicket()
+
+    val pnr10 = Regex("""\b(?:PNR[:\s-]*)?(\d{3}[-\s]?\d{7}|\d{10})\b""", RegexOption.IGNORE_CASE)
+        .find(text)?.groupValues?.getOrNull(1)?.replace(Regex("[^0-9]"), "")
+    val pnr6 = Regex("""\bPNR[:\s-]*([A-Z0-9]{6})\b""", RegexOption.IGNORE_CASE)
+        .find(text)?.groupValues?.getOrNull(1)?.uppercase()
+    val pnr = pnr10 ?: pnr6 ?: ""
+
+    val train5 = Regex("""\b(?:TRAIN|TRN|Train No\.?)[:\s-]*(\d{5})\b""", RegexOption.IGNORE_CASE)
+        .find(text)?.groupValues?.getOrNull(1)
+        ?: Regex("""\b(\d{5})\b""").findAll(text).map { it.value }.firstOrNull { it != pnr.take(5) }
+    val flightNo = Regex("""\b(6E|AI|UK|QP|SG)[-\s]?(\d{3,4})\b""", RegexOption.IGNORE_CASE)
+        .find(text)?.value?.uppercase()
+    val trainOrFlight = train5 ?: flightNo ?: ""
+
+    val catalogMatch = OfflineIndianTrainCatalog[trainOrFlight]
+    val trainName = catalogMatch?.first ?: if (flightNo != null) "Flight $flightNo" else ""
+
+    val routeMatch = Regex("""\b([A-Z]{3,5})\s*(?:-|to|->|→)\s*([A-Z]{3,5})\b""").find(text)
+    val fromCode = routeMatch?.groupValues?.getOrNull(1) ?: catalogMatch?.second?.first ?: ""
+    val toCode = routeMatch?.groupValues?.getOrNull(2) ?: catalogMatch?.second?.second ?: ""
+
+    val dateMatch = Regex("""\b(?:DOJ|Dt|Date)?[:\s-]*(\d{2}[-/]\d{2}[-/]\d{2,4})\b""", RegexOption.IGNORE_CASE)
+        .find(text)?.groupValues?.getOrNull(1) ?: ""
+    val timeMatch = Regex("""\b(?:Dep|Time|At)?[:\s-]*(\d{2}:\d{2})\b""", RegexOption.IGNORE_CASE)
+        .find(text)?.groupValues?.getOrNull(1) ?: ""
+
+    val coachMatches = Regex("""\b([A-Z]{1,2}\d{1,2}|SL|1A|2A|3A|CC)[-\s/](\d{1,3})(?:\s*(LB|MB|UB|SL|SU|WS|MS|AS))?\b""", RegexOption.IGNORE_CASE)
+        .findAll(text)
+        .map { it.value.trim().uppercase() }
+        .toList()
+    val coachStr = coachMatches.joinToString(", ")
+
+    val fareMatch = Regex("""(?:Fare|Rs\.?|INR|₹)[:\s]*([\d,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE)
+        .find(text)?.groupValues?.getOrNull(1)?.replace(",", "") ?: ""
+
+    return ParsedTravelTicket(
+        pnr = pnr,
+        trainOrFlightNo = trainOrFlight,
+        trainOrCarrierName = trainName,
+        fromStation = fromCode,
+        toStation = toCode,
+        departureDate = dateMatch,
+        departureTime = timeMatch,
+        coachAndSeats = coachStr,
+        fareRupees = fareMatch
+    )
+}
+
+fun enrichTicketWithOfflineCatalog(ticket: ParsedTravelTicket): ParsedTravelTicket {
+    val cleanTrain = ticket.trainOrFlightNo.trim()
+    val match = OfflineIndianTrainCatalog[cleanTrain] ?: return ticket
+    return ticket.copy(
+        trainOrCarrierName = ticket.trainOrCarrierName.ifBlank { match.first },
+        fromStation = ticket.fromStation.ifBlank { match.second.first },
+        toStation = ticket.toStation.ifBlank { match.second.second }
+    )
+}
+
+fun formatTravelExpenseTitle(baseCategory: String, ticket: ParsedTravelTicket): String {
+    val enriched = enrichTicketWithOfflineCatalog(ticket)
+    if (!enriched.hasTicketMetadata) return baseCategory.ifBlank { "Travel & Ticket" }
+    val parts = mutableListOf<String>()
+    val labelPrefix = when {
+        enriched.trainOrCarrierName.isNotBlank() && enriched.trainOrFlightNo.isNotBlank() ->
+            "🚆 ${enriched.trainOrFlightNo} ${enriched.trainOrCarrierName}"
+        enriched.trainOrFlightNo.isNotBlank() -> "🚆 Train/Flight ${enriched.trainOrFlightNo}"
+        else -> "🚆 ${baseCategory.ifBlank { "Travel Ticket" }}"
+    }
+    parts.add(labelPrefix)
+    if (enriched.pnr.isNotBlank()) parts.add("PNR: ${enriched.pnr}")
+    if (enriched.fromStation.isNotBlank() && enriched.toStation.isNotBlank()) {
+        parts.add("${enriched.fromStation.uppercase()}→${enriched.toStation.uppercase()}")
+    }
+    if (enriched.departureTime.isNotBlank() || enriched.departureDate.isNotBlank()) {
+        val dt = listOf(enriched.departureDate, enriched.departureTime).filter { it.isNotBlank() }.joinToString(" ")
+        parts.add("Dep: $dt")
+    }
+    if (enriched.coachAndSeats.isNotBlank()) {
+        parts.add("Seats: ${enriched.coachAndSeats}")
+    }
+    return parts.joinToString(" | ")
+}
+
+fun extractTravelTicketFromTitle(title: String): ParsedTravelTicket? {
+    if (!title.contains("PNR:", ignoreCase = true) &&
+        !title.contains("Seats:", ignoreCase = true) &&
+        !title.contains("🚆") &&
+        !title.contains("→")
+    ) {
+        return null
+    }
+    val segments = title.split("|").map { it.trim() }
+    var pnr = ""
+    var trainNo = ""
+    var trainName = ""
+    var fromSt = ""
+    var toSt = ""
+    var dep = ""
+    var seats = ""
+
+    segments.forEachIndexed { idx, seg ->
+        when {
+            seg.startsWith("PNR:", ignoreCase = true) -> pnr = seg.substringAfter(":").trim()
+            seg.startsWith("Dep:", ignoreCase = true) -> dep = seg.substringAfter(":").trim()
+            seg.startsWith("Seats:", ignoreCase = true) || seg.startsWith("Coach", ignoreCase = true) ->
+                seats = seg.substringAfter(":").trim()
+            seg.contains("→") -> {
+                fromSt = seg.substringBefore("→").trim()
+                toSt = seg.substringAfter("→").trim()
+            }
+            idx == 0 -> {
+                val cleanFirst = seg.replace("🚆", "").replace("✈️", "").trim()
+                val numMatch = Regex("""^(\d{5}|[A-Z0-9]{2}-\d{3,4})\s*(.*)$""").find(cleanFirst)
+                if (numMatch != null) {
+                    trainNo = numMatch.groupValues[1]
+                    trainName = numMatch.groupValues[2]
+                } else {
+                    trainName = cleanFirst
+                }
+            }
+        }
+    }
+    val parsed = enrichTicketWithOfflineCatalog(
+        ParsedTravelTicket(
+            pnr = pnr,
+            trainOrFlightNo = trainNo,
+            trainOrCarrierName = trainName,
+            fromStation = fromSt,
+            toStation = toSt,
+            departureTime = dep,
+            coachAndSeats = seats,
+            cleanTitle = segments.firstOrNull()?.trim().orEmpty().ifBlank { "🚆 Train / Travel Ticket" }
+        )
+    )
+    return if (parsed.hasTicketMetadata) parsed else null
+}
+
+@Composable
+fun GroupBoardingPassCard(
+    ticket: ParsedTravelTicket,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = Color(0xFFF6F9EE),
+        border = BorderStroke(1.dp, Color(0xFFC5DCA0)),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Rounded.ConfirmationNumber,
+                        contentDescription = null,
+                        tint = BuckwheatOlivePrimary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = buildString {
+                            if (ticket.trainOrFlightNo.isNotBlank()) append("#${ticket.trainOrFlightNo} ")
+                            append(ticket.trainOrCarrierName.ifBlank { "Group Travel Pass" })
+                        },
+                        fontFamily = FigtreeFontFamily,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 13.sp,
+                        color = BuckwheatOlivePrimary
+                    )
+                }
+
+                if (ticket.pnr.isNotBlank()) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = BuckwheatOlivePrimary
+                    ) {
+                        Text(
+                            text = "PNR: ${ticket.pnr}",
+                            fontFamily = FigtreeFontFamily,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 11.sp,
+                            color = Color.White,
+                            style = TextStyle(fontFeatureSettings = "tnum"),
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+            }
+
+            if (ticket.fromStation.isNotBlank() || ticket.toStation.isNotBlank() || ticket.departureTime.isNotBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (ticket.fromStation.isNotBlank() || ticket.toStation.isNotBlank()) {
+                        Text(
+                            text = "${resolveStationDisplayName(ticket.fromStation.ifBlank { "Origin" })}  →  ${resolveStationDisplayName(ticket.toStation.ifBlank { "Dest" })}",
+                            fontFamily = FigtreeFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = BuckwheatCharcoal
+                        )
+                    }
+                    if (ticket.departureTime.isNotBlank()) {
+                        Text(
+                            text = "Dep ${ticket.departureTime}",
+                            fontFamily = FigtreeFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = BuckwheatSecondaryText,
+                            style = TextStyle(fontFeatureSettings = "tnum")
+                        )
+                    }
+                }
+            }
+
+            if (ticket.coachAndSeats.isNotBlank()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color.White,
+                    border = BorderStroke(1.dp, Color(0xFFDCE9B9))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Coach / Berth Allocation",
+                            fontFamily = FigtreeFontFamily,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 11.sp,
+                            color = BuckwheatSecondaryText
+                        )
+                        Text(
+                            text = ticket.coachAndSeats,
+                            fontFamily = FigtreeFontFamily,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 12.sp,
+                            color = BuckwheatOlivePrimary,
+                            style = TextStyle(fontFeatureSettings = "tnum")
+                        )
+                    }
+                }
+            }
+
+            if (ticket.pnr.length == 10) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Surface(
+                        onClick = {
+                            runCatching {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("IRCTC PNR", ticket.pnr))
+                                val uri = Uri.parse("https://www.confirmtkt.com/pnr-status/${ticket.pnr}")
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri).apply {
+                                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                context.startActivity(intent)
+                            }
+                        },
+                        shape = RoundedCornerShape(50),
+                        color = Color(0xFFDCE9B9)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Train,
+                                contentDescription = null,
+                                tint = BuckwheatOlivePrimary,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Check Live PNR & Coach Status ↗",
+                                fontFamily = FigtreeFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = BuckwheatOlivePrimary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+

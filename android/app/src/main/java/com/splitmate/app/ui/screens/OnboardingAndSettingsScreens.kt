@@ -426,13 +426,20 @@ fun UserSettingsScreen(
     onUpdateCurrencyCode: (String) -> Unit = {},
     onUpdateUserProfile: (newName: String, newSeed: String) -> Unit = { _, _ -> },
     onThemeToggle: (isDark: Boolean) -> Unit = {},
+    onExportLedgerText: () -> String = { "" },
     onClearVaultClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("splitmate_prefs", android.content.Context.MODE_PRIVATE) }
     var isDarkTheme by remember(isDarkThemeInitial) { mutableStateOf(isDarkThemeInitial) }
     var showResetDataDialog by remember { mutableStateOf(false) }
 
     var editedName by remember(userName) { mutableStateOf(userName) }
+    var editedUpiId by remember(upiId) { mutableStateOf(upiId) }
+    var largestRemainderEnabled by remember { mutableStateOf(prefs.getBoolean("pref_largest_remainder", true)) }
+    var includeUpiInWhatsApp by remember { mutableStateOf(prefs.getBoolean("pref_whatsapp_upi", true)) }
+    var hapticsEnabled by remember { mutableStateOf(prefs.getBoolean("pref_haptics", true)) }
+
     val initialStyle = remember(avatarSeed) {
         val part = avatarSeed.substringAfter('|', "Masculine")
         if (part in listOf("Masculine", "Feminine", "Neutral")) part else "Masculine"
@@ -486,7 +493,7 @@ fun UserSettingsScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Settings",
+                        text = "Settings & Preferences",
                         fontFamily = SplitMateDisplayFontFamily,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 20.sp,
@@ -519,11 +526,11 @@ fun UserSettingsScreen(
             contentPadding = PaddingValues(top = 8.dp, bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Section 1: User Profile Name & Avatar Presentation Style
+            // Section 1: User Profile Name, UPI ID & Avatar Presentation Style
             item {
                 Column {
                     Text(
-                        text = "Profile & Avatar",
+                        text = "Profile, Avatar & UPI Handle",
                         fontFamily = SplitMateDisplayFontFamily,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.ExtraBold,
@@ -614,6 +621,41 @@ fun UserSettingsScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
 
+                            OutlinedTextField(
+                                value = editedUpiId,
+                                onValueChange = { editedUpiId = it },
+                                label = {
+                                    Text(
+                                        text = "Your UPI ID / Phone (for WhatsApp Reminders)",
+                                        fontFamily = SplitMateBrandFontFamily,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                },
+                                placeholder = {
+                                    Text("e.g. akshay@okaxis or 9876543210@upi", fontFamily = SplitMateBrandFontFamily)
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.QrCode2,
+                                        contentDescription = null,
+                                        tint = textPrimary
+                                    )
+                                },
+                                singleLine = true,
+                                shape = RoundedCornerShape(16.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = textPrimary,
+                                    unfocusedTextColor = textPrimary,
+                                    focusedContainerColor = mutedBg.copy(alpha = 0.4f),
+                                    unfocusedContainerColor = mutedBg.copy(alpha = 0.4f),
+                                    focusedBorderColor = textPrimary,
+                                    unfocusedBorderColor = borderColor,
+                                    focusedLabelColor = textPrimary,
+                                    unfocusedLabelColor = textSecondary
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
                             Column(modifier = Modifier.fillMaxWidth()) {
                                 Text(
                                     text = "Avatar Presentation Style",
@@ -664,8 +706,10 @@ fun UserSettingsScreen(
                             Button(
                                 onClick = {
                                     val clean = editedName.trim().ifEmpty { "Explorer" }
+                                    val cleanUpi = editedUpiId.trim()
                                     onUpdateUserProfile(clean, "$clean|$selectedStyle")
-                                    Toast.makeText(context, "Profile updated", Toast.LENGTH_SHORT).show()
+                                    onUpdateUpiId(cleanUpi)
+                                    Toast.makeText(context, "Saved Profile & UPI Handle", Toast.LENGTH_SHORT).show()
                                 },
                                 shape = SplitMateThemeTokens.RadiusPill,
                                 colors = ButtonDefaults.buttonColors(
@@ -677,7 +721,7 @@ fun UserSettingsScreen(
                                     .height(46.dp)
                             ) {
                                 Text(
-                                    text = "Save Profile",
+                                    text = "Save Profile & UPI Handle",
                                     fontFamily = SplitMateBrandFontFamily,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 14.sp
@@ -688,11 +732,11 @@ fun UserSettingsScreen(
                 }
             }
 
-            // Section 2: Appearance (Dark Theme Toggle)
+            // Section 2: Split Engine & WhatsApp Preferences
             item {
                 Column {
                     Text(
-                        text = "Appearance",
+                        text = "Split Engine & Trip Tools",
                         fontFamily = SplitMateDisplayFontFamily,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.ExtraBold,
@@ -707,34 +751,185 @@ fun UserSettingsScreen(
                             .fillMaxWidth()
                             .border(1.dp, borderColor, SplitMateThemeTokens.RadiusCard)
                     ) {
-                        SettingsRowItem(
-                            icon = if (isDarkTheme) Icons.Rounded.DarkMode else Icons.Rounded.LightMode,
-                            iconBg = Color(0xFFE8EDFB),
-                            iconTint = Color(0xFF244896),
-                            title = "Dark Theme",
-                            subtitle = "Switch between light and dark appearances",
-                            titleColor = textPrimary,
-                            subtitleColor = textSecondary,
-                            trailingContent = {
-                                Switch(
-                                    checked = isDarkTheme,
-                                    onCheckedChange = {
-                                        isDarkTheme = it
-                                        onThemeToggle(it)
-                                    },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = Color.White,
-                                        checkedTrackColor = Color(0xFF416913),
-                                        uncheckedThumbColor = Color(0xFF23201E),
-                                        uncheckedTrackColor = mutedBg
+                        Column {
+                            SettingsRowItem(
+                                icon = Icons.Rounded.Functions,
+                                iconBg = SplitMateThemeTokens.AccentSage.copy(alpha = 0.45f),
+                                iconTint = SplitMateThemeTokens.SageText,
+                                title = "0.00¢ Largest Remainder Auto-Split",
+                                subtitle = "Automatically distribute indivisible ₹1 remainders so group totals never drift",
+                                titleColor = textPrimary,
+                                subtitleColor = textSecondary,
+                                trailingContent = {
+                                    Switch(
+                                        checked = largestRemainderEnabled,
+                                        onCheckedChange = {
+                                            largestRemainderEnabled = it
+                                            prefs.edit().putBoolean("pref_largest_remainder", it).apply()
+                                        },
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = Color.White,
+                                            checkedTrackColor = Color(0xFF416913),
+                                            uncheckedThumbColor = Color(0xFF23201E),
+                                            uncheckedTrackColor = mutedBg
+                                        )
                                     )
-                                )
-                            },
-                            onClick = {
-                                isDarkTheme = !isDarkTheme
-                                onThemeToggle(isDarkTheme)
-                            }
-                        )
+                                },
+                                onClick = {
+                                    largestRemainderEnabled = !largestRemainderEnabled
+                                    prefs.edit().putBoolean("pref_largest_remainder", largestRemainderEnabled).apply()
+                                }
+                            )
+
+                            HorizontalDivider(color = borderColor.copy(alpha = 0.5f))
+
+                            SettingsRowItem(
+                                icon = Icons.Rounded.Send,
+                                iconBg = SplitMateThemeTokens.AccentSage.copy(alpha = 0.45f),
+                                iconTint = SplitMateThemeTokens.SageText,
+                                title = "Include My UPI ID in WhatsApp Reminders",
+                                subtitle = "Embed your UPI handle in 1-tap WhatsApp settlement messages",
+                                titleColor = textPrimary,
+                                subtitleColor = textSecondary,
+                                trailingContent = {
+                                    Switch(
+                                        checked = includeUpiInWhatsApp,
+                                        onCheckedChange = {
+                                            includeUpiInWhatsApp = it
+                                            prefs.edit().putBoolean("pref_whatsapp_upi", it).apply()
+                                        },
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = Color.White,
+                                            checkedTrackColor = Color(0xFF416913),
+                                            uncheckedThumbColor = Color(0xFF23201E),
+                                            uncheckedTrackColor = mutedBg
+                                        )
+                                    )
+                                },
+                                onClick = {
+                                    includeUpiInWhatsApp = !includeUpiInWhatsApp
+                                    prefs.edit().putBoolean("pref_whatsapp_upi", includeUpiInWhatsApp).apply()
+                                }
+                            )
+
+                            HorizontalDivider(color = borderColor.copy(alpha = 0.5f))
+
+                            SettingsRowItem(
+                                icon = Icons.Rounded.Share,
+                                iconBg = Color(0xFFE8EDFB),
+                                iconTint = Color(0xFF244896),
+                                title = "Export & Share Trip Ledger Summary",
+                                subtitle = "Share a clean WhatsApp/Clipboard summary of all group balances & expenses ($activeGroupsCount active groups)",
+                                titleColor = textPrimary,
+                                subtitleColor = textSecondary,
+                                trailingContent = {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                                        contentDescription = null,
+                                        tint = textPrimary
+                                    )
+                                },
+                                onClick = {
+                                    val summaryText = onExportLedgerText().ifBlank {
+                                        "📊 SplitMate Trip Summary (${editedName.ifBlank { userName }})\nActive Groups: $activeGroupsCount\nUPI Handle: ${editedUpiId.ifBlank { "Not configured" }}"
+                                    }
+                                    runCatching {
+                                        val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                            type = "text/plain"
+                                            putExtra(android.content.Intent.EXTRA_TEXT, summaryText)
+                                        }
+                                        context.startActivity(
+                                            android.content.Intent.createChooser(shareIntent, "Share Trip Ledger Summary")
+                                                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        )
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Section 3: Appearance & Tactile Feedback
+            item {
+                Column {
+                    Text(
+                        text = "Appearance & Tactile Physics",
+                        fontFamily = SplitMateDisplayFontFamily,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = textPrimary,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                    )
+
+                    Card(
+                        shape = SplitMateThemeTokens.RadiusCard,
+                        colors = CardDefaults.cardColors(containerColor = cardBg),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, borderColor, SplitMateThemeTokens.RadiusCard)
+                    ) {
+                        Column {
+                            SettingsRowItem(
+                                icon = if (isDarkTheme) Icons.Rounded.DarkMode else Icons.Rounded.LightMode,
+                                iconBg = Color(0xFFE8EDFB),
+                                iconTint = Color(0xFF244896),
+                                title = "Dark Theme",
+                                subtitle = "Switch between Warm Buckwheat Light and OLED Dark canvas",
+                                titleColor = textPrimary,
+                                subtitleColor = textSecondary,
+                                trailingContent = {
+                                    Switch(
+                                        checked = isDarkTheme,
+                                        onCheckedChange = {
+                                            isDarkTheme = it
+                                            onThemeToggle(it)
+                                        },
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = Color.White,
+                                            checkedTrackColor = Color(0xFF416913),
+                                            uncheckedThumbColor = Color(0xFF23201E),
+                                            uncheckedTrackColor = mutedBg
+                                        )
+                                    )
+                                },
+                                onClick = {
+                                    isDarkTheme = !isDarkTheme
+                                    onThemeToggle(isDarkTheme)
+                                }
+                            )
+
+                            HorizontalDivider(color = borderColor.copy(alpha = 0.5f))
+
+                            SettingsRowItem(
+                                icon = Icons.Rounded.Vibration,
+                                iconBg = SplitMateThemeTokens.AccentSage.copy(alpha = 0.45f),
+                                iconTint = SplitMateThemeTokens.SageText,
+                                title = "Tactile Keypad Haptics",
+                                subtitle = "Bouncy spring vibration feedback when typing amounts & splitting",
+                                titleColor = textPrimary,
+                                subtitleColor = textSecondary,
+                                trailingContent = {
+                                    Switch(
+                                        checked = hapticsEnabled,
+                                        onCheckedChange = {
+                                            hapticsEnabled = it
+                                            prefs.edit().putBoolean("pref_haptics", it).apply()
+                                        },
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = Color.White,
+                                            checkedTrackColor = Color(0xFF416913),
+                                            uncheckedThumbColor = Color(0xFF23201E),
+                                            uncheckedTrackColor = mutedBg
+                                        )
+                                    )
+                                },
+                                onClick = {
+                                    hapticsEnabled = !hapticsEnabled
+                                    prefs.edit().putBoolean("pref_haptics", hapticsEnabled).apply()
+                                }
+                            )
+                        }
                     }
                 }
             }

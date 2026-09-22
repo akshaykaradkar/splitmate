@@ -74,6 +74,9 @@ interface SplitMateDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSettlement(settlement: SettlementEntity)
 
+    @Query("DELETE FROM settlements WHERE settlementId = :settlementId")
+    suspend fun deleteSettlementById(settlementId: String)
+
     @Query("UPDATE expenses SET syncStatus = 'SYNCED' WHERE syncStatus = 'PENDING'")
     suspend fun markPendingExpensesSynced()
 

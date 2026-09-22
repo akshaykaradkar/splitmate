@@ -54,7 +54,10 @@ data class SplitMateUiState(
     val receiptTaxPercent: Double = 8.875,
     val receiptTipPercent: Double = 18.0,
     val receiptItems: List<ReceiptLineItem> = defaultSeedReceiptItems(),
-    val statusBannerMessage: String? = null
+    val statusBannerMessage: String? = null,
+    val selectedTabName: String = "LEDGERS",
+    val openedGroupDetailId: String? = null,
+    val returnToGroupDetailId: String? = null
 ) {
     val activeCurrency: CurrencyRateEntity
         get() = CurrencyRateEntity("INR", "Indian Rupee", "₹", 83.95)
@@ -63,7 +66,10 @@ data class SplitMateUiState(
         get() = groups.find { it.groupId == activeGroupId } ?: groups.firstOrNull()
 
     val activeGroupMembers: List<GroupMemberEntity>
-        get() = members.filter { it.groupId == activeGroupId }
+        get() {
+            val targetGroupId = activeGroup?.groupId ?: activeGroupId
+            return members.filter { it.groupId == targetGroupId }
+        }
 }
 
 fun defaultSeedCurrencies(): List<CurrencyRateEntity> = listOf(
@@ -557,20 +563,103 @@ class SplitMateViewModel(
         _uiState.update { it.copy(isOfflineMode = offline) }
     }
 
-    @Suppress("UNUSED_PARAMETER")
-    fun updateUserProfile(newName: String, newCurrencyCode: String) {
+    fun updateUserProfile(newName: String, newSeedOrCurrency: String, newUpiId: String? = null) {
         val cleanName = newName.trim().ifEmpty { "Akshay" }
+        var resolvedSeed = ""
+        var resolvedUpi = ""
+        var resolvedDark = false
+        var resolvedCountry = "India"
+        var updatedCurrentUserMembers = emptyList<GroupMemberEntity>()
+
         _uiState.update { state ->
-            val currentStyle = state.currentUserSeed.substringAfter('|', "Masculine")
-            val updatedSeed = "$cleanName|$currentStyle"
-            val updatedMembers = state.members.map { m ->
-                if (m.isCurrentUser) m.copy(name = cleanName, avatarSeed = updatedSeed) else m
+            val styleFromArg = if (newSeedOrCurrency.contains('|')) {
+                newSeedOrCurrency.substringAfter('|', "Masculine")
+            } else {
+                state.currentUserSeed.substringAfter('|', "Masculine")
             }
+            val updatedSeed = "$cleanName|$styleFromArg"
+            val finalUpi = newUpiId?.trim() ?: state.userUpiId
+            resolvedSeed = updatedSeed
+            resolvedUpi = finalUpi
+            resolvedDark = state.isDarkTheme
+            resolvedCountry = state.currentUserCountry
+
+            val updatedMembers = state.members.map { m ->
+                if (m.isCurrentUser) m.copy(name = cleanName, avatarSeed = updatedSeed, upiId = finalUpi) else m
+            }
+            updatedCurrentUserMembers = updatedMembers.filter { it.isCurrentUser }
             state.copy(
                 currentUserName = cleanName,
                 currentUserSeed = updatedSeed,
+                userUpiId = finalUpi,
                 activeCurrencyCode = "INR",
-                members = updatedMembers
+                members = updatedMembers,
+                statusBannerMessage = "Saved profile & payment preferences"
+            )
+        }
+
+        viewModelScope.launch(ioDispatcher) {
+            dao?.upsertUserProfile(
+                UserProfileEntity(
+                    profileId = "me",
+                    name = cleanName,
+                    avatarSeed = resolvedSeed,
+                    countryName = resolvedCountry,
+                    currencyCode = "INR",
+                    currencySymbol = "₹",
+                    upiId = resolvedUpi,
+                    isDarkTheme = resolvedDark
+                )
+            )
+            if (updatedCurrentUserMembers.isNotEmpty()) {
+                dao?.insertMembers(updatedCurrentUserMembers)
+            }
+        }
+    }
+
+    fun selectTab(tabName: String) {
+        _uiState.update { it.copy(selectedTabName = tabName) }
+    }
+
+    fun openGroupDetail(groupId: String) {
+        selectActiveGroup(groupId)
+        _uiState.update {
+            it.copy(
+                selectedTabName = "LEDGERS",
+                openedGroupDetailId = groupId,
+                returnToGroupDetailId = groupId
+            )
+        }
+    }
+
+    fun closeGroupDetail() {
+        _uiState.update {
+            it.copy(
+                openedGroupDetailId = null,
+                returnToGroupDetailId = null
+            )
+        }
+    }
+
+    fun navigateToSubFlow(targetTabName: String, originGroupDetailId: String?) {
+        if (originGroupDetailId != null) {
+            selectActiveGroup(originGroupDetailId)
+        }
+        _uiState.update {
+            it.copy(
+                selectedTabName = targetTabName,
+                returnToGroupDetailId = originGroupDetailId ?: it.openedGroupDetailId
+            )
+        }
+    }
+
+    fun finishSubFlowToGroupDetail(explicitGroupId: String? = null) {
+        _uiState.update { state ->
+            val targetGroup = explicitGroupId ?: state.returnToGroupDetailId ?: state.openedGroupDetailId ?: state.activeGroup?.groupId
+            state.copy(
+                selectedTabName = "LEDGERS",
+                openedGroupDetailId = targetGroup,
+                returnToGroupDetailId = null
             )
         }
     }
@@ -916,6 +1005,70 @@ class SplitMateViewModel(
         viewModelScope.launch(ioDispatcher) {
             dao?.deleteSplitsForExpense(expenseId)
             dao?.deleteExpense(expenseId)
+        }
+    }
+
+    fun undoSettlement(settlementId: String) {
+        _uiState.update { curr ->
+            val removed = curr.settlements.find { it.settlementId == settlementId }
+            curr.copy(
+                settlements = curr.settlements.filterNot { it.settlementId == settlementId },
+                statusBannerMessage = "Reverted settlement (${removed?.fromMemberName ?: ""} → ${removed?.toMemberName ?: ""})"
+            )
+        }
+        viewModelScope.launch(ioDispatcher) {
+            dao?.deleteSettlementById(settlementId)
+        }
+    }
+
+    fun editExistingExpense(
+        expenseId: String,
+        newTitle: String,
+        newTotalRupees: Double,
+        newPayerId: String
+    ) {
+        val state = _uiState.value
+        val existing = state.expenses.find { it.expenseId == expenseId } ?: return
+        val cleanTitle = newTitle.trim().ifEmpty { existing.title }
+        val newTotalCents = (newTotalRupees * 100.0).toLong().coerceAtLeast(1L)
+
+        val existingSplits = state.splits.filter { it.expenseId == expenseId }
+        val groupMembers = state.members.filter { it.groupId == existing.groupId }
+        val splitMemberIds = existingSplits.map { it.memberId }.ifEmpty { groupMembers.map { it.memberId } }
+        val count = splitMemberIds.size.coerceAtLeast(1)
+        val perPersonBase = newTotalCents / count
+        val remainder = (newTotalCents % count).toInt()
+
+        val updatedExpense = existing.copy(
+            title = cleanTitle,
+            payerId = newPayerId.ifBlank { existing.payerId },
+            baseSubtotalCents = newTotalCents,
+            totalAmountCents = newTotalCents
+        )
+
+        val updatedSplits = splitMemberIds.mapIndexed { idx, mId ->
+            val extraCent = if (idx < remainder) 1L else 0L
+            ExpenseSplitEntity(
+                splitId = "${expenseId}_sp_$idx",
+                expenseId = expenseId,
+                memberId = mId,
+                baseClaimedCents = perPersonBase + extraCent,
+                finalOwedCents = perPersonBase + extraCent,
+                plusOneCent = extraCent > 0L
+            )
+        }
+
+        _uiState.update { curr ->
+            curr.copy(
+                expenses = curr.expenses.map { if (it.expenseId == expenseId) updatedExpense else it },
+                splits = curr.splits.filterNot { it.expenseId == expenseId } + updatedSplits,
+                statusBannerMessage = "Updated \"$cleanTitle\" (₹${String.format(Locale.US, "%.2f", newTotalCents / 100.0)})"
+            )
+        }
+
+        viewModelScope.launch(ioDispatcher) {
+            dao?.deleteSplitsForExpense(expenseId)
+            dao?.insertExpenseWithSplits(updatedExpense, updatedSplits)
         }
     }
 
