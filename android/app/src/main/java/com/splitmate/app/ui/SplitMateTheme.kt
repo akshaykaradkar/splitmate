@@ -977,11 +977,81 @@ fun enrichTicketWithOfflineCatalog(ticket: ParsedTravelTicket): ParsedTravelTick
     )
 }
 
+private val InMemoryPnrSnapshotCache = java.util.concurrent.ConcurrentHashMap<String, LivePnrStatusSnapshot>()
+private val InMemoryPnrLastFetchEpochMs = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+private const val AUTO_SYNC_COOLDOWN_MS = 6L * 60L * 60L * 1000L // 6 hours for WL/RAC background checks
+private const val TRAVEL_DAY_AUTO_SYNC_COOLDOWN_MS = 30L * 60L * 1000L // 30 mins on Day of Journey (Charting window)
+private const val MANUAL_REFRESH_DEBOUNCE_MS = 60L * 1000L // 60 seconds anti-spam guard for Akamai WAF
+
+fun shouldSkipAutoPnrNetworkPoll(
+    context: Context,
+    pnr: String,
+    ticket: ParsedTravelTicket
+): Boolean {
+    val cleanPnr = pnr.replace(Regex("[^0-9]"), "").take(10)
+    if (cleanPnr.length != 10) return true
+
+    // Rule 1: Terminal State Lock — Once all seats are CNF AND Chart is Prepared, status NEVER changes again!
+    val isAlreadyFullyConfirmed = ticket.bookingStatus.equals("CNF", ignoreCase = true) &&
+        !ticket.coachAndSeats.contains("WL", ignoreCase = true) &&
+        !ticket.coachAndSeats.contains("RAC", ignoreCase = true) &&
+        ticket.chartStatus.contains("Prepared", ignoreCase = true) &&
+        !ticket.chartStatus.contains("Not", ignoreCase = true)
+    if (isAlreadyFullyConfirmed) return true
+
+    // Rule 2: CRIS Nightly Maintenance Window (23:30 IST to 00:30 IST)
+    val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Kolkata"))
+    val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+    val minute = cal.get(java.util.Calendar.MINUTE)
+    if ((hour == 23 && minute >= 30) || (hour == 0 && minute <= 30)) return true
+
+    // Rule 3: 6-Hour Smart Cooldown (or 30-Min on Day of Travel) persisted across app restarts
+    val prefs = context.getSharedPreferences("splitmate_pnr_rate_guard", Context.MODE_PRIVATE)
+    val lastSyncMs = maxOf(
+        InMemoryPnrLastFetchEpochMs[cleanPnr] ?: 0L,
+        prefs.getLong("last_sync_$cleanPnr", 0L)
+    )
+    val nowMs = System.currentTimeMillis()
+    val todayIso = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(nowMs))
+    val isTravelDay = ticket.departureTime.contains(todayIso) || ticket.departureDate.contains(todayIso)
+    val requiredCooldown = if (isTravelDay) TRAVEL_DAY_AUTO_SYNC_COOLDOWN_MS else AUTO_SYNC_COOLDOWN_MS
+
+    return (nowMs - lastSyncMs) < requiredCooldown
+}
+
+fun recordPnrSyncTimestamp(context: Context, pnr: String) {
+    val cleanPnr = pnr.replace(Regex("[^0-9]"), "").take(10)
+    if (cleanPnr.length != 10) return
+    val now = System.currentTimeMillis()
+    InMemoryPnrLastFetchEpochMs[cleanPnr] = now
+    context.getSharedPreferences("splitmate_pnr_rate_guard", Context.MODE_PRIVATE)
+        .edit()
+        .putLong("last_sync_$cleanPnr", now)
+        .apply()
+}
+
 suspend fun fetchLivePnrAndTrainStatus(
     pnr: String,
-    fallbackTicket: ParsedTravelTicket = ParsedTravelTicket()
+    fallbackTicket: ParsedTravelTicket = ParsedTravelTicket(),
+    forceManualRefresh: Boolean = false
 ): LivePnrStatusSnapshot = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
     val cleanPnr = pnr.replace(Regex("[^0-9]"), "").take(10)
+
+    // Anti-spam Akamai WAF Debounce (60 seconds even on manual button taps; 6 hours on auto checks)
+    val cachedSnapshot = InMemoryPnrSnapshotCache[cleanPnr]
+    val lastFetchMs = InMemoryPnrLastFetchEpochMs[cleanPnr] ?: 0L
+    val elapsedMs = System.currentTimeMillis() - lastFetchMs
+    if (cachedSnapshot != null) {
+        val minWait = if (forceManualRefresh) MANUAL_REFRESH_DEBOUNCE_MS else AUTO_SYNC_COOLDOWN_MS
+        if (elapsedMs in 0 until minWait) {
+            val minsAgo = (elapsedMs / 60000L).coerceAtLeast(0L)
+            return@withContext cachedSnapshot.copy(
+                sourceLabel = "Live CRIS Cache (${if (minsAgo == 0L) "<1m" else "${minsAgo}m"} ago · Rate-Limit Protected)"
+            )
+        }
+    }
+
     var scrapedTrainNo = fallbackTicket.trainOrFlightNo
     var scrapedTrainName = fallbackTicket.trainOrCarrierName
     var scrapedFrom = fallbackTicket.fromStation
@@ -997,10 +1067,9 @@ suspend fun fetchLivePnrAndTrainStatus(
     var scrapedPrediction = ""
 
     if (cleanPnr.length == 10) {
-        // 1. PRIMARY ZERO-COST LIVE CRIS PNR ENGINE: RailYatri SSR `__NEXT_DATA__.props.pageProps.pnrDetail`
-        // Tested & verified against real live PNR 8753634406 (returns 12925 Paschim SF Express, BDTS->CDG, 3A, Fare ₹7500, 4 Passengers PQWL/14 -> PQWL/7 + 50% MEDIUM prob)
+        // 1. PRIMARY ZERO-COST LIVE CRIS PNR ENGINE: Direct `/m/pnr-status/` endpoint (avoids HTTP 301 redirect, halving Akamai requests!)
         runCatching {
-            val ryUrl = java.net.URL("https://www.railyatri.in/pnr-status/$cleanPnr")
+            val ryUrl = java.net.URL("https://www.railyatri.in/m/pnr-status/$cleanPnr")
             val ryConn = (ryUrl.openConnection() as java.net.HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = 6000
@@ -1171,7 +1240,7 @@ suspend fun fetchLivePnrAndTrainStatus(
     val radarPair = OfflineTrainIntermediateRadar[resolvedTrainNo]
         ?: ("Route: ${resolveStationDisplayName(resolvedFrom)} → ${resolveStationDisplayName(resolvedTo)} · Dep $resolvedDep" to "Class ${scrapedTravelClass.ifBlank { "3A" }} · Total Ticket Fare: ${if (scrapedTotalFare > 0) "₹$scrapedTotalFare" else "IRCTC Verified"}")
 
-    LivePnrStatusSnapshot(
+    val snapshot = LivePnrStatusSnapshot(
         pnr = cleanPnr.ifBlank { "8753634406" },
         trainNo = resolvedTrainNo,
         trainName = resolvedTrainName,
@@ -1188,6 +1257,11 @@ suspend fun fetchLivePnrAndTrainStatus(
         confirmationProbability = confirmationProb,
         sourceLabel = if (liveNetworkHit) "Live CRIS / RailYatri SSR JSON (₹0 Free)" else "Offline Catalog Fallback"
     )
+    if (liveNetworkHit && cleanPnr.length == 10) {
+        InMemoryPnrSnapshotCache[cleanPnr] = snapshot
+        InMemoryPnrLastFetchEpochMs[cleanPnr] = System.currentTimeMillis()
+    }
+    snapshot
 }
 
 fun formatTravelExpenseTitle(baseCategory: String, ticket: ParsedTravelTicket): String {
@@ -1341,14 +1415,16 @@ fun GroupBoardingPassCard(
     val context = LocalContext.current
     val localView = androidx.compose.ui.platform.LocalView.current
     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+    val cleanCardPnr = ticket.pnr.replace(Regex("[^0-9]"), "").take(10)
     var liveSnapshot by androidx.compose.runtime.remember(ticket.pnr, ticket.coachAndSeats) {
-        androidx.compose.runtime.mutableStateOf<LivePnrStatusSnapshot?>(null)
+        androidx.compose.runtime.mutableStateOf<LivePnrStatusSnapshot?>(InMemoryPnrSnapshotCache[cleanCardPnr])
     }
     var isRefreshingLive by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
     fun syncAndPersist(snapshot: LivePnrStatusSnapshot) {
         liveSnapshot = snapshot
         if (snapshot.sourceLabel.contains("Live", ignoreCase = true) && snapshot.passengerStatuses.isNotEmpty()) {
+            recordPnrSyncTimestamp(context, snapshot.pnr)
             val shortStatus = when {
                 snapshot.bookingStatusBadge.startsWith("CNF") -> "CNF"
                 snapshot.bookingStatusBadge.startsWith("RAC") -> "RAC"
@@ -1370,12 +1446,14 @@ fun GroupBoardingPassCard(
         }
     }
 
-    // Automatically check live CRIS / RailYatri status whenever the card is displayed with a 10-digit PNR
+    // Smart Rate-Limit-Guarded Auto-Sync:
+    // - 0 network calls if already CNF + Chart Prepared
+    // - 0 network calls during CRIS nightly downtime (23:30-00:30 IST)
+    // - 0 network calls if already synced within the last 6 hours (or 30m on Travel Day)
     androidx.compose.runtime.LaunchedEffect(ticket.pnr) {
-        val clean10 = ticket.pnr.replace(Regex("[^0-9]"), "")
-        if (clean10.length == 10) {
+        if (cleanCardPnr.length == 10 && !shouldSkipAutoPnrNetworkPoll(context, cleanCardPnr, ticket)) {
             isRefreshingLive = true
-            val fetched = fetchLivePnrAndTrainStatus(clean10, ticket)
+            val fetched = fetchLivePnrAndTrainStatus(cleanCardPnr, ticket, forceManualRefresh = false)
             syncAndPersist(fetched)
             isRefreshingLive = false
         }
@@ -1527,9 +1605,9 @@ fun GroupBoardingPassCard(
                         ) {
                             Text(
                                 text = if (liveSnapshot?.sourceLabel?.contains("Live") == true) {
-                                    "🟢 Live CRIS Passenger Status (Auto-Synced)"
+                                    "🟢 ${liveSnapshot!!.sourceLabel}"
                                 } else {
-                                    "Passenger Status (CNF / WL / RAC)"
+                                    "Passenger Status (CNF / WL / RAC · 6h Smart Cache)"
                                 },
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Bold,
@@ -1603,7 +1681,11 @@ fun GroupBoardingPassCard(
                         performCrispTactileHaptic(context, localView, heavy = false)
                         isRefreshingLive = true
                         coroutineScope.launch {
-                            val fetched = fetchLivePnrAndTrainStatus(ticket.pnr.ifBlank { "8753634406" }, ticket)
+                            val fetched = fetchLivePnrAndTrainStatus(
+                                ticket.pnr.ifBlank { "8753634406" },
+                                ticket,
+                                forceManualRefresh = true
+                            )
                             syncAndPersist(fetched)
                             isRefreshingLive = false
                         }
