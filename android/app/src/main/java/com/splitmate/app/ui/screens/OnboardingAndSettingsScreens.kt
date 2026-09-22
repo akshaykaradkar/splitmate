@@ -297,7 +297,10 @@ fun OnboardingSetupScreen(
                             listOf("Masculine", "Feminine", "Neutral").forEach { style ->
                                 val isSelected = selectedPresentationStyle == style
                                 Surface(
-                                    onClick = { selectedPresentationStyle = style },
+                                    onClick = {
+                                        com.splitmate.app.ui.performCrispTactileHaptic(context, heavy = false)
+                                        selectedPresentationStyle = style
+                                    },
                                     shape = SplitMateThemeTokens.RadiusPill,
                                     color = if (isSelected) primaryText else Color.Transparent,
                                     modifier = Modifier
@@ -362,6 +365,7 @@ fun OnboardingSetupScreen(
             ) {
                 Button(
                     onClick = {
+                        com.splitmate.app.ui.performCrispTactileHaptic(context, heavy = true)
                         val finalName = if (nameText.isBlank()) "Explorer" else nameText.trim()
                         val styledSeed = "$effectiveSeed|$selectedPresentationStyle"
                         onCompleteProfile(finalName, selectedCurrency, styledSeed)
@@ -430,7 +434,7 @@ fun UserSettingsScreen(
     onClearVaultClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    val prefs = remember { context.getSharedPreferences("splitmate_prefs", android.content.Context.MODE_PRIVATE) }
+    val prefs = remember { com.splitmate.app.data.EncryptedPrefsProvider.get(context) }
     var isDarkTheme by remember(isDarkThemeInitial) { mutableStateOf(isDarkThemeInitial) }
     var showResetDataDialog by remember { mutableStateOf(false) }
 

@@ -237,11 +237,13 @@ fun SplitMateMainDashboardScaffold(
         runCatching { SplitMateTab.valueOf(uiState.selectedTabName) }.getOrDefault(SplitMateTab.LEDGERS)
     }
     var showPnrReviewScreen by remember { mutableStateOf(false) }
+    var activeReviewPnr by remember { mutableStateOf("") }
 
     // Intercept system Back when PNR review screen is open or when on SPLIT, SETTLE, or AUDIT
     androidx.activity.compose.BackHandler(enabled = showPnrReviewScreen || currentTab != SplitMateTab.LEDGERS) {
         if (showPnrReviewScreen) {
             showPnrReviewScreen = false
+            activeReviewPnr = ""
         } else if (uiState.returnToGroupDetailId != null) {
             viewModel.finishSubFlowToGroupDetail(uiState.returnToGroupDetailId)
         } else {
@@ -252,9 +254,14 @@ fun SplitMateMainDashboardScaffold(
     if (showPnrReviewScreen) {
         PnrExpenseReviewScreen(
             viewModel = viewModel,
-            onBackClick = { showPnrReviewScreen = false },
+            initialPnr = activeReviewPnr,
+            onBackClick = {
+                showPnrReviewScreen = false
+                activeReviewPnr = ""
+            },
             onExpenseAdded = {
                 showPnrReviewScreen = false
+                activeReviewPnr = ""
                 val loggedGroupId = viewModel.uiState.value.activeGroup?.groupId
                 viewModel.finishSubFlowToGroupDetail(loggedGroupId)
             }
@@ -342,6 +349,13 @@ fun SplitMateMainDashboardScaffold(
                     },
                     onNavigateToPnrSplit = {
                         if (uiState.groups.isNotEmpty()) {
+                            activeReviewPnr = ""
+                            showPnrReviewScreen = true
+                        }
+                    },
+                    onOpenPnrWithTicket = { pnr ->
+                        if (uiState.groups.isNotEmpty()) {
+                            activeReviewPnr = pnr
                             showPnrReviewScreen = true
                         }
                     },
@@ -358,6 +372,7 @@ fun SplitMateMainDashboardScaffold(
                     },
                     onOpenPnrDirectSplit = {
                         if (uiState.groups.isNotEmpty()) {
+                            activeReviewPnr = ""
                             showPnrReviewScreen = true
                         } else {
                             viewModel.selectTab(SplitMateTab.LEDGERS.name)
@@ -370,7 +385,14 @@ fun SplitMateMainDashboardScaffold(
                     }
                 )
                 SplitMateTab.SETTLE -> GreedySettlementScreen(viewModel = viewModel)
-                SplitMateTab.AUDIT -> AuditVaultScreen(viewModel = viewModel)
+                SplitMateTab.AUDIT -> AuditVaultScreen(
+                    viewModel = viewModel,
+                    onOpenPnrWithTicket = { groupId, pnr ->
+                        viewModel.selectActiveGroup(groupId)
+                        activeReviewPnr = pnr
+                        showPnrReviewScreen = true
+                    }
+                )
             }
         }
     }
@@ -445,6 +467,7 @@ fun LedgersDashboardScreen(
     onNavigateToSplit: () -> Unit = {},
     onNavigateToSettle: () -> Unit = {},
     onNavigateToPnrSplit: () -> Unit = {},
+    onOpenPnrWithTicket: (String) -> Unit = {},
     onAvatarSettingsClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -844,6 +867,129 @@ fun LedgersDashboardScreen(
                 }
             }
 
+            // TACTILE PAPER PNR STUDIO HERO LAUNCHER + HORIZONTAL LOGGED PNR STRIP
+            item {
+                val pnrExpensesInGroup = remember(groupExpenses) {
+                    groupExpenses.mapNotNull { exp ->
+                        val parsed = extractTravelTicketFromTitle(exp.title)
+                        if (parsed != null && parsed.pnr.isNotBlank()) exp to parsed else null
+                    }
+                }
+                Surface(
+                    shape = SplitMateTheme.RadiusCard,
+                    color = if (SplitMateTheme.isDark) Color(0xFF1F2B16) else Color(0xFFEAF3D5),
+                    border = BorderStroke(1.dp, if (SplitMateTheme.isDark) Color(0xFF3D5428) else Color(0xFFC5DCA0)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color(0xFF264010)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Train,
+                                        contentDescription = null,
+                                        tint = Color(0xFFD7E8B6),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = "Tactile Paper IRCTC PNR Studio",
+                                        fontFamily = SplitMateTheme.FontDisplay,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 15.sp,
+                                        color = SplitMateTheme.PrimaryDark
+                                    )
+                                    Text(
+                                        text = if (pnrExpensesInGroup.isEmpty()) {
+                                            "Fetch live 10-digit PNR boarding pass & split by passenger"
+                                        } else {
+                                            "${pnrExpensesInGroup.size} train ticket(s) logged · Tap any PNR below to view tactile pass"
+                                        },
+                                        fontSize = 11.sp,
+                                        color = SplitMateTheme.TextSecondary
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                onClick = onNavigateToPnrSplit,
+                                shape = SplitMateTheme.RadiusBadge,
+                                color = Color(0xFF264010)
+                            ) {
+                                Text(
+                                    text = "+ New PNR →",
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 11.sp,
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                                )
+                            }
+                        }
+
+                        if (pnrExpensesInGroup.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                pnrExpensesInGroup.forEach { (exp, ticket) ->
+                                    val formattedFare = "₹${String.format(Locale.US, "%.0f", exp.totalAmountCents / 100.0)}"
+                                    Surface(
+                                        onClick = { onOpenPnrWithTicket(ticket.pnr) },
+                                        shape = SplitMateTheme.RadiusBadge,
+                                        color = SplitMateTheme.SurfaceWhite,
+                                        border = BorderStroke(1.dp, SplitMateTheme.BorderLight)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.ConfirmationNumber,
+                                                contentDescription = null,
+                                                tint = SplitMateTheme.SageText,
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                            Text(
+                                                text = "PNR ${ticket.pnr} (${ticket.fromStation.ifBlank { "ORG" }}→${ticket.toStation.ifBlank { "DST" }} · $formattedFare) ↗",
+                                                fontFamily = SplitMateTheme.FontRounded,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 11.sp,
+                                                color = SplitMateTheme.PrimaryDark
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             if (groupExpenses.isEmpty()) {
                 item {
                     Card(
@@ -971,10 +1117,16 @@ fun LedgersDashboardScreen(
 
                             if (parsedTicketInGroup != null) {
                                 Spacer(modifier = Modifier.height(10.dp))
-                                GroupBoardingPassCard(
+                                CompactLedgerTicketStub(
                                     ticket = parsedTicketInGroup,
-                                    onPersistUpdatedTitle = { newTitle ->
-                                        viewModel.persistLivePnrUpdate(expense.expenseId, newTitle)
+                                    totalAmountDisplay = formattedTotal,
+                                    perPersonShareDisplay = perPersonShare,
+                                    onInspectTactilePass = {
+                                        if (parsedTicketInGroup.pnr.isNotBlank()) {
+                                            onOpenPnrWithTicket(parsedTicketInGroup.pnr)
+                                        } else {
+                                            onNavigateToPnrSplit()
+                                        }
                                     }
                                 )
                             }
@@ -3267,7 +3419,10 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
 // TAB 4: ACTIVITY & HISTORY (Interactive Expense Breakdown + Group Filters)
 // ==============================================================================
 @Composable
-fun AuditVaultScreen(viewModel: SplitMateViewModel) {
+fun AuditVaultScreen(
+    viewModel: SplitMateViewModel,
+    onOpenPnrWithTicket: (groupId: String, pnr: String) -> Unit = { _, _ -> }
+) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val sym = "₹"
     var selectedGroupFilterId by remember { mutableStateOf<String?>(null) }
@@ -3515,10 +3670,12 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
 
                     if (parsedTravelTicket != null) {
                         Spacer(modifier = Modifier.height(10.dp))
-                        GroupBoardingPassCard(
+                        CompactLedgerTicketStub(
                             ticket = parsedTravelTicket,
-                            onPersistUpdatedTitle = { newTitle ->
-                                viewModel.persistLivePnrUpdate(expense.expenseId, newTitle)
+                            totalAmountDisplay = formattedTotal,
+                            perPersonShareDisplay = perPersonShare,
+                            onInspectTactilePass = {
+                                onOpenPnrWithTicket(expense.groupId, parsedTravelTicket.pnr)
                             }
                         )
                     }

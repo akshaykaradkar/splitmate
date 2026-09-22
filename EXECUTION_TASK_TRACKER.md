@@ -56,29 +56,29 @@
 ---
 
 ## Phase 3: Material Design 3 Expressive, Typography (`tnum`), Haptics & Ticket De-Cluttering
-- [/] **3.1** **Universal `tnum` Enforcement, Dark-Mode `TactilePaperPassTokens` & Haptics**:
-  - Apply `fontFeatureSettings = "tnum"` to all 14 `SplitMateTypography` slots (`SplitMateTheme.kt:L201-L343`) and create `SplitMateTnumMonospace` (`FontFamily.Monospace` + `tnum`).
-  - Replace all 28 raw `FontFamily.Monospace` occurrences (`PnrExpenseReviewScreen.kt`, `QuickExpenseAndGuideScreens.kt`, `SplitMateAppComposable.kt`, `OnboardingAndSettingsScreens.kt`) with `SplitMateTnumMonospace`.
-  - Make `TactilePaperPassTokens` (`PnrExpenseReviewScreen.kt:L60-L87`) dark-mode adaptive via `LocalSplitMatePalette.current` and add explicit `OutlinedTextFieldDefaults.colors(...)` at `L1354`.
-  - Wire `LocalHapticFeedback.current` across `PnrExpenseReviewScreen.kt`, `OnboardingAndSettingsScreens.kt`, and `SplitMateTheme.kt`, and replace linear `tween` with `SplitMateMotion.SmoothSettleSpring` / `ExpressiveSpatialSpring`.
-- [/] **3.2** **Ticket UI De-Cluttering & Logged-Ticket Fee Protection**:
-  - Create `CompactLedgerTicketStub` (`76dp` single-row pill) for Group Overview & Activity Audit feeds, replacing full `TravelBoardingPassCard` in list rows.
-  - Redesign the Group "Split PNR" tab (`SplitMateAppComposable.kt:L2786-L2875`) with the top **"Launch Tactile Paper PNR Studio"** Hero Card (`#D7E8B6`) + compact horizontal logged-ticket strip (`LazyRow`).
+- [x] **3.1** **Universal `tnum` Enforcement, Dark-Mode `TactilePaperPassTokens` & Haptics**:
+  - Apply `fontFeatureSettings = "tnum"` to all 14 `SplitMateTypography` slots (`SplitMateTheme.kt:L201-L343`) and bind `SplitMateTnumMonospace = FigtreeFontFamily`.
+  - Replace all raw `FontFamily.Monospace` occurrences (`PnrExpenseReviewScreen.kt`, `QuickExpenseAndGuideScreens.kt`, `SplitMateAppComposable.kt`, `OnboardingAndSettingsScreens.kt`) with `SplitMateTnumMonospace` (`FigtreeFontFamily`).
+  - Make `TactilePaperPassTokens` (`PnrExpenseReviewScreen.kt:L60-L120`) dark-mode adaptive via `SplitMateTheme.isDark` and add explicit `tactileTextFieldColors()`.
+  - Wire `LocalHapticFeedback.current` across `PnrExpenseReviewScreen.kt`, `OnboardingAndSettingsScreens.kt`, and `SplitMateTheme.kt`, and replace linear `tween` with `spring(dampingRatio = 0.8f, stiffness = 380f)` (`SmoothSettleSpring`).
+- [x] **3.2** **Ticket UI De-Cluttering & Logged-Ticket Fee Protection**:
+  - Create `CompactLedgerTicketStub` (`76dp` single-row pill) for Group Overview & Activity Audit feeds, replacing full `GroupBoardingPassCard` in list rows.
+  - Redesign the Group "Split PNR" tab (`SplitMateAppComposable.kt`) with the top **"Tactile Paper IRCTC PNR Studio"** Hero Launcher Card (`#EAF3D5` / `#1F2B16`) + compact horizontal logged-ticket strip.
   - Derive `selectedExistingExpense` reactively from `pnrInput` in `PnrExpenseReviewScreen.kt`, lock `effectiveTotalPaise = selectedExistingExpense.totalAmountCents` when inspecting/editing an existing logged ticket (preventing double-counted `+₹25.40` IRCTC fees), and regenerate `formattedTitle` on split update.
-- [ ] **3.3** **Phase 3 Verification, Self-Audit & Git Checkpoint Commit**:
-  - Run `./gradlew testDebugUnitTest`, audit `git diff`, and create Git commit `feat(phase-3): ...`.
+- [x] **3.3** **Phase 3 Verification, Self-Audit & Git Checkpoint Commit**:
+  - Run `./gradlew testDebugUnitTest` (`BUILD SUCCESSFUL`, all 10 unit tests pass), audit `git diff`, and create Git commit `feat(phase-3): ...`.
 
 ---
 
 ## Phase 4: APK Bloat Elimination (~17.1 MB → ~4.0 MB), Dead Code Purge & Architecture Modularization
-- [ ] **4.1** **R8 Shrinking, Resource Shrinking & Dead WebView Asset Deletion**:
+- [/] **4.1** **R8 Shrinking, Resource Shrinking & Dead WebView Asset Deletion**:
   - Delete `android/app/src/main/assets/index.html`, `splitmate-ui.js`, `stitch-interactive.js`, and `styles.css`.
   - Enable `minifyEnabled true`, `shrinkResources true`, `proguardFiles(...)`, and `resConfigs "en"` in `android/app/build.gradle`, and bump `versionCode 16` / `versionName "1.9.0"`.
-- [ ] **4.2** **Dead Code Purge & Test Suite Alignment**:
+- [/] **4.2** **Dead Code Purge & Test Suite Alignment**:
   - Remove `ReceiptLineItem`, `defaultSeedReceiptItems()`, `claimReceiptItemToggle()`, `splitUnassignedRemainderEqually()`, `commitCollaborativeExpense()`, `HorizontalFloatingToolbar`, and `SplitMateQuickActionFab` from `SplitMateViewModel.kt`, `Components.kt`, and `SplitMateAppComposable.kt`.
   - Update `SplitMateViewModelTurbineTest.kt` and `SplitMateComposeUiTest.kt` so all unit and UI tests compile and pass without dead symbols.
-- [ ] **4.3** **UI Package Modularization (`ui/dialogs/` & `ui/pnr/`)**:
+- [/] **4.3** **UI Package Modularization (`ui/dialogs/` & `ui/pnr/`)**:
   - Extract dialog composables from `SplitMateAppComposable.kt` into `ui/dialogs/GroupAndSettlementDialogs.kt` and PNR helper functions/models into `ui/pnr/PnrTicketModels.kt` (preserving `package com.splitmate.app` in `SplitMateAppComposable.kt`).
-- [ ] **4.4** **Phase 4 Final Verification, Release APK Size Audit (`< 5.0 MB`) & Final Git Commit**:
+- [/] **4.4** **Phase 4 Final Verification, Release APK Size Audit (`< 5.0 MB`) & Final Git Commit**:
   - Run `./gradlew testDebugUnitTest` and `./gradlew assembleRelease`.
   - Verify release APK size (`splitmate-1.9.0.apk` < `5.0 MB`) and create final Git commit `feat(phase-4): ...`.

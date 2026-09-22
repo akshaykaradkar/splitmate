@@ -47,45 +47,80 @@ import androidx.compose.ui.unit.sp
 import com.splitmate.app.data.GroupMemberEntity
 import com.splitmate.app.ui.FigtreeFontFamily
 import com.splitmate.app.ui.LivePnrPassenger
+import com.splitmate.app.SplitMateTheme
 import com.splitmate.app.ui.LivePnrStatusSnapshot
 import com.splitmate.app.ui.ParsedTravelTicket
 import com.splitmate.app.ui.SplitMateViewModel
 import com.splitmate.app.ui.fetchLivePnrAndTrainStatus
 import com.splitmate.app.ui.formatTravelExpenseTitle
+import androidx.compose.animation.core.spring
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import java.util.Locale
 
 // ============================================================================
-// 1. DESIGN TOKENS — "TACTILE LUXURY PAPER BOARDING PASS"
+// 1. DESIGN TOKENS — "TACTILE LUXURY PAPER BOARDING PASS" (LIGHT & DARK ADAPTIVE)
 // ============================================================================
 object TactilePaperPassTokens {
-    val CanvasBackground = Color(0xFFFAF7F2)       // Warm Eggshell Linen
-    val PaperSurface = Color(0xFFFFFDF9)           // Tactile High-Grade Paper Ivory
-    val PaperStubSurface = Color(0xFFF6F2EA)       // Slightly recessed stub paper
-    val HairlineBorder = Color(0xFFE5DEC9)         // Warm crisp stone border
-    val PerforationLine = Color(0xFFD6CEBE)        // Perforated tear line
+    val CanvasBackground: Color
+        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF141311) else Color(0xFFFAF7F2)
+    val PaperSurface: Color
+        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF1F1D1A) else Color(0xFFFFFDF9)
+    val PaperStubSurface: Color
+        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF282521) else Color(0xFFF6F2EA)
+    val HairlineBorder: Color
+        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF38342E) else Color(0xFFE5DEC9)
+    val PerforationLine: Color
+        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF4A443C) else Color(0xFFD6CEBE)
 
     val ForestTop = Color(0xFF264010)              // Deep Organic Forest Green
     val ForestBottom = Color(0xFF1B2E0B)           // Richer Pine Shadow
     val ForestBadgeFill = Color(0xFF345418)        // Translucent pill surface
     val ForestBadgeStroke = Color(0xFF4A7325)      // Crisp moss highlight
 
-    val AmberChartBg = Color(0xFFFEF3D6)           // Warm Amber Pill
-    val AmberChartBorder = Color(0xFFF7D788)
-    val AmberChartText = Color(0xFF9E5808)
+    val AmberChartBg: Color
+        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF332610) else Color(0xFFFEF3D6)
+    val AmberChartBorder: Color
+        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF6B4E1B) else Color(0xFFF7D788)
+    val AmberChartText: Color
+        @Composable get() = if (SplitMateTheme.isDark) Color(0xFFFCD34D) else Color(0xFF9E5808)
 
-    val TerracottaWaitlistBg = Color(0xFFFDECE6)   // Waitlist / Alert Peach
-    val TerracottaWaitlistBorder = Color(0xFFF7C6B5)
-    val TerracottaWaitlistText = Color(0xFFB53C1A)
+    val TerracottaWaitlistBg: Color
+        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF3A1F18) else Color(0xFFFDECE6)
+    val TerracottaWaitlistBorder: Color
+        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF7C3725) else Color(0xFFF7C6B5)
+    val TerracottaWaitlistText: Color
+        @Composable get() = if (SplitMateTheme.isDark) Color(0xFFFED8C8) else Color(0xFFB53C1A)
 
-    val SageConfirmedBg = Color(0xFFE4F2D5)        // Confirmed / Positive Sage
-    val SageConfirmedBorder = Color(0xFFC2E0A3)
-    val SageConfirmedText = Color(0xFF2B520D)
+    val SageConfirmedBg: Color
+        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF233316) else Color(0xFFE4F2D5)
+    val SageConfirmedBorder: Color
+        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF426128) else Color(0xFFC2E0A3)
+    val SageConfirmedText: Color
+        @Composable get() = if (SplitMateTheme.isDark) Color(0xFFD7E8B6) else Color(0xFF2B520D)
 
-    val InkPrimary = Color(0xFF1E1C1A)             // Deep Charcoal Ink
-    val InkSecondary = Color(0xFF6B655E)           // Warm Slate Ink
-    val InkMuted = Color(0xFF9C9488)               // Muted Stone Label
+    val InkPrimary: Color
+        @Composable get() = if (SplitMateTheme.isDark) Color(0xFFF4EFEA) else Color(0xFF1E1C1A)
+    val InkSecondary: Color
+        @Composable get() = if (SplitMateTheme.isDark) Color(0xFFB8B0A4) else Color(0xFF6B655E)
+    val InkMuted: Color
+        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF857D73) else Color(0xFF9C9488)
+
+    @Composable
+    fun tactileTextFieldColors(): TextFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = InkPrimary,
+        unfocusedTextColor = InkPrimary,
+        focusedContainerColor = PaperSurface,
+        unfocusedContainerColor = PaperSurface,
+        focusedBorderColor = SageConfirmedText,
+        unfocusedBorderColor = HairlineBorder,
+        focusedLabelColor = SageConfirmedText,
+        unfocusedLabelColor = InkSecondary,
+        cursorColor = SageConfirmedText
+    )
 }
 
 // ============================================================================
@@ -779,6 +814,7 @@ fun PnrExpenseReviewScreen(
                                 placeholder = { Text("e.g. 2450.00", fontFamily = FigtreeFontFamily) },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 singleLine = true,
+                                colors = TactilePaperPassTokens.tactileTextFieldColors(),
                                 modifier = Modifier.fillMaxWidth()
                             )
                             Row(
@@ -791,6 +827,7 @@ fun PnrExpenseReviewScreen(
                                     label = { Text("From Station", fontFamily = FigtreeFontFamily) },
                                     placeholder = { Text("NDLS", fontFamily = FigtreeFontFamily) },
                                     singleLine = true,
+                                    colors = TactilePaperPassTokens.tactileTextFieldColors(),
                                     modifier = Modifier.weight(1f)
                                 )
                                 OutlinedTextField(
@@ -799,6 +836,7 @@ fun PnrExpenseReviewScreen(
                                     label = { Text("To Station", fontFamily = FigtreeFontFamily) },
                                     placeholder = { Text("MMCT", fontFamily = FigtreeFontFamily) },
                                     singleLine = true,
+                                    colors = TactilePaperPassTokens.tactileTextFieldColors(),
                                     modifier = Modifier.weight(1f)
                                 )
                             }
@@ -1365,6 +1403,7 @@ fun TactilePaperBoardingPass(
             }
 
             // SECTION C: PHYSICAL PERFORATED TEAR-OFF LINE
+            val perforationLineColor = TactilePaperPassTokens.PerforationLine
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1372,7 +1411,7 @@ fun TactilePaperBoardingPass(
             ) {
                 val yCenter = size.height / 2f
                 drawLine(
-                    color = TactilePaperPassTokens.PerforationLine,
+                    color = perforationLineColor,
                     start = Offset(18.dp.toPx(), yCenter),
                     end = Offset(size.width - 18.dp.toPx(), yCenter),
                     strokeWidth = 2.dp.toPx(),
@@ -1610,6 +1649,7 @@ private fun MemberSplitSelectionCard(
                                 onValueChange = { quickAddName = it },
                                 placeholder = { Text("Enter passenger name (e.g. Rahul)", fontSize = 12.sp) },
                                 singleLine = true,
+                                colors = TactilePaperPassTokens.tactileTextFieldColors(),
                                 modifier = Modifier.weight(1f)
                             )
                             Button(
@@ -1631,6 +1671,8 @@ private fun MemberSplitSelectionCard(
                 }
             }
 
+            val haptic = LocalHapticFeedback.current
+
             // Member Rows (Tap to toggle inclusion on this Train Ticket)
             members.forEachIndexed { index, member ->
                 val isSelected = member.memberId in selectedMemberIds
@@ -1639,7 +1681,7 @@ private fun MemberSplitSelectionCard(
                 val memberExactShareDisplay = if (exactMemberCents != null) formatPaise(exactMemberCents) else perMemberShareDisplay
                 val rowBg by animateColorAsState(
                     targetValue = if (isSelected) Color.Transparent else TactilePaperPassTokens.PaperStubSurface.copy(alpha = 0.6f),
-                    animationSpec = tween(180),
+                    animationSpec = spring(dampingRatio = 0.8f, stiffness = 380f),
                     label = "memberRowBg"
                 )
 
@@ -1648,7 +1690,10 @@ private fun MemberSplitSelectionCard(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
                         .background(rowBg)
-                        .clickable { onToggleMember(member.memberId) }
+                        .clickable {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onToggleMember(member.memberId)
+                        }
                         .padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -1754,6 +1799,7 @@ private fun MemberSplitSelectionCard(
 // ============================================================================
 @Composable
 fun TactileBarcode(modifier: Modifier = Modifier) {
+    val barcodeInk = TactilePaperPassTokens.InkPrimary
     Canvas(modifier = modifier) {
         val barWidths = floatArrayOf(
             3f, 1.5f, 4.5f, 1.5f, 1.5f, 3f, 6f, 1.5f, 3f, 1.5f,
@@ -1767,7 +1813,7 @@ fun TactileBarcode(modifier: Modifier = Modifier) {
             val w = rawWidth * scale
             if (currentX + w <= size.width) {
                 drawRect(
-                    color = TactilePaperPassTokens.InkPrimary,
+                    color = barcodeInk,
                     topLeft = Offset(currentX, 0f),
                     size = Size(w, size.height)
                 )

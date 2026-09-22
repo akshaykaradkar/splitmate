@@ -174,6 +174,8 @@ val FigtreeFontFamily = FontFamily(
 val PlusJakartaSansFont = FigtreeFontFamily
 val JetBrainsMonoFont = FigtreeFontFamily
 
+val SplitMateTnumMonospace: FontFamily = FigtreeFontFamily
+
 val SplitMateTypography = Typography(
     displayLarge = TextStyle(
         fontFamily = FigtreeFontFamily,
@@ -219,7 +221,8 @@ val SplitMateTypography = Typography(
         fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 18.sp,
-        lineHeight = 24.sp
+        lineHeight = 24.sp,
+        fontFeatureSettings = "tnum"
     ),
     titleLarge = TextStyle(
         fontFamily = FigtreeFontFamily,
@@ -232,42 +235,48 @@ val SplitMateTypography = Typography(
         fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 15.sp,
-        lineHeight = 20.sp
+        lineHeight = 20.sp,
+        fontFeatureSettings = "tnum"
     ),
     titleSmall = TextStyle(
         fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 13.sp,
         lineHeight = 18.sp,
-        letterSpacing = 0.sp
+        letterSpacing = 0.sp,
+        fontFeatureSettings = "tnum"
     ),
     bodyLarge = TextStyle(
         fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 15.sp,
         lineHeight = 20.sp,
-        letterSpacing = 0.sp
+        letterSpacing = 0.sp,
+        fontFeatureSettings = "tnum"
     ),
     bodyMedium = TextStyle(
         fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 13.sp,
         lineHeight = 18.sp,
-        letterSpacing = 0.sp
+        letterSpacing = 0.sp,
+        fontFeatureSettings = "tnum"
     ),
     bodySmall = TextStyle(
         fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 12.sp,
         lineHeight = 16.sp,
-        letterSpacing = 0.sp
+        letterSpacing = 0.sp,
+        fontFeatureSettings = "tnum"
     ),
     labelLarge = TextStyle(
         fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 12.sp,
         lineHeight = 16.sp,
-        letterSpacing = 0.5.sp
+        letterSpacing = 0.5.sp,
+        fontFeatureSettings = "tnum"
     ),
     labelMedium = TextStyle(
         fontFamily = FigtreeFontFamily,
@@ -281,7 +290,8 @@ val SplitMateTypography = Typography(
         fontWeight = FontWeight.Medium,
         fontSize = 11.sp,
         lineHeight = 14.sp,
-        letterSpacing = 0.sp
+        letterSpacing = 0.sp,
+        fontFeatureSettings = "tnum"
     )
 )
 
@@ -831,7 +841,7 @@ fun performCrispTactileHaptic(
     view: android.view.View? = null,
     heavy: Boolean = false
 ) {
-    val prefs = context.getSharedPreferences("splitmate_prefs", Context.MODE_PRIVATE)
+    val prefs = com.splitmate.app.data.EncryptedPrefsProvider.get(context)
     if (!prefs.getBoolean("pref_haptics", true)) return
 
     runCatching {
@@ -1509,6 +1519,138 @@ fun GroupBoardingPassCard(
                                 color = passAccent
                             )
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Compact 76dp Single-Row Buckwheat Ticket Stub Pill (`CompactLedgerTicketStub`).
+ * Designed for Group Overview & Activity Audit feeds so multiple logged train PNRs never
+ * clutter the vertical scroll with 380dp+ multi-section boarding passes.
+ * Tapping opens the full Tactile Paper PNR Studio (`PnrExpenseReviewScreen`) for that PNR.
+ */
+@Composable
+fun CompactLedgerTicketStub(
+    ticket: ParsedTravelTicket,
+    totalAmountDisplay: String = "",
+    perPersonShareDisplay: String = "",
+    onInspectTactilePass: (() -> Unit)? = null
+) {
+    val context = LocalContext.current
+    val localView = androidx.compose.ui.platform.LocalView.current
+    val isDark = SplitMateTheme.isDark
+    val stubBg = if (isDark) Color(0xFF212B18) else Color(0xFFF3F7EA)
+    val stubBorder = if (isDark) Color(0xFF3B5224) else Color(0xFFCDE0A8)
+    val badgeBg = if (isDark) Color(0xFF2D401B) else Color(0xFFDCE9B9)
+    val badgeText = if (isDark) Color(0xFFD7E8B6) else Color(0xFF365314)
+
+    val fromCode = ticket.fromStation.ifBlank { "ORG" }.uppercase(java.util.Locale.US)
+    val toCode = ticket.toStation.ifBlank { "DST" }.uppercase(java.util.Locale.US)
+    val statusBadge = ticket.bookingStatus.ifBlank { "CNF" }
+
+    Surface(
+        onClick = {
+            performCrispTactileHaptic(context, localView, heavy = false)
+            onInspectTactilePass?.invoke()
+        },
+        enabled = onInspectTactilePass != null,
+        shape = RoundedCornerShape(14.dp),
+        color = stubBg,
+        border = androidx.compose.foundation.BorderStroke(1.dp, stubBorder),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(badgeBg),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Train,
+                        contentDescription = "IRCTC Ticket Stub",
+                        tint = badgeText,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "$fromCode → $toCode",
+                            fontFamily = FigtreeFontFamily,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 13.sp,
+                            color = SplitMateTheme.PrimaryDark
+                        )
+                        if (ticket.pnr.isNotBlank()) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = badgeBg
+                            ) {
+                                Text(
+                                    text = "PNR ${ticket.pnr}",
+                                    style = TextStyle(
+                                        fontFamily = SplitMateTnumMonospace,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 10.sp,
+                                        fontFeatureSettings = "tnum"
+                                    ),
+                                    color = badgeText,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = buildString {
+                            if (ticket.trainOrFlightNo.isNotBlank()) append(ticket.trainOrFlightNo).append(" · ")
+                            append(statusBadge)
+                            if (perPersonShareDisplay.isNotBlank()) append(" · ").append(perPersonShareDisplay).append("/pax")
+                        },
+                        fontFamily = FigtreeFontFamily,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 11.sp,
+                        color = SplitMateTheme.TextSecondary,
+                        maxLines = 1
+                    )
+                }
+            }
+
+            if (onInspectTactilePass != null) {
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = badgeBg
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Paper Pass ↗",
+                            fontFamily = FigtreeFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp,
+                            color = badgeText
+                        )
                     }
                 }
             }

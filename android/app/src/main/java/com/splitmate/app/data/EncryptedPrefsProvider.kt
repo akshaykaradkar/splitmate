@@ -23,6 +23,8 @@ object EncryptedPrefsProvider {
     @Volatile
     private var cachedPrefs: SharedPreferences? = null
 
+    fun get(context: Context): SharedPreferences = getPnrVaultPrefs(context)
+
     fun getPnrVaultPrefs(context: Context): SharedPreferences {
         cachedPrefs?.let { return it }
         return synchronized(this) {
