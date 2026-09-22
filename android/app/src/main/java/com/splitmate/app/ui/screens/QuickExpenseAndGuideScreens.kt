@@ -459,7 +459,7 @@ fun QuickExpenseScreen(
                                                 isCheckingLivePnr = true
                                                 pnrScope.launch {
                                                     val snap = com.splitmate.app.ui.fetchLivePnrAndTrainStatus(
-                                                        pnr = pnrInput.ifBlank { "8421094312" },
+                                                        pnr = pnrInput.ifBlank { "8753634406" },
                                                         fallbackTicket = com.splitmate.app.ui.ParsedTravelTicket(
                                                             pnr = pnrInput,
                                                             trainOrFlightNo = trainNoInput,
@@ -477,7 +477,16 @@ fun QuickExpenseScreen(
                                                     coachSeatsInput = snap.passengerStatuses.joinToString(", ")
                                                     bookingStatusInput = snap.bookingStatusBadge
                                                     chartStatusInput = if (snap.chartPrepared) "Chart Prepared" else "Chart Not Prepared"
-                                                    liveRadarPreview = "${snap.liveTrainLocationRadar} · ${snap.confirmationProbability}"
+                                                    liveRadarPreview = buildString {
+                                                        if (snap.totalFareRupees > 0) append("Total IRCTC Fare: ₹${snap.totalFareRupees} · ")
+                                                        append("${snap.liveTrainLocationRadar} · ${snap.confirmationProbability}")
+                                                    }
+                                                    if (snap.trainName.isNotBlank()) {
+                                                        draftTitle = "Train ${snap.trainNo} ${snap.trainName}"
+                                                    }
+                                                    if (snap.totalFareRupees > 0 && (amountDigits == "0" || amountDigits.isEmpty())) {
+                                                        amountDigits = snap.totalFareRupees.toString()
+                                                    }
                                                     isCheckingLivePnr = false
                                                 }
                                             },
