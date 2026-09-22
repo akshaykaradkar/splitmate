@@ -900,6 +900,7 @@ data class LivePnrStatusSnapshot(
     val departureTime: String,
     val travelClass: String = "",
     val totalFareRupees: Int = 0,
+    val passengerCount: Int = 1,
     val bookingStatusBadge: String, // "CNF", "WL", or "RAC"
     val chartPrepared: Boolean,
     val passengerStatuses: List<String>,
@@ -907,7 +908,57 @@ data class LivePnrStatusSnapshot(
     val liveTrainLocationRadar: String,
     val confirmationProbability: String,
     val sourceLabel: String
-)
+) {
+    /**
+     * Official Indian Railways / IRCTC Tariff Classification:
+     * Non-AC classes ("SL", "2S", "II", "GN", "UR") are charged ₹10+18% GST (₹11.80 UPI) / ₹15+18% GST (₹17.70 Card).
+     * AC classes ("1A", "2A", "3A", "3E", "CC", "EC", "EA", "FC") are charged ₹20+18% GST (₹23.60 UPI) / ₹30+18% GST (₹35.40 Card).
+     */
+    val isAcClass: Boolean
+        get() = travelClass.trim().uppercase() !in setOf("SL", "2S", "II", "GN", "UR")
+
+    val effectivePassengerCount: Int
+        get() = passengerCount.coerceAtLeast(passengerStatuses.size.coerceAtLeast(1))
+
+    val baseFarePaise: Long
+        get() = totalFareRupees.toLong() * 100L
+
+    // IRCTC Convenience Fee per PNR (inclusive of 18% GST)
+    val irctcConvenienceFeeUpiPaise: Long
+        get() = if (totalFareRupees > 0) (if (isAcClass) 2360L else 1180L) else 0L
+
+    val irctcConvenienceFeeCardPaise: Long
+        get() = if (totalFareRupees > 0) (if (isAcClass) 3540L else 1770L) else 0L
+
+    // IRCTC Optional Travel Insurance Premium: ₹0.45 (45 paise) per passenger (inclusive of 18% GST)
+    val travelInsurancePaise: Long
+        get() = if (totalFareRupees > 0) effectivePassengerCount * 45L else 0L
+
+    // Dynamic All-Inclusive IRCTC Totals in Paise
+    val allInclusiveUpiPaise: Long
+        get() = baseFarePaise + irctcConvenienceFeeUpiPaise + travelInsurancePaise
+
+    val allInclusiveCardPaise: Long
+        get() = baseFarePaise + irctcConvenienceFeeCardPaise + travelInsurancePaise
+
+    fun computeCustomTotalPaise(paymentMode: String = "UPI", includeInsurance: Boolean = true): Long {
+        if (totalFareRupees <= 0) return 0L
+        val convFee = when (paymentMode.uppercase()) {
+            "UPI" -> irctcConvenienceFeeUpiPaise
+            "CARD" -> irctcConvenienceFeeCardPaise
+            else -> 0L
+        }
+        val insFee = if (includeInsurance) travelInsurancePaise else 0L
+        return baseFarePaise + convFee + insFee
+    }
+
+    fun formatPaiseAsDecimalRupees(paise: Long): String {
+        val whole = paise / 100L
+        val rem = kotlin.math.abs(paise % 100L)
+        return if (rem == 0L) "$whole" else String.format(java.util.Locale.US, "%d.%02d", whole, rem)
+    }
+}
+
 
 private val OfflineIndianTrainCatalog = mapOf(
     "12925" to ("Paschim SF Express" to ("BDTS" to "CDG")),
@@ -1012,6 +1063,7 @@ fun loadPersistedPnrSnapshot(context: Context, pnr: String): LivePnrStatusSnapsh
         departureTime = obj.optString("departureTime", ""),
         travelClass = obj.optString("travelClass", ""),
         totalFareRupees = obj.optInt("totalFareRupees", 0),
+        passengerCount = obj.optInt("passengerCount", paxList.size.coerceAtLeast(1)),
         bookingStatusBadge = obj.optString("bookingStatusBadge", "CNF"),
         chartPrepared = obj.optBoolean("chartPrepared", false),
         passengerStatuses = paxList,
@@ -1039,6 +1091,7 @@ private fun savePersistedPnrSnapshot(context: Context?, snapshot: LivePnrStatusS
             put("departureTime", snapshot.departureTime)
             put("travelClass", snapshot.travelClass)
             put("totalFareRupees", snapshot.totalFareRupees)
+            put("passengerCount", snapshot.effectivePassengerCount)
             put("bookingStatusBadge", snapshot.bookingStatusBadge)
             put("chartPrepared", snapshot.chartPrepared)
             put("passengerStatuses", org.json.JSONArray(snapshot.passengerStatuses))
@@ -1334,8 +1387,16 @@ suspend fun fetchLivePnrAndTrainStatus(
         }
     }
 
+    val paxCount = scrapedPassengers.size.coerceAtLeast(1)
+    val isAc = scrapedTravelClass.trim().uppercase() !in setOf("SL", "2S", "II", "GN", "UR")
+    val convFeeRupeesStr = if (isAc) "23.60" else "11.80"
+    val insFeePaise = paxCount * 45L
+    val insFeeRupeesStr = String.format(java.util.Locale.US, "%d.%02d", insFeePaise / 100L, insFeePaise % 100L)
+    val allIncPaise = if (scrapedTotalFare > 0) (scrapedTotalFare * 100L + (if (isAc) 2360L else 1180L) + insFeePaise) else 0L
+    val allIncStr = if (allIncPaise > 0L) String.format(java.util.Locale.US, "%d.%02d", allIncPaise / 100L, allIncPaise % 100L) else ""
+
     val radarPair = OfflineTrainIntermediateRadar[resolvedTrainNo]
-        ?: ("Route: ${resolveStationDisplayName(resolvedFrom)} → ${resolveStationDisplayName(resolvedTo)} · Dep $resolvedDep" to "Class ${scrapedTravelClass.ifBlank { "3A" }} · Total Ticket Fare: ${if (scrapedTotalFare > 0) "₹$scrapedTotalFare" else "IRCTC Verified"}")
+        ?: ("Route: ${resolveStationDisplayName(resolvedFrom)} → ${resolveStationDisplayName(resolvedTo)} · Dep $resolvedDep" to "Class ${scrapedTravelClass.ifBlank { "3A" }} · Bill: ${if (scrapedTotalFare > 0) "₹$allIncStr (Base ₹$scrapedTotalFare + IRCTC Fee ₹$convFeeRupeesStr + Ins ₹$insFeeRupeesStr)" else "IRCTC Verified"}")
 
         val snapshot = LivePnrStatusSnapshot(
             pnr = cleanPnr.ifBlank { "8753634406" },
@@ -1346,6 +1407,7 @@ suspend fun fetchLivePnrAndTrainStatus(
             departureTime = resolvedDep,
             travelClass = scrapedTravelClass,
             totalFareRupees = scrapedTotalFare,
+            passengerCount = paxCount,
             bookingStatusBadge = overallBadge,
             chartPrepared = scrapedChart,
             passengerStatuses = scrapedPassengers,

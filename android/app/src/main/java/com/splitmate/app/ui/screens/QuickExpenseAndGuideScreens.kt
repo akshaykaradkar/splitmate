@@ -202,16 +202,17 @@ fun QuickExpenseScreen(
     val activeGroupName = selectedGroup?.name ?: "Select a Group"
     val activeGroupIconName = selectedGroup?.iconName ?: "Flight"
 
-    val numericVal = amountDigits.toLongOrNull() ?: 0L
-    val formattedDisplay = if (numericVal == 0L) {
-        "$currencySymbol 0"
-    } else {
-        "$currencySymbol " + NumberFormat.getNumberInstance(Locale("en", "IN")).format(numericVal)
+    val totalAmountPaise = remember(amountDigits) {
+        parseAmountInputToPaise(amountDigits)
+    }
+    val numericVal = totalAmountPaise / 100L
+    val formattedDisplay = remember(amountDigits, totalAmountPaise) {
+        formatPaiseWithInputDisplay(totalAmountPaise, amountDigits, currencySymbol)
     }
 
     val memberCount = selectedMemberIds.size
-    val perPerson = if (memberCount > 0) numericVal / memberCount else 0L
-    val remainder = if (memberCount > 0) numericVal % memberCount else 0L
+    val perPersonPaise = if (memberCount > 0) totalAmountPaise / memberCount else 0L
+    val remainderPaise = if (memberCount > 0) totalAmountPaise % memberCount else 0L
 
     if (showEditTitleDialog) {
         val existingTicket = remember(expenseCategoryTitle) {
@@ -242,8 +243,40 @@ fun QuickExpenseScreen(
         var chartStatusInput by remember { mutableStateOf(existingTicket?.chartStatus ?: "Chart Prepared") }
         var liveRadarPreview by remember { mutableStateOf(existingTicket?.liveTrainRadar ?: "") }
         var isCheckingLivePnr by remember { mutableStateOf(false) }
+        var fetchedPnrSnapshot by remember {
+            mutableStateOf(
+                existingTicket?.pnr?.takeIf { it.length == 10 }?.let {
+                    com.splitmate.app.ui.loadPersistedPnrSnapshot(context, it)
+                }
+            )
+        }
+        var irctcPaymentMode by remember { mutableStateOf("UPI") } // "UPI", "CARD", or "BASE"
+        var includeIrctcInsurance by remember { mutableStateOf(true) }
         val pnrScope = androidx.compose.runtime.rememberCoroutineScope()
         val dialogView = androidx.compose.ui.platform.LocalView.current
+
+        val syncDynamicIrctcFare: (com.splitmate.app.ui.LivePnrStatusSnapshot, String, Boolean) -> Unit = { snap, payMode, withIns ->
+            if (snap.totalFareRupees > 0) {
+                val computedPaise = snap.computeCustomTotalPaise(payMode, withIns)
+                amountDigits = snap.formatPaiseAsDecimalRupees(computedPaise)
+                val convPaise = when (payMode) {
+                    "UPI" -> snap.irctcConvenienceFeeUpiPaise
+                    "CARD" -> snap.irctcConvenienceFeeCardPaise
+                    else -> 0L
+                }
+                val insPaise = if (withIns) snap.travelInsurancePaise else 0L
+                liveRadarPreview = buildString {
+                    append("All-Incl Bill: ₹${snap.formatPaiseAsDecimalRupees(computedPaise)} ")
+                    append("(Base ₹${snap.totalFareRupees} + ${if (snap.isAcClass) "AC" else "Non-AC"} $payMode Fee ₹${snap.formatPaiseAsDecimalRupees(convPaise)}")
+                    if (withIns) {
+                        append(" + Ins ${snap.effectivePassengerCount}×₹0.45=₹${snap.formatPaiseAsDecimalRupees(insPaise)}")
+                    }
+                    append(") · ${snap.liveTrainLocationRadar}")
+                }
+            } else {
+                liveRadarPreview = "${snap.liveTrainLocationRadar} · ${snap.confirmationProbability}"
+            }
+        }
 
         val triggerLivePnrLookup: (String) -> Unit = { targetPnr ->
             val clean10 = targetPnr.replace(Regex("[^0-9]"), "").take(10)
@@ -264,6 +297,7 @@ fun QuickExpenseScreen(
                         forceManualRefresh = true,
                         context = context
                     )
+                    fetchedPnrSnapshot = snap
                     pnrInput = snap.pnr
                     trainNoInput = snap.trainNo
                     fromStationInput = snap.fromStation
@@ -272,16 +306,10 @@ fun QuickExpenseScreen(
                     coachSeatsInput = snap.passengerStatuses.joinToString(", ")
                     bookingStatusInput = snap.bookingStatusBadge
                     chartStatusInput = if (snap.chartPrepared) "Chart Prepared" else "Chart Not Prepared"
-                    liveRadarPreview = buildString {
-                        if (snap.totalFareRupees > 0) append("Total IRCTC Fare: ₹${snap.totalFareRupees} · ")
-                        append("${snap.liveTrainLocationRadar} · ${snap.confirmationProbability}")
-                    }
                     if (snap.trainName.isNotBlank()) {
                         draftTitle = "Train ${snap.trainNo} ${snap.trainName}"
                     }
-                    if (snap.totalFareRupees > 0 && (amountDigits == "0" || amountDigits.isEmpty())) {
-                        amountDigits = snap.totalFareRupees.toString()
-                    }
+                    syncDynamicIrctcFare(snap, irctcPaymentMode, includeIrctcInsurance)
                     isCheckingLivePnr = false
                 }
             }
@@ -509,6 +537,93 @@ fun QuickExpenseScreen(
                                     modifier = Modifier.fillMaxWidth()
                                 )
 
+                                val activeSnap = fetchedPnrSnapshot
+                                if (activeSnap != null && activeSnap.totalFareRupees > 0) {
+                                    val classBadge = activeSnap.travelClass.ifBlank { "3A" } + if (activeSnap.isAcClass) " (AC)" else " (Non-AC)"
+                                    val upiFeeStr = activeSnap.formatPaiseAsDecimalRupees(activeSnap.irctcConvenienceFeeUpiPaise)
+                                    val cardFeeStr = activeSnap.formatPaiseAsDecimalRupees(activeSnap.irctcConvenienceFeeCardPaise)
+                                    val insFeeStr = activeSnap.formatPaiseAsDecimalRupees(activeSnap.travelInsurancePaise)
+                                    val computedTotalPaise = activeSnap.computeCustomTotalPaise(irctcPaymentMode, includeIrctcInsurance)
+                                    val computedTotalStr = activeSnap.formatPaiseAsDecimalRupees(computedTotalPaise)
+
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = surfaceColor,
+                                        border = BorderStroke(1.dp, QuickExpenseThemeTokens.AccentSage)
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                                        ) {
+                                            Text(
+                                                text = "🇮🇳 Official IRCTC Dynamic Bill ($classBadge · ${activeSnap.effectivePassengerCount} Pax)",
+                                                fontFamily = SplitMateBrandFontFamily,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 11.sp,
+                                                color = QuickExpenseThemeTokens.SageText
+                                            )
+                                            Text(
+                                                text = "Base Fare: ₹${activeSnap.totalFareRupees}.00  →  All-Inclusive Total: ₹$computedTotalStr",
+                                                fontFamily = SplitMateBrandFontFamily,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 11.sp,
+                                                color = textPrimary
+                                            )
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                listOf(
+                                                    "UPI" to "UPI +₹$upiFeeStr",
+                                                    "CARD" to "Card +₹$cardFeeStr",
+                                                    "BASE" to "Base ₹0"
+                                                ).forEach { (modeKey, modeLabel) ->
+                                                    val isModeSelected = irctcPaymentMode == modeKey
+                                                    Surface(
+                                                        onClick = {
+                                                            com.splitmate.app.ui.performCrispTactileHaptic(context, dialogView, heavy = false)
+                                                            irctcPaymentMode = modeKey
+                                                            syncDynamicIrctcFare(activeSnap, modeKey, includeIrctcInsurance)
+                                                        },
+                                                        shape = QuickExpenseThemeTokens.RadiusPill,
+                                                        color = if (isModeSelected) Color(0xFF23201E) else QuickExpenseThemeTokens.SageSurface,
+                                                        border = BorderStroke(1.dp, if (isModeSelected) Color(0xFF23201E) else QuickExpenseThemeTokens.AccentSage)
+                                                    ) {
+                                                        Text(
+                                                            text = if (isModeSelected) "✓ $modeLabel" else modeLabel,
+                                                            fontFamily = SplitMateBrandFontFamily,
+                                                            fontWeight = FontWeight.Bold,
+                                                            fontSize = 10.sp,
+                                                            color = if (isModeSelected) Color.White else QuickExpenseThemeTokens.SageText,
+                                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            Surface(
+                                                onClick = {
+                                                    com.splitmate.app.ui.performCrispTactileHaptic(context, dialogView, heavy = false)
+                                                    includeIrctcInsurance = !includeIrctcInsurance
+                                                    syncDynamicIrctcFare(activeSnap, irctcPaymentMode, includeIrctcInsurance)
+                                                },
+                                                shape = QuickExpenseThemeTokens.RadiusPill,
+                                                color = if (includeIrctcInsurance) QuickExpenseThemeTokens.SageSurface else surfaceColor,
+                                                border = BorderStroke(1.dp, QuickExpenseThemeTokens.AccentSage)
+                                            ) {
+                                                Text(
+                                                    text = (if (includeIrctcInsurance) "✓ " else "+ ") +
+                                                        "IRCTC Travel Insurance (${activeSnap.effectivePassengerCount} Pax × ₹0.45 = ₹$insFeeStr incl. GST)",
+                                                    fontFamily = SplitMateBrandFontFamily,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 10.sp,
+                                                    color = if (includeIrctcInsurance) QuickExpenseThemeTokens.SageText else textSecondary,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
                                 if (liveRadarPreview.isNotBlank() || bookingStatusInput.isNotBlank()) {
                                     Surface(
                                         shape = RoundedCornerShape(10.dp),
@@ -563,16 +678,16 @@ fun QuickExpenseScreen(
                         expenseCategoryTitle = finalTitle
                         showEditTitleDialog = false
 
-                        val currentAmount = amountDigits.toLongOrNull() ?: 0L
-                        if (pendingCommitAfterCategorySelection && hasSelectedGroup && currentAmount > 0L && selectedMemberIds.isNotEmpty()) {
+                        val currentAmountPaise = parseAmountInputToPaise(amountDigits)
+                        if (pendingCommitAfterCategorySelection && hasSelectedGroup && currentAmountPaise > 0L && selectedMemberIds.isNotEmpty()) {
                             pendingCommitAfterCategorySelection = false
                             val selected = participants.filter { selectedMemberIds.contains(it.id) }
                             viewModel?.commitQuickEqualExpense(
                                 title = finalTitle,
-                                totalAmountCents = currentAmount * 100L,
+                                totalAmountCents = currentAmountPaise,
                                 selectedMemberIds = selected.map { it.id }
                             )
-                            onSaveSplit(currentAmount, selected)
+                            onSaveSplit(currentAmountPaise / 100L, selected)
                         } else {
                             pendingCommitAfterCategorySelection = false
                         }
@@ -977,8 +1092,8 @@ fun QuickExpenseScreen(
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = if (memberCount > 0) {
-                                    "$currencySymbol ${NumberFormat.getNumberInstance(Locale("en", "IN")).format(perPerson)} / person · $memberCount splitting" +
-                                        if (remainder > 0L) " · +$currencySymbol$remainder Unassigned" else " · Exact Split"
+                                    "$currencySymbol ${formatPaiseForSplitBadge(perPersonPaise)} / person · $memberCount splitting" +
+                                        if (remainderPaise > 0L) " · +${currencySymbol}${formatPaiseForSplitBadge(remainderPaise)} Largest Remainder" else " · Exact Split"
                                 } else {
                                     "Select at least 1 person to split"
                                 },
@@ -1212,7 +1327,7 @@ fun QuickExpenseScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 TactileSquircleKey(
-                                    label = "00",
+                                    label = ".",
                                     keypadBg = keypadBg,
                                     keypadBorder = keypadBorder,
                                     textPrimary = textPrimary,
@@ -1221,8 +1336,8 @@ fun QuickExpenseScreen(
                                         .height(54.dp),
                                     onClick = {
                                         com.splitmate.app.ui.performCrispTactileHaptic(context, keypadView, heavy = false)
-                                        if (amountDigits.isNotEmpty() && amountDigits.length < 8) {
-                                            amountDigits += "00"
+                                        if (!amountDigits.contains(".") && amountDigits.length < 9) {
+                                            amountDigits = if (amountDigits.isEmpty()) "0." else "$amountDigits."
                                         }
                                     }
                                 )
@@ -1237,9 +1352,7 @@ fun QuickExpenseScreen(
                                         .height(54.dp),
                                     onClick = {
                                         com.splitmate.app.ui.performCrispTactileHaptic(context, keypadView, heavy = false)
-                                        if (amountDigits != "0" && amountDigits.length < 8) {
-                                            amountDigits += "0"
-                                        }
+                                        appendDigit("0", amountDigits) { amountDigits = it }
                                     }
                                 )
 
@@ -1256,7 +1369,8 @@ fun QuickExpenseScreen(
                                     onClick = {
                                         com.splitmate.app.ui.performCrispTactileHaptic(context, keypadView, heavy = false)
                                         if (amountDigits.isNotEmpty()) {
-                                            amountDigits = amountDigits.dropLast(1)
+                                            val next = amountDigits.dropLast(1)
+                                            amountDigits = next.ifEmpty { "0" }
                                         }
                                     }
                                 )
@@ -1321,7 +1435,7 @@ fun QuickExpenseScreen(
 
                             // Log & Split FAB spanning EXACTLY two rows in height (54dp + 8dp + 54dp = 116dp)
                             // Always 100% opaque — never transparent or washed-out white/grey when amount is 0.
-                            val canCommitSplit = hasSelectedGroup && numericVal > 0L && selectedMemberIds.isNotEmpty()
+                            val canCommitSplit = hasSelectedGroup && totalAmountPaise > 0L && selectedMemberIds.isNotEmpty()
                             val ctaContainerColor = if (canCommitSplit) {
                                 Color(0xFF23201E)
                             } else {
@@ -1343,10 +1457,10 @@ fun QuickExpenseScreen(
                                             val selected = participants.filter { selectedMemberIds.contains(it.id) }
                                             viewModel?.commitQuickEqualExpense(
                                                 title = expenseCategoryTitle,
-                                                totalAmountCents = numericVal * 100L,
+                                                totalAmountCents = totalAmountPaise,
                                                 selectedMemberIds = selected.map { it.id }
                                             )
-                                            onSaveSplit(numericVal, selected)
+                                            onSaveSplit(totalAmountPaise / 100L, selected)
                                         }
                                     }
                                 },
@@ -1504,15 +1618,61 @@ fun TactileSquircleKey(
     }
 }
 
-// Helper function for appending keypad input
+// Helper functions for appending keypad input & exact paise parsing
 private fun appendDigit(key: String, current: String, onUpdate: (String) -> Unit) {
-    if (current.length < 8) {
+    if (current.contains(".")) {
+        val decimals = current.substringAfter(".")
+        if (decimals.length < 2 && current.length < 11) {
+            onUpdate(current + key)
+        }
+    } else if (current.length < 8) {
         if (current == "0") {
             onUpdate(key)
         } else {
             onUpdate(current + key)
         }
     }
+}
+
+private fun parseAmountInputToPaise(input: String): Long {
+    val clean = input.trim()
+    if (clean.isEmpty() || clean == "0" || clean == "0.") return 0L
+    return if (clean.contains(".")) {
+        val whole = clean.substringBefore(".").toLongOrNull() ?: 0L
+        val decRaw = clean.substringAfter(".").take(2)
+        val decPaise = when (decRaw.length) {
+            0 -> 0L
+            1 -> (decRaw.toLongOrNull() ?: 0L) * 10L
+            else -> decRaw.toLongOrNull() ?: 0L
+        }
+        whole * 100L + decPaise
+    } else {
+        (clean.toLongOrNull() ?: 0L) * 100L
+    }
+}
+
+private fun formatPaiseWithInputDisplay(paise: Long, rawInput: String, currencySymbol: String): String {
+    if (paise == 0L && !rawInput.contains(".")) return "$currencySymbol 0"
+    val whole = paise / 100L
+    val formattedWhole = NumberFormat.getNumberInstance(Locale("en", "IN")).format(whole)
+    return if (rawInput.contains(".")) {
+        val decPart = rawInput.substringAfter(".").take(2)
+        "$currencySymbol $formattedWhole.$decPart"
+    } else {
+        val remPaise = kotlin.math.abs(paise % 100L)
+        if (remPaise > 0L) {
+            "$currencySymbol $formattedWhole.${String.format(Locale.US, "%02d", remPaise)}"
+        } else {
+            "$currencySymbol $formattedWhole"
+        }
+    }
+}
+
+private fun formatPaiseForSplitBadge(paise: Long): String {
+    val whole = paise / 100L
+    val rem = kotlin.math.abs(paise % 100L)
+    val formattedWhole = NumberFormat.getNumberInstance(Locale("en", "IN")).format(whole)
+    return if (rem == 0L) formattedWhole else "$formattedWhole.${String.format(Locale.US, "%02d", rem)}"
 }
 
 private data class EditableMemberDraft(
