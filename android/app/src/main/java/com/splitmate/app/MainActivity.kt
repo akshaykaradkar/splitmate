@@ -4,10 +4,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.splitmate.app.data.SplitMateRoomDatabase
 import com.splitmate.app.ui.SplitMateMaterial3ExpressiveTheme
 import com.splitmate.app.ui.SplitMateViewModel
@@ -34,7 +34,7 @@ class MainActivity : ComponentActivity() {
         )[SplitMateViewModel::class.java]
 
         setContent {
-            val uiState by viewModel.uiState.collectAsState()
+            val uiState by viewModel.uiState.collectAsStateWithLifecycle()
             SplitMateMaterial3ExpressiveTheme(darkTheme = uiState.isDarkTheme) {
                 SplitMateApp(viewModel = viewModel)
             }

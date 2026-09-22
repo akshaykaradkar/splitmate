@@ -51,6 +51,7 @@ import com.splitmate.app.ui.ParsedTravelTicket
 import com.splitmate.app.ui.SplitMateViewModel
 import com.splitmate.app.ui.fetchLivePnrAndTrainStatus
 import com.splitmate.app.ui.formatTravelExpenseTitle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -191,7 +192,7 @@ fun PnrExpenseReviewScreen(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     val activeGroup = uiState.activeGroup
     val groupMembers = uiState.activeGroupMembers

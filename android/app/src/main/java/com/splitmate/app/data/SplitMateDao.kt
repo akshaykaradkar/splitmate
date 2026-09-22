@@ -1,10 +1,9 @@
 package com.splitmate.app.data
 
 import androidx.room.Dao
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -17,7 +16,7 @@ interface SplitMateDao {
     @Query("SELECT * FROM currency_rates WHERE currencyCode = :code LIMIT 1")
     suspend fun getCurrencyRate(code: String): CurrencyRateEntity?
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun upsertCurrencyRates(rates: List<CurrencyRateEntity>)
 
     // --- Groups & Members ---
@@ -30,10 +29,10 @@ interface SplitMateDao {
     @Query("SELECT * FROM group_members")
     fun observeAllMembers(): Flow<List<GroupMemberEntity>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun insertGroup(group: ExpenseGroupEntity)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun insertMembers(members: List<GroupMemberEntity>)
 
     @Query("UPDATE group_members SET name = :name, upiId = :upiId, avatarSeed = :avatarSeed WHERE memberId = :memberId")
@@ -46,11 +45,20 @@ interface SplitMateDao {
     @Query("SELECT * FROM expense_splits")
     fun observeAllSplits(): Flow<List<ExpenseSplitEntity>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun insertExpense(expense: ExpenseEntity)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun insertExpenseSplits(splits: List<ExpenseSplitEntity>)
+
+    @Transaction
+    suspend fun replaceExpenseSplits(
+        expenseId: String,
+        splits: List<ExpenseSplitEntity>
+    ) {
+        deleteSplitsForExpense(expenseId)
+        insertExpenseSplits(splits)
+    }
 
     @Transaction
     suspend fun insertExpenseWithSplits(
@@ -58,7 +66,7 @@ interface SplitMateDao {
         splits: List<ExpenseSplitEntity>
     ) {
         insertExpense(expense)
-        insertExpenseSplits(splits)
+        replaceExpenseSplits(expense.expenseId, splits)
     }
 
     @Query("UPDATE expenses SET title = :newTitle WHERE expenseId = :expenseId")
@@ -70,11 +78,14 @@ interface SplitMateDao {
     @Query("DELETE FROM expense_splits WHERE expenseId = :expenseId")
     suspend fun deleteSplitsForExpense(expenseId: String)
 
+    @Query("DELETE FROM expense_groups WHERE groupId = :groupId")
+    suspend fun deleteGroupById(groupId: String)
+
     // --- Settlements ---
     @Query("SELECT * FROM settlements ORDER BY settledAt DESC")
     fun observeAllSettlements(): Flow<List<SettlementEntity>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun insertSettlement(settlement: SettlementEntity)
 
     @Query("DELETE FROM settlements WHERE settlementId = :settlementId")
@@ -90,7 +101,7 @@ interface SplitMateDao {
     @Query("SELECT * FROM user_profile WHERE profileId = 'me' LIMIT 1")
     suspend fun getUserProfile(): UserProfileEntity?
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun upsertUserProfile(profile: UserProfileEntity)
 
     @Query("DELETE FROM user_profile")

@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -127,9 +128,9 @@ fun SplitMateApp(viewModel: SplitMateViewModel) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("splitmate_prefs", android.content.Context.MODE_PRIVATE) }
     val navController = rememberNavController()
-    val uiState by viewModel.uiState.collectAsState()
-    val totalBalance by viewModel.totalBalance.collectAsState()
-    val activeGroups by viewModel.activeGroups.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val totalBalance by viewModel.totalBalance.collectAsStateWithLifecycle()
+    val activeGroups by viewModel.activeGroups.collectAsStateWithLifecycle()
 
     // Observe and sync Dark Theme preference across app restarts
     LaunchedEffect(Unit) {
@@ -231,7 +232,7 @@ fun SplitMateMainDashboardScaffold(
     viewModel: SplitMateViewModel,
     onOpenSettings: () -> Unit
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val currentTab = remember(uiState.selectedTabName) {
         runCatching { SplitMateTab.valueOf(uiState.selectedTabName) }.getOrDefault(SplitMateTab.LEDGERS)
     }
@@ -447,9 +448,9 @@ fun LedgersDashboardScreen(
     onAvatarSettingsClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    val totalBalance by viewModel.totalBalance.collectAsState()
-    val activeGroups by viewModel.activeGroups.collectAsState()
-    val uiState by viewModel.uiState.collectAsState()
+    val totalBalance by viewModel.totalBalance.collectAsStateWithLifecycle()
+    val activeGroups by viewModel.activeGroups.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showNewGroupDialog by remember { mutableStateOf(false) }
     var editingFriend by remember { mutableStateOf<GroupMemberEntity?>(null) }
     val openedGroupDetailId = uiState.openedGroupDetailId
@@ -491,8 +492,8 @@ fun LedgersDashboardScreen(
         )
     }
 
-    val deviceContacts by viewModel.deviceContacts.collectAsState()
-    val isLoadingContacts by viewModel.isLoadingContacts.collectAsState()
+    val deviceContacts by viewModel.deviceContacts.collectAsStateWithLifecycle()
+    val isLoadingContacts by viewModel.isLoadingContacts.collectAsStateWithLifecycle()
 
     val addToGroupPermLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -2303,10 +2304,10 @@ fun LedgersDashboardScreen(
 @Composable
 fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
     val context = LocalContext.current
-    val settlementPlan by viewModel.settlementPlan.collectAsState()
-    val uiState by viewModel.uiState.collectAsState()
-    val deviceContacts by viewModel.deviceContacts.collectAsState()
-    val isLoadingContacts by viewModel.isLoadingContacts.collectAsState()
+    val settlementPlan by viewModel.settlementPlan.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val deviceContacts by viewModel.deviceContacts.collectAsStateWithLifecycle()
+    val isLoadingContacts by viewModel.isLoadingContacts.collectAsStateWithLifecycle()
 
     var targetMemberForContactLink by remember { mutableStateOf<GroupMemberEntity?>(null) }
     var showContactLinkSheet by remember { mutableStateOf(false) }
@@ -3267,7 +3268,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
 // ==============================================================================
 @Composable
 fun AuditVaultScreen(viewModel: SplitMateViewModel) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val sym = "₹"
     var selectedGroupFilterId by remember { mutableStateOf<String?>(null) }
     var showFilterBar by remember { mutableStateOf(true) }

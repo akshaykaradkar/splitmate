@@ -91,6 +91,9 @@ dependencies {
     implementation 'io.coil-kt:coil-compose:2.6.0'
     implementation 'io.coil-kt:coil-svg:2.6.0'
 
+    // Jetpack Security Crypto (AES256-GCM Hardware-Backed Keystore for PNR Vault)
+    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+
     // QA & Automated Testing: JUnit 5, CashApp Turbine, Coroutines Test, Compose Test Rule
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.2'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.2'

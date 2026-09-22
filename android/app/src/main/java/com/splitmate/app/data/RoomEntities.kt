@@ -1,6 +1,7 @@
 package com.splitmate.app.data
 
 import androidx.room.Entity
+import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
@@ -34,7 +35,15 @@ data class ExpenseGroupEntity(
  */
 @Entity(
     tableName = "group_members",
-    indices = [Index("groupId")]
+    foreignKeys = [
+        ForeignKey(
+            entity = ExpenseGroupEntity::class,
+            parentColumns = ["groupId"],
+            childColumns = ["groupId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index(value = ["groupId"])]
 )
 data class GroupMemberEntity(
     @PrimaryKey val memberId: String,
@@ -57,7 +66,25 @@ data class GroupMemberEntity(
  */
 @Entity(
     tableName = "expenses",
-    indices = [Index("groupId")]
+    foreignKeys = [
+        ForeignKey(
+            entity = ExpenseGroupEntity::class,
+            parentColumns = ["groupId"],
+            childColumns = ["groupId"],
+            onDelete = ForeignKey.CASCADE
+        ),
+        ForeignKey(
+            entity = GroupMemberEntity::class,
+            parentColumns = ["memberId"],
+            childColumns = ["payerId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [
+        Index(value = ["groupId"]),
+        Index(value = ["payerId"]),
+        Index(value = ["groupId", "createdAt"])
+    ]
 )
 data class ExpenseEntity(
     @PrimaryKey val expenseId: String,
@@ -81,7 +108,25 @@ data class ExpenseEntity(
  */
 @Entity(
     tableName = "expense_splits",
-    indices = [Index("expenseId"), Index("memberId")]
+    foreignKeys = [
+        ForeignKey(
+            entity = ExpenseEntity::class,
+            parentColumns = ["expenseId"],
+            childColumns = ["expenseId"],
+            onDelete = ForeignKey.CASCADE
+        ),
+        ForeignKey(
+            entity = GroupMemberEntity::class,
+            parentColumns = ["memberId"],
+            childColumns = ["memberId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [
+        Index(value = ["expenseId"]),
+        Index(value = ["memberId"]),
+        Index(value = ["expenseId", "memberId"], unique = true)
+    ]
 )
 data class ExpenseSplitEntity(
     @PrimaryKey val splitId: String,
@@ -97,7 +142,32 @@ data class ExpenseSplitEntity(
  */
 @Entity(
     tableName = "settlements",
-    indices = [Index("groupId")]
+    foreignKeys = [
+        ForeignKey(
+            entity = ExpenseGroupEntity::class,
+            parentColumns = ["groupId"],
+            childColumns = ["groupId"],
+            onDelete = ForeignKey.CASCADE
+        ),
+        ForeignKey(
+            entity = GroupMemberEntity::class,
+            parentColumns = ["memberId"],
+            childColumns = ["fromMemberId"],
+            onDelete = ForeignKey.CASCADE
+        ),
+        ForeignKey(
+            entity = GroupMemberEntity::class,
+            parentColumns = ["memberId"],
+            childColumns = ["toMemberId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [
+        Index(value = ["groupId"]),
+        Index(value = ["fromMemberId"]),
+        Index(value = ["toMemberId"]),
+        Index(value = ["groupId", "settledAt"])
+    ]
 )
 data class SettlementEntity(
     @PrimaryKey val settlementId: String,

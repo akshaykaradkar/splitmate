@@ -43,6 +43,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
@@ -132,8 +133,8 @@ fun QuickExpenseScreen(
     onSaveSplit: (amount: Long, selectedMembers: List<QuickParticipant>) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
-    val uiState = viewModel?.uiState?.collectAsState()?.value
-    val activeMembers = viewModel?.activeGroupMembers?.collectAsState()?.value
+    val uiState = viewModel?.uiState?.collectAsStateWithLifecycle()?.value
+    val activeMembers = viewModel?.activeGroupMembers?.collectAsStateWithLifecycle()?.value
         ?: uiState?.activeGroupMembers
         ?: emptyList()
     val isDark = uiState?.isDarkTheme == true || SplitMateTheme.isDark

@@ -402,13 +402,14 @@ fun queryAllDeviceContacts(context: Context): List<DeviceContact> {
         context.contentResolver.query(
             ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
             projection,
-            null,
+            "${ContactsContract.CommonDataKinds.Phone.HAS_PHONE_NUMBER} = 1",
             null,
             "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} ASC"
         )?.use { cursor ->
             val nameIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
             val numberIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
             while (cursor.moveToNext()) {
+                if (contactsByPhone.size >= 500) break
                 val rawName = if (nameIndex >= 0) cursor.getString(nameIndex).orEmpty().trim() else ""
                 val rawNumber = if (numberIndex >= 0) cursor.getString(numberIndex).orEmpty().trim() else ""
                 val clean10 = cleanIndianTenDigitPhone(rawNumber)
@@ -1053,7 +1054,7 @@ fun loadPersistedPnrSnapshot(context: Context, pnr: String): LivePnrStatusSnapsh
     val cleanPnr = pnr.replace(Regex("[^0-9]"), "").take(10)
     if (cleanPnr.length != 10) return null
     InMemoryPnrSnapshotCache[cleanPnr]?.let { return it }
-    val prefs = context.getSharedPreferences("splitmate_pnr_rate_guard", Context.MODE_PRIVATE)
+    val prefs = com.splitmate.app.data.EncryptedPrefsProvider.getPnrVaultPrefs(context)
     val rawJson = prefs.getString("snapshot_json_$cleanPnr", null) ?: return null
     val savedSyncMs = prefs.getLong("last_sync_$cleanPnr", 0L)
     if (savedSyncMs > 0L) {
@@ -1151,7 +1152,7 @@ private fun savePersistedPnrSnapshot(context: Context?, snapshot: LivePnrStatusS
             put("confirmationProbability", snapshot.confirmationProbability)
             put("sourceLabel", snapshot.sourceLabel)
         }
-        context.getSharedPreferences("splitmate_pnr_rate_guard", Context.MODE_PRIVATE)
+        com.splitmate.app.data.EncryptedPrefsProvider.getPnrVaultPrefs(context)
             .edit()
             .putLong("last_sync_$cleanPnr", now)
             .putString("snapshot_json_$cleanPnr", obj.toString())
@@ -1185,7 +1186,7 @@ fun shouldSkipAutoPnrNetworkPoll(
     if ((hour == 23 && minute >= 30) || (hour == 0 && minute <= 30)) return true
 
     // Rule 3: 6-Hour Smart Cooldown (or 30-Min on Day of Travel) persisted across app restarts
-    val prefs = context.getSharedPreferences("splitmate_pnr_rate_guard", Context.MODE_PRIVATE)
+    val prefs = com.splitmate.app.data.EncryptedPrefsProvider.getPnrVaultPrefs(context)
     val lastSyncMs = maxOf(
         InMemoryPnrLastFetchEpochMs[cleanPnr] ?: 0L,
         prefs.getLong("last_sync_$cleanPnr", 0L)
@@ -1204,7 +1205,7 @@ fun recordPnrSyncTimestamp(context: Context, pnr: String) {
         if (cleanPnr.length != 10) return
         val now = System.currentTimeMillis()
         InMemoryPnrLastFetchEpochMs[cleanPnr] = now
-        context.getSharedPreferences("splitmate_pnr_rate_guard", Context.MODE_PRIVATE)
+        com.splitmate.app.data.EncryptedPrefsProvider.getPnrVaultPrefs(context)
             .edit()
             .putLong("last_sync_$cleanPnr", now)
             .apply()
@@ -1227,7 +1228,7 @@ suspend fun fetchLivePnrAndTrainStatus(
         }
         val cachedSnapshot = InMemoryPnrSnapshotCache[cleanPnr]
         val diskSyncMs = if (context != null && cleanPnr.length == 10) {
-            context.getSharedPreferences("splitmate_pnr_rate_guard", Context.MODE_PRIVATE)
+            com.splitmate.app.data.EncryptedPrefsProvider.getPnrVaultPrefs(context)
                 .getLong("last_sync_$cleanPnr", 0L)
         } else 0L
         val lastFetchMs = maxOf(InMemoryPnrLastFetchEpochMs[cleanPnr] ?: 0L, diskSyncMs)
@@ -1247,7 +1248,7 @@ suspend fun fetchLivePnrAndTrainStatus(
         if (cleanPnr.length == 10) {
             val preNow = System.currentTimeMillis()
             InMemoryPnrLastFetchEpochMs[cleanPnr] = preNow
-            context?.getSharedPreferences("splitmate_pnr_rate_guard", Context.MODE_PRIVATE)
+            context?.let { com.splitmate.app.data.EncryptedPrefsProvider.getPnrVaultPrefs(it) }
                 ?.edit()
                 ?.putLong("last_sync_$cleanPnr", preNow)
                 ?.apply()

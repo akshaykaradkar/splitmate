@@ -129,7 +129,7 @@ class SplitMateViewModel(
 
     val activeGroupMembers: StateFlow<List<GroupMemberEntity>> = _uiState.map { state ->
         state.activeGroupMembers
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _deviceContacts = MutableStateFlow<List<DeviceContact>>(emptyList())
     val deviceContacts: StateFlow<List<DeviceContact>> = _deviceContacts.asStateFlow()
@@ -137,7 +137,8 @@ class SplitMateViewModel(
     private val _isLoadingContacts = MutableStateFlow(false)
     val isLoadingContacts: StateFlow<Boolean> = _isLoadingContacts.asStateFlow()
 
-    fun loadDeviceContacts(context: android.content.Context) {
+    fun loadDeviceContacts(context: android.content.Context, forceRefresh: Boolean = false) {
+        if (!forceRefresh && _deviceContacts.value.isNotEmpty()) return
         viewModelScope.launch(ioDispatcher) {
             _isLoadingContacts.value = true
             val loaded = queryAllDeviceContacts(context.applicationContext)
@@ -159,7 +160,7 @@ class SplitMateViewModel(
                 else -> "${sym}0.00"
             }
         }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, "₹0.00")
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "₹0.00")
 
     val activeGroups: StateFlow<List<ActiveGroupCardUiModel>> = _uiState.map { state ->
         if (state.groups.isEmpty()) {
@@ -208,7 +209,7 @@ class SplitMateViewModel(
                 )
             }
         }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val settlementPlan: StateFlow<List<SettlementTransferUiModel>> = _uiState.map { state ->
         if (state.groups.isEmpty()) {
@@ -253,7 +254,7 @@ class SplitMateViewModel(
                 )
             }
         }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
         if (dao != null) {
