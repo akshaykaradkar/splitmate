@@ -1026,10 +1026,16 @@ fun LedgersDashboardScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // 1-Tap Warm Espresso Night (#181512) Theme Toggle
+                    // 1-Tap Warm Espresso Night (#181512) Theme Toggle (Global across all tabs & Settings)
                     Surface(
                         onClick = {
-                            SplitMateTheme.isDark = !SplitMateTheme.isDark
+                            val nextDark = !uiState.isDarkTheme
+                            SplitMateTheme.isDark = nextDark
+                            context.getSharedPreferences("splitmate_prefs", android.content.Context.MODE_PRIVATE)
+                                .edit()
+                                .putBoolean("is_dark_theme", nextDark)
+                                .apply()
+                            viewModel.toggleDarkTheme(nextDark)
                         },
                         shape = CircleShape,
                         color = SplitMateTheme.SurfaceWhite,
@@ -1040,14 +1046,14 @@ fun LedgersDashboardScreen(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                         ) {
                             Icon(
-                                imageVector = if (SplitMateTheme.isDark) Icons.Rounded.LightMode else Icons.Rounded.DarkMode,
+                                imageVector = if (uiState.isDarkTheme) Icons.Rounded.LightMode else Icons.Rounded.DarkMode,
                                 contentDescription = "Toggle Warm Espresso Night Theme",
-                                tint = if (SplitMateTheme.isDark) Color(0xFFD7E8B6) else SplitMateTheme.PrimaryDark,
+                                tint = if (uiState.isDarkTheme) Color(0xFFD7E8B6) else SplitMateTheme.PrimaryDark,
                                 modifier = Modifier.size(15.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (SplitMateTheme.isDark) "Cream" else "Espresso",
+                                text = if (uiState.isDarkTheme) "Cream" else "Espresso",
                                 fontFamily = SplitMateTheme.FontRounded,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
