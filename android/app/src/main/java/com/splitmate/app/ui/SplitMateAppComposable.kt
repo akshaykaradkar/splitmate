@@ -66,6 +66,7 @@ import com.splitmate.app.ui.extractInitialsFromNameOrSeed
 import com.splitmate.app.ui.resolveGroupCategoryIcon
 import com.splitmate.app.ui.screens.EditFriendUpiDialog
 import com.splitmate.app.ui.screens.OnboardingSetupScreen
+import com.splitmate.app.ui.screens.PnrExpenseReviewScreen
 import com.splitmate.app.ui.screens.QuickExpenseScreen
 import com.splitmate.app.ui.screens.UserSettingsScreen
 import java.util.Locale
@@ -234,14 +235,30 @@ fun SplitMateMainDashboardScaffold(
     val currentTab = remember(uiState.selectedTabName) {
         runCatching { SplitMateTab.valueOf(uiState.selectedTabName) }.getOrDefault(SplitMateTab.LEDGERS)
     }
+    var showPnrReviewScreen by remember { mutableStateOf(false) }
 
-    // Intercept system Back when on SPLIT, SETTLE, or AUDIT so user returns to their active group or Ledgers instead of exiting the app!
-    androidx.activity.compose.BackHandler(enabled = currentTab != SplitMateTab.LEDGERS) {
-        if (uiState.returnToGroupDetailId != null) {
+    // Intercept system Back when PNR review screen is open or when on SPLIT, SETTLE, or AUDIT
+    androidx.activity.compose.BackHandler(enabled = showPnrReviewScreen || currentTab != SplitMateTab.LEDGERS) {
+        if (showPnrReviewScreen) {
+            showPnrReviewScreen = false
+        } else if (uiState.returnToGroupDetailId != null) {
             viewModel.finishSubFlowToGroupDetail(uiState.returnToGroupDetailId)
         } else {
             viewModel.selectTab(SplitMateTab.LEDGERS.name)
         }
+    }
+
+    if (showPnrReviewScreen) {
+        PnrExpenseReviewScreen(
+            viewModel = viewModel,
+            onBackClick = { showPnrReviewScreen = false },
+            onExpenseAdded = {
+                showPnrReviewScreen = false
+                val loggedGroupId = viewModel.uiState.value.activeGroup?.groupId
+                viewModel.finishSubFlowToGroupDetail(loggedGroupId)
+            }
+        )
+        return
     }
 
     val animatedScreenBg by animateColorAsState(
@@ -322,6 +339,9 @@ fun SplitMateMainDashboardScaffold(
                             originGroupDetailId = uiState.openedGroupDetailId
                         )
                     },
+                    onNavigateToPnrSplit = {
+                        showPnrReviewScreen = true
+                    },
                     onAvatarSettingsClick = onOpenSettings
                 )
                 SplitMateTab.SPLIT -> QuickExpenseScreen(
@@ -332,6 +352,9 @@ fun SplitMateMainDashboardScaffold(
                         } else {
                             viewModel.selectTab(SplitMateTab.LEDGERS.name)
                         }
+                    },
+                    onOpenPnrDirectSplit = {
+                        showPnrReviewScreen = true
                     },
                     onSaveSplit = { _, _ ->
                         // Return directly inside the group where the expense was logged!
@@ -414,6 +437,7 @@ fun LedgersDashboardScreen(
     viewModel: SplitMateViewModel,
     onNavigateToSplit: () -> Unit = {},
     onNavigateToSettle: () -> Unit = {},
+    onNavigateToPnrSplit: () -> Unit = {},
     onAvatarSettingsClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -442,16 +466,19 @@ fun LedgersDashboardScreen(
 
     editingExpense?.let { exp ->
         val expGroupMembers = uiState.members.filter { it.groupId == exp.groupId }
+        val expExistingSplits = uiState.splits.filter { it.expenseId == exp.expenseId && it.finalOwedCents > 0L }
         EditLoggedExpenseDialog(
             expense = exp,
             groupMembers = expGroupMembers,
+            initialSplitMemberIds = expExistingSplits.map { it.memberId }.toSet().ifEmpty { expGroupMembers.map { it.memberId }.toSet() },
             onDismiss = { editingExpense = null },
-            onSave = { newTitle, newAmountRupees, newPayerId ->
+            onSave = { newTitle, newAmountRupees, newPayerId, updatedSplitMemberIds ->
                 viewModel.editExistingExpense(
                     expenseId = exp.expenseId,
                     newTitle = newTitle,
                     newTotalRupees = newAmountRupees,
-                    newPayerId = newPayerId
+                    newPayerId = newPayerId,
+                    selectedMemberIds = updatedSplitMemberIds
                 )
                 editingExpense = null
             }
@@ -590,6 +617,31 @@ fun LedgersDashboardScreen(
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 12.sp,
                                     color = SplitMateTheme.SageText
+                                )
+                            }
+                        }
+
+                        Surface(
+                            onClick = onNavigateToPnrSplit,
+                            shape = SplitMateTheme.RadiusBadge,
+                            color = Color(0xFF264010)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Train,
+                                    contentDescription = "Split PNR",
+                                    tint = Color(0xFFD7E8B6),
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = "Split PNR",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 12.sp,
+                                    color = Color.White
                                 )
                             }
                         }
@@ -828,8 +880,16 @@ fun LedgersDashboardScreen(
                     val isMePayer = payer?.isCurrentUser == true
                     val formattedTotal = "₹${String.format(Locale.US, "%.2f", expense.totalAmountCents / 100.0)}"
                     val isExpanded = expandedExpenseId == expense.expenseId
-                    val memberCount = groupMembers.size.coerceAtLeast(1)
-                    val perPersonShare = "₹${String.format(Locale.US, "%.2f", (expense.totalAmountCents / memberCount) / 100.0)}"
+                    val breakdown = remember(expense, groupMembers, uiState.splits) {
+                        SplitMateViewModel.resolveExpenseSplitBreakdown(
+                            expense = expense,
+                            groupMembers = groupMembers,
+                            allSplits = uiState.splits,
+                            currencySymbol = "₹",
+                            headerPrefix = "Split Breakdown"
+                        )
+                    }
+                    val perPersonShare = breakdown.perPersonHeadlineShare
 
                     Card(
                         onClick = {
@@ -874,7 +934,7 @@ fun LedgersDashboardScreen(
                                             color = SplitMateTheme.PrimaryDark
                                         )
                                         Text(
-                                            text = "Paid by ${payer?.name ?: "You"} · $perPersonShare / person",
+                                            text = "Paid by ${payer?.name ?: "You"} · $perPersonShare / person (${breakdown.splittingMembersCount} splitting)",
                                             fontFamily = SplitMateTheme.FontRounded,
                                             fontWeight = FontWeight.Medium,
                                             letterSpacing = 0.sp,
@@ -917,13 +977,13 @@ fun LedgersDashboardScreen(
                                 HorizontalDivider(color = SplitMateTheme.BorderLight)
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    text = "Split Breakdown (${groupMembers.size} members)",
+                                    text = breakdown.headerLabel,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = SplitMateTheme.PrimaryDark
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
-                                groupMembers.forEach { mbr ->
+                                breakdown.rows.forEach { row ->
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -932,15 +992,15 @@ fun LedgersDashboardScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            text = if (mbr.isCurrentUser) "${mbr.name} (You)" else mbr.name,
+                                            text = row.displayName,
                                             fontSize = 12.sp,
-                                            color = SplitMateTheme.TextSecondary
+                                            color = if (row.isIncludedInSplit) SplitMateTheme.TextSecondary else SplitMateTheme.TextSecondary.copy(alpha = 0.5f)
                                         )
                                         Text(
-                                            text = perPersonShare,
+                                            text = row.formattedShare,
                                             fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = SplitMateTheme.PrimaryDark
+                                            fontWeight = if (row.isIncludedInSplit) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (row.isIncludedInSplit) SplitMateTheme.PrimaryDark else SplitMateTheme.TextSecondary.copy(alpha = 0.55f)
                                         )
                                     }
                                 }
@@ -1234,6 +1294,75 @@ fun LedgersDashboardScreen(
                                 Icon(Icons.AutoMirrored.Rounded.ReceiptLong, contentDescription = null, tint = Color(0xFF23201E), modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text("Log Expense", fontFamily = SplitMateTheme.FontRounded, color = Color(0xFF23201E), fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Dedicated Hero Entry: IRCTC Train PNR Direct Split (Tactile Boarding Pass)
+                        Surface(
+                            onClick = onNavigateToPnrSplit,
+                            shape = SplitMateTheme.RadiusButton,
+                            color = Color(0xFF264010),
+                            border = BorderStroke(1.dp, Color(0xFF4A7325)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 11.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(34.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(Color(0xFF345418)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Train,
+                                            contentDescription = "IRCTC PNR Direct Split",
+                                            tint = Color(0xFFD7E8B6),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(
+                                            text = "IRCTC Train PNR Direct Split",
+                                            fontFamily = SplitMateTheme.FontRounded,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 13.sp,
+                                            color = Color.White
+                                        )
+                                        Text(
+                                            text = "Enter 10-digit PNR · Live Status & Select Members",
+                                            fontFamily = SplitMateTheme.FontRounded,
+                                            fontWeight = FontWeight.Medium,
+                                            fontSize = 11.sp,
+                                            color = Color(0xFFC5D6A7)
+                                        )
+                                    }
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(999.dp),
+                                    color = Color(0xFFD7E8B6)
+                                ) {
+                                    Text(
+                                        text = "Split PNR →",
+                                        fontFamily = SplitMateTheme.FontRounded,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF1B2E0B),
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -3217,8 +3346,16 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
             val payer = uiState.members.find { it.memberId == expense.payerId }
             val group = uiState.groups.find { it.groupId == expense.groupId }
             val groupMembers = uiState.members.filter { it.groupId == expense.groupId }
-            val memberCount = groupMembers.size.coerceAtLeast(1)
-            val perPersonShare = "$sym${String.format(Locale.US, "%.2f", (expense.totalAmountCents / memberCount) / 100.0)}"
+            val breakdown = remember(expense, groupMembers, uiState.splits, sym) {
+                SplitMateViewModel.resolveExpenseSplitBreakdown(
+                    expense = expense,
+                    groupMembers = groupMembers,
+                    allSplits = uiState.splits,
+                    currencySymbol = sym,
+                    headerPrefix = "Individual Share Breakdown"
+                )
+            }
+            val perPersonShare = breakdown.perPersonHeadlineShare
             val isMePayer = payer?.isCurrentUser == true
             val formattedTotal = "$sym${String.format(Locale.US, "%.2f", expense.totalAmountCents / 100.0)}"
             val isExpanded = expandedExpenseId == expense.expenseId
@@ -3303,13 +3440,13 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
                         HorizontalDivider(color = SplitMateTheme.BorderLight)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Individual Share Breakdown (${groupMembers.size} members)",
+                            text = breakdown.headerLabel,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = SplitMateTheme.PrimaryDark
                         )
                         Spacer(modifier = Modifier.height(6.dp))
-                        groupMembers.forEach { mbr ->
+                        breakdown.rows.forEach { row ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -3318,15 +3455,15 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = if (mbr.isCurrentUser) "${mbr.name} (You)" else mbr.name,
+                                    text = row.displayName,
                                     fontSize = 12.sp,
-                                    color = SplitMateTheme.TextSecondary
+                                    color = if (row.isIncludedInSplit) SplitMateTheme.TextSecondary else SplitMateTheme.TextSecondary.copy(alpha = 0.5f)
                                 )
                                 Text(
-                                    text = perPersonShare,
+                                    text = row.formattedShare,
                                     fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = SplitMateTheme.PrimaryDark
+                                    fontWeight = if (row.isIncludedInSplit) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (row.isIncludedInSplit) SplitMateTheme.PrimaryDark else SplitMateTheme.TextSecondary.copy(alpha = 0.55f)
                                 )
                             }
                         }
@@ -3342,7 +3479,7 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "$perPersonShare / person",
+                            text = "$perPersonShare / person (${breakdown.splittingMembersCount} splitting)",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = SplitMateTheme.TextSecondary
@@ -3386,16 +3523,19 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
     if (editingExpenseEntity != null) {
         val exp = editingExpenseEntity!!
         val expGroupMembers = uiState.members.filter { it.groupId == exp.groupId }
+        val expExistingSplits = uiState.splits.filter { it.expenseId == exp.expenseId && it.finalOwedCents > 0L }
         EditLoggedExpenseDialog(
             expense = exp,
             groupMembers = expGroupMembers,
+            initialSplitMemberIds = expExistingSplits.map { it.memberId }.toSet().ifEmpty { expGroupMembers.map { it.memberId }.toSet() },
             onDismiss = { editingExpenseEntity = null },
-            onSave = { newTitle, newRupees, newPayerId ->
+            onSave = { newTitle, newRupees, newPayerId, updatedSplitMemberIds ->
                 viewModel.editExistingExpense(
                     expenseId = exp.expenseId,
                     newTitle = newTitle,
                     newTotalRupees = newRupees,
-                    newPayerId = newPayerId
+                    newPayerId = newPayerId,
+                    selectedMemberIds = updatedSplitMemberIds
                 )
                 editingExpenseEntity = null
             }
@@ -3404,14 +3544,15 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
 }
 
 // ==============================================================================
-// DIALOG FOR EDITING AN ALREADY-LOGGED EXPENSE (Category, Amount, Payer, PNR)
+// DIALOG FOR EDITING AN ALREADY-LOGGED EXPENSE (Category, Amount, Payer, PNR, Split Members)
 // ==============================================================================
 @Composable
 fun EditLoggedExpenseDialog(
     expense: com.splitmate.app.data.ExpenseEntity,
     groupMembers: List<com.splitmate.app.data.GroupMemberEntity>,
+    initialSplitMemberIds: Set<String> = groupMembers.map { it.memberId }.toSet(),
     onDismiss: () -> Unit,
-    onSave: (String, Double, String) -> Unit
+    onSave: (String, Double, String, List<String>) -> Unit
 ) {
     val existingTicket = remember(expense.title) { extractTravelTicketFromTitle(expense.title) }
     var editedTitle by remember(expense.title) {
@@ -3423,6 +3564,9 @@ fun EditLoggedExpenseDialog(
     }
     var selectedPayerId by remember(expense.payerId) {
         mutableStateOf(expense.payerId)
+    }
+    var selectedSplitMemberIds by remember(expense.expenseId, initialSplitMemberIds) {
+        mutableStateOf(initialSplitMemberIds.ifEmpty { groupMembers.map { it.memberId }.toSet() })
     }
     var includeTravelTicket by remember(existingTicket) {
         mutableStateOf(existingTicket != null)
@@ -3551,6 +3695,37 @@ fun EditLoggedExpenseDialog(
                             }
                         }
                     }
+
+                    Text(
+                        text = "Split Equally Among (${selectedSplitMemberIds.size} of ${groupMembers.size} selected):",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SplitMateTheme.TextSecondary
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(groupMembers, key = { "split_${it.memberId}" }) { mbr ->
+                            val isIncluded = selectedSplitMemberIds.contains(mbr.memberId)
+                            Surface(
+                                onClick = {
+                                    selectedSplitMemberIds = if (isIncluded && selectedSplitMemberIds.size > 1) {
+                                        selectedSplitMemberIds - mbr.memberId
+                                    } else {
+                                        selectedSplitMemberIds + mbr.memberId
+                                    }
+                                },
+                                shape = SplitMateTheme.RadiusBadge,
+                                color = if (isIncluded) SplitMateTheme.SageSurface else SplitMateTheme.SurfaceMuted
+                            ) {
+                                Text(
+                                    text = (if (isIncluded) "✓ " else "") + (if (mbr.isCurrentUser) "${mbr.name} (You)" else mbr.name),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isIncluded) SplitMateTheme.SageText else SplitMateTheme.TextSecondary,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Row(
@@ -3628,7 +3803,7 @@ fun EditLoggedExpenseDialog(
                     } else {
                         editedTitle.trim().ifBlank { "Group Expense" }
                     }
-                    onSave(finalTitle, parsedRupees, selectedPayerId)
+                    onSave(finalTitle, parsedRupees, selectedPayerId, selectedSplitMemberIds.toList())
                 },
                 shape = SplitMateTheme.RadiusButton,
                 colors = ButtonDefaults.buttonColors(

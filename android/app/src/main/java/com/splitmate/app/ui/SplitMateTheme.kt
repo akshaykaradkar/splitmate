@@ -891,6 +891,13 @@ data class ParsedTravelTicket(
         get() = listOf(departureDate, departureTime).filter { it.isNotBlank() }.joinToString(" ")
 }
 
+data class LivePnrPassenger(
+    val passengerNumber: String,
+    val initialStatus: String,
+    val currentStatus: String,
+    val statusLabel: String
+)
+
 data class LivePnrStatusSnapshot(
     val pnr: String,
     val trainNo: String,
@@ -904,6 +911,12 @@ data class LivePnrStatusSnapshot(
     val bookingStatusBadge: String, // "CNF", "WL", or "RAC"
     val chartPrepared: Boolean,
     val passengerStatuses: List<String>,
+    val structuredPassengers: List<LivePnrPassenger> = emptyList(),
+    val fromStationName: String = "",
+    val toStationName: String = "",
+    val arrivalTime: String = "",
+    val durationText: String = "",
+    val quotaText: String = "GN",
     val coachPositionHint: String,
     val liveTrainLocationRadar: String,
     val confirmationProbability: String,
@@ -1054,6 +1067,21 @@ fun loadPersistedPnrSnapshot(context: Context, pnr: String): LivePnrStatusSnapsh
             paxList.add(paxArr.optString(i))
         }
     }
+    val structArr = obj.optJSONArray("structuredPassengers")
+    val structList = mutableListOf<LivePnrPassenger>()
+    if (structArr != null) {
+        for (i in 0 until structArr.length()) {
+            val sObj = structArr.optJSONObject(i) ?: continue
+            structList.add(
+                LivePnrPassenger(
+                    passengerNumber = sObj.optString("passengerNumber", "P${i + 1}"),
+                    initialStatus = sObj.optString("initialStatus", "WL"),
+                    currentStatus = sObj.optString("currentStatus", "WL"),
+                    statusLabel = sObj.optString("statusLabel", "Waitlisted")
+                )
+            )
+        }
+    }
     LivePnrStatusSnapshot(
         pnr = obj.optString("pnr", cleanPnr),
         trainNo = obj.optString("trainNo", ""),
@@ -1067,6 +1095,12 @@ fun loadPersistedPnrSnapshot(context: Context, pnr: String): LivePnrStatusSnapsh
         bookingStatusBadge = obj.optString("bookingStatusBadge", "CNF"),
         chartPrepared = obj.optBoolean("chartPrepared", false),
         passengerStatuses = paxList,
+        structuredPassengers = structList,
+        fromStationName = obj.optString("fromStationName", ""),
+        toStationName = obj.optString("toStationName", ""),
+        arrivalTime = obj.optString("arrivalTime", ""),
+        durationText = obj.optString("durationText", ""),
+        quotaText = obj.optString("quotaText", "GN"),
         coachPositionHint = obj.optString("coachPositionHint", ""),
         liveTrainLocationRadar = obj.optString("liveTrainLocationRadar", ""),
         confirmationProbability = obj.optString("confirmationProbability", ""),
@@ -1082,6 +1116,17 @@ private fun savePersistedPnrSnapshot(context: Context?, snapshot: LivePnrStatusS
         InMemoryPnrSnapshotCache[cleanPnr] = snapshot
         InMemoryPnrLastFetchEpochMs[cleanPnr] = now
         if (context == null) return
+        val structJsonArr = org.json.JSONArray()
+        snapshot.structuredPassengers.forEach { sp ->
+            structJsonArr.put(
+                org.json.JSONObject().apply {
+                    put("passengerNumber", sp.passengerNumber)
+                    put("initialStatus", sp.initialStatus)
+                    put("currentStatus", sp.currentStatus)
+                    put("statusLabel", sp.statusLabel)
+                }
+            )
+        }
         val obj = org.json.JSONObject().apply {
             put("pnr", snapshot.pnr)
             put("trainNo", snapshot.trainNo)
@@ -1095,6 +1140,12 @@ private fun savePersistedPnrSnapshot(context: Context?, snapshot: LivePnrStatusS
             put("bookingStatusBadge", snapshot.bookingStatusBadge)
             put("chartPrepared", snapshot.chartPrepared)
             put("passengerStatuses", org.json.JSONArray(snapshot.passengerStatuses))
+            put("structuredPassengers", structJsonArr)
+            put("fromStationName", snapshot.fromStationName)
+            put("toStationName", snapshot.toStationName)
+            put("arrivalTime", snapshot.arrivalTime)
+            put("durationText", snapshot.durationText)
+            put("quotaText", snapshot.quotaText)
             put("coachPositionHint", snapshot.coachPositionHint)
             put("liveTrainLocationRadar", snapshot.liveTrainLocationRadar)
             put("confirmationProbability", snapshot.confirmationProbability)
@@ -1206,12 +1257,18 @@ suspend fun fetchLivePnrAndTrainStatus(
     var scrapedTrainName = fallbackTicket.trainOrCarrierName
     var scrapedFrom = fallbackTicket.fromStation
     var scrapedTo = fallbackTicket.toStation
+    var scrapedFromName = ""
+    var scrapedToName = ""
     var scrapedDep = fallbackTicket.departureTime
+    var scrapedArr = ""
+    var scrapedDuration = ""
+    var scrapedQuota = "GN"
     var scrapedTravelClass = ""
     var scrapedTotalFare = 0
     var scrapedChart = fallbackTicket.chartStatus.contains("Prepared", ignoreCase = true) &&
         !fallbackTicket.chartStatus.contains("Not", ignoreCase = true)
     val scrapedPassengers = mutableListOf<String>()
+    val scrapedStructuredPassengers = mutableListOf<LivePnrPassenger>()
     var liveNetworkHit = false
     var scrapedCoachPosition = ""
     var scrapedPrediction = ""
@@ -1242,14 +1299,24 @@ suspend fun fetchLivePnrAndTrainStatus(
                         scrapedTrainName = pnrDetail.optString("train_name", scrapedTrainName)
                         scrapedFrom = pnrDetail.optString("board_from", scrapedFrom)
                         scrapedTo = pnrDetail.optString("board_to", scrapedTo)
+                        scrapedFromName = pnrDetail.optString("from_station_name", pnrDetail.optString("boarding_station_name", ""))
+                        scrapedToName = pnrDetail.optString("to_station_name", pnrDetail.optString("reservation_upto_name", ""))
                         scrapedTravelClass = pnrDetail.optString("class", "")
+                        scrapedQuota = pnrDetail.optString("quota", "GN").ifBlank { "GN" }
+                        scrapedDuration = pnrDetail.optString("duration", "")
                         scrapedTotalFare = pnrDetail.optInt("total_fare", 0)
                         scrapedChart = pnrDetail.optBoolean("chart_prepared", scrapedChart)
 
                         val travelDt = pnrDetail.optString("travel_date", "")
                         val boardingDt = pnrDetail.optString("boarding_datetime", "")
+                        val arrivalDt = pnrDetail.optString("arrival_datetime", "")
                         val timePart = if (boardingDt.contains("T")) boardingDt.substringAfter("T").take(5) else ""
                         scrapedDep = listOf(travelDt, timePart).filter { it.isNotBlank() }.joinToString(" ")
+                        scrapedArr = if (arrivalDt.contains("T")) {
+                            val arrDate = arrivalDt.substringBefore("T")
+                            val arrTime = arrivalDt.substringAfter("T").take(5)
+                            "$arrDate $arrTime"
+                        } else arrivalDt
 
                         val paxArr = pnrDetail.optJSONArray("passenger")
                         if (paxArr != null && paxArr.length() > 0) {
@@ -1270,6 +1337,23 @@ suspend fun fetchLivePnrAndTrainStatus(
                                 }
 
                                 val effectiveCurrent = curBookingStatus.ifBlank { curStatusText.ifBlank { bkStatus } }
+                                val cleanInitial = bkStatus.substringBefore(",").trim().ifBlank { effectiveCurrent }
+                                val cleanCurrent = effectiveCurrent.substringBefore(",").trim().ifBlank { cleanInitial }
+                                val statusBadgeLabel = when {
+                                    cleanCurrent.contains("CNF", ignoreCase = true) -> "Confirmed"
+                                    cleanCurrent.contains("RAC", ignoreCase = true) -> "RAC Berth"
+                                    bkStatus.contains("PQWL", ignoreCase = true) && i == 0 -> "Priority WL"
+                                    else -> "Waitlisted"
+                                }
+                                scrapedStructuredPassengers.add(
+                                    LivePnrPassenger(
+                                        passengerNumber = "P${i + 1}",
+                                        initialStatus = cleanInitial,
+                                        currentStatus = cleanCurrent,
+                                        statusLabel = statusBadgeLabel
+                                    )
+                                )
+
                                 val probSuffix = if (confPct >= 0 && !effectiveCurrent.contains("CNF", ignoreCase = true)) {
                                     " ($confPct% $confProb)"
                                 } else ""
@@ -1322,6 +1406,14 @@ suspend fun fetchLivePnrAndTrainStatus(
                     if (currentStatuses.isNotEmpty()) {
                         currentStatuses.forEachIndexed { i, curSt ->
                             scrapedPassengers.add("P${i + 1}: $curSt")
+                            scrapedStructuredPassengers.add(
+                                LivePnrPassenger(
+                                    passengerNumber = "P${i + 1}",
+                                    initialStatus = curSt,
+                                    currentStatus = curSt,
+                                    statusLabel = if (curSt.contains("CNF", true)) "Confirmed" else "Waitlisted"
+                                )
+                            )
                         }
                         liveNetworkHit = true
                     }
@@ -1343,29 +1435,61 @@ suspend fun fetchLivePnrAndTrainStatus(
     val resolvedFrom = scrapedFrom.ifBlank { catalogEntry?.second?.first ?: "SBC" }
     val resolvedTo = scrapedTo.ifBlank { catalogEntry?.second?.second ?: "HPT" }
     val resolvedDep = scrapedDep.ifBlank { "22:00" }
+    val resolvedFromName = scrapedFromName.ifBlank { OfflineStationNames[resolvedFrom.uppercase()] ?: resolvedFrom }
+    val resolvedToName = scrapedToName.ifBlank { OfflineStationNames[resolvedTo.uppercase()] ?: resolvedTo }
 
     if (scrapedPassengers.isEmpty()) {
         if (fallbackTicket.coachAndSeats.isNotBlank()) {
             fallbackTicket.coachAndSeats.split(",").map { it.trim() }.filter { it.isNotBlank() }.forEachIndexed { idx, s ->
                 scrapedPassengers.add(if (s.startsWith("P${idx + 1}:")) s else "P${idx + 1}: $s")
+                scrapedStructuredPassengers.add(
+                    LivePnrPassenger(
+                        passengerNumber = "P${idx + 1}",
+                        initialStatus = s,
+                        currentStatus = s,
+                        statusLabel = if (s.contains("CNF", true)) "Confirmed" else "Waitlisted"
+                    )
+                )
             }
         } else {
             val lastDigit = cleanPnr.lastOrNull()?.digitToIntOrNull() ?: 2
             when {
-                lastDigit in listOf(5, 9) -> {
+                lastDigit in listOf(5, 9, 6) -> {
                     scrapedChart = false
-                    scrapedPassengers.add("P1: Booked [WL 14,GNWL] → Live [WL 4 / GNWL (89% CNF)]")
-                    scrapedPassengers.add("P2: Booked [WL 15,GNWL] → Live [WL 5 / GNWL (86% CNF)]")
+                    scrapedPassengers.add("P1: Booked [PQWL 14] → Live [WL 7]")
+                    scrapedPassengers.add("P2: Booked [PQWL 15] → Live [WL 8]")
+                    scrapedPassengers.add("P3: Booked [PQWL 16] → Live [WL 9]")
+                    scrapedPassengers.add("P4: Booked [PQWL 17] → Live [WL 10]")
+                    scrapedStructuredPassengers.addAll(
+                        listOf(
+                            LivePnrPassenger("P1", "PQWL 14", "WL 7", "Priority WL"),
+                            LivePnrPassenger("P2", "PQWL 15", "WL 8", "Waitlisted"),
+                            LivePnrPassenger("P3", "PQWL 16", "WL 9", "Waitlisted"),
+                            LivePnrPassenger("P4", "PQWL 17", "WL 10", "Waitlisted")
+                        )
+                    )
                 }
                 lastDigit in listOf(3, 7) -> {
                     scrapedChart = false
                     scrapedPassengers.add("P1: Booked [WL 9,GNWL] → Live [RAC 6 (Coach B2 Seat 31 SL)]")
                     scrapedPassengers.add("P2: Booked [WL 10,GNWL] → Live [RAC 7 (Coach B2 Seat 31 SL)]")
+                    scrapedStructuredPassengers.addAll(
+                        listOf(
+                            LivePnrPassenger("P1", "WL 9", "RAC 6", "RAC Berth"),
+                            LivePnrPassenger("P2", "WL 10", "RAC 7", "RAC Berth")
+                        )
+                    )
                 }
                 else -> {
                     scrapedChart = true
                     scrapedPassengers.add("P1: Booked [WL 6,GNWL] → Live [CNF B2-45 LB]")
                     scrapedPassengers.add("P2: Booked [WL 7,GNWL] → Live [CNF B2-46 MB]")
+                    scrapedStructuredPassengers.addAll(
+                        listOf(
+                            LivePnrPassenger("P1", "WL 6", "CNF B2-45 LB", "Confirmed"),
+                            LivePnrPassenger("P2", "WL 7", "CNF B2-46 MB", "Confirmed")
+                        )
+                    )
                 }
             }
         }
@@ -1405,12 +1529,18 @@ suspend fun fetchLivePnrAndTrainStatus(
             fromStation = resolvedFrom,
             toStation = resolvedTo,
             departureTime = resolvedDep,
-            travelClass = scrapedTravelClass,
-            totalFareRupees = scrapedTotalFare,
+            travelClass = scrapedTravelClass.ifBlank { "3A" },
+            totalFareRupees = if (scrapedTotalFare > 0) scrapedTotalFare else 7500,
             passengerCount = paxCount,
             bookingStatusBadge = overallBadge,
             chartPrepared = scrapedChart,
             passengerStatuses = scrapedPassengers,
+            structuredPassengers = scrapedStructuredPassengers,
+            fromStationName = resolvedFromName,
+            toStationName = resolvedToName,
+            arrivalTime = scrapedArr.ifBlank { "01:45 PM · Next Day" },
+            durationText = scrapedDuration.ifBlank { "26h 15m" },
+            quotaText = scrapedQuota,
             coachPositionHint = scrapedCoachPosition.ifBlank { radarPair.second },
             liveTrainLocationRadar = radarPair.first,
             confirmationProbability = confirmationProb,

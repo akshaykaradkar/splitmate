@@ -1063,19 +1063,25 @@ class SplitMateViewModel(
         expenseId: String,
         newTitle: String,
         newTotalRupees: Double,
-        newPayerId: String
+        newPayerId: String,
+        selectedMemberIds: List<String>? = null
     ) {
         val state = _uiState.value
         val existing = state.expenses.find { it.expenseId == expenseId } ?: return
         val cleanTitle = newTitle.trim().ifEmpty { existing.title }
-        val newTotalCents = (newTotalRupees * 100.0).toLong().coerceAtLeast(1L)
+        val newTotalCents = kotlin.math.round(newTotalRupees * 100.0).toLong().coerceAtLeast(1L)
 
-        val existingSplits = state.splits.filter { it.expenseId == expenseId }
+        val existingSplits = state.splits.filter { it.expenseId == expenseId && it.finalOwedCents > 0L }
         val groupMembers = state.members.filter { it.groupId == existing.groupId }
-        val splitMemberIds = existingSplits.map { it.memberId }.ifEmpty { groupMembers.map { it.memberId } }
-        val count = splitMemberIds.size.coerceAtLeast(1)
-        val perPersonBase = newTotalCents / count
-        val remainder = (newTotalCents % count).toInt()
+        val splitMemberIds = selectedMemberIds?.filter { id -> groupMembers.any { it.memberId == id } }
+            ?.ifEmpty { null }
+            ?: existingSplits.map { it.memberId }.ifEmpty { groupMembers.map { it.memberId } }
+
+        val chosenMembers = groupMembers.filter { splitMemberIds.contains(it.memberId) }.ifEmpty { groupMembers }
+        val equalAllocations = SplitMateMathEngine.splitEquallyZeroDrift(
+            newTotalCents,
+            chosenMembers.map { it.memberId to it.name }
+        )
 
         val updatedExpense = existing.copy(
             title = cleanTitle,
@@ -1084,15 +1090,14 @@ class SplitMateViewModel(
             totalAmountCents = newTotalCents
         )
 
-        val updatedSplits = splitMemberIds.mapIndexed { idx, mId ->
-            val extraCent = if (idx < remainder) 1L else 0L
+        val updatedSplits = equalAllocations.mapIndexed { idx, alloc ->
             ExpenseSplitEntity(
                 splitId = "${expenseId}_sp_$idx",
                 expenseId = expenseId,
-                memberId = mId,
-                baseClaimedCents = perPersonBase + extraCent,
-                finalOwedCents = perPersonBase + extraCent,
-                plusOneCent = extraCent > 0L
+                memberId = alloc.memberId,
+                baseClaimedCents = alloc.baseClaimedCents,
+                finalOwedCents = alloc.finalCents,
+                plusOneCent = alloc.plusOneCent
             )
         }
 
@@ -1100,7 +1105,7 @@ class SplitMateViewModel(
             curr.copy(
                 expenses = curr.expenses.map { if (it.expenseId == expenseId) updatedExpense else it },
                 splits = curr.splits.filterNot { it.expenseId == expenseId } + updatedSplits,
-                statusBannerMessage = "Updated \"$cleanTitle\" (₹${String.format(Locale.US, "%.2f", newTotalCents / 100.0)})"
+                statusBannerMessage = "Updated \"$cleanTitle\" across ${chosenMembers.size} members (₹${String.format(Locale.US, "%.2f", newTotalCents / 100.0)})"
             )
         }
 
@@ -1160,7 +1165,97 @@ class SplitMateViewModel(
         }
     }
 
+    data class MemberSplitBreakdownRow(
+        val memberId: String,
+        val displayName: String,
+        val isCurrentUser: Boolean,
+        val isIncludedInSplit: Boolean,
+        val owedCents: Long,
+        val plusOneCent: Boolean,
+        val formattedShare: String
+    )
+
+    data class ExpenseSplitBreakdownSummary(
+        val totalMembersInGroup: Int,
+        val splittingMembersCount: Int,
+        val perPersonHeadlineShare: String,
+        val headerLabel: String,
+        val rows: List<MemberSplitBreakdownRow>
+    )
+
     companion object {
+        /**
+         * Resolves the exact per-member split breakdown for an expense using the persisted
+         * [ExpenseSplitEntity] records (`allSplits`), so deselected members are NEVER charged
+         * and the denominator is strictly `splittingMembersCount` (NOT `groupMembers.size`).
+         */
+        fun resolveExpenseSplitBreakdown(
+            expense: ExpenseEntity,
+            groupMembers: List<GroupMemberEntity>,
+            allSplits: List<ExpenseSplitEntity>,
+            currencySymbol: String = "₹",
+            headerPrefix: String = "Split Breakdown"
+        ): ExpenseSplitBreakdownSummary {
+            val expenseSplits = allSplits.filter { it.expenseId == expense.expenseId && it.finalOwedCents > 0L }
+            val splitMap = expenseSplits.associateBy { it.memberId }
+            val hasExplicitSplits = expenseSplits.isNotEmpty()
+
+            val splittingCount = if (hasExplicitSplits) {
+                expenseSplits.size.coerceAtLeast(1)
+            } else {
+                groupMembers.size.coerceAtLeast(1)
+            }
+
+            val perPersonAvgCents = expense.totalAmountCents / splittingCount
+            val perPersonHeadlineShare = "$currencySymbol${String.format(Locale.US, "%.2f", perPersonAvgCents / 100.0)}"
+
+            val headerLabel = if (hasExplicitSplits && splittingCount < groupMembers.size) {
+                "$headerPrefix ($splittingCount of ${groupMembers.size} members splitting)"
+            } else {
+                "$headerPrefix ($splittingCount members)"
+            }
+
+            val rows = groupMembers.map { mbr ->
+                val displayName = if (mbr.isCurrentUser) "${mbr.name} (You)" else mbr.name
+                if (hasExplicitSplits) {
+                    val sp = splitMap[mbr.memberId]
+                    val owed = sp?.finalOwedCents ?: 0L
+                    val included = sp != null && owed > 0L
+                    MemberSplitBreakdownRow(
+                        memberId = mbr.memberId,
+                        displayName = displayName,
+                        isCurrentUser = mbr.isCurrentUser,
+                        isIncludedInSplit = included,
+                        owedCents = owed,
+                        plusOneCent = sp?.plusOneCent == true,
+                        formattedShare = if (included) {
+                            "$currencySymbol${String.format(Locale.US, "%.2f", owed / 100.0)}"
+                        } else {
+                            "${currencySymbol}0.00 (Excluded)"
+                        }
+                    )
+                } else {
+                    MemberSplitBreakdownRow(
+                        memberId = mbr.memberId,
+                        displayName = displayName,
+                        isCurrentUser = mbr.isCurrentUser,
+                        isIncludedInSplit = true,
+                        owedCents = perPersonAvgCents,
+                        plusOneCent = false,
+                        formattedShare = perPersonHeadlineShare
+                    )
+                }
+            }
+
+            return ExpenseSplitBreakdownSummary(
+                totalMembersInGroup = groupMembers.size,
+                splittingMembersCount = splittingCount,
+                perPersonHeadlineShare = perPersonHeadlineShare,
+                headerLabel = headerLabel,
+                rows = rows
+            )
+        }
+
         fun currencySymbolFor(code: String): String = when (code.uppercase()) {
             "INR" -> "₹"
             "USD", "AUD", "CAD", "SGD", "NZD", "HKD", "MXN" -> "$"

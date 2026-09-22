@@ -81,4 +81,66 @@ class SplitMateViewModelTurbineTest {
             cancelAndIgnoreRemainingEvents()
         }
     }
+
+    @Test
+    @DisplayName("Split Breakdown test: Deselecting 1 of 4 members divides ONLY by 3 selected members and excludes the 4th")
+    fun testDeselectingOneMemberSplitsOnlyAmongSelectedMembers() = runTest(testDispatcher) {
+        val viewModel = SplitMateViewModel(dao = null, ioDispatcher = testDispatcher)
+
+        // Create a 4-member group (Akshay + Sam, Priya, Maya)
+        viewModel.createNewGroup(
+            name = "Goa Train Trip",
+            currencyCode = "INR",
+            friendNamesCsv = "Sam, Priya, Maya"
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val stateBefore = viewModel.uiState.value
+        val groupMembers = stateBefore.activeGroupMembers
+        assertEquals(4, groupMembers.size, "Group should have 4 total members")
+
+        // Deselect the 4th member ("Maya") -> only 3 members selected
+        val selectedThreeIds = groupMembers.take(3).map { it.memberId }
+        val deselectedMember = groupMembers.last()
+
+        // Log ₹3,000.00 (300,000 paise) among ONLY the 3 selected members
+        viewModel.commitQuickEqualExpense(
+            title = "Paschim Express Tickets",
+            totalAmountCents = 300_000L,
+            selectedMemberIds = selectedThreeIds
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val stateAfter = viewModel.uiState.value
+        val loggedExpense = stateAfter.expenses.first { it.title == "Paschim Express Tickets" }
+
+        val breakdown = SplitMateViewModel.resolveExpenseSplitBreakdown(
+            expense = loggedExpense,
+            groupMembers = groupMembers,
+            allSplits = stateAfter.splits,
+            currencySymbol = "₹",
+            headerPrefix = "Split Breakdown"
+        )
+
+        // Verify it divides by 3 (₹1000.00 each), NOT by 4 (₹750.00)!
+        assertEquals(4, breakdown.totalMembersInGroup)
+        assertEquals(3, breakdown.splittingMembersCount)
+        assertEquals("₹1000.00", breakdown.perPersonHeadlineShare)
+        assertEquals("Split Breakdown (3 of 4 members splitting)", breakdown.headerLabel)
+
+        // Verify each of the 3 selected members owes 100,000 paise (₹1000.00)
+        selectedThreeIds.forEach { selectedId ->
+            val row = breakdown.rows.first { it.memberId == selectedId }
+            assertTrue(row.isIncludedInSplit)
+            assertEquals(100_000L, row.owedCents)
+            assertEquals("₹1000.00", row.formattedShare)
+        }
+
+        // Verify the deselected 4th member ("Maya") is excluded and owes 0 paise
+        val excludedRow = breakdown.rows.first { it.memberId == deselectedMember.memberId }
+        assertEquals(false, excludedRow.isIncludedInSplit)
+        assertEquals(0L, excludedRow.owedCents)
+        assertEquals("₹0.00 (Excluded)", excludedRow.formattedShare)
+    }
 }
+
