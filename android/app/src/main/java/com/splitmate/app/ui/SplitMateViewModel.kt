@@ -682,6 +682,41 @@ class SplitMateViewModel(
         }
     }
 
+    fun addContactsToGroup(groupId: String, contacts: List<DeviceContact>) {
+        if (contacts.isEmpty()) return
+        val existingMembers = _uiState.value.members.filter { it.groupId == groupId }
+        val existingPhones = existingMembers.map { cleanIndianTenDigitPhone(it.upiId) }.filter { it.isNotEmpty() }.toSet()
+        val existingNames = existingMembers.map { it.name.trim().lowercase() }.toSet()
+        val now = System.currentTimeMillis()
+        val newMembers = contacts.mapIndexedNotNull { idx, c ->
+            val cleanName = c.name.trim()
+            val cleanPhone = cleanIndianTenDigitPhone(c.cleanPhone)
+            if (cleanName.isEmpty()) null
+            else if (cleanPhone.isNotEmpty() && existingPhones.contains(cleanPhone)) null
+            else if (existingNames.contains(cleanName.lowercase())) null
+            else {
+                GroupMemberEntity(
+                    memberId = "${groupId}_c_${now}_$idx",
+                    groupId = groupId,
+                    name = cleanName,
+                    avatarSeed = "$cleanName|Neutral",
+                    upiId = if (cleanPhone.length == 10) "${cleanPhone}@upi" else "",
+                    isCurrentUser = false
+                )
+            }
+        }
+        if (newMembers.isEmpty()) return
+        _uiState.update { state ->
+            state.copy(
+                members = state.members + newMembers,
+                statusBannerMessage = "Added ${newMembers.size} contact(s) to group"
+            )
+        }
+        viewModelScope.launch(ioDispatcher) {
+            dao?.insertMembers(newMembers)
+        }
+    }
+
     // --- Collaborative Receipt Claim & Remainder Engine Actions ---
     fun setClaimerPersona(memberId: String) {
         _uiState.update { it.copy(activeClaimerPersonaId = memberId) }

@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.decode.SvgDecoder
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.splitmate.app.R
@@ -66,13 +67,13 @@ fun DiceBearAvatar(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val cleanSeed = seed.trim().ifEmpty { "SplitMateUser" }.replace(" ", "_")
-    val svgUrl = "https://api.dicebear.com/9.x/open-peeps/svg?seed=$cleanSeed&backgroundColor=d7e8b6,fed8c8,dce3fd"
+    val svgUrl = buildDiceBearOpenPeepsUrl(seed)
 
     val request = ImageRequest.Builder(context)
         .data(svgUrl)
-        .diskCacheKey("dicebear_peep_$cleanSeed")
-        .memoryCacheKey("dicebear_peep_$cleanSeed")
+        .decoderFactory(SvgDecoder.Factory())
+        .diskCacheKey("dicebear_peep_$svgUrl")
+        .memoryCacheKey("dicebear_peep_$svgUrl")
         .diskCachePolicy(CachePolicy.ENABLED)
         .memoryCachePolicy(CachePolicy.ENABLED)
         .crossfade(true)

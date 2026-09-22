@@ -293,8 +293,11 @@ fun QuickExpenseScreen(
     }
 
     editingFriend?.let { friend ->
+        val editableGroupMembers = activeMembers.filter { !it.isCurrentUser }.ifEmpty { listOf(friend) }
         EditFriendUpiDialog(
             member = friend,
+            allGroupMembers = editableGroupMembers,
+            onSelectMember = { editingFriend = it },
             onDismiss = { editingFriend = null },
             onSave = { newName, newUpi, newAvatarSeed ->
                 viewModel?.updateFriendUpi(friend.memberId, newName, newUpi, newAvatarSeed)
@@ -306,7 +309,7 @@ fun QuickExpenseScreen(
     Scaffold(
         containerColor = screenBg,
         topBar = {
-            // Root BottomNav destination — NO back arrow navigationIcon!
+            // Root BottomNav destination — NO back arrow navigationIcon and NO INR/Equal Split badge!
             TopAppBar(
                 title = {
                     Box {
@@ -365,7 +368,7 @@ fun QuickExpenseScreen(
                                     DropdownMenuItem(
                                         text = {
                                             Text(
-                                                "${grp.name} (₹ INR)",
+                                                grp.name,
                                                 fontFamily = SplitMateBrandFontFamily,
                                                 fontWeight = FontWeight.SemiBold
                                             )
@@ -381,20 +384,35 @@ fun QuickExpenseScreen(
                     }
                 },
                 actions = {
-                    Surface(
-                        shape = QuickExpenseThemeTokens.RadiusPill,
-                        color = surfaceColor,
-                        border = BorderStroke(1.dp, keypadBorder),
-                        modifier = Modifier.padding(end = 12.dp)
-                    ) {
-                        Text(
-                            text = "₹ INR • Equal Split",
-                            fontFamily = SplitMateBrandFontFamily,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = textSecondary,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                        )
+                    val firstEditable = activeMembers.firstOrNull { !it.isCurrentUser }
+                    if (hasSelectedGroup && firstEditable != null) {
+                        Surface(
+                            onClick = { editingFriend = firstEditable },
+                            shape = QuickExpenseThemeTokens.RadiusPill,
+                            color = surfaceColor,
+                            border = BorderStroke(1.dp, keypadBorder),
+                            modifier = Modifier.padding(end = 12.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.ManageAccounts,
+                                    contentDescription = "Edit Members",
+                                    tint = textPrimary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = "Edit Members",
+                                    fontFamily = SplitMateBrandFontFamily,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = textPrimary
+                                )
+                            }
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -927,44 +945,63 @@ fun QuickExpenseScreen(
                             )
 
                             // Log & Split FAB spanning EXACTLY two rows in height (54dp + 8dp + 54dp = 116dp)
-                            Button(
+                            // Always 100% opaque — never transparent or washed-out white/grey when amount is 0.
+                            val canCommitSplit = hasSelectedGroup && numericVal > 0L && selectedMemberIds.isNotEmpty()
+                            val ctaContainerColor = if (canCommitSplit) {
+                                Color(0xFF23201E)
+                            } else {
+                                QuickExpenseThemeTokens.SageSurface
+                            }
+                            val ctaContentColor = if (canCommitSplit) {
+                                Color.White
+                            } else {
+                                QuickExpenseThemeTokens.SageText
+                            }
+                            Surface(
                                 onClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    val selected = participants.filter { selectedMemberIds.contains(it.id) }
-                                    viewModel?.commitQuickEqualExpense(
-                                        title = expenseCategoryTitle,
-                                        totalAmountCents = numericVal * 100L,
-                                        selectedMemberIds = selected.map { it.id }
-                                    )
-                                    onSaveSplit(numericVal, selected)
+                                    if (canCommitSplit) {
+                                        val selected = participants.filter { selectedMemberIds.contains(it.id) }
+                                        viewModel?.commitQuickEqualExpense(
+                                            title = expenseCategoryTitle,
+                                            totalAmountCents = numericVal * 100L,
+                                            selectedMemberIds = selected.map { it.id }
+                                        )
+                                        onSaveSplit(numericVal, selected)
+                                    }
                                 },
                                 shape = QuickExpenseThemeTokens.RadiusKeySquircle,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = textPrimary,
-                                    contentColor = screenBg
+                                color = ctaContainerColor,
+                                shadowElevation = if (canCommitSplit) 6.dp else 2.dp,
+                                border = BorderStroke(
+                                    width = 1.5.dp,
+                                    color = if (canCommitSplit) Color(0xFF23201E) else QuickExpenseThemeTokens.AccentSage
                                 ),
-                                enabled = hasSelectedGroup && numericVal > 0L && selectedMemberIds.isNotEmpty(),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(116.dp)
-                                    .shadow(6.dp, shape = QuickExpenseThemeTokens.RadiusKeySquircle),
-                                contentPadding = PaddingValues(6.dp)
                             ) {
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.Center,
-                                    modifier = Modifier.fillMaxSize()
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(6.dp)
                                 ) {
                                     Surface(
                                         shape = CircleShape,
-                                        color = if (isDark) Color(0xFF416913).copy(alpha = 0.35f) else QuickExpenseThemeTokens.AccentSage.copy(alpha = 0.25f),
+                                        color = if (canCommitSplit) {
+                                            QuickExpenseThemeTokens.AccentSage.copy(alpha = 0.25f)
+                                        } else {
+                                            QuickExpenseThemeTokens.AccentSage.copy(alpha = 0.45f)
+                                        },
                                         modifier = Modifier.size(34.dp)
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
                                             Icon(
                                                 imageVector = Icons.Rounded.ElectricBolt,
                                                 contentDescription = null,
-                                                tint = if (isDark) Color(0xFF416913) else QuickExpenseThemeTokens.AccentSage,
+                                                tint = if (canCommitSplit) QuickExpenseThemeTokens.AccentSage else QuickExpenseThemeTokens.SageText,
                                                 modifier = Modifier.size(20.dp)
                                             )
                                         }
@@ -975,7 +1012,7 @@ fun QuickExpenseScreen(
                                         fontFamily = SplitMateDisplayFontFamily,
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.ExtraBold,
-                                        color = screenBg,
+                                        color = ctaContentColor,
                                         textAlign = TextAlign.Center,
                                         lineHeight = 16.sp
                                     )
@@ -1102,6 +1139,8 @@ private fun appendDigit(key: String, current: String, onUpdate: (String) -> Unit
 @Composable
 fun EditFriendUpiDialog(
     member: GroupMemberEntity,
+    allGroupMembers: List<GroupMemberEntity> = listOf(member),
+    onSelectMember: (GroupMemberEntity) -> Unit = {},
     onDismiss: () -> Unit,
     onSave: (name: String, upiId: String, avatarSeed: String) -> Unit
 ) {
@@ -1160,8 +1199,8 @@ fun EditFriendUpiDialog(
             contacts = deviceContacts,
             isLoading = isLoadingContacts,
             multiSelect = false,
-            title = "Link Contact for ${friendName.ifBlank { member.name }}",
-            subtitle = "Select a phone contact to enable direct UPI and WhatsApp",
+            title = "Select Contact for ${friendName.ifBlank { member.name }}",
+            subtitle = "Choose a contact from your phonebook to link name & UPI",
             onDismissRequest = { showInAppContactPicker = false },
             onConfirmSelected = { selected ->
                 val chosen = selected.firstOrNull()
@@ -1209,14 +1248,14 @@ fun EditFriendUpiDialog(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "Edit Member",
+                            text = "Edit Group Member",
                             fontFamily = SplitMateDisplayFontFamily,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = QuickExpenseThemeTokens.PrimaryDark
                         )
                         Text(
-                            text = "Update profile and phone contact",
+                            text = "Switch member, set avatar style, or link contact",
                             fontFamily = SplitMateBrandFontFamily,
                             fontSize = 12.sp,
                             color = QuickExpenseThemeTokens.TextSecondary
@@ -1226,10 +1265,68 @@ fun EditFriendUpiDialog(
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // 0. Select from Already Added Group Members
+                    if (allGroupMembers.size > 1) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                text = "Select Group Member (${allGroupMembers.size})",
+                                fontFamily = SplitMateBrandFontFamily,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = QuickExpenseThemeTokens.PrimaryDark
+                            )
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                items(allGroupMembers, key = { it.memberId }) { candidate ->
+                                    val isCurrentTarget = candidate.memberId == member.memberId
+                                    Surface(
+                                        onClick = { onSelectMember(candidate) },
+                                        shape = QuickExpenseThemeTokens.RadiusPill,
+                                        color = if (isCurrentTarget) QuickExpenseThemeTokens.PrimaryDark else QuickExpenseThemeTokens.SurfaceKeypad,
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (isCurrentTarget) QuickExpenseThemeTokens.PrimaryDark else QuickExpenseThemeTokens.BorderLight
+                                        )
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(20.dp)
+                                                    .clip(CircleShape)
+                                                    .background(QuickExpenseThemeTokens.AccentSage),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = extractInitialsFromNameOrSeed(candidate.name),
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = Color(0xFF23201E)
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = candidate.name,
+                                                fontFamily = SplitMateBrandFontFamily,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isCurrentTarget) QuickExpenseThemeTokens.ScreenBg else QuickExpenseThemeTokens.PrimaryDark
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // 1. Presentation Style Toggle (Masculine, Feminine, Neutral)
                     Column {
                         Text(
-                            text = "Presentation Style",
+                            text = "Avatar Presentation Style",
                             fontFamily = SplitMateBrandFontFamily,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
@@ -1273,23 +1370,57 @@ fun EditFriendUpiDialog(
                         }
                     }
 
-                    // 2. Friend's Name Field
-                    OutlinedTextField(
-                        value = friendName,
-                        onValueChange = { friendName = it },
-                        label = { Text("Friend's Name", fontFamily = SplitMateBrandFontFamily) },
-                        singleLine = true,
+                    // 2. Selected Member Contact Card (No manual free-text keyboard box!)
+                    Surface(
                         shape = RoundedCornerShape(16.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = QuickExpenseThemeTokens.PrimaryDark,
-                            unfocusedTextColor = QuickExpenseThemeTokens.PrimaryDark,
-                            focusedBorderColor = QuickExpenseThemeTokens.PrimaryDark,
-                            unfocusedBorderColor = QuickExpenseThemeTokens.BorderLight
-                        ),
+                        color = QuickExpenseThemeTokens.SurfaceKeypad,
+                        border = BorderStroke(1.dp, QuickExpenseThemeTokens.BorderLight),
                         modifier = Modifier.fillMaxWidth()
-                    )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Selected Contact Member",
+                                    fontFamily = SplitMateBrandFontFamily,
+                                    fontSize = 11.sp,
+                                    color = QuickExpenseThemeTokens.TextSecondary
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = friendName.ifBlank { member.name },
+                                    fontFamily = SplitMateDisplayFontFamily,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = QuickExpenseThemeTokens.PrimaryDark
+                                )
+                                Text(
+                                    text = if (pickedPhoneNumber.length == 10) {
+                                        "+91 $pickedPhoneNumber · $pickedPhoneNumber@upi"
+                                    } else {
+                                        "No phone number linked yet"
+                                    },
+                                    fontFamily = SplitMateBrandFontFamily,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (pickedPhoneNumber.length == 10) QuickExpenseThemeTokens.SageText else QuickExpenseThemeTokens.TerracottaText
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.Rounded.VerifiedUser,
+                                contentDescription = null,
+                                tint = QuickExpenseThemeTokens.SageText,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
 
-                    // 3. Pick from Contacts Button (Opens In-App ContactPickerBottomSheet)
+                    // 3. Pick / Replace from Contacts Button (Opens In-App ContactPickerBottomSheet)
                     Button(
                         onClick = {
                             val hasPermission = ContextCompat.checkSelfPermission(
@@ -1320,7 +1451,11 @@ fun EditFriendUpiDialog(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (pickedPhoneNumber.length == 10) "Change Linked Contact (+91 $pickedPhoneNumber)" else "+ Link Contact",
+                            text = if (pickedPhoneNumber.length == 10) {
+                                "Replace / Change from Contacts"
+                            } else {
+                                "Select from Phone Contacts"
+                            },
                             fontFamily = SplitMateBrandFontFamily,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 14.sp,

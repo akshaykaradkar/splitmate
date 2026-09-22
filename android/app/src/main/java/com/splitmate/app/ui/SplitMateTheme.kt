@@ -262,9 +262,9 @@ fun buildDiceBearOpenPeepsUrl(rawSeed: String, styleOverride: String? = null): S
     val seedBase = parts.firstOrNull()?.trim()?.ifEmpty { "Explorer" } ?: "Explorer"
     val style = (styleOverride ?: parts.getOrNull(1)?.trim() ?: "Neutral").lowercase()
     val headParam = when (style) {
-        "masculine" -> "&head=flatTop,short1,short2,short3,short4"
-        "feminine" -> "&head=long1,long2,long3,long4,buns"
-        else -> ""
+        "masculine" -> "&head=flatTop,short1,short2,short3,short4,short5,pomp&maskProbability=0"
+        "feminine" -> "&head=long,longBangs,longCurly,bun,bun2,buns,bangs,mediumStraight&facialHairProbability=0&maskProbability=0"
+        else -> "&head=medium1,medium2,medium3,afro,twists,hatBeanie&facialHairProbability=0&maskProbability=0"
     }
     return "https://api.dicebear.com/9.x/open-peeps/svg?seed=${Uri.encode(seedBase)}&backgroundColor=d7e8b6,fed8c8,dce3fd$headParam"
 }

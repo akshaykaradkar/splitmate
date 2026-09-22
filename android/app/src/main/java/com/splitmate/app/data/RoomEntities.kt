@@ -45,7 +45,7 @@ data class GroupMemberEntity(
     val upiId: String = ""
 ) {
     val diceBearSvgUrl: String
-        get() = "https://api.dicebear.com/9.x/open-peeps/svg?seed=${avatarSeed.trim().replace(" ", "_")}&backgroundColor=d7e8b6,fed8c8,dce3fd"
+        get() = com.splitmate.app.ui.buildDiceBearOpenPeepsUrl(avatarSeed)
 }
 
 /**
