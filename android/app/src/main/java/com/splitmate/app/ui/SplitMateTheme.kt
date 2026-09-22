@@ -151,84 +151,132 @@ private val fontProvider = GoogleFont.Provider(
     certificates = R.array.com_google_android_gms_fonts_certs
 )
 
-val PlusJakartaSansFont = FontFamily(
-    Font(googleFont = GoogleFont("Plus Jakarta Sans"), fontProvider = fontProvider, weight = FontWeight.Medium),
-    Font(googleFont = GoogleFont("Plus Jakarta Sans"), fontProvider = fontProvider, weight = FontWeight.SemiBold),
-    Font(googleFont = GoogleFont("Plus Jakarta Sans"), fontProvider = fontProvider, weight = FontWeight.Bold),
-    Font(googleFont = GoogleFont("Plus Jakarta Sans"), fontProvider = fontProvider, weight = FontWeight.ExtraBold)
+private val figtreeGoogleFont = GoogleFont("Figtree")
+
+val FigtreeFontFamily = FontFamily(
+    Font(googleFont = figtreeGoogleFont, fontProvider = fontProvider, weight = FontWeight.Normal),
+    androidx.compose.ui.text.font.Font(resId = R.font.figtree_regular, weight = FontWeight.Normal),
+    Font(googleFont = figtreeGoogleFont, fontProvider = fontProvider, weight = FontWeight.Medium),
+    androidx.compose.ui.text.font.Font(resId = R.font.figtree_medium, weight = FontWeight.Medium),
+    Font(googleFont = figtreeGoogleFont, fontProvider = fontProvider, weight = FontWeight.SemiBold),
+    androidx.compose.ui.text.font.Font(resId = R.font.figtree_semibold, weight = FontWeight.SemiBold),
+    Font(googleFont = figtreeGoogleFont, fontProvider = fontProvider, weight = FontWeight.Bold),
+    androidx.compose.ui.text.font.Font(resId = R.font.figtree_bold, weight = FontWeight.Bold),
+    Font(googleFont = figtreeGoogleFont, fontProvider = fontProvider, weight = FontWeight.ExtraBold),
+    androidx.compose.ui.text.font.Font(resId = R.font.figtree_extrabold, weight = FontWeight.ExtraBold)
 )
 
-val JetBrainsMonoFont = FontFamily(
-    Font(googleFont = GoogleFont("JetBrains Mono"), fontProvider = fontProvider, weight = FontWeight.Medium),
-    Font(googleFont = GoogleFont("JetBrains Mono"), fontProvider = fontProvider, weight = FontWeight.SemiBold),
-    Font(googleFont = GoogleFont("JetBrains Mono"), fontProvider = fontProvider, weight = FontWeight.Bold)
-)
+val PlusJakartaSansFont = FigtreeFontFamily
+val JetBrainsMonoFont = FigtreeFontFamily
 
 val SplitMateTypography = Typography(
     displayLarge = TextStyle(
-        fontFamily = PlusJakartaSansFont,
+        fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.ExtraBold,
         fontSize = 48.sp,
         lineHeight = 52.sp,
-        letterSpacing = (-1.5).sp
+        letterSpacing = (-1.5).sp,
+        fontFeatureSettings = "tnum"
     ),
     displayMedium = TextStyle(
-        fontFamily = PlusJakartaSansFont,
+        fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.ExtraBold,
         fontSize = 36.sp,
         lineHeight = 42.sp,
-        letterSpacing = (-1.0).sp
+        letterSpacing = (-1.5).sp,
+        fontFeatureSettings = "tnum"
+    ),
+    displaySmall = TextStyle(
+        fontFamily = FigtreeFontFamily,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 30.sp,
+        lineHeight = 36.sp,
+        letterSpacing = (-1.0).sp,
+        fontFeatureSettings = "tnum"
     ),
     headlineLarge = TextStyle(
-        fontFamily = PlusJakartaSansFont,
+        fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.ExtraBold,
         fontSize = 26.sp,
         lineHeight = 32.sp,
-        letterSpacing = (-0.5).sp
+        letterSpacing = (-0.5).sp,
+        fontFeatureSettings = "tnum"
     ),
     headlineMedium = TextStyle(
-        fontFamily = PlusJakartaSansFont,
+        fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 20.sp,
         lineHeight = 26.sp,
-        letterSpacing = (-0.3).sp
+        letterSpacing = (-0.3).sp,
+        fontFeatureSettings = "tnum"
+    ),
+    headlineSmall = TextStyle(
+        fontFamily = FigtreeFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 18.sp,
+        lineHeight = 24.sp
     ),
     titleLarge = TextStyle(
-        fontFamily = PlusJakartaSansFont,
+        fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.Bold,
-        fontSize = 17.sp,
-        lineHeight = 22.sp
+        fontSize = 24.sp,
+        lineHeight = 28.sp,
+        fontFeatureSettings = "tnum"
     ),
     titleMedium = TextStyle(
-        fontFamily = PlusJakartaSansFont,
+        fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 15.sp,
         lineHeight = 20.sp
     ),
-    bodyLarge = TextStyle(
-        fontFamily = PlusJakartaSansFont,
-        fontWeight = FontWeight.Medium,
-        fontSize = 15.sp,
-        lineHeight = 20.sp
-    ),
-    bodyMedium = TextStyle(
-        fontFamily = PlusJakartaSansFont,
+    titleSmall = TextStyle(
+        fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 13.sp,
-        lineHeight = 18.sp
+        lineHeight = 18.sp,
+        letterSpacing = 0.sp
+    ),
+    bodyLarge = TextStyle(
+        fontFamily = FigtreeFontFamily,
+        fontWeight = FontWeight.Medium,
+        fontSize = 15.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.sp
+    ),
+    bodyMedium = TextStyle(
+        fontFamily = FigtreeFontFamily,
+        fontWeight = FontWeight.Medium,
+        fontSize = 13.sp,
+        lineHeight = 18.sp,
+        letterSpacing = 0.sp
+    ),
+    bodySmall = TextStyle(
+        fontFamily = FigtreeFontFamily,
+        fontWeight = FontWeight.Medium,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.sp
     ),
     labelLarge = TextStyle(
-        fontFamily = PlusJakartaSansFont,
+        fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 12.sp,
         lineHeight = 16.sp,
         letterSpacing = 0.5.sp
     ),
     labelMedium = TextStyle(
-        fontFamily = JetBrainsMonoFont,
+        fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 12.sp,
-        lineHeight = 16.sp
+        lineHeight = 16.sp,
+        fontFeatureSettings = "tnum"
+    ),
+    labelSmall = TextStyle(
+        fontFamily = FigtreeFontFamily,
+        fontWeight = FontWeight.Medium,
+        fontSize = 11.sp,
+        lineHeight = 14.sp,
+        letterSpacing = 0.sp
     )
 )
 
@@ -712,6 +760,6 @@ fun SplitMateExpressiveTheme(
     )
 }
 
-val SplitMateBrandFontFamily: FontFamily = FontFamily.SansSerif
-val SplitMateDisplayFontFamily: FontFamily = FontFamily.SansSerif
+val SplitMateBrandFontFamily: FontFamily = FigtreeFontFamily
+val SplitMateDisplayFontFamily: FontFamily = FigtreeFontFamily
 

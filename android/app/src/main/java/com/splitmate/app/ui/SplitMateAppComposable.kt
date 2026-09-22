@@ -783,6 +783,9 @@ fun LedgersDashboardScreen(
                                         )
                                         Text(
                                             text = "Paid by ${payer?.name ?: "You"} · $perPersonShare / person",
+                                            fontFamily = SplitMateTheme.FontRounded,
+                                            fontWeight = FontWeight.Medium,
+                                            letterSpacing = 0.sp,
                                             fontSize = 12.sp,
                                             color = SplitMateTheme.TextSecondary
                                         )
@@ -792,8 +795,10 @@ fun LedgersDashboardScreen(
                                 Column(horizontalAlignment = Alignment.End) {
                                     Text(
                                         text = (if (isMePayer) "+" else "-") + formattedTotal,
+                                        fontFamily = SplitMateTheme.FontDisplay,
                                         fontWeight = FontWeight.ExtraBold,
                                         fontSize = 16.sp,
+                                        style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
                                         color = if (isMePayer) SplitMateTheme.SageText else SplitMateTheme.TerracottaText
                                     )
                                     Text(
@@ -1017,14 +1022,17 @@ fun LedgersDashboardScreen(
                             text = totalBalance,
                             fontSize = 48.sp,
                             fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = (-1.5).sp,
                             color = SplitMateTheme.PrimaryDark,
-                            fontFamily = SplitMateTheme.FontDisplay
+                            fontFamily = SplitMateTheme.FontDisplay,
+                            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
                         )
 
                         Text(
                             text = "Across ${activeGroups.size} active groups",
                             fontFamily = SplitMateTheme.FontRounded,
                             fontSize = 13.sp,
+                            letterSpacing = 0.sp,
                             color = SplitMateTheme.TextSecondary,
                             fontWeight = FontWeight.Medium
                         )

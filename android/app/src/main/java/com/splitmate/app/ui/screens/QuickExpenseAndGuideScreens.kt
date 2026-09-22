@@ -35,6 +35,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -567,16 +568,17 @@ fun QuickExpenseScreen(
                         }
                     }
 
-                    // DisplayLarge Amount closely beneath category chip
+                    // DisplayLarge Amount closely beneath category chip (Tabular Figures + -1.5.sp tracking)
                     Text(
                         text = formattedDisplay,
                         fontFamily = SplitMateDisplayFontFamily,
                         fontSize = 48.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = textPrimary,
-                        letterSpacing = (-1.2).sp,
+                        letterSpacing = (-1.5).sp,
                         textAlign = TextAlign.Center,
-                        lineHeight = 52.sp
+                        lineHeight = 52.sp,
+                        style = TextStyle(fontFeatureSettings = "tnum")
                     )
 
                     Spacer(modifier = Modifier.height(6.dp))
@@ -1115,7 +1117,8 @@ fun TactileSquircleKey(
                     fontFamily = SplitMateDisplayFontFamily,
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
-                    color = textPrimary
+                    color = textPrimary,
+                    style = TextStyle(fontFeatureSettings = "tnum")
                 )
             }
         }
