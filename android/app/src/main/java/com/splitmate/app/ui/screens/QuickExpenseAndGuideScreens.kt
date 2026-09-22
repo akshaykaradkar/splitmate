@@ -72,19 +72,23 @@ object QuickExpenseThemeTokens {
     val PrimaryDark: Color
         get() = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkPrimaryText else DesignSystemBindings.GM3LightPrimaryText
     val AccentSage = DesignSystemBindings.ElementsPositiveContainer
-    val SageSurface = Color(0xFFEAF3DC)
-    val SageText = DesignSystemBindings.ElementsPositiveText
+    val SageSurface: Color
+        get() = if (SplitMateTheme.isDark) Color(0xFF233216) else Color(0xFFEAF3DC)
+    val SageText: Color
+        get() = if (SplitMateTheme.isDark) Color(0xFFD7E8B6) else DesignSystemBindings.ElementsPositiveText
     val SageBorder = Color(0xFF5A8E24)
-    val TerracottaSurface = Color(0xFFFCECE7)
-    val TerracottaText = DesignSystemBindings.ElementsNegativeText
+    val TerracottaSurface: Color
+        get() = if (SplitMateTheme.isDark) Color(0xFF3A2019) else Color(0xFFFCECE7)
+    val TerracottaText: Color
+        get() = if (SplitMateTheme.isDark) Color(0xFFFECDD3) else DesignSystemBindings.ElementsNegativeText
     val SurfaceWhite: Color
         get() = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkCardSurface else DesignSystemBindings.GM3LightCardSurface
     val SurfaceKeypad: Color
         get() = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkKeypadSurface else DesignSystemBindings.GM3LightKeypadSurface
     val SurfaceKeypadBorder: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF383838) else Color(0xFFE8E2D8)
+        get() = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkBorder else Color(0xFFE8E2D8)
     val BorderLight: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF333333) else Color(0xFFE5DFC5)
+        get() = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkBorder else Color(0xFFE5DFC5)
     val TextSecondary: Color
         get() = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkSubtitleText else DesignSystemBindings.GM3LightSubtitleText
 
@@ -370,14 +374,25 @@ fun QuickExpenseScreen(
                                         shape = QuickExpenseThemeTokens.RadiusPill,
                                         color = QuickExpenseThemeTokens.SageText
                                     ) {
-                                        Text(
-                                            text = "📋 Paste IRCTC SMS / Sample PNR",
-                                            fontFamily = SplitMateBrandFontFamily,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 11.sp,
-                                            color = Color.White,
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                        )
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.ContentPaste,
+                                                contentDescription = null,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(5.dp))
+                                            Text(
+                                                text = "Paste IRCTC SMS / Sample PNR",
+                                                fontFamily = SplitMateBrandFontFamily,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 11.sp,
+                                                color = Color.White
+                                            )
+                                        }
                                     }
                                 }
 
@@ -738,12 +753,12 @@ fun QuickExpenseScreen(
                 ) {
                     val quickCategoryPills = remember {
                         listOf(
-                            "🚆 Train / PNR" to "Train / PNR Ticket",
-                            "🍽️ Food" to "Dinner & Food",
-                            "🚕 Cab" to "Cab & Local",
-                            "🏨 Stay" to "Stay & Hotel",
-                            "🛒 Groceries" to "Groceries",
-                            "🎉 Drinks" to "Party & Drinks"
+                            Triple("Train / PNR", "Train / PNR Ticket", Icons.Rounded.Train),
+                            Triple("Food", "Dinner & Food", Icons.Rounded.Restaurant),
+                            Triple("Cab", "Cab & Local", Icons.Rounded.LocalTaxi),
+                            Triple("Stay", "Stay & Hotel", Icons.Rounded.Hotel),
+                            Triple("Groceries", "Groceries", Icons.Rounded.ShoppingCart),
+                            Triple("Drinks", "Party & Drinks", Icons.Rounded.LocalBar)
                         )
                     }
                     LazyRow(
@@ -752,9 +767,11 @@ fun QuickExpenseScreen(
                             .fillMaxWidth()
                             .padding(bottom = 6.dp)
                     ) {
-                        items(quickCategoryPills) { (chipLabel, fullCategory) ->
+                        items(quickCategoryPills) { (chipLabel, fullCategory, chipIcon) ->
                             val isChosen = expenseCategoryTitle.startsWith(fullCategory, ignoreCase = true) ||
-                                (fullCategory == "Train / PNR Ticket" && (expenseCategoryTitle.contains("PNR:") || expenseCategoryTitle.contains("🚆")))
+                                (fullCategory == "Train / PNR Ticket" && (expenseCategoryTitle.contains("PNR:") || expenseCategoryTitle.contains("Train", ignoreCase = true)))
+                            val selectedBg = if (isDark) Color(0xFFD7E8B6) else Color(0xFF23201E)
+                            val selectedFg = if (isDark) Color(0xFF181512) else Color.White
                             Surface(
                                 onClick = {
                                     if (fullCategory == "Train / PNR Ticket") {
@@ -765,17 +782,28 @@ fun QuickExpenseScreen(
                                     }
                                 },
                                 shape = QuickExpenseThemeTokens.RadiusPill,
-                                color = if (isChosen) Color(0xFF23201E) else QuickExpenseThemeTokens.SageSurface,
-                                border = BorderStroke(1.dp, if (isChosen) Color(0xFF23201E) else QuickExpenseThemeTokens.AccentSage)
+                                color = if (isChosen) selectedBg else QuickExpenseThemeTokens.SageSurface,
+                                border = BorderStroke(1.dp, if (isChosen) selectedBg else QuickExpenseThemeTokens.AccentSage)
                             ) {
-                                Text(
-                                    text = chipLabel,
-                                    fontFamily = SplitMateBrandFontFamily,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isChosen) Color.White else QuickExpenseThemeTokens.SageText,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = chipIcon,
+                                        contentDescription = null,
+                                        tint = if (isChosen) selectedFg else QuickExpenseThemeTokens.SageText,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(
+                                        text = chipLabel,
+                                        fontFamily = SplitMateBrandFontFamily,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isChosen) selectedFg else QuickExpenseThemeTokens.SageText
+                                    )
+                                }
                             }
                         }
                     }
@@ -1404,8 +1432,15 @@ private fun appendDigit(key: String, current: String, onUpdate: (String) -> Unit
     }
 }
 
+private data class EditableMemberDraft(
+    val memberId: String,
+    val name: String,
+    val style: String,
+    val upiId: String
+)
+
 // ==============================================================================
-// EDIT FRIEND PERSONA & IN-APP CONTACT PICKER DIALOG
+// EDIT FRIEND PERSONA, EDITABLE UPI ID & BATCH MEMBER EDITOR DIALOG
 // ==============================================================================
 @Composable
 fun EditFriendUpiDialog(
@@ -1413,29 +1448,46 @@ fun EditFriendUpiDialog(
     allGroupMembers: List<GroupMemberEntity> = listOf(member),
     onSelectMember: (GroupMemberEntity) -> Unit = {},
     onDismiss: () -> Unit,
-    onSave: (name: String, upiId: String, avatarSeed: String) -> Unit
+    onSave: (name: String, upiId: String, avatarSeed: String) -> Unit,
+    onSaveAll: ((List<com.splitmate.app.ui.SplitMateViewModel.BatchMemberUpdate>) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val initialStyle = remember(member.avatarSeed) {
-        member.avatarSeed.substringAfter('|', "Neutral").takeIf {
-            it in listOf("Masculine", "Feminine", "Neutral")
-        } ?: "Neutral"
-    }
-    var friendName by remember(member) { mutableStateOf(member.name) }
-    var selectedPresentationStyle by remember(member) { mutableStateOf(initialStyle) }
 
-    val initialCleanDigits = remember(member.upiId) {
-        member.upiId.substringBefore('@').replace(Regex("[^0-9]"), "")
+    val effectiveMembers = remember(allGroupMembers, member) {
+        if (allGroupMembers.isEmpty()) listOf(member) else allGroupMembers
     }
-    var pickedPhoneNumber by remember(member) { mutableStateOf(initialCleanDigits) }
-    val resolvedPhoneUpi = remember(pickedPhoneNumber) {
-        if (pickedPhoneNumber.length == 10) {
-            "$pickedPhoneNumber@upi"
-        } else {
-            ""
+
+    // Persistent draft map across ALL members in the group so switching members never loses edits!
+    val memberDrafts = remember(effectiveMembers) {
+        androidx.compose.runtime.mutableStateMapOf<String, EditableMemberDraft>().apply {
+            effectiveMembers.forEach { m ->
+                val parsedStyle = m.avatarSeed.substringAfter('|', "Neutral").takeIf {
+                    it in listOf("Masculine", "Feminine", "Neutral")
+                } ?: "Neutral"
+                put(
+                    m.memberId,
+                    EditableMemberDraft(
+                        memberId = m.memberId,
+                        name = m.name,
+                        style = parsedStyle,
+                        upiId = m.upiId
+                    )
+                )
+            }
         }
     }
+
+    var activeMemberId by remember(member.memberId) { mutableStateOf(member.memberId) }
+    val activeMember = remember(activeMemberId, effectiveMembers) {
+        effectiveMembers.find { it.memberId == activeMemberId } ?: member
+    }
+    val activeDraft = memberDrafts[activeMember.memberId] ?: EditableMemberDraft(
+        memberId = activeMember.memberId,
+        name = activeMember.name,
+        style = "Neutral",
+        upiId = activeMember.upiId
+    )
 
     var showInAppContactPicker by remember { mutableStateOf(false) }
     var deviceContacts by remember { mutableStateOf<List<DeviceContact>>(emptyList()) }
@@ -1458,11 +1510,11 @@ fun EditFriendUpiDialog(
         }
     }
 
-    val avatarPreviewUrl = remember(friendName, selectedPresentationStyle) {
-        buildDiceBearOpenPeepsUrl(friendName.ifBlank { member.name }, selectedPresentationStyle)
+    val avatarPreviewUrl = remember(activeDraft.name, activeDraft.style) {
+        buildDiceBearOpenPeepsUrl(activeDraft.name.ifBlank { activeMember.name }, activeDraft.style)
     }
-    val cleanInitials = remember(friendName, member.name) {
-        extractInitialsFromNameOrSeed(friendName.ifBlank { member.name })
+    val cleanInitials = remember(activeDraft.name, activeMember.name) {
+        extractInitialsFromNameOrSeed(activeDraft.name.ifBlank { activeMember.name })
     }
 
     if (showInAppContactPicker) {
@@ -1470,14 +1522,17 @@ fun EditFriendUpiDialog(
             contacts = deviceContacts,
             isLoading = isLoadingContacts,
             multiSelect = false,
-            title = "Select Contact for ${friendName.ifBlank { member.name }}",
+            title = "Select Contact for ${activeDraft.name.ifBlank { activeMember.name }}",
             subtitle = "Choose a contact from your phonebook to link name & UPI",
             onDismissRequest = { showInAppContactPicker = false },
             onConfirmSelected = { selected ->
                 val chosen = selected.firstOrNull()
                 if (chosen != null) {
-                    friendName = chosen.name
-                    pickedPhoneNumber = chosen.cleanPhone
+                    val autoUpi = if (chosen.cleanPhone.length == 10) "${chosen.cleanPhone}@upi" else activeDraft.upiId
+                    memberDrafts[activeMember.memberId] = activeDraft.copy(
+                        name = chosen.name,
+                        upiId = autoUpi
+                    )
                 }
                 showInAppContactPicker = false
             }
@@ -1519,14 +1574,14 @@ fun EditFriendUpiDialog(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "Edit Group Member",
+                            text = "Edit Group Members & UPI",
                             fontFamily = SplitMateDisplayFontFamily,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = QuickExpenseThemeTokens.PrimaryDark
                         )
                         Text(
-                            text = "Switch member, set avatar style, or link contact",
+                            text = "Configure all members at once, then Save All",
                             fontFamily = SplitMateBrandFontFamily,
                             fontSize = 12.sp,
                             color = QuickExpenseThemeTokens.TextSecondary
@@ -1535,58 +1590,125 @@ fun EditFriendUpiDialog(
                 }
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    // 0. Select from Already Added Group Members
-                    if (allGroupMembers.size > 1) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.verticalScroll(rememberScrollState())
+                ) {
+                    // 0. Batch Member Quick-Matrix (Configure Masculine/Feminine/Neutral for ALL members one by one without closing!)
+                    if (effectiveMembers.size > 1) {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(
-                                text = "Select Group Member (${allGroupMembers.size})",
+                                text = "All Group Members (${effectiveMembers.size}) — Tap M / F / N or Select to Edit UPI",
                                 fontFamily = SplitMateBrandFontFamily,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
                                 color = QuickExpenseThemeTokens.PrimaryDark
                             )
-                            LazyRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                items(allGroupMembers, key = { it.memberId }) { candidate ->
-                                    val isCurrentTarget = candidate.memberId == member.memberId
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                effectiveMembers.forEach { candidate ->
+                                    val draft = memberDrafts[candidate.memberId] ?: EditableMemberDraft(
+                                        candidate.memberId,
+                                        candidate.name,
+                                        "Neutral",
+                                        candidate.upiId
+                                    )
+                                    val isCurrentTarget = candidate.memberId == activeMember.memberId
                                     Surface(
-                                        onClick = { onSelectMember(candidate) },
-                                        shape = QuickExpenseThemeTokens.RadiusPill,
-                                        color = if (isCurrentTarget) QuickExpenseThemeTokens.PrimaryDark else QuickExpenseThemeTokens.SurfaceKeypad,
+                                        onClick = {
+                                            activeMemberId = candidate.memberId
+                                            onSelectMember(candidate)
+                                        },
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = if (isCurrentTarget) QuickExpenseThemeTokens.SageSurface else QuickExpenseThemeTokens.SurfaceKeypad,
                                         border = BorderStroke(
-                                            1.dp,
-                                            if (isCurrentTarget) QuickExpenseThemeTokens.PrimaryDark else QuickExpenseThemeTokens.BorderLight
-                                        )
+                                            if (isCurrentTarget) 1.5.dp else 1.dp,
+                                            if (isCurrentTarget) QuickExpenseThemeTokens.SageBorder else QuickExpenseThemeTokens.BorderLight
+                                        ),
+                                        modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 10.dp, vertical = 8.dp)
                                         ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(20.dp)
-                                                    .clip(CircleShape)
-                                                    .background(QuickExpenseThemeTokens.AccentSage),
-                                                contentAlignment = Alignment.Center
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.weight(1f)
                                             ) {
-                                                Text(
-                                                    text = extractInitialsFromNameOrSeed(candidate.name),
-                                                    fontSize = 9.sp,
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    color = Color(0xFF23201E)
-                                                )
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(28.dp)
+                                                        .clip(CircleShape)
+                                                        .background(QuickExpenseThemeTokens.AccentSage),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    AsyncImage(
+                                                        model = ImageRequest.Builder(context)
+                                                            .data(buildDiceBearOpenPeepsUrl(draft.name, draft.style))
+                                                            .decoderFactory(SvgDecoder.Factory())
+                                                            .build(),
+                                                        contentDescription = draft.name,
+                                                        contentScale = ContentScale.Crop,
+                                                        modifier = Modifier.fillMaxSize().clip(CircleShape)
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Column {
+                                                    Text(
+                                                        text = draft.name,
+                                                        fontFamily = SplitMateBrandFontFamily,
+                                                        fontSize = 13.sp,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        color = QuickExpenseThemeTokens.PrimaryDark,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                    Text(
+                                                        text = draft.upiId.ifBlank { "Tap to add UPI ID" },
+                                                        fontFamily = SplitMateBrandFontFamily,
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = if (draft.upiId.isNotBlank()) QuickExpenseThemeTokens.SageText else QuickExpenseThemeTokens.TerracottaText,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
                                             }
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = candidate.name,
-                                                fontFamily = SplitMateBrandFontFamily,
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (isCurrentTarget) QuickExpenseThemeTokens.ScreenBg else QuickExpenseThemeTokens.PrimaryDark
-                                            )
+                                            // Inline 1-Tap M / F / N pills for every member so all can be set rapidly!
+                                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                listOf(
+                                                    "Masculine" to "M",
+                                                    "Feminine" to "F",
+                                                    "Neutral" to "N"
+                                                ).forEach { (fullStyle, shortCode) ->
+                                                    val selected = draft.style == fullStyle
+                                                    Surface(
+                                                        onClick = {
+                                                            activeMemberId = candidate.memberId
+                                                            memberDrafts[candidate.memberId] = draft.copy(style = fullStyle)
+                                                        },
+                                                        shape = CircleShape,
+                                                        color = if (selected) QuickExpenseThemeTokens.PrimaryDark else QuickExpenseThemeTokens.SurfaceWhite,
+                                                        border = BorderStroke(
+                                                            1.dp,
+                                                            if (selected) QuickExpenseThemeTokens.PrimaryDark else QuickExpenseThemeTokens.BorderLight
+                                                        ),
+                                                        modifier = Modifier.size(28.dp)
+                                                    ) {
+                                                        Box(contentAlignment = Alignment.Center) {
+                                                            Text(
+                                                                text = shortCode,
+                                                                fontFamily = SplitMateBrandFontFamily,
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.ExtraBold,
+                                                                color = if (selected) QuickExpenseThemeTokens.ScreenBg else QuickExpenseThemeTokens.TextSecondary
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -1594,10 +1716,10 @@ fun EditFriendUpiDialog(
                         }
                     }
 
-                    // 1. Presentation Style Toggle (Masculine, Feminine, Neutral)
+                    // 1. Active Member Presentation Style Toggle (Masculine, Feminine, Neutral)
                     Column {
                         Text(
-                            text = "Avatar Presentation Style",
+                            text = "Avatar Style for ${activeDraft.name}",
                             fontFamily = SplitMateBrandFontFamily,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
@@ -1617,9 +1739,11 @@ fun EditFriendUpiDialog(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 listOf("Masculine", "Feminine", "Neutral").forEach { style ->
-                                    val isSelected = selectedPresentationStyle == style
+                                    val isSelected = activeDraft.style == style
                                     Surface(
-                                        onClick = { selectedPresentationStyle = style },
+                                        onClick = {
+                                            memberDrafts[activeMember.memberId] = activeDraft.copy(style = style)
+                                        },
                                         shape = QuickExpenseThemeTokens.RadiusPill,
                                         color = if (isSelected) QuickExpenseThemeTokens.PrimaryDark else Color.Transparent,
                                         modifier = Modifier
@@ -1641,54 +1765,40 @@ fun EditFriendUpiDialog(
                         }
                     }
 
-                    // 2. Selected Member Contact Card (No manual free-text keyboard box!)
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = QuickExpenseThemeTokens.SurfaceKeypad,
-                        border = BorderStroke(1.dp, QuickExpenseThemeTokens.BorderLight),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
+                    // 2. EDITABLE UPI ID FIELD (Direct UPI ID editing for active member!)
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "UPI ID for ${activeDraft.name}",
+                            fontFamily = SplitMateBrandFontFamily,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = QuickExpenseThemeTokens.PrimaryDark
+                        )
+                        OutlinedTextField(
+                            value = activeDraft.upiId,
+                            onValueChange = { newUpi ->
+                                memberDrafts[activeMember.memberId] = activeDraft.copy(upiId = newUpi.trim())
+                            },
+                            placeholder = {
                                 Text(
-                                    text = "Selected Contact Member",
-                                    fontFamily = SplitMateBrandFontFamily,
-                                    fontSize = 11.sp,
-                                    color = QuickExpenseThemeTokens.TextSecondary
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = friendName.ifBlank { member.name },
-                                    fontFamily = SplitMateDisplayFontFamily,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = QuickExpenseThemeTokens.PrimaryDark
-                                )
-                                Text(
-                                    text = if (pickedPhoneNumber.length == 10) {
-                                        "+91 $pickedPhoneNumber · $pickedPhoneNumber@upi"
-                                    } else {
-                                        "No phone number linked yet"
-                                    },
+                                    text = "e.g. ${activeDraft.name.lowercase().replace(" ", "")}@okaxis or 9876543210@upi",
                                     fontFamily = SplitMateBrandFontFamily,
                                     fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (pickedPhoneNumber.length == 10) QuickExpenseThemeTokens.SageText else QuickExpenseThemeTokens.TerracottaText
+                                    color = QuickExpenseThemeTokens.TextSecondary
                                 )
-                            }
-                            Icon(
-                                imageVector = Icons.Rounded.VerifiedUser,
-                                contentDescription = null,
-                                tint = QuickExpenseThemeTokens.SageText,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = QuickExpenseThemeTokens.SageText,
+                                unfocusedBorderColor = QuickExpenseThemeTokens.BorderLight,
+                                focusedContainerColor = QuickExpenseThemeTokens.SurfaceKeypad,
+                                unfocusedContainerColor = QuickExpenseThemeTokens.SurfaceKeypad,
+                                focusedTextColor = QuickExpenseThemeTokens.PrimaryDark,
+                                unfocusedTextColor = QuickExpenseThemeTokens.PrimaryDark
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
 
                     // 3. Pick / Replace from Contacts Button (Opens In-App ContactPickerBottomSheet)
@@ -1712,7 +1822,7 @@ fun EditFriendUpiDialog(
                         border = BorderStroke(1.5.dp, QuickExpenseThemeTokens.SageBorder),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp)
+                            .height(44.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Contacts,
@@ -1722,14 +1832,10 @@ fun EditFriendUpiDialog(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (pickedPhoneNumber.length == 10) {
-                                "Replace / Change from Contacts"
-                            } else {
-                                "Select from Phone Contacts"
-                            },
+                            text = "Link / Replace from Phone Contacts",
                             fontFamily = SplitMateBrandFontFamily,
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 14.sp,
+                            fontSize = 13.sp,
                             color = QuickExpenseThemeTokens.SageText
                         )
                     }
@@ -1738,9 +1844,23 @@ fun EditFriendUpiDialog(
             confirmButton = {
                 Button(
                     onClick = {
-                        val cleanName = friendName.trim().ifEmpty { member.name }
-                        val styledSeed = "$cleanName|$selectedPresentationStyle"
-                        onSave(cleanName, resolvedPhoneUpi, styledSeed)
+                        if (onSaveAll != null) {
+                            val batchUpdates = effectiveMembers.map { m ->
+                                val d = memberDrafts[m.memberId] ?: EditableMemberDraft(m.memberId, m.name, "Neutral", m.upiId)
+                                val cleanName = d.name.trim().ifEmpty { m.name }
+                                com.splitmate.app.ui.SplitMateViewModel.BatchMemberUpdate(
+                                    memberId = m.memberId,
+                                    name = cleanName,
+                                    upiId = d.upiId.trim(),
+                                    avatarSeed = "$cleanName|${d.style}"
+                                )
+                            }
+                            onSaveAll(batchUpdates)
+                        } else {
+                            val cleanName = activeDraft.name.trim().ifEmpty { activeMember.name }
+                            val styledSeed = "$cleanName|${activeDraft.style}"
+                            onSave(cleanName, activeDraft.upiId.trim(), styledSeed)
+                        }
                     },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = QuickExpenseThemeTokens.PrimaryDark,
@@ -1748,7 +1868,7 @@ fun EditFriendUpiDialog(
                     )
                 ) {
                     Text(
-                        "Save Member",
+                        text = if (effectiveMembers.size > 1) "Save All Members (${effectiveMembers.size})" else "Save Member",
                         fontFamily = SplitMateBrandFontFamily,
                         fontWeight = FontWeight.Bold
                     )
@@ -1766,3 +1886,4 @@ fun EditFriendUpiDialog(
         )
     }
 }
+

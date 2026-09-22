@@ -50,12 +50,13 @@ object DesignSystemBindings {
     val GM3LightPrimaryText = Color(0xFF23201E)
     val GM3LightSubtitleText = Color(0xFF6E6863)
 
-    val GM3DarkBackground = Color(0xFF121212)
-    val GM3DarkCardSurface = Color(0xFF1E1E1E)
-    val GM3DarkKeypadSurface = Color(0xFF2A2A2A)
-    val GM3DarkPrimaryText = Color(0xFFFAF7F2)
-    val GM3DarkSubtitleText = Color(0xFFA09890)
-    val GM3DarkBorder = Color(0xFF343535)
+    // Warm Espresso Night Theme (#181512 Leather-Journal Dark Palette)
+    val GM3DarkBackground = Color(0xFF181512)
+    val GM3DarkCardSurface = Color(0xFF24201C)
+    val GM3DarkKeypadSurface = Color(0xFF2E2823)
+    val GM3DarkPrimaryText = Color(0xFFFAF6F0)
+    val GM3DarkSubtitleText = Color(0xFFB5ACA2)
+    val GM3DarkBorder = Color(0xFF38312B)
 
     val GM3ShapeExtraLarge = RoundedCornerShape(28.dp)
     val GM3ShapeLarge = RoundedCornerShape(24.dp)
@@ -124,17 +125,17 @@ private val SplitMateLightColorScheme = lightColorScheme(
 )
 
 private val SplitMateDarkColorScheme = darkColorScheme(
-    primary = Color(0xFFAED581),
-    onPrimary = Color(0xFF1B3300),
-    primaryContainer = Color(0xFF2A420E),
-    onPrimaryContainer = BuckwheatSageContainer,
-    secondary = Color(0xFFFFB4A1),
-    onSecondary = Color(0xFF561E0F),
-    secondaryContainer = Color(0xFF733423),
-    onSecondaryContainer = BuckwheatPeachContainer,
+    primary = Color(0xFFD7E8B6),
+    onPrimary = Color(0xFF181512),
+    primaryContainer = Color(0xFF233216),
+    onPrimaryContainer = Color(0xFFD7E8B6),
+    secondary = Color(0xFFFEB49C),
+    onSecondary = Color(0xFF3A2019),
+    secondaryContainer = Color(0xFF3A2019),
+    onSecondaryContainer = Color(0xFFFECDD3),
     tertiary = Color(0xFFBDC5FF),
     onTertiary = Color(0xFF1E2678),
-    tertiaryContainer = Color(0xFF353E90),
+    tertiaryContainer = Color(0xFF2A263D),
     onTertiaryContainer = BuckwheatLavenderContainer,
     background = DesignSystemBindings.GM3DarkBackground,
     onBackground = DesignSystemBindings.GM3DarkPrimaryText,
@@ -153,17 +154,20 @@ private val fontProvider = GoogleFont.Provider(
 
 private val figtreeGoogleFont = GoogleFont("Figtree")
 
+// Bundled TrueType Figtree fonts placed FIRST so they load synchronously on Frame 0 with zero Roboto fallback
 val FigtreeFontFamily = FontFamily(
-    Font(googleFont = figtreeGoogleFont, fontProvider = fontProvider, weight = FontWeight.Normal),
+    androidx.compose.ui.text.font.Font(resId = R.font.figtree_regular, weight = FontWeight.Light),
     androidx.compose.ui.text.font.Font(resId = R.font.figtree_regular, weight = FontWeight.Normal),
-    Font(googleFont = figtreeGoogleFont, fontProvider = fontProvider, weight = FontWeight.Medium),
     androidx.compose.ui.text.font.Font(resId = R.font.figtree_medium, weight = FontWeight.Medium),
-    Font(googleFont = figtreeGoogleFont, fontProvider = fontProvider, weight = FontWeight.SemiBold),
     androidx.compose.ui.text.font.Font(resId = R.font.figtree_semibold, weight = FontWeight.SemiBold),
-    Font(googleFont = figtreeGoogleFont, fontProvider = fontProvider, weight = FontWeight.Bold),
     androidx.compose.ui.text.font.Font(resId = R.font.figtree_bold, weight = FontWeight.Bold),
-    Font(googleFont = figtreeGoogleFont, fontProvider = fontProvider, weight = FontWeight.ExtraBold),
-    androidx.compose.ui.text.font.Font(resId = R.font.figtree_extrabold, weight = FontWeight.ExtraBold)
+    androidx.compose.ui.text.font.Font(resId = R.font.figtree_extrabold, weight = FontWeight.ExtraBold),
+    androidx.compose.ui.text.font.Font(resId = R.font.figtree_extrabold, weight = FontWeight.Black),
+    Font(googleFont = figtreeGoogleFont, fontProvider = fontProvider, weight = FontWeight.Normal),
+    Font(googleFont = figtreeGoogleFont, fontProvider = fontProvider, weight = FontWeight.Medium),
+    Font(googleFont = figtreeGoogleFont, fontProvider = fontProvider, weight = FontWeight.SemiBold),
+    Font(googleFont = figtreeGoogleFont, fontProvider = fontProvider, weight = FontWeight.Bold),
+    Font(googleFont = figtreeGoogleFont, fontProvider = fontProvider, weight = FontWeight.ExtraBold)
 )
 
 val PlusJakartaSansFont = FigtreeFontFamily
@@ -898,14 +902,14 @@ fun formatTravelExpenseTitle(baseCategory: String, ticket: ParsedTravelTicket): 
     val parts = mutableListOf<String>()
     val labelPrefix = when {
         enriched.trainOrCarrierName.isNotBlank() && enriched.trainOrFlightNo.isNotBlank() ->
-            "🚆 ${enriched.trainOrFlightNo} ${enriched.trainOrCarrierName}"
-        enriched.trainOrFlightNo.isNotBlank() -> "🚆 Train/Flight ${enriched.trainOrFlightNo}"
-        else -> "🚆 ${baseCategory.ifBlank { "Travel Ticket" }}"
+            "Train ${enriched.trainOrFlightNo} ${enriched.trainOrCarrierName}"
+        enriched.trainOrFlightNo.isNotBlank() -> "Train/Flight ${enriched.trainOrFlightNo}"
+        else -> baseCategory.ifBlank { "Train / Travel Ticket" }
     }
     parts.add(labelPrefix)
     if (enriched.pnr.isNotBlank()) parts.add("PNR: ${enriched.pnr}")
     if (enriched.fromStation.isNotBlank() && enriched.toStation.isNotBlank()) {
-        parts.add("${enriched.fromStation.uppercase()}→${enriched.toStation.uppercase()}")
+        parts.add("${enriched.fromStation.uppercase()}->${enriched.toStation.uppercase()}")
     }
     if (enriched.departureTime.isNotBlank() || enriched.departureDate.isNotBlank()) {
         val dt = listOf(enriched.departureDate, enriched.departureTime).filter { it.isNotBlank() }.joinToString(" ")
@@ -920,7 +924,8 @@ fun formatTravelExpenseTitle(baseCategory: String, ticket: ParsedTravelTicket): 
 fun extractTravelTicketFromTitle(title: String): ParsedTravelTicket? {
     if (!title.contains("PNR:", ignoreCase = true) &&
         !title.contains("Seats:", ignoreCase = true) &&
-        !title.contains("🚆") &&
+        !title.contains("Train", ignoreCase = true) &&
+        !title.contains("->") &&
         !title.contains("→")
     ) {
         return null
@@ -940,12 +945,16 @@ fun extractTravelTicketFromTitle(title: String): ParsedTravelTicket? {
             seg.startsWith("Dep:", ignoreCase = true) -> dep = seg.substringAfter(":").trim()
             seg.startsWith("Seats:", ignoreCase = true) || seg.startsWith("Coach", ignoreCase = true) ->
                 seats = seg.substringAfter(":").trim()
+            seg.contains("->") -> {
+                fromSt = seg.substringBefore("->").trim()
+                toSt = seg.substringAfter("->").trim()
+            }
             seg.contains("→") -> {
                 fromSt = seg.substringBefore("→").trim()
                 toSt = seg.substringAfter("→").trim()
             }
             idx == 0 -> {
-                val cleanFirst = seg.replace("🚆", "").replace("✈️", "").trim()
+                val cleanFirst = seg.replace("Train/Flight", "").replace("Train", "").trim()
                 val numMatch = Regex("""^(\d{5}|[A-Z0-9]{2}-\d{3,4})\s*(.*)$""").find(cleanFirst)
                 if (numMatch != null) {
                     trainNo = numMatch.groupValues[1]
@@ -965,10 +974,65 @@ fun extractTravelTicketFromTitle(title: String): ParsedTravelTicket? {
             toStation = toSt,
             departureTime = dep,
             coachAndSeats = seats,
-            cleanTitle = segments.firstOrNull()?.trim().orEmpty().ifBlank { "🚆 Train / Travel Ticket" }
+            cleanTitle = segments.firstOrNull()?.trim().orEmpty().ifBlank { "Train / PNR Ticket" }
         )
     )
     return if (parsed.hasTicketMetadata) parsed else null
+}
+
+@Composable
+fun SplitMateCircularLogoBadge(
+    sizeDp: Int = 44,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .size(sizeDp.dp)
+            .clip(CircleShape)
+            .background(SplitMateTheme.SurfaceWhite, CircleShape)
+            .border(2.dp, SplitMateTheme.PrimaryDark.copy(alpha = 0.28f), CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        androidx.compose.foundation.Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(6.dp)
+                .clip(CircleShape)
+        ) {
+            // Left-top circular hemisphere (Sage Olive #D7E8B6)
+            drawArc(
+                color = Color(0xFFD7E8B6),
+                startAngle = 135f,
+                sweepAngle = 180f,
+                useCenter = true
+            )
+            // Right-bottom circular hemisphere (Terracotta Coral #E06B52)
+            drawArc(
+                color = Color(0xFFE06B52),
+                startAngle = 315f,
+                sweepAngle = 180f,
+                useCenter = true
+            )
+            // Equilibrium ring outline inside the circle
+            drawCircle(
+                color = Color(0xFF365314),
+                radius = size.minDimension * 0.48f,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx())
+            )
+            // Upper equilibrium dot (Deep Olive)
+            drawCircle(
+                color = Color(0xFF365314),
+                radius = size.minDimension * 0.10f,
+                center = androidx.compose.ui.geometry.Offset(size.width * 0.36f, size.height * 0.36f)
+            )
+            // Lower equilibrium dot (Warm Cream)
+            drawCircle(
+                color = Color(0xFFFAF6F0),
+                radius = size.minDimension * 0.10f,
+                center = androidx.compose.ui.geometry.Offset(size.width * 0.64f, size.height * 0.64f)
+            )
+        }
+    }
 }
 
 @Composable
@@ -977,10 +1041,14 @@ fun GroupBoardingPassCard(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val passBg = if (SplitMateTheme.isDark) Color(0xFF233216) else Color(0xFFF6F9EE)
+    val passBorder = if (SplitMateTheme.isDark) Color(0xFF3E5626) else Color(0xFFC5DCA0)
+    val passAccent = if (SplitMateTheme.isDark) Color(0xFFD7E8B6) else BuckwheatOlivePrimary
+
     Surface(
         shape = RoundedCornerShape(18.dp),
-        color = Color(0xFFF6F9EE),
-        border = BorderStroke(1.dp, Color(0xFFC5DCA0)),
+        color = passBg,
+        border = BorderStroke(1.dp, passBorder),
         modifier = modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -991,9 +1059,9 @@ fun GroupBoardingPassCard(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Rounded.ConfirmationNumber,
+                        imageVector = Icons.Rounded.Train,
                         contentDescription = null,
-                        tint = BuckwheatOlivePrimary,
+                        tint = passAccent,
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
@@ -1005,7 +1073,7 @@ fun GroupBoardingPassCard(
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 13.sp,
-                        color = BuckwheatOlivePrimary
+                        color = passAccent
                     )
                 }
 
@@ -1035,13 +1103,30 @@ fun GroupBoardingPassCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (ticket.fromStation.isNotBlank() || ticket.toStation.isNotBlank()) {
-                        Text(
-                            text = "${resolveStationDisplayName(ticket.fromStation.ifBlank { "Origin" })}  →  ${resolveStationDisplayName(ticket.toStation.ifBlank { "Dest" })}",
-                            fontFamily = FigtreeFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = BuckwheatCharcoal
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = resolveStationDisplayName(ticket.fromStation.ifBlank { "Origin" }),
+                                fontFamily = FigtreeFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = SplitMateTheme.PrimaryDark
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(
+                                imageVector = Icons.Rounded.ArrowForward,
+                                contentDescription = null,
+                                tint = passAccent,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = resolveStationDisplayName(ticket.toStation.ifBlank { "Dest" }),
+                                fontFamily = FigtreeFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = SplitMateTheme.PrimaryDark
+                            )
+                        }
                     }
                     if (ticket.departureTime.isNotBlank()) {
                         Text(
@@ -1049,7 +1134,7 @@ fun GroupBoardingPassCard(
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.Bold,
                             fontSize = 11.sp,
-                            color = BuckwheatSecondaryText,
+                            color = SplitMateTheme.TextSecondary,
                             style = TextStyle(fontFeatureSettings = "tnum")
                         )
                     }
@@ -1060,8 +1145,8 @@ fun GroupBoardingPassCard(
                 Spacer(modifier = Modifier.height(6.dp))
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = Color.White,
-                    border = BorderStroke(1.dp, Color(0xFFDCE9B9))
+                    color = SplitMateTheme.SurfaceWhite,
+                    border = BorderStroke(1.dp, passBorder)
                 ) {
                     Row(
                         modifier = Modifier
@@ -1075,14 +1160,14 @@ fun GroupBoardingPassCard(
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.Medium,
                             fontSize = 11.sp,
-                            color = BuckwheatSecondaryText
+                            color = SplitMateTheme.TextSecondary
                         )
                         Text(
                             text = ticket.coachAndSeats,
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 12.sp,
-                            color = BuckwheatOlivePrimary,
+                            color = passAccent,
                             style = TextStyle(fontFeatureSettings = "tnum")
                         )
                     }
@@ -1108,7 +1193,7 @@ fun GroupBoardingPassCard(
                             }
                         },
                         shape = RoundedCornerShape(50),
-                        color = Color(0xFFDCE9B9)
+                        color = if (SplitMateTheme.isDark) Color(0xFF3E5626) else Color(0xFFDCE9B9)
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
@@ -1117,16 +1202,23 @@ fun GroupBoardingPassCard(
                             Icon(
                                 imageVector = Icons.Rounded.Train,
                                 contentDescription = null,
-                                tint = BuckwheatOlivePrimary,
+                                tint = passAccent,
                                 modifier = Modifier.size(13.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Check Live PNR & Coach Status ↗",
+                                text = "Check Live PNR & Coach Status",
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.sp,
-                                color = BuckwheatOlivePrimary
+                                color = passAccent
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.Rounded.OpenInNew,
+                                contentDescription = null,
+                                tint = passAccent,
+                                modifier = Modifier.size(12.dp)
                             )
                         }
                     }

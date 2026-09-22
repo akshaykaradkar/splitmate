@@ -1021,6 +1021,44 @@ class SplitMateViewModel(
         }
     }
 
+    data class BatchMemberUpdate(
+        val memberId: String,
+        val name: String,
+        val upiId: String,
+        val avatarSeed: String
+    )
+
+    fun updateAllGroupMembers(updates: List<BatchMemberUpdate>) {
+        if (updates.isEmpty()) return
+        val updateMap = updates.associateBy { it.memberId }
+        _uiState.update { curr ->
+            val nextMembers = curr.members.map { mbr ->
+                val upd = updateMap[mbr.memberId]
+                if (upd != null) {
+                    mbr.copy(
+                        name = upd.name.trim().ifEmpty { mbr.name },
+                        upiId = upd.upiId.trim(),
+                        avatarSeed = upd.avatarSeed.trim().ifEmpty { mbr.avatarSeed }
+                    )
+                } else mbr
+            }
+            curr.copy(
+                members = nextMembers,
+                statusBannerMessage = "Saved ${updates.size} group member profile(s) & UPI IDs"
+            )
+        }
+        viewModelScope.launch(ioDispatcher) {
+            updates.forEach { upd ->
+                dao?.updateMemberProfile(
+                    memberId = upd.memberId,
+                    name = upd.name.trim(),
+                    upiId = upd.upiId.trim(),
+                    avatarSeed = upd.avatarSeed.trim()
+                )
+            }
+        }
+    }
+
     fun editExistingExpense(
         expenseId: String,
         newTitle: String,
