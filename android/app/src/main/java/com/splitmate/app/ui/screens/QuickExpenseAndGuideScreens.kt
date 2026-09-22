@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -237,7 +238,13 @@ fun QuickExpenseScreen(
         var toStationInput by remember { mutableStateOf(existingTicket?.toStation ?: "") }
         var depTimeInput by remember { mutableStateOf(existingTicket?.departureTime ?: "") }
         var coachSeatsInput by remember { mutableStateOf(existingTicket?.coachAndSeats ?: "") }
+        var bookingStatusInput by remember { mutableStateOf(existingTicket?.bookingStatus ?: "CNF") }
+        var chartStatusInput by remember { mutableStateOf(existingTicket?.chartStatus ?: "Chart Prepared") }
+        var liveRadarPreview by remember { mutableStateOf(existingTicket?.liveTrainRadar ?: "") }
+        var isCheckingLivePnr by remember { mutableStateOf(false) }
         var rawSmsPasteInput by remember { mutableStateOf("") }
+        val pnrScope = androidx.compose.runtime.rememberCoroutineScope()
+        val dialogView = androidx.compose.ui.platform.LocalView.current
 
         val presetCategories = remember {
             listOf(
@@ -267,7 +274,7 @@ fun QuickExpenseScreen(
                     )
                     Text(
                         if (pendingCommitAfterCategorySelection) "Pick a category or enter a title to finish logging ₹$numericVal"
-                        else "Select category or attach Indian Railway PNR / Boarding Pass details",
+                        else "Select category or attach Indian Railway PNR (CNF / WL / RAC + Live Radar)",
                         fontFamily = SplitMateBrandFontFamily,
                         fontWeight = FontWeight.Medium,
                         fontSize = 12.sp,
@@ -283,6 +290,7 @@ fun QuickExpenseScreen(
                             FilterChip(
                                 selected = isSelected,
                                 onClick = {
+                                    com.splitmate.app.ui.performCrispTactileHaptic(context, dialogView, heavy = false)
                                     draftTitle = catLabel
                                     isTravelTicketMode = catLabel.contains("Train", ignoreCase = true) ||
                                         catLabel.contains("Flight", ignoreCase = true) ||
@@ -336,7 +344,10 @@ fun QuickExpenseScreen(
                         )
                         Switch(
                             checked = isTravelTicketMode,
-                            onCheckedChange = { isTravelTicketMode = it }
+                            onCheckedChange = {
+                                com.splitmate.app.ui.performCrispTactileHaptic(context, dialogView, heavy = false)
+                                isTravelTicketMode = it
+                            }
                         )
                     }
 
@@ -350,48 +361,148 @@ fun QuickExpenseScreen(
                                 modifier = Modifier.padding(10.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Row(
+                                LazyRow(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Surface(
-                                        onClick = {
-                                            val clip = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-                                            val clipText = clip?.primaryClip?.getItemAt(0)?.text?.toString().orEmpty()
-                                            val sampleOrClip = if (clipText.isNotBlank()) clipText else "PNR:8421094312,TRAIN:16592,DOJ:24-09-26,3A,SBC-HPT,Dep:22:00,B2-45 LB,B2-46 MB,Fare:3420"
-                                            rawSmsPasteInput = sampleOrClip
-                                            val parsed = com.splitmate.app.ui.parseIrctcOrTravelTicketText(sampleOrClip)
-                                            if (parsed.pnr.isNotBlank()) pnrInput = parsed.pnr
-                                            if (parsed.trainOrFlightNo.isNotBlank()) trainNoInput = parsed.trainOrFlightNo
-                                            if (parsed.fromStation.isNotBlank()) fromStationInput = parsed.fromStation
-                                            if (parsed.toStation.isNotBlank()) toStationInput = parsed.toStation
-                                            if (parsed.departureTime.isNotBlank()) depTimeInput = parsed.departureTime
-                                            if (parsed.coachAndSeats.isNotBlank()) coachSeatsInput = parsed.coachAndSeats
-                                            if (parsed.fareRupees.isNotBlank() && (amountDigits == "0" || amountDigits.isEmpty())) {
-                                                amountDigits = parsed.fareRupees.substringBefore(".")
-                                            }
-                                        },
-                                        shape = QuickExpenseThemeTokens.RadiusPill,
-                                        color = QuickExpenseThemeTokens.SageText
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                            verticalAlignment = Alignment.CenterVertically
+                                    item {
+                                        Surface(
+                                            onClick = {
+                                                com.splitmate.app.ui.performCrispTactileHaptic(context, dialogView, heavy = false)
+                                                val clip = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                                val clipText = clip?.primaryClip?.getItemAt(0)?.text?.toString().orEmpty()
+                                                val sampleOrClip = if (clipText.contains("PNR", ignoreCase = true) || clipText.contains("TRAIN", ignoreCase = true)) {
+                                                    clipText
+                                                } else {
+                                                    "PNR:8421094312,TRAIN:16592,DOJ:24-09-26,3A,SBC-HPT,Dep:22:00,B2-45 LB,B2-46 MB,Chart Prepared,Fare:3420"
+                                                }
+                                                rawSmsPasteInput = sampleOrClip
+                                                val parsed = com.splitmate.app.ui.parseIrctcOrTravelTicketText(sampleOrClip)
+                                                if (parsed.pnr.isNotBlank()) pnrInput = parsed.pnr
+                                                if (parsed.trainOrFlightNo.isNotBlank()) trainNoInput = parsed.trainOrFlightNo
+                                                if (parsed.fromStation.isNotBlank()) fromStationInput = parsed.fromStation
+                                                if (parsed.toStation.isNotBlank()) toStationInput = parsed.toStation
+                                                if (parsed.departureTime.isNotBlank()) depTimeInput = parsed.departureTime
+                                                if (parsed.coachAndSeats.isNotBlank()) coachSeatsInput = parsed.coachAndSeats
+                                                bookingStatusInput = parsed.bookingStatus
+                                                chartStatusInput = parsed.chartStatus
+                                                if (parsed.fareRupees.isNotBlank() && (amountDigits == "0" || amountDigits.isEmpty())) {
+                                                    amountDigits = parsed.fareRupees.substringBefore(".")
+                                                }
+                                            },
+                                            shape = QuickExpenseThemeTokens.RadiusPill,
+                                            color = QuickExpenseThemeTokens.SageText
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.ContentPaste,
-                                                contentDescription = null,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(14.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(5.dp))
-                                            Text(
-                                                text = "Paste IRCTC SMS / Sample PNR",
-                                                fontFamily = SplitMateBrandFontFamily,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 11.sp,
-                                                color = Color.White
-                                            )
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.ContentPaste,
+                                                    contentDescription = null,
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = "Paste CNF SMS",
+                                                    fontFamily = SplitMateBrandFontFamily,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 11.sp,
+                                                    color = Color.White
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    item {
+                                        Surface(
+                                            onClick = {
+                                                com.splitmate.app.ui.performCrispTactileHaptic(context, dialogView, heavy = false)
+                                                val wlSample = "PNR:6539182045,TRAIN:12952,DOJ:25-09-26,2A,NDLS-MMCT,Dep:16:55,GNWL 4,RAC 11,Chart Not Prepared,Fare:5840"
+                                                rawSmsPasteInput = wlSample
+                                                val parsed = com.splitmate.app.ui.parseIrctcOrTravelTicketText(wlSample)
+                                                pnrInput = parsed.pnr
+                                                trainNoInput = parsed.trainOrFlightNo
+                                                fromStationInput = parsed.fromStation
+                                                toStationInput = parsed.toStation
+                                                depTimeInput = parsed.departureTime
+                                                coachSeatsInput = parsed.coachAndSeats
+                                                bookingStatusInput = parsed.bookingStatus
+                                                chartStatusInput = parsed.chartStatus
+                                                if (parsed.fareRupees.isNotBlank() && (amountDigits == "0" || amountDigits.isEmpty())) {
+                                                    amountDigits = parsed.fareRupees.substringBefore(".")
+                                                }
+                                            },
+                                            shape = QuickExpenseThemeTokens.RadiusPill,
+                                            color = Color(0xFFE06B52)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = "⏳ Test WL / RAC SMS",
+                                                    fontFamily = SplitMateBrandFontFamily,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 11.sp,
+                                                    color = Color.White
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    item {
+                                        Surface(
+                                            onClick = {
+                                                com.splitmate.app.ui.performCrispTactileHaptic(context, dialogView, heavy = true)
+                                                isCheckingLivePnr = true
+                                                pnrScope.launch {
+                                                    val snap = com.splitmate.app.ui.fetchLivePnrAndTrainStatus(
+                                                        pnr = pnrInput.ifBlank { "8421094312" },
+                                                        fallbackTicket = com.splitmate.app.ui.ParsedTravelTicket(
+                                                            pnr = pnrInput,
+                                                            trainOrFlightNo = trainNoInput,
+                                                            fromStation = fromStationInput,
+                                                            toStation = toStationInput,
+                                                            departureTime = depTimeInput,
+                                                            coachAndSeats = coachSeatsInput
+                                                        )
+                                                    )
+                                                    pnrInput = snap.pnr
+                                                    trainNoInput = snap.trainNo
+                                                    fromStationInput = snap.fromStation
+                                                    toStationInput = snap.toStation
+                                                    depTimeInput = snap.departureTime
+                                                    coachSeatsInput = snap.passengerStatuses.joinToString(", ")
+                                                    bookingStatusInput = snap.bookingStatusBadge
+                                                    chartStatusInput = if (snap.chartPrepared) "Chart Prepared" else "Chart Not Prepared"
+                                                    liveRadarPreview = "${snap.liveTrainLocationRadar} · ${snap.confirmationProbability}"
+                                                    isCheckingLivePnr = false
+                                                }
+                                            },
+                                            shape = QuickExpenseThemeTokens.RadiusPill,
+                                            color = Color(0xFF23201E)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Sync,
+                                                    contentDescription = null,
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = if (isCheckingLivePnr) "Checking CRIS..." else "Check Live PNR Status",
+                                                    fontFamily = SplitMateBrandFontFamily,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 11.sp,
+                                                    color = Color.White
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -453,10 +564,36 @@ fun QuickExpenseScreen(
                                 OutlinedTextField(
                                     value = coachSeatsInput,
                                     onValueChange = { coachSeatsInput = it },
-                                    label = { Text("Coach & Seat/Berth Numbers (e.g. B2-45 LB, B2-46 MB)", fontSize = 11.sp) },
+                                    label = { Text("Status & Berths (e.g. CNF B2-45 LB, WL 4 / GNWL, RAC 11)", fontSize = 11.sp) },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth()
                                 )
+
+                                if (liveRadarPreview.isNotBlank() || bookingStatusInput.isNotBlank()) {
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = surfaceColor,
+                                        border = BorderStroke(1.dp, QuickExpenseThemeTokens.AccentSage)
+                                    ) {
+                                        Column(modifier = Modifier.padding(8.dp)) {
+                                            Text(
+                                                text = "Status: $bookingStatusInput · $chartStatusInput",
+                                                fontFamily = SplitMateBrandFontFamily,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 11.sp,
+                                                color = if (bookingStatusInput.contains("WL", true) || bookingStatusInput.contains("RAC", true)) Color(0xFFE06B52) else QuickExpenseThemeTokens.SageText
+                                            )
+                                            if (liveRadarPreview.isNotBlank()) {
+                                                Text(
+                                                    text = "🛰️ $liveRadarPreview",
+                                                    fontFamily = SplitMateBrandFontFamily,
+                                                    fontSize = 10.sp,
+                                                    color = textSecondary
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -465,6 +602,7 @@ fun QuickExpenseScreen(
             confirmButton = {
                 Button(
                     onClick = {
+                        com.splitmate.app.ui.performCrispTactileHaptic(context, dialogView, heavy = true)
                         val finalTitle = if (isTravelTicketMode) {
                             com.splitmate.app.ui.formatTravelExpenseTitle(
                                 baseCategory = draftTitle.ifBlank { "Train / PNR Ticket" },
@@ -474,7 +612,9 @@ fun QuickExpenseScreen(
                                     fromStation = fromStationInput.trim(),
                                     toStation = toStationInput.trim(),
                                     departureTime = depTimeInput.trim(),
-                                    coachAndSeats = coachSeatsInput.trim()
+                                    coachAndSeats = coachSeatsInput.trim(),
+                                    bookingStatus = bookingStatusInput.trim().ifBlank { "CNF" },
+                                    chartStatus = chartStatusInput.trim().ifBlank { "Chart Prepared" }
                                 )
                             )
                         } else {
@@ -1126,6 +1266,7 @@ fun QuickExpenseScreen(
                                 }
                             )
 
+                            val keypadView = androidx.compose.ui.platform.LocalView.current
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1139,7 +1280,7 @@ fun QuickExpenseScreen(
                                         .weight(1f)
                                         .height(54.dp),
                                     onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        com.splitmate.app.ui.performCrispTactileHaptic(context, keypadView, heavy = false)
                                         if (amountDigits.isNotEmpty() && amountDigits.length < 8) {
                                             amountDigits += "00"
                                         }
@@ -1155,7 +1296,7 @@ fun QuickExpenseScreen(
                                         .weight(1f)
                                         .height(54.dp),
                                     onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        com.splitmate.app.ui.performCrispTactileHaptic(context, keypadView, heavy = false)
                                         if (amountDigits != "0" && amountDigits.length < 8) {
                                             amountDigits += "0"
                                         }
@@ -1173,7 +1314,7 @@ fun QuickExpenseScreen(
                                         .weight(1f)
                                         .height(54.dp),
                                     onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        com.splitmate.app.ui.performCrispTactileHaptic(context, keypadView, heavy = false)
                                         if (amountDigits.isNotEmpty()) {
                                             amountDigits = amountDigits.dropLast(1)
                                         }
@@ -1183,13 +1324,14 @@ fun QuickExpenseScreen(
                         }
 
                         // Right: 4th Column (Row 1 = 54dp Note, Row 2 = 54dp Clear "C", Rows 3 & 4 = 116dp 2-Row Log & Split FAB)
+                        val rightColView = androidx.compose.ui.platform.LocalView.current
                         Column(
                             modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Surface(
                                 onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    com.splitmate.app.ui.performCrispTactileHaptic(context, rightColView, heavy = true)
                                     showEditTitleDialog = true
                                     onLogExpenseClick()
                                 },
@@ -1232,7 +1374,7 @@ fun QuickExpenseScreen(
                                     .fillMaxWidth()
                                     .height(54.dp),
                                 onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    com.splitmate.app.ui.performCrispTactileHaptic(context, rightColView, heavy = false)
                                     amountDigits = "0"
                                 }
                             )
@@ -1252,7 +1394,7 @@ fun QuickExpenseScreen(
                             }
                             Surface(
                                 onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    com.splitmate.app.ui.performCrispTactileHaptic(context, rightColView, heavy = true)
                                     if (canCommitSplit) {
                                         if (expenseCategoryTitle.isBlank()) {
                                             pendingCommitAfterCategorySelection = true
@@ -1335,7 +1477,8 @@ private fun KeypadRow(
     textPrimary: Color = QuickExpenseThemeTokens.PrimaryDark,
     onKeyPress: (String) -> Unit
 ) {
-    val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
+    val localView = androidx.compose.ui.platform.LocalView.current
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1351,7 +1494,7 @@ private fun KeypadRow(
                     .weight(1f)
                     .height(54.dp),
                 onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    com.splitmate.app.ui.performCrispTactileHaptic(context, localView, heavy = false)
                     onKeyPress(key)
                 }
             )

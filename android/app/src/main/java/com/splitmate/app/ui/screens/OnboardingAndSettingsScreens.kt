@@ -753,42 +753,11 @@ fun UserSettingsScreen(
                     ) {
                         Column {
                             SettingsRowItem(
-                                icon = Icons.Rounded.Functions,
-                                iconBg = SplitMateThemeTokens.AccentSage.copy(alpha = 0.45f),
-                                iconTint = SplitMateThemeTokens.SageText,
-                                title = "0.00¢ Largest Remainder Auto-Split",
-                                subtitle = "Automatically distribute indivisible ₹1 remainders so group totals never drift",
-                                titleColor = textPrimary,
-                                subtitleColor = textSecondary,
-                                trailingContent = {
-                                    Switch(
-                                        checked = largestRemainderEnabled,
-                                        onCheckedChange = {
-                                            largestRemainderEnabled = it
-                                            prefs.edit().putBoolean("pref_largest_remainder", it).apply()
-                                        },
-                                        colors = SwitchDefaults.colors(
-                                            checkedThumbColor = Color.White,
-                                            checkedTrackColor = Color(0xFF416913),
-                                            uncheckedThumbColor = Color(0xFF23201E),
-                                            uncheckedTrackColor = mutedBg
-                                        )
-                                    )
-                                },
-                                onClick = {
-                                    largestRemainderEnabled = !largestRemainderEnabled
-                                    prefs.edit().putBoolean("pref_largest_remainder", largestRemainderEnabled).apply()
-                                }
-                            )
-
-                            HorizontalDivider(color = borderColor.copy(alpha = 0.5f))
-
-                            SettingsRowItem(
                                 icon = Icons.Rounded.Send,
                                 iconBg = SplitMateThemeTokens.AccentSage.copy(alpha = 0.45f),
                                 iconTint = SplitMateThemeTokens.SageText,
                                 title = "Include My UPI ID in WhatsApp Reminders",
-                                subtitle = "Embed your UPI handle in 1-tap WhatsApp settlement messages",
+                                subtitle = "Embed your UPI handle in 1-tap WhatsApp settlement messages (INR ₹)",
                                 titleColor = textPrimary,
                                 subtitleColor = textSecondary,
                                 trailingContent = {
@@ -852,6 +821,7 @@ fun UserSettingsScreen(
 
             // Section 3: Appearance & Tactile Feedback
             item {
+                val settingsLocalView = androidx.compose.ui.platform.LocalView.current
                 Column {
                     Text(
                         text = "Appearance & Tactile Physics",
@@ -874,8 +844,8 @@ fun UserSettingsScreen(
                                 icon = if (isDarkTheme) Icons.Rounded.DarkMode else Icons.Rounded.LightMode,
                                 iconBg = Color(0xFFE8EDFB),
                                 iconTint = Color(0xFF244896),
-                                title = "Dark Theme",
-                                subtitle = "Switch between Warm Buckwheat Light and OLED Dark canvas",
+                                title = "Dark Theme (Warm Espresso #181512)",
+                                subtitle = "Switch between Buckwheat Cream Light and Warm Espresso Night canvas",
                                 titleColor = textPrimary,
                                 subtitleColor = textSecondary,
                                 trailingContent = {
@@ -884,6 +854,7 @@ fun UserSettingsScreen(
                                         onCheckedChange = {
                                             isDarkTheme = it
                                             onThemeToggle(it)
+                                            com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = false)
                                         },
                                         colors = SwitchDefaults.colors(
                                             checkedThumbColor = Color.White,
@@ -896,6 +867,7 @@ fun UserSettingsScreen(
                                 onClick = {
                                     isDarkTheme = !isDarkTheme
                                     onThemeToggle(isDarkTheme)
+                                    com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = false)
                                 }
                             )
 
@@ -906,7 +878,7 @@ fun UserSettingsScreen(
                                 iconBg = SplitMateThemeTokens.AccentSage.copy(alpha = 0.45f),
                                 iconTint = SplitMateThemeTokens.SageText,
                                 title = "Tactile Keypad Haptics",
-                                subtitle = "Bouncy spring vibration feedback when typing amounts & splitting",
+                                subtitle = "Crisp hardware vibration feedback when typing amounts & splitting",
                                 titleColor = textPrimary,
                                 subtitleColor = textSecondary,
                                 trailingContent = {
@@ -915,6 +887,9 @@ fun UserSettingsScreen(
                                         onCheckedChange = {
                                             hapticsEnabled = it
                                             prefs.edit().putBoolean("pref_haptics", it).apply()
+                                            if (it) {
+                                                com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = true)
+                                            }
                                         },
                                         colors = SwitchDefaults.colors(
                                             checkedThumbColor = Color.White,
@@ -927,6 +902,9 @@ fun UserSettingsScreen(
                                 onClick = {
                                     hapticsEnabled = !hapticsEnabled
                                     prefs.edit().putBoolean("pref_haptics", hapticsEnabled).apply()
+                                    if (hapticsEnabled) {
+                                        com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = true)
+                                    }
                                 }
                             )
                         }

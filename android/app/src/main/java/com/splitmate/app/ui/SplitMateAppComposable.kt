@@ -848,24 +848,27 @@ fun LedgersDashboardScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                val (catBadgeBg, catBadgeTint) = resolveExpenseCategoryBadgeColors(expense.title, SplitMateTheme.isDark)
+                                val parsedTicketInGroup = remember(expense.title) { extractTravelTicketFromTitle(expense.title) }
+                                val cleanTitleInGroup = parsedTicketInGroup?.cleanTitle ?: expense.title
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                                     Box(
                                         modifier = Modifier
                                             .size(40.dp)
                                             .clip(CircleShape)
-                                            .background(if (isMePayer) Color(0xFFE0E7FF) else SplitMateTheme.TerracottaSurface),
+                                            .background(catBadgeBg),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Rounded.Dining,
+                                            imageVector = resolveExpenseCategoryIcon(expense.title),
                                             contentDescription = null,
-                                            tint = if (isMePayer) Color(0xFF3730A3) else SplitMateTheme.TerracottaText
+                                            tint = catBadgeTint
                                         )
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column {
                                         Text(
-                                            text = expense.title,
+                                            text = cleanTitleInGroup,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 15.sp,
                                             color = SplitMateTheme.PrimaryDark
@@ -1538,10 +1541,14 @@ fun LedgersDashboardScreen(
                         val sym = uiState.activeCurrency.symbol
                         val formattedAmt = (if (isMePayer) "+" else "-") +
                             sym + String.format(Locale.US, "%.2f", expense.totalAmountCents / 100.0)
+                        val (catBg, catTint) = resolveExpenseCategoryBadgeColors(expense.title, SplitMateTheme.isDark)
+                        val parsedTravel = extractTravelTicketFromTitle(expense.title)
+                        val cleanTitle = parsedTravel?.cleanTitle ?: expense.title
                         ActivityItemRow(
-                            icon = Icons.Rounded.Restaurant,
-                            iconBg = if (isMePayer) Color(0xFFE0E7FF) else Color(0xFFFFE4E6),
-                            title = expense.title,
+                            icon = resolveExpenseCategoryIcon(expense.title),
+                            iconBg = catBg,
+                            iconTint = catTint,
+                            title = cleanTitle,
                             subtitle = "Paid by ${if (isMePayer) "you" else (payer?.name ?: "Member")} · Tap group to view details",
                             amount = formattedAmt,
                             isPositive = isMePayer
@@ -3224,18 +3231,19 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        val (auditCatBg, auditCatTint) = resolveExpenseCategoryBadgeColors(expense.title, SplitMateTheme.isDark)
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                             Box(
                                 modifier = Modifier
                                     .size(40.dp)
                                     .clip(CircleShape)
-                                    .background(if (isMePayer) Color(0xFFE0E7FF) else Color(0xFFFFE4E6)),
+                                    .background(auditCatBg),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = if (parsedTravelTicket != null) Icons.Rounded.Train else Icons.Rounded.Dining,
+                                    imageVector = resolveExpenseCategoryIcon(expense.title),
                                     contentDescription = null,
-                                    tint = if (isMePayer) Color(0xFF3730A3) else SplitMateTheme.TerracottaText
+                                    tint = auditCatTint
                                 )
                             }
                             Spacer(modifier = Modifier.width(12.dp))
@@ -3700,6 +3708,7 @@ fun OverlappingAvatarStack(avatars: List<String>, remainingCount: Int = 0) {
 fun ActivityItemRow(
     icon: ImageVector,
     iconBg: Color,
+    iconTint: Color = SplitMateTheme.PrimaryDark,
     title: String,
     subtitle: String,
     amount: String,
@@ -3719,7 +3728,7 @@ fun ActivityItemRow(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                 Box(
                     modifier = Modifier
                         .size(40.dp)
@@ -3727,7 +3736,7 @@ fun ActivityItemRow(
                         .background(iconBg),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(icon, contentDescription = null, tint = SplitMateTheme.PrimaryDark, modifier = Modifier.size(20.dp))
+                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
