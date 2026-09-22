@@ -60,23 +60,51 @@ object SplitMateMathEngine {
     )
 
     /**
+     * Canonical Payer-First participant ordering for Largest Remainder (`0.00¢` drift) reconciliation.
+     * Guarantees that the Payer (`payerId`, falling back to `currentUserId`) absorbs the first `+1` paise
+     * remainder penny, followed by remaining participants in deterministic `memberId` ascending order.
+     */
+    fun orderParticipantsPayerFirst(
+        memberIds: Collection<String>,
+        payerId: String?,
+        currentUserId: String? = null
+    ): List<String> {
+        val primaryPayerId = payerId?.takeIf { it.isNotBlank() } ?: currentUserId
+        return memberIds.distinct().sortedWith(
+            compareByDescending<String> { it == primaryPayerId }
+                .thenByDescending { it == currentUserId }
+                .thenBy { it }
+        )
+    }
+
+    /**
      * Splits an exact integer-cent total equally among N members using Largest Remainder (`0.00¢ drift`).
      */
     fun splitEquallyZeroDrift(
         totalCents: Long,
-        members: List<Pair<String, String>>
+        members: List<Pair<String, String>>,
+        payerId: String? = null,
+        currentUserId: String? = null
     ): List<SplitAllocation> {
-        if (members.isEmpty() || totalCents <= 0L) {
-            return members.map { (id, name) ->
+        val orderedMembers = if (payerId != null || currentUserId != null) {
+            val memberMap = members.toMap()
+            orderParticipantsPayerFirst(members.map { it.first }, payerId, currentUserId)
+                .map { id -> id to (memberMap[id] ?: id) }
+        } else {
+            members
+        }
+
+        if (orderedMembers.isEmpty() || totalCents <= 0L) {
+            return orderedMembers.map { (id, name) ->
                 SplitAllocation(id, name, 0L, 0.0, 0L, 0.0, 0L, false)
             }
         }
-        val count = members.size
+        val count = orderedMembers.size
         val exactEach = totalCents.toDouble() / count.toDouble()
         val baseFloor = totalCents / count
         val remainderPennies = (totalCents % count).toInt()
 
-        return members.mapIndexed { idx, (id, name) ->
+        return orderedMembers.mapIndexed { idx, (id, name) ->
             val getsExtraPenny = idx < remainderPennies
             val finalShare = if (getsExtraPenny) baseFloor + 1L else baseFloor
             SplitAllocation(

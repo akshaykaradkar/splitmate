@@ -34,34 +34,34 @@
 ---
 
 ## Phase 2: Financial Math Drift, Ghost Data Elimination & Network Resilience
-- [ ] **2.1** **`SplitMateMathEngine.kt` & Custom Payer Selection (`payerMemberId`)**:
+- [x] **2.1** **`SplitMateMathEngine.kt` & Custom Payer Selection (`payerMemberId`)**:
   - Implement `SplitMateMathEngine.orderParticipantsPayerFirst(memberIds, payerId, currentUserId)` so all 3 split paths (`SplitMateViewModel`, `PnrExpenseReviewScreen`, `QuickExpenseScreen`) assign Largest Remainder pennies (`+1` paise) to the actual Payer first (`0.00¢` drift).
   - Add `payerMemberId: String? = null` to `commitQuickEqualExpense`, add `"Paid by: [Member]"` chip selector in `PnrExpenseReviewScreen` and `QuickExpenseScreen`, and replace all 5 hardcoded `member.isCurrentUser` checks in `PnrExpenseReviewScreen.kt` with `member.memberId == selectedPayerId`.
   - Fix `QuickExpenseAndGuideScreens.kt:L896` so the Largest Remainder badge reads `memberOwedCents[member.memberId]` (`+₹0.01`) instead of total `remainderPaise` (`+₹0.02`).
   - Fix `resolveExpenseSplitBreakdown` (`PnrExpenseReviewScreen.kt:L1246`) to use `orderParticipantsPayerFirst`.
-- [ ] **2.2** **Zero Ghost Data & Manual Ticket Entry Mode (`isLiveVerified` / `isManualEntry`)**:
+- [x] **2.2** **Zero Ghost Data & Manual Ticket Entry Mode (`isLiveVerified` / `isManualEntry`)**:
   - Remove `OfflineIndianTrainCatalog`, `OfflineTrainIntermediateRadar`, `enrichTicketWithOfflineCatalog`, and the modulo-hash synthetic WL/RAC/CNF generator (`SplitMateTheme.kt:L1425-L1496`) while preserving `OfflineStationNames`.
   - Update all 4 call sites of deleted functions (`SplitMateTheme.kt:L1522, L1559, L1633` and `SplitMateAppComposable.kt:L3878`).
   - When live PNR fetch fails (`isLiveVerified == false`), populate `liveSnapshot` with `LivePnrStatusSnapshot(pnr = clean, isLiveVerified = false, isManualEntry = true, ...)` to unlock the **Manual Ticket Fare & Route Card** (`manualTotalFareInput`, `manualFromStationInput`, `manualToStationInput`), member split selector, and bottom Confirm CTA.
   - Gate `dao.upsertCurrencyRates(defaultSeedCurrencies())` behind `if (roomDao.getCurrencyRate("INR") == null)` and set INR `lockedExchangeRate = 1.0`.
-- [ ] **2.3** **`PnrNetworkRepository.kt` — 5-Stage Token Bucket, Coalescing & Bounded Timeouts**:
+- [x] **2.3** **`PnrNetworkRepository.kt` — 5-Stage Token Bucket, Coalescing & Bounded Timeouts**:
   - Implement `PnrNetworkRepository.kt` with the strict 5-stage pipeline: L1 `LruCache(32)` + L2 `EncryptedSharedPreferences` → 6h positive TTL / 60s negative debounce → `coalesceMutex` `inFlightPnrDeferreds` on `SupervisorJob() + Dispatchers.IO` → `"global_pnr_fetch_epochs_csv"` 5-calls-per-5-minutes token bucket → `4,000ms` connect/read socket timeout with `finally { conn.disconnect() }`.
-- [ ] **2.4** **Idempotent PNR Deduping & Cross-Group Navigation (`PnrReviewLaunchRequest`)**:
+- [x] **2.4** **Idempotent PNR Deduping & Cross-Group Navigation (`PnrReviewLaunchRequest`)**:
   - Add 10-digit PNR deduplication inside `commitQuickEqualExpense` (`SplitMateViewModel.kt:L480`) and self-excluding duplicate-PNR guard inside `editExistingExpense` (`L679`).
   - Add `PnrReviewLaunchRequest(groupId, initialPnr, returnToTab)` so tapping a PNR ticket from Global Activity switches `selectActiveGroup(expense.groupId)` before opening the Studio.
-- [ ] **2.5** **Phase 2 Verification, Self-Audit & Git Checkpoint Commit**:
+- [x] **2.5** **Phase 2 Verification, Self-Audit & Git Checkpoint Commit**:
   - Update unit tests in `SplitMateViewModelTurbineTest.kt` for `1.0` INR exchange rate, custom payer LRM, and duplicate-PNR rejection.
   - Run `./gradlew testDebugUnitTest`, audit `git diff`, and create Git commit `feat(phase-2): ...`.
 
 ---
 
 ## Phase 3: Material Design 3 Expressive, Typography (`tnum`), Haptics & Ticket De-Cluttering
-- [ ] **3.1** **Universal `tnum` Enforcement, Dark-Mode `TactilePaperPassTokens` & Haptics**:
+- [/] **3.1** **Universal `tnum` Enforcement, Dark-Mode `TactilePaperPassTokens` & Haptics**:
   - Apply `fontFeatureSettings = "tnum"` to all 14 `SplitMateTypography` slots (`SplitMateTheme.kt:L201-L343`) and create `SplitMateTnumMonospace` (`FontFamily.Monospace` + `tnum`).
   - Replace all 28 raw `FontFamily.Monospace` occurrences (`PnrExpenseReviewScreen.kt`, `QuickExpenseAndGuideScreens.kt`, `SplitMateAppComposable.kt`, `OnboardingAndSettingsScreens.kt`) with `SplitMateTnumMonospace`.
   - Make `TactilePaperPassTokens` (`PnrExpenseReviewScreen.kt:L60-L87`) dark-mode adaptive via `LocalSplitMatePalette.current` and add explicit `OutlinedTextFieldDefaults.colors(...)` at `L1354`.
   - Wire `LocalHapticFeedback.current` across `PnrExpenseReviewScreen.kt`, `OnboardingAndSettingsScreens.kt`, and `SplitMateTheme.kt`, and replace linear `tween` with `SplitMateMotion.SmoothSettleSpring` / `ExpressiveSpatialSpring`.
-- [ ] **3.2** **Ticket UI De-Cluttering & Logged-Ticket Fee Protection**:
+- [/] **3.2** **Ticket UI De-Cluttering & Logged-Ticket Fee Protection**:
   - Create `CompactLedgerTicketStub` (`76dp` single-row pill) for Group Overview & Activity Audit feeds, replacing full `TravelBoardingPassCard` in list rows.
   - Redesign the Group "Split PNR" tab (`SplitMateAppComposable.kt:L2786-L2875`) with the top **"Launch Tactile Paper PNR Studio"** Hero Card (`#D7E8B6`) + compact horizontal logged-ticket strip (`LazyRow`).
   - Derive `selectedExistingExpense` reactively from `pnrInput` in `PnrExpenseReviewScreen.kt`, lock `effectiveTotalPaise = selectedExistingExpense.totalAmountCents` when inspecting/editing an existing logged ticket (preventing double-counted `+₹25.40` IRCTC fees), and regenerate `formattedTitle` on split update.

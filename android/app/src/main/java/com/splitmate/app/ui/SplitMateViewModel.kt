@@ -60,7 +60,8 @@ data class SplitMateUiState(
     val returnToGroupDetailId: String? = null
 ) {
     val activeCurrency: CurrencyRateEntity
-        get() = CurrencyRateEntity("INR", "Indian Rupee", "₹", 83.95)
+        get() = currencyRates.find { it.currencyCode == activeCurrencyCode }
+            ?: CurrencyRateEntity("INR", "Indian Rupee", "₹", 1.0, baseCurrency = "INR")
 
     val activeGroup: ExpenseGroupEntity?
         get() = groups.find { it.groupId == activeGroupId } ?: groups.firstOrNull()
@@ -73,7 +74,7 @@ data class SplitMateUiState(
 }
 
 fun defaultSeedCurrencies(): List<CurrencyRateEntity> = listOf(
-    CurrencyRateEntity("INR", "Indian Rupee", "₹", 83.95)
+    CurrencyRateEntity("INR", "Indian Rupee", "₹", 1.0, baseCurrency = "INR")
 )
 
 fun defaultSeedReceiptItems(): List<ReceiptLineItem> = listOf(
@@ -303,7 +304,7 @@ class SplitMateViewModel(
                 lockedMultiplier = 1.0,
                 unassignedBaseCents = 0L,
                 currencyCode = "INR",
-                lockedExchangeRate = 83.95,
+                lockedExchangeRate = 1.0,
                 syncStatus = "SYNCED"
             )
         )
@@ -322,7 +323,9 @@ class SplitMateViewModel(
 
     private fun observeRoomDatabase(roomDao: SplitMateDao) {
         viewModelScope.launch(ioDispatcher) {
-            roomDao.upsertCurrencyRates(_uiState.value.currencyRates)
+            if (roomDao.getCurrencyRate("INR") == null) {
+                roomDao.upsertCurrencyRates(defaultSeedCurrencies())
+            }
         }
         viewModelScope.launch(ioDispatcher) {
             roomDao.observeUserProfile().collect { profile ->
@@ -483,13 +486,14 @@ class SplitMateViewModel(
     }
 
     /**
-     * Commits a Quick Equal Expense from QuickExpenseScreen:
-     * Strictly divides [totalAmountCents] equally among [selectedMemberIds] with Exact Split.
+     * Commits a Quick Equal Expense from QuickExpenseScreen or PnrExpenseReviewScreen:
+     * Strictly divides [totalAmountCents] equally among [selectedMemberIds] with Payer-First Largest Remainder (`0.00¢` drift).
      */
     fun commitQuickEqualExpense(
         title: String,
         totalAmountCents: Long,
-        selectedMemberIds: List<String>
+        selectedMemberIds: List<String>,
+        payerMemberId: String? = null
     ) {
         if (totalAmountCents <= 0L) return
         val state = _uiState.value
@@ -497,25 +501,35 @@ class SplitMateViewModel(
         if (groupMembers.isEmpty()) return
 
         // Guard against adding the exact same 10-digit PNR twice to the same group ledger
-        val pnrMatch = Regex("""PNR:\s*(\d{10})""", RegexOption.IGNORE_CASE).find(title)?.groupValues?.getOrNull(1)
-        if (!pnrMatch.isNullOrBlank()) {
+        val pnrDigits = Regex("""\b(\d{10})\b""").find(title)?.groupValues?.getOrNull(1)
+        if (!pnrDigits.isNullOrBlank()) {
             val alreadyExistsInGroup = state.expenses.any { existingExp ->
-                existingExp.groupId == state.activeGroupId && existingExp.title.contains(pnrMatch)
+                existingExp.groupId == state.activeGroupId && existingExp.title.contains(pnrDigits)
             }
-            if (alreadyExistsInGroup) return
+            if (alreadyExistsInGroup) {
+                _uiState.update { curr ->
+                    curr.copy(statusBannerMessage = "PNR $pnrDigits is already logged in this group ledger")
+                }
+                return
+            }
         }
 
         val chosenMembers = groupMembers.filter { selectedMemberIds.contains(it.memberId) }
             .ifEmpty { groupMembers }
-        val payer = groupMembers.find { it.isCurrentUser } ?: groupMembers.first()
+        val currentUser = groupMembers.find { it.isCurrentUser }
+        val payer = groupMembers.find { it.memberId == payerMemberId }
+            ?: currentUser
+            ?: groupMembers.first()
 
         val lockedRate = state.activeCurrency.rateFromBase
         val syncStatus = if (state.isOfflineMode) "PENDING" else "SYNCED"
         val expenseId = "exp_${System.currentTimeMillis()}"
 
         val equalAllocations = SplitMateMathEngine.splitEquallyZeroDrift(
-            totalAmountCents,
-            chosenMembers.map { it.memberId to it.name }
+            totalCents = totalAmountCents,
+            members = chosenMembers.map { it.memberId to it.name },
+            payerId = payer.memberId,
+            currentUserId = currentUser?.memberId
         )
 
         val expenseEntity = ExpenseEntity(
@@ -1079,6 +1093,21 @@ class SplitMateViewModel(
         val state = _uiState.value
         val existing = state.expenses.find { it.expenseId == expenseId } ?: return
         val cleanTitle = newTitle.trim().ifEmpty { existing.title }
+
+        // Guard against editing an expense to collide with another expense's 10-digit PNR in the same group
+        val newPnrDigits = Regex("""\b(\d{10})\b""").find(cleanTitle)?.groupValues?.getOrNull(1)
+        if (!newPnrDigits.isNullOrBlank()) {
+            val conflictingExpense = state.expenses.firstOrNull { other ->
+                other.groupId == existing.groupId && other.expenseId != expenseId && other.title.contains(newPnrDigits)
+            }
+            if (conflictingExpense != null) {
+                _uiState.update { curr ->
+                    curr.copy(statusBannerMessage = "PNR $newPnrDigits is already logged in another expense in this group")
+                }
+                return
+            }
+        }
+
         val newTotalCents = kotlin.math.round(newTotalRupees * 100.0).toLong().coerceAtLeast(1L)
 
         val existingSplits = state.splits.filter { it.expenseId == expenseId && it.finalOwedCents > 0L }
@@ -1087,15 +1116,19 @@ class SplitMateViewModel(
             ?.ifEmpty { null }
             ?: existingSplits.map { it.memberId }.ifEmpty { groupMembers.map { it.memberId } }
 
+        val resolvedPayerId = newPayerId.ifBlank { existing.payerId }
+        val currentUser = groupMembers.find { it.isCurrentUser }
         val chosenMembers = groupMembers.filter { splitMemberIds.contains(it.memberId) }.ifEmpty { groupMembers }
         val equalAllocations = SplitMateMathEngine.splitEquallyZeroDrift(
-            newTotalCents,
-            chosenMembers.map { it.memberId to it.name }
+            totalCents = newTotalCents,
+            members = chosenMembers.map { it.memberId to it.name },
+            payerId = resolvedPayerId,
+            currentUserId = currentUser?.memberId
         )
 
         val updatedExpense = existing.copy(
             title = cleanTitle,
-            payerId = newPayerId.ifBlank { existing.payerId },
+            payerId = resolvedPayerId,
             baseSubtotalCents = newTotalCents,
             totalAmountCents = newTotalCents
         )
@@ -1120,7 +1153,6 @@ class SplitMateViewModel(
         }
 
         viewModelScope.launch(ioDispatcher) {
-            dao?.deleteSplitsForExpense(expenseId)
             dao?.insertExpenseWithSplits(updatedExpense, updatedSplits)
         }
     }
@@ -1225,6 +1257,18 @@ class SplitMateViewModel(
                 "$headerPrefix ($splittingCount members)"
             }
 
+            val fallbackAllocationsMap = if (!hasExplicitSplits) {
+                val currentUser = groupMembers.find { it.isCurrentUser }
+                SplitMateMathEngine.splitEquallyZeroDrift(
+                    totalCents = expense.totalAmountCents,
+                    members = groupMembers.map { it.memberId to it.name },
+                    payerId = expense.payerId,
+                    currentUserId = currentUser?.memberId
+                ).associateBy { it.memberId }
+            } else {
+                emptyMap()
+            }
+
             val rows = groupMembers.map { mbr ->
                 val displayName = if (mbr.isCurrentUser) "${mbr.name} (You)" else mbr.name
                 if (hasExplicitSplits) {
@@ -1245,14 +1289,16 @@ class SplitMateViewModel(
                         }
                     )
                 } else {
+                    val alloc = fallbackAllocationsMap[mbr.memberId]
+                    val owed = alloc?.finalCents ?: perPersonAvgCents
                     MemberSplitBreakdownRow(
                         memberId = mbr.memberId,
                         displayName = displayName,
                         isCurrentUser = mbr.isCurrentUser,
                         isIncludedInSplit = true,
-                        owedCents = perPersonAvgCents,
-                        plusOneCent = false,
-                        formattedShare = perPersonHeadlineShare
+                        owedCents = owed,
+                        plusOneCent = alloc?.plusOneCent == true,
+                        formattedShare = "$currencySymbol${String.format(Locale.US, "%.2f", owed / 100.0)}"
                     )
                 }
             }

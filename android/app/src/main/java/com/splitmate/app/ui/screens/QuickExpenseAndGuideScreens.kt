@@ -196,6 +196,12 @@ fun QuickExpenseScreen(
     var selectedMemberIds by remember(participants) {
         mutableStateOf(participants.map { it.id }.toSet())
     }
+    var selectedPayerId by remember(activeMembers) {
+        mutableStateOf(
+            activeMembers.firstOrNull { it.isCurrentUser }?.memberId
+                ?: activeMembers.firstOrNull()?.memberId.orEmpty()
+        )
+    }
     val haptic = LocalHapticFeedback.current
 
     val currencySymbol = "₹"
@@ -215,6 +221,7 @@ fun QuickExpenseScreen(
     val memberCount = selectedMemberIds.size
     val perPersonPaise = if (memberCount > 0) totalAmountPaise / memberCount else 0L
     val remainderPaise = if (memberCount > 0) totalAmountPaise % memberCount else 0L
+    val payerExtraPaise = if (remainderPaise > 0L) 1L else 0L
 
     if (showEditTitleDialog) {
         val existingTicket = remember(expenseCategoryTitle) {
@@ -487,7 +494,8 @@ fun QuickExpenseScreen(
                             viewModel?.commitQuickEqualExpense(
                                 title = finalTitle,
                                 totalAmountCents = currentAmountPaise,
-                                selectedMemberIds = selected.map { it.id }
+                                selectedMemberIds = selected.map { it.id },
+                                payerMemberId = selectedPayerId
                             )
                             onSaveSplit(currentAmountPaise / 100L, selected)
                         } else {
@@ -895,7 +903,7 @@ fun QuickExpenseScreen(
                             Text(
                                 text = if (memberCount > 0) {
                                     "$currencySymbol ${formatPaiseForSplitBadge(perPersonPaise)} / person · $memberCount splitting" +
-                                        if (remainderPaise > 0L) " · +${currencySymbol}${formatPaiseForSplitBadge(remainderPaise)} Largest Remainder" else " · Exact Split"
+                                        if (payerExtraPaise > 0L) " · +${currencySymbol}${formatPaiseForSplitBadge(payerExtraPaise)} Largest Remainder" else " · Exact Split"
                                 } else {
                                     "Select at least 1 person to split"
                                 },
@@ -917,6 +925,49 @@ fun QuickExpenseScreen(
                         .fillMaxWidth()
                         .padding(vertical = 2.dp)
                 ) {
+                    if (participants.size > 1) {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 4.dp)
+                        ) {
+                            item {
+                                Text(
+                                    text = "Paid by:",
+                                    fontFamily = SplitMateBrandFontFamily,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = textSecondary
+                                )
+                            }
+                            items(participants, key = { "payer_${it.id}" }) { person ->
+                                val isPayer = person.id == selectedPayerId
+                                Surface(
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        selectedPayerId = person.id
+                                    },
+                                    shape = QuickExpenseThemeTokens.RadiusPill,
+                                    color = if (isPayer) QuickExpenseThemeTokens.SageSurface else surfaceColor,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (isPayer) QuickExpenseThemeTokens.SageBorder else keypadBorder
+                                    )
+                                ) {
+                                    Text(
+                                        text = if (isPayer) "✓ ${person.name}" else person.name,
+                                        fontFamily = SplitMateBrandFontFamily,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isPayer) FontWeight.ExtraBold else FontWeight.Medium,
+                                        color = if (isPayer) QuickExpenseThemeTokens.SageText else textSecondary,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1260,7 +1311,8 @@ fun QuickExpenseScreen(
                                             viewModel?.commitQuickEqualExpense(
                                                 title = expenseCategoryTitle,
                                                 totalAmountCents = totalAmountPaise,
-                                                selectedMemberIds = selected.map { it.id }
+                                                selectedMemberIds = selected.map { it.id },
+                                                payerMemberId = selectedPayerId
                                             )
                                             onSaveSplit(totalAmountPaise / 100L, selected)
                                         }

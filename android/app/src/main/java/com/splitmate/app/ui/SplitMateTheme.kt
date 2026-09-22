@@ -909,7 +909,7 @@ data class LivePnrStatusSnapshot(
     val travelClass: String = "",
     val totalFareRupees: Int = 0,
     val passengerCount: Int = 1,
-    val bookingStatusBadge: String, // "CNF", "WL", or "RAC"
+    val bookingStatusBadge: String, // "CNF", "WL", "RAC", or "MANUAL"
     val chartPrepared: Boolean,
     val passengerStatuses: List<String>,
     val structuredPassengers: List<LivePnrPassenger> = emptyList(),
@@ -921,7 +921,9 @@ data class LivePnrStatusSnapshot(
     val coachPositionHint: String,
     val liveTrainLocationRadar: String,
     val confirmationProbability: String,
-    val sourceLabel: String
+    val sourceLabel: String,
+    val isLiveVerified: Boolean = true,
+    val isManualEntry: Boolean = false
 ) {
     /**
      * Official Indian Railways / IRCTC Tariff Classification:
@@ -973,33 +975,6 @@ data class LivePnrStatusSnapshot(
     }
 }
 
-
-private val OfflineIndianTrainCatalog = mapOf(
-    "12925" to ("Paschim SF Express" to ("BDTS" to "CDG")),
-    "16592" to ("Hampi Express" to ("SBC" to "HPT")),
-    "16591" to ("Hampi Express" to ("HPT" to "SBC")),
-    "12628" to ("Karnataka Express" to ("NDLS" to "SBC")),
-    "12627" to ("Karnataka Express" to ("SBC" to "NDLS")),
-    "12952" to ("Mumbai Rajdhani" to ("NDLS" to "MMCT")),
-    "12951" to ("New Delhi Rajdhani" to ("MMCT" to "NDLS")),
-    "22436" to ("Vande Bharat Express" to ("NDLS" to "BSB")),
-    "12002" to ("Bhopal Shatabdi" to ("NDLS" to "RKMP")),
-    "12138" to ("Punjab Mail" to ("FZR" to "CSMT")),
-    "16345" to ("Netravati Express" to ("LTT" to "TVC")),
-    "11013" to ("Coimbatore Express" to ("LTT" to "CBE")),
-    "12051" to ("Jan Shatabdi Exp" to ("CSMT" to "MAO")),
-    "20111" to ("Konkan Kanya Exp" to ("CSMT" to "MAO"))
-)
-
-private val OfflineTrainIntermediateRadar = mapOf(
-    "12925" to ("Scheduled BDTS (11:30) → Surat → Vadodara → Kota → New Delhi → CDG (15:23)" to "Engine -> EOG -> H1 -> A1 -> A2 -> B1..B6 (3A) -> S1..S6 -> PC"),
-    "16592" to ("Crossing Dharmavaram Jn (DMM) · Platform 2 · On Time" to "Engine -> SLR -> GEN -> B1 -> B2 (Coach 6 from Engine)"),
-    "12952" to ("Crossing Kota Jn (KOTA) at 118 km/h · Platform 1 · On Time" to "Engine -> EOG -> A1 -> A2 -> B1 -> B2 (Coach 5 from Engine)"),
-    "22436" to ("Arriving Prayagraj Jn (PRYJ) · Platform 4 · 4m Early" to "Vande Bharat Aerodynamic Nose -> C1 -> C2 -> C3 -> E1"),
-    "12051" to ("Passing Ratnagiri (RN) Konkan Line · On Time" to "Engine -> D1 -> D2 -> CC1 -> CC2 (Coach 4 from Engine)"),
-    "20111" to ("Approaching Kankavli (KKW) · Running 8m Late" to "Engine -> SLR -> S1..S6 -> B1 -> B2 -> A1")
-)
-
 private val OfflineStationNames = mapOf(
     "BDTS" to "Mumbai Bandra Terminus",
     "CDG" to "Chandigarh",
@@ -1030,554 +1005,52 @@ fun resolveStationDisplayName(code: String): String {
     return if (fullName != null) "$clean ($fullName)" else clean
 }
 
-fun enrichTicketWithOfflineCatalog(ticket: ParsedTravelTicket): ParsedTravelTicket {
-    val cleanTrain = ticket.trainOrFlightNo.trim()
-    val match = OfflineIndianTrainCatalog[cleanTrain] ?: return ticket
-    val radar = OfflineTrainIntermediateRadar[cleanTrain]?.first ?: ""
-    return ticket.copy(
-        trainOrCarrierName = ticket.trainOrCarrierName.ifBlank { match.first },
-        fromStation = ticket.fromStation.ifBlank { match.second.first },
-        toStation = ticket.toStation.ifBlank { match.second.second },
-        liveTrainRadar = ticket.liveTrainRadar.ifBlank { radar }
-    )
-}
-
-private val InMemoryPnrSnapshotCache = java.util.concurrent.ConcurrentHashMap<String, LivePnrStatusSnapshot>()
-private val InMemoryPnrLastFetchEpochMs = java.util.concurrent.ConcurrentHashMap<String, Long>()
-private val InFlightPnrSet: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet<String>())
-
-private const val AUTO_SYNC_COOLDOWN_MS = 6L * 60L * 60L * 1000L // 6 hours for WL/RAC background checks
-private const val TRAVEL_DAY_AUTO_SYNC_COOLDOWN_MS = 30L * 60L * 1000L // 30 mins on Day of Journey (Charting window)
-private const val MANUAL_REFRESH_DEBOUNCE_MS = 60L * 1000L // 60 seconds anti-spam guard for Akamai WAF
-
-fun loadPersistedPnrSnapshot(context: Context, pnr: String): LivePnrStatusSnapshot? = runCatching {
-    val cleanPnr = pnr.replace(Regex("[^0-9]"), "").take(10)
-    if (cleanPnr.length != 10) return null
-    InMemoryPnrSnapshotCache[cleanPnr]?.let { return it }
-    val prefs = com.splitmate.app.data.EncryptedPrefsProvider.getPnrVaultPrefs(context)
-    val rawJson = prefs.getString("snapshot_json_$cleanPnr", null) ?: return null
-    val savedSyncMs = prefs.getLong("last_sync_$cleanPnr", 0L)
-    if (savedSyncMs > 0L) {
-        InMemoryPnrLastFetchEpochMs[cleanPnr] = savedSyncMs
-    }
-    val obj = org.json.JSONObject(rawJson)
-    val paxArr = obj.optJSONArray("passengerStatuses")
-    val paxList = mutableListOf<String>()
-    if (paxArr != null) {
-        for (i in 0 until paxArr.length()) {
-            paxList.add(paxArr.optString(i))
-        }
-    }
-    val structArr = obj.optJSONArray("structuredPassengers")
-    val structList = mutableListOf<LivePnrPassenger>()
-    if (structArr != null) {
-        for (i in 0 until structArr.length()) {
-            val sObj = structArr.optJSONObject(i) ?: continue
-            structList.add(
-                LivePnrPassenger(
-                    passengerNumber = sObj.optString("passengerNumber", "P${i + 1}"),
-                    initialStatus = sObj.optString("initialStatus", "WL"),
-                    currentStatus = sObj.optString("currentStatus", "WL"),
-                    statusLabel = sObj.optString("statusLabel", "Waitlisted")
-                )
-            )
-        }
-    }
-    LivePnrStatusSnapshot(
-        pnr = obj.optString("pnr", cleanPnr),
-        trainNo = obj.optString("trainNo", ""),
-        trainName = obj.optString("trainName", ""),
-        fromStation = obj.optString("fromStation", ""),
-        toStation = obj.optString("toStation", ""),
-        departureTime = obj.optString("departureTime", ""),
-        travelClass = obj.optString("travelClass", ""),
-        totalFareRupees = obj.optInt("totalFareRupees", 0),
-        passengerCount = obj.optInt("passengerCount", paxList.size.coerceAtLeast(1)),
-        bookingStatusBadge = obj.optString("bookingStatusBadge", "CNF"),
-        chartPrepared = obj.optBoolean("chartPrepared", false),
-        passengerStatuses = paxList,
-        structuredPassengers = structList,
-        fromStationName = obj.optString("fromStationName", ""),
-        toStationName = obj.optString("toStationName", ""),
-        arrivalTime = obj.optString("arrivalTime", ""),
-        durationText = obj.optString("durationText", ""),
-        quotaText = obj.optString("quotaText", "GN"),
-        coachPositionHint = obj.optString("coachPositionHint", ""),
-        liveTrainLocationRadar = obj.optString("liveTrainLocationRadar", ""),
-        confirmationProbability = obj.optString("confirmationProbability", ""),
-        sourceLabel = obj.optString("sourceLabel", "Live CRIS Cache (Rate-Limit Protected)")
-    ).also { InMemoryPnrSnapshotCache[cleanPnr] = it }
-}.getOrNull()
-
-private fun savePersistedPnrSnapshot(context: Context?, snapshot: LivePnrStatusSnapshot) {
-    runCatching {
-        val cleanPnr = snapshot.pnr.replace(Regex("[^0-9]"), "").take(10)
-        if (cleanPnr.length != 10) return
-        val now = System.currentTimeMillis()
-        InMemoryPnrSnapshotCache[cleanPnr] = snapshot
-        InMemoryPnrLastFetchEpochMs[cleanPnr] = now
-        if (context == null) return
-        val structJsonArr = org.json.JSONArray()
-        snapshot.structuredPassengers.forEach { sp ->
-            structJsonArr.put(
-                org.json.JSONObject().apply {
-                    put("passengerNumber", sp.passengerNumber)
-                    put("initialStatus", sp.initialStatus)
-                    put("currentStatus", sp.currentStatus)
-                    put("statusLabel", sp.statusLabel)
-                }
-            )
-        }
-        val obj = org.json.JSONObject().apply {
-            put("pnr", snapshot.pnr)
-            put("trainNo", snapshot.trainNo)
-            put("trainName", snapshot.trainName)
-            put("fromStation", snapshot.fromStation)
-            put("toStation", snapshot.toStation)
-            put("departureTime", snapshot.departureTime)
-            put("travelClass", snapshot.travelClass)
-            put("totalFareRupees", snapshot.totalFareRupees)
-            put("passengerCount", snapshot.effectivePassengerCount)
-            put("bookingStatusBadge", snapshot.bookingStatusBadge)
-            put("chartPrepared", snapshot.chartPrepared)
-            put("passengerStatuses", org.json.JSONArray(snapshot.passengerStatuses))
-            put("structuredPassengers", structJsonArr)
-            put("fromStationName", snapshot.fromStationName)
-            put("toStationName", snapshot.toStationName)
-            put("arrivalTime", snapshot.arrivalTime)
-            put("durationText", snapshot.durationText)
-            put("quotaText", snapshot.quotaText)
-            put("coachPositionHint", snapshot.coachPositionHint)
-            put("liveTrainLocationRadar", snapshot.liveTrainLocationRadar)
-            put("confirmationProbability", snapshot.confirmationProbability)
-            put("sourceLabel", snapshot.sourceLabel)
-        }
-        com.splitmate.app.data.EncryptedPrefsProvider.getPnrVaultPrefs(context)
-            .edit()
-            .putLong("last_sync_$cleanPnr", now)
-            .putString("snapshot_json_$cleanPnr", obj.toString())
-            .apply()
-    }
-}
+fun loadPersistedPnrSnapshot(context: Context, pnr: String): LivePnrStatusSnapshot? =
+    com.splitmate.app.data.PnrNetworkRepository.loadPersistedPnrSnapshot(context, pnr)
 
 fun shouldSkipAutoPnrNetworkPoll(
     context: Context,
     pnr: String,
     ticket: ParsedTravelTicket
-): Boolean = runCatching {
-    val cleanPnr = pnr.replace(Regex("[^0-9]"), "").take(10)
-    if (cleanPnr.length != 10) return true
+): Boolean = com.splitmate.app.data.PnrNetworkRepository.shouldSkipAutoPnrNetworkPoll(context, pnr, ticket)
 
-    // Hydrate disk cache into RAM on cold start
-    loadPersistedPnrSnapshot(context, cleanPnr)
-
-    // Rule 1: Terminal State Lock — Once all seats are CNF AND Chart is Prepared, status NEVER changes again!
-    val isAlreadyFullyConfirmed = ticket.bookingStatus.equals("CNF", ignoreCase = true) &&
-        !ticket.coachAndSeats.contains("WL", ignoreCase = true) &&
-        !ticket.coachAndSeats.contains("RAC", ignoreCase = true) &&
-        ticket.chartStatus.contains("Prepared", ignoreCase = true) &&
-        !ticket.chartStatus.contains("Not", ignoreCase = true)
-    if (isAlreadyFullyConfirmed) return true
-
-    // Rule 2: CRIS Nightly Maintenance Window (23:30 IST to 00:30 IST)
-    val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Kolkata"))
-    val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
-    val minute = cal.get(java.util.Calendar.MINUTE)
-    if ((hour == 23 && minute >= 30) || (hour == 0 && minute <= 30)) return true
-
-    // Rule 3: 6-Hour Smart Cooldown (or 30-Min on Day of Travel) persisted across app restarts
-    val prefs = com.splitmate.app.data.EncryptedPrefsProvider.getPnrVaultPrefs(context)
-    val lastSyncMs = maxOf(
-        InMemoryPnrLastFetchEpochMs[cleanPnr] ?: 0L,
-        prefs.getLong("last_sync_$cleanPnr", 0L)
-    )
-    val nowMs = System.currentTimeMillis()
-    val todayIso = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(nowMs))
-    val isTravelDay = ticket.departureTime.contains(todayIso) || ticket.departureDate.contains(todayIso)
-    val requiredCooldown = if (isTravelDay) TRAVEL_DAY_AUTO_SYNC_COOLDOWN_MS else AUTO_SYNC_COOLDOWN_MS
-
-    (nowMs - lastSyncMs) < requiredCooldown
-}.getOrDefault(true)
-
-fun recordPnrSyncTimestamp(context: Context, pnr: String) {
-    runCatching {
-        val cleanPnr = pnr.replace(Regex("[^0-9]"), "").take(10)
-        if (cleanPnr.length != 10) return
-        val now = System.currentTimeMillis()
-        InMemoryPnrLastFetchEpochMs[cleanPnr] = now
-        com.splitmate.app.data.EncryptedPrefsProvider.getPnrVaultPrefs(context)
-            .edit()
-            .putLong("last_sync_$cleanPnr", now)
-            .apply()
-    }
-}
+fun recordPnrSyncTimestamp(context: Context, pnr: String) =
+    com.splitmate.app.data.PnrNetworkRepository.recordPnrSyncTimestamp(context, pnr)
 
 suspend fun fetchLivePnrAndTrainStatus(
     pnr: String,
     fallbackTicket: ParsedTravelTicket = ParsedTravelTicket(),
     forceManualRefresh: Boolean = false,
     context: Context? = null
-): LivePnrStatusSnapshot = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-    val cleanPnr = pnr.replace(Regex("[^0-9]"), "").take(10)
-    val lockKey = cleanPnr.ifBlank { "default" }
-    val acquiredLock = InFlightPnrSet.add(lockKey)
-
-    try {
-        if (context != null && cleanPnr.length == 10) {
-            loadPersistedPnrSnapshot(context, cleanPnr)
-        }
-        val cachedSnapshot = InMemoryPnrSnapshotCache[cleanPnr]
-        val diskSyncMs = if (context != null && cleanPnr.length == 10) {
-            com.splitmate.app.data.EncryptedPrefsProvider.getPnrVaultPrefs(context)
-                .getLong("last_sync_$cleanPnr", 0L)
-        } else 0L
-        val lastFetchMs = maxOf(InMemoryPnrLastFetchEpochMs[cleanPnr] ?: 0L, diskSyncMs)
-        val elapsedMs = System.currentTimeMillis() - lastFetchMs
-
-        if (cachedSnapshot != null) {
-            val minWait = if (forceManualRefresh) MANUAL_REFRESH_DEBOUNCE_MS else AUTO_SYNC_COOLDOWN_MS
-            if (!acquiredLock || elapsedMs in 0 until minWait) {
-                val minsAgo = (elapsedMs / 60000L).coerceAtLeast(0L)
-                return@withContext cachedSnapshot.copy(
-                    sourceLabel = "Live CRIS Cache (${if (minsAgo == 0L) "<1m" else "${minsAgo}m"} ago · Rate-Limit Protected)"
-                )
-            }
-        }
-
-        // Stamp timestamp BEFORE opening network socket so even concurrent or aborted attempts cannot spam Akamai WAF
-        if (cleanPnr.length == 10) {
-            val preNow = System.currentTimeMillis()
-            InMemoryPnrLastFetchEpochMs[cleanPnr] = preNow
-            context?.let { com.splitmate.app.data.EncryptedPrefsProvider.getPnrVaultPrefs(it) }
-                ?.edit()
-                ?.putLong("last_sync_$cleanPnr", preNow)
-                ?.apply()
-        }
-
-    var scrapedTrainNo = fallbackTicket.trainOrFlightNo
-    var scrapedTrainName = fallbackTicket.trainOrCarrierName
-    var scrapedFrom = fallbackTicket.fromStation
-    var scrapedTo = fallbackTicket.toStation
-    var scrapedFromName = ""
-    var scrapedToName = ""
-    var scrapedDep = fallbackTicket.departureTime
-    var scrapedArr = ""
-    var scrapedDuration = ""
-    var scrapedQuota = "GN"
-    var scrapedTravelClass = ""
-    var scrapedTotalFare = 0
-    var scrapedChart = fallbackTicket.chartStatus.contains("Prepared", ignoreCase = true) &&
-        !fallbackTicket.chartStatus.contains("Not", ignoreCase = true)
-    val scrapedPassengers = mutableListOf<String>()
-    val scrapedStructuredPassengers = mutableListOf<LivePnrPassenger>()
-    var liveNetworkHit = false
-    var scrapedCoachPosition = ""
-    var scrapedPrediction = ""
-
-    if (cleanPnr.length == 10) {
-        // 1. PRIMARY ZERO-COST LIVE CRIS PNR ENGINE: Direct `/m/pnr-status/` endpoint (avoids HTTP 301 redirect, halving Akamai requests!)
-        runCatching {
-            val ryUrl = java.net.URL("https://www.railyatri.in/m/pnr-status/$cleanPnr")
-            val ryConn = (ryUrl.openConnection() as java.net.HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 6000
-                readTimeout = 6000
-                setRequestProperty(
-                    "User-Agent",
-                    "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
-                )
-            }
-            if (ryConn.responseCode in 200..299) {
-                val html = ryConn.inputStream.bufferedReader().use { it.readText() }
-                val nextDataJson = Regex("""<script id="__NEXT_DATA__" type="application/json">(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
-                    .find(html)?.groupValues?.getOrNull(1)
-
-                if (!nextDataJson.isNullOrBlank()) {
-                    val root = org.json.JSONObject(nextDataJson)
-                    val pnrDetail = root.optJSONObject("props")?.optJSONObject("pageProps")?.optJSONObject("pnrDetail")
-                    if (pnrDetail != null && pnrDetail.optString("train_number").isNotBlank()) {
-                        scrapedTrainNo = pnrDetail.optString("train_number", scrapedTrainNo)
-                        scrapedTrainName = pnrDetail.optString("train_name", scrapedTrainName)
-                        scrapedFrom = pnrDetail.optString("board_from", scrapedFrom)
-                        scrapedTo = pnrDetail.optString("board_to", scrapedTo)
-                        scrapedFromName = pnrDetail.optString("from_station_name", pnrDetail.optString("boarding_station_name", ""))
-                        scrapedToName = pnrDetail.optString("to_station_name", pnrDetail.optString("reservation_upto_name", ""))
-                        scrapedTravelClass = pnrDetail.optString("class", "")
-                        scrapedQuota = pnrDetail.optString("quota", "GN").ifBlank { "GN" }
-                        scrapedDuration = pnrDetail.optString("duration", "")
-                        scrapedTotalFare = pnrDetail.optInt("total_fare", 0)
-                        scrapedChart = pnrDetail.optBoolean("chart_prepared", scrapedChart)
-
-                        val travelDt = pnrDetail.optString("travel_date", "")
-                        val boardingDt = pnrDetail.optString("boarding_datetime", "")
-                        val arrivalDt = pnrDetail.optString("arrival_datetime", "")
-                        val timePart = if (boardingDt.contains("T")) boardingDt.substringAfter("T").take(5) else ""
-                        scrapedDep = listOf(travelDt, timePart).filter { it.isNotBlank() }.joinToString(" ")
-                        scrapedArr = if (arrivalDt.contains("T")) {
-                            val arrDate = arrivalDt.substringBefore("T")
-                            val arrTime = arrivalDt.substringAfter("T").take(5)
-                            "$arrDate $arrTime"
-                        } else arrivalDt
-
-                        val paxArr = pnrDetail.optJSONArray("passenger")
-                        if (paxArr != null && paxArr.length() > 0) {
-                            for (i in 0 until paxArr.length()) {
-                                val pax = paxArr.optJSONObject(i) ?: continue
-                                val bkStatus = pax.optString("booking_status", pax.optString("booking_status_details", "")).trim()
-                                val curBookingStatus = pax.optString("current_booking_status", "").trim()
-                                val curStatusText = pax.optString("current_status", "").trim()
-                                val coachPos = pax.optString("coach_position", "").trim()
-                                val confProb = pax.optString("conf_probability", "").trim()
-                                val confPct = pax.optInt("conf_percentage", -1)
-
-                                if (coachPos.isNotBlank() && scrapedCoachPosition.isBlank()) {
-                                    scrapedCoachPosition = "Coach Position $coachPos from Engine"
-                                }
-                                if (confPct >= 0 && scrapedPrediction.isBlank()) {
-                                    scrapedPrediction = "$confPct% Confirmation Chance ($confProb)"
-                                }
-
-                                val effectiveCurrent = curBookingStatus.ifBlank { curStatusText.ifBlank { bkStatus } }
-                                val cleanInitial = bkStatus.substringBefore(",").trim().ifBlank { effectiveCurrent }
-                                val cleanCurrent = effectiveCurrent.substringBefore(",").trim().ifBlank { cleanInitial }
-                                val statusBadgeLabel = when {
-                                    cleanCurrent.contains("CNF", ignoreCase = true) -> "Confirmed"
-                                    cleanCurrent.contains("RAC", ignoreCase = true) -> "RAC Berth"
-                                    bkStatus.contains("PQWL", ignoreCase = true) && i == 0 -> "Priority WL"
-                                    else -> "Waitlisted"
-                                }
-                                scrapedStructuredPassengers.add(
-                                    LivePnrPassenger(
-                                        passengerNumber = "P${i + 1}",
-                                        initialStatus = cleanInitial,
-                                        currentStatus = cleanCurrent,
-                                        statusLabel = statusBadgeLabel
-                                    )
-                                )
-
-                                val probSuffix = if (confPct >= 0 && !effectiveCurrent.contains("CNF", ignoreCase = true)) {
-                                    " ($confPct% $confProb)"
-                                } else ""
-
-                                val rowLabel = if (bkStatus.isNotBlank() && !bkStatus.equals(effectiveCurrent, ignoreCase = true)) {
-                                    "P${i + 1}: Booked [$bkStatus] → Live [$effectiveCurrent$probSuffix]"
-                                } else {
-                                    "P${i + 1}: $effectiveCurrent$probSuffix"
-                                }
-                                scrapedPassengers.add(rowLabel)
-                            }
-                            liveNetworkHit = true
-                        }
-                    }
-                }
-            }
-        }
-
-        // 2. Secondary Zero-Cost SSR Fallback: ConfirmTkt (`data = { ... }`)
-        if (!liveNetworkHit) {
-            runCatching {
-                val url = java.net.URL("https://www.confirmtkt.com/pnr-status/$cleanPnr")
-                val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
-                    requestMethod = "GET"
-                    connectTimeout = 4500
-                    readTimeout = 4500
-                    setRequestProperty(
-                        "User-Agent",
-                        "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
-                    )
-                }
-                if (conn.responseCode in 200..299) {
-                    val html = conn.inputStream.bufferedReader().use { it.readText() }
-                    val trNo = Regex(""""TrainNo"\s*:\s*"(\d{5})"""").find(html)?.groupValues?.getOrNull(1)
-                    val trName = Regex(""""TrainName"\s*:\s*"([^"]+)"""").find(html)?.groupValues?.getOrNull(1)
-                    val fromSt = Regex(""""BoardingStation"\s*:\s*"([A-Z]{2,5})"""").find(html)?.groupValues?.getOrNull(1)
-                    val toSt = Regex(""""ReservationUpto"\s*:\s*"([A-Z]{2,5})"""").find(html)?.groupValues?.getOrNull(1)
-                    val chartPrep = Regex(""""ChartPrepared"\s*:\s*(true|false)""").find(html)?.groupValues?.getOrNull(1)
-                    val currentStatuses = Regex(""""CurrentStatus"\s*:\s*"([^"]+)"""").findAll(html)
-                        .map { it.groupValues[1].trim() }.filter { it.isNotBlank() }.toList()
-
-                    if (!trNo.isNullOrBlank()) {
-                        scrapedTrainNo = trNo
-                        liveNetworkHit = true
-                    }
-                    if (!trName.isNullOrBlank()) scrapedTrainName = trName
-                    if (!fromSt.isNullOrBlank()) scrapedFrom = fromSt
-                    if (!toSt.isNullOrBlank()) scrapedTo = toSt
-                    if (chartPrep != null) scrapedChart = chartPrep.equals("true", ignoreCase = true)
-                    if (currentStatuses.isNotEmpty()) {
-                        currentStatuses.forEachIndexed { i, curSt ->
-                            scrapedPassengers.add("P${i + 1}: $curSt")
-                            scrapedStructuredPassengers.add(
-                                LivePnrPassenger(
-                                    passengerNumber = "P${i + 1}",
-                                    initialStatus = curSt,
-                                    currentStatus = curSt,
-                                    statusLabel = if (curSt.contains("CNF", true)) "Confirmed" else "Waitlisted"
-                                )
-                            )
-                        }
-                        liveNetworkHit = true
-                    }
-                }
-            }
-        }
-    }
-
-    val catalogKeys = OfflineIndianTrainCatalog.keys.toList()
-    val resolvedTrainNo = scrapedTrainNo.ifBlank {
-        val hashIdx = (cleanPnr.hashCode().let { if (it < 0) -it else it }) % catalogKeys.size
-        catalogKeys[hashIdx]
-    }
-    val catalogEntry = OfflineIndianTrainCatalog[resolvedTrainNo]
-    val baseTrainName = scrapedTrainName.ifBlank { catalogEntry?.first ?: "Indian Railways Express" }
-    val resolvedTrainName = if (scrapedTravelClass.isNotBlank() && !baseTrainName.contains("($scrapedTravelClass)")) {
-        "$baseTrainName ($scrapedTravelClass)"
-    } else baseTrainName
-    val resolvedFrom = scrapedFrom.ifBlank { catalogEntry?.second?.first ?: "SBC" }
-    val resolvedTo = scrapedTo.ifBlank { catalogEntry?.second?.second ?: "HPT" }
-    val resolvedDep = scrapedDep.ifBlank { "22:00" }
-    val resolvedFromName = scrapedFromName.ifBlank { OfflineStationNames[resolvedFrom.uppercase()] ?: resolvedFrom }
-    val resolvedToName = scrapedToName.ifBlank { OfflineStationNames[resolvedTo.uppercase()] ?: resolvedTo }
-
-    if (scrapedPassengers.isEmpty()) {
-        if (fallbackTicket.coachAndSeats.isNotBlank()) {
-            fallbackTicket.coachAndSeats.split(",").map { it.trim() }.filter { it.isNotBlank() }.forEachIndexed { idx, s ->
-                scrapedPassengers.add(if (s.startsWith("P${idx + 1}:")) s else "P${idx + 1}: $s")
-                scrapedStructuredPassengers.add(
-                    LivePnrPassenger(
-                        passengerNumber = "P${idx + 1}",
-                        initialStatus = s,
-                        currentStatus = s,
-                        statusLabel = if (s.contains("CNF", true)) "Confirmed" else "Waitlisted"
-                    )
-                )
-            }
-        } else {
-            val lastDigit = cleanPnr.lastOrNull()?.digitToIntOrNull() ?: 2
-            when {
-                lastDigit in listOf(5, 9, 6) -> {
-                    scrapedChart = false
-                    scrapedPassengers.add("P1: Booked [PQWL 14] → Live [WL 7]")
-                    scrapedPassengers.add("P2: Booked [PQWL 15] → Live [WL 8]")
-                    scrapedPassengers.add("P3: Booked [PQWL 16] → Live [WL 9]")
-                    scrapedPassengers.add("P4: Booked [PQWL 17] → Live [WL 10]")
-                    scrapedStructuredPassengers.addAll(
-                        listOf(
-                            LivePnrPassenger("P1", "PQWL 14", "WL 7", "Priority WL"),
-                            LivePnrPassenger("P2", "PQWL 15", "WL 8", "Waitlisted"),
-                            LivePnrPassenger("P3", "PQWL 16", "WL 9", "Waitlisted"),
-                            LivePnrPassenger("P4", "PQWL 17", "WL 10", "Waitlisted")
-                        )
-                    )
-                }
-                lastDigit in listOf(3, 7) -> {
-                    scrapedChart = false
-                    scrapedPassengers.add("P1: Booked [WL 9,GNWL] → Live [RAC 6 (Coach B2 Seat 31 SL)]")
-                    scrapedPassengers.add("P2: Booked [WL 10,GNWL] → Live [RAC 7 (Coach B2 Seat 31 SL)]")
-                    scrapedStructuredPassengers.addAll(
-                        listOf(
-                            LivePnrPassenger("P1", "WL 9", "RAC 6", "RAC Berth"),
-                            LivePnrPassenger("P2", "WL 10", "RAC 7", "RAC Berth")
-                        )
-                    )
-                }
-                else -> {
-                    scrapedChart = true
-                    scrapedPassengers.add("P1: Booked [WL 6,GNWL] → Live [CNF B2-45 LB]")
-                    scrapedPassengers.add("P2: Booked [WL 7,GNWL] → Live [CNF B2-46 MB]")
-                    scrapedStructuredPassengers.addAll(
-                        listOf(
-                            LivePnrPassenger("P1", "WL 6", "CNF B2-45 LB", "Confirmed"),
-                            LivePnrPassenger("P2", "WL 7", "CNF B2-46 MB", "Confirmed")
-                        )
-                    )
-                }
-            }
-        }
-    }
-
-    val joinedPassengers = scrapedPassengers.joinToString(" | ")
-    val overallBadge = when {
-        joinedPassengers.contains("WL", ignoreCase = true) && !joinedPassengers.contains("CNF", ignoreCase = true) -> "WL (Waitlisted)"
-        joinedPassengers.contains("RAC", ignoreCase = true) -> "RAC (Side Lower Shared)"
-        joinedPassengers.contains("WL", ignoreCase = true) -> "PARTIAL CNF + WL"
-        else -> "CNF (Confirmed)"
-    }
-
-    val confirmationProb = scrapedPrediction.ifBlank {
-        when {
-            overallBadge.startsWith("CNF") -> "100% Confirmed · Berths Locked"
-            overallBadge.startsWith("RAC") -> "94% Full Berth CNF at Charting"
-            else -> "88% CNF Probability (ML Trend)"
-        }
-    }
-
-    val paxCount = scrapedPassengers.size.coerceAtLeast(1)
-    val isAc = scrapedTravelClass.trim().uppercase() !in setOf("SL", "2S", "II", "GN", "UR")
-    val convFeeRupeesStr = if (isAc) "23.60" else "11.80"
-    val insFeePaise = paxCount * 45L
-    val insFeeRupeesStr = String.format(java.util.Locale.US, "%d.%02d", insFeePaise / 100L, insFeePaise % 100L)
-    val allIncPaise = if (scrapedTotalFare > 0) (scrapedTotalFare * 100L + (if (isAc) 2360L else 1180L) + insFeePaise) else 0L
-    val allIncStr = if (allIncPaise > 0L) String.format(java.util.Locale.US, "%d.%02d", allIncPaise / 100L, allIncPaise % 100L) else ""
-
-    val radarPair = OfflineTrainIntermediateRadar[resolvedTrainNo]
-        ?: ("Route: ${resolveStationDisplayName(resolvedFrom)} → ${resolveStationDisplayName(resolvedTo)} · Dep $resolvedDep" to "Class ${scrapedTravelClass.ifBlank { "3A" }} · Bill: ${if (scrapedTotalFare > 0) "₹$allIncStr (Base ₹$scrapedTotalFare + IRCTC Fee ₹$convFeeRupeesStr + Ins ₹$insFeeRupeesStr)" else "IRCTC Verified"}")
-
-        val snapshot = LivePnrStatusSnapshot(
-            pnr = cleanPnr,
-            trainNo = resolvedTrainNo,
-            trainName = resolvedTrainName,
-            fromStation = resolvedFrom,
-            toStation = resolvedTo,
-            departureTime = resolvedDep,
-            travelClass = scrapedTravelClass,
-            totalFareRupees = scrapedTotalFare,
-            passengerCount = paxCount,
-            bookingStatusBadge = overallBadge,
-            chartPrepared = scrapedChart,
-            passengerStatuses = scrapedPassengers,
-            structuredPassengers = scrapedStructuredPassengers,
-            fromStationName = resolvedFromName,
-            toStationName = resolvedToName,
-            arrivalTime = scrapedArr,
-            durationText = scrapedDuration,
-            quotaText = scrapedQuota,
-            coachPositionHint = scrapedCoachPosition.ifBlank { radarPair.second },
-            liveTrainLocationRadar = radarPair.first,
-            confirmationProbability = confirmationProb,
-            sourceLabel = if (liveNetworkHit) "Live CRIS / RailYatri SSR JSON (₹0 Free)" else "Offline Catalog Fallback"
-        )
-        if (liveNetworkHit && cleanPnr.length == 10) {
-            savePersistedPnrSnapshot(context, snapshot)
-        }
-        snapshot
-    } finally {
-        if (acquiredLock) InFlightPnrSet.remove(lockKey)
-    }
-}
+): LivePnrStatusSnapshot = com.splitmate.app.data.PnrNetworkRepository.fetchLivePnrStatus(
+    pnr = pnr,
+    fallbackTicket = fallbackTicket,
+    forceManualRefresh = forceManualRefresh,
+    context = context
+)
 
 fun formatTravelExpenseTitle(baseCategory: String, ticket: ParsedTravelTicket): String {
-    val enriched = enrichTicketWithOfflineCatalog(ticket)
-    if (!enriched.hasTicketMetadata) return baseCategory.ifBlank { "Travel & Ticket" }
+    if (!ticket.hasTicketMetadata) return baseCategory.ifBlank { "Travel & Ticket" }
     val parts = mutableListOf<String>()
     val labelPrefix = when {
-        enriched.trainOrCarrierName.isNotBlank() && enriched.trainOrFlightNo.isNotBlank() ->
-            "Train ${enriched.trainOrFlightNo} ${enriched.trainOrCarrierName}"
-        enriched.trainOrFlightNo.isNotBlank() -> "Train/Flight ${enriched.trainOrFlightNo}"
+        ticket.trainOrCarrierName.isNotBlank() && ticket.trainOrFlightNo.isNotBlank() ->
+            "Train ${ticket.trainOrFlightNo} ${ticket.trainOrCarrierName}"
+        ticket.trainOrFlightNo.isNotBlank() -> "Train/Flight ${ticket.trainOrFlightNo}"
+        ticket.trainOrCarrierName.isNotBlank() -> ticket.trainOrCarrierName
         else -> baseCategory.ifBlank { "Train / Travel Ticket" }
     }
     parts.add(labelPrefix)
-    if (enriched.pnr.isNotBlank()) parts.add("PNR: ${enriched.pnr}")
-    if (enriched.bookingStatus.isNotBlank()) parts.add("Status: ${enriched.bookingStatus}")
-    if (enriched.fromStation.isNotBlank() && enriched.toStation.isNotBlank()) {
-        parts.add("${enriched.fromStation.uppercase()}->${enriched.toStation.uppercase()}")
+    if (ticket.pnr.isNotBlank()) parts.add("PNR: ${ticket.pnr}")
+    if (ticket.bookingStatus.isNotBlank()) parts.add("Status: ${ticket.bookingStatus}")
+    if (ticket.fromStation.isNotBlank() && ticket.toStation.isNotBlank()) {
+        parts.add("${ticket.fromStation.uppercase()}->${ticket.toStation.uppercase()}")
     }
-    if (enriched.departureTime.isNotBlank() || enriched.departureDate.isNotBlank()) {
-        val dt = listOf(enriched.departureDate, enriched.departureTime).filter { it.isNotBlank() }.joinToString(" ")
+    if (ticket.departureTime.isNotBlank() || ticket.departureDate.isNotBlank()) {
+        val dt = listOf(ticket.departureDate, ticket.departureTime).filter { it.isNotBlank() }.joinToString(" ")
         parts.add("Dep: $dt")
     }
-    if (enriched.coachAndSeats.isNotBlank()) {
-        parts.add("Seats: ${enriched.coachAndSeats}")
+    if (ticket.coachAndSeats.isNotBlank()) {
+        parts.add("Seats: ${ticket.coachAndSeats}")
     }
     return parts.joinToString(" | ")
 }
@@ -1631,19 +1104,17 @@ fun extractTravelTicketFromTitle(title: String): ParsedTravelTicket? {
     if (seats.contains("WL", ignoreCase = true) && status == "CNF") status = "WL"
     if (seats.contains("RAC", ignoreCase = true) && status == "CNF") status = "RAC"
 
-    val parsed = enrichTicketWithOfflineCatalog(
-        ParsedTravelTicket(
-            pnr = pnr,
-            trainOrFlightNo = trainNo,
-            trainOrCarrierName = trainName,
-            fromStation = fromSt,
-            toStation = toSt,
-            departureTime = dep,
-            coachAndSeats = seats,
-            bookingStatus = status,
-            chartStatus = if (status.contains("WL", ignoreCase = true)) "Chart Not Prepared" else "Chart Prepared",
-            cleanTitle = segments.firstOrNull()?.trim().orEmpty().ifBlank { "Train / PNR Ticket" }
-        )
+    val parsed = ParsedTravelTicket(
+        pnr = pnr,
+        trainOrFlightNo = trainNo,
+        trainOrCarrierName = trainName,
+        fromStation = fromSt,
+        toStation = toSt,
+        departureTime = dep,
+        coachAndSeats = seats,
+        bookingStatus = status,
+        chartStatus = if (status.contains("WL", ignoreCase = true)) "Chart Not Prepared" else "Chart Prepared",
+        cleanTitle = segments.firstOrNull()?.trim().orEmpty().ifBlank { "Train / PNR Ticket" }
     )
     return if (parsed.hasTicketMetadata) parsed else null
 }

@@ -3876,18 +3876,16 @@ fun EditLoggedExpenseDialog(
                     val finalTitle = if (includeTravelTicket && (pnrNumber.isNotBlank() || trainOrFlightNo.isNotBlank() || coachAndSeats.isNotBlank())) {
                         val parsedFrom = routeFromTo.substringBefore("→").substringBefore("-").trim()
                         val parsedTo = routeFromTo.substringAfter("→", routeFromTo.substringAfter("-", "")).trim()
-                        val enriched = enrichTicketWithOfflineCatalog(
-                            ParsedTravelTicket(
-                                pnr = pnrNumber.trim(),
-                                trainOrFlightNo = trainOrFlightNo.trim(),
-                                fromStation = parsedFrom,
-                                toStation = parsedTo,
-                                departureTime = departureInfo.trim(),
-                                coachAndSeats = coachAndSeats.trim(),
-                                cleanTitle = editedTitle.trim().ifBlank { "🚆 Train / PNR Ticket" }
-                            )
+                        val parsedTicket = ParsedTravelTicket(
+                            pnr = pnrNumber.trim(),
+                            trainOrFlightNo = trainOrFlightNo.trim(),
+                            fromStation = parsedFrom,
+                            toStation = parsedTo,
+                            departureTime = departureInfo.trim(),
+                            coachAndSeats = coachAndSeats.trim(),
+                            cleanTitle = editedTitle.trim().ifBlank { "🚆 Train / PNR Ticket" }
                         )
-                        formatTravelExpenseTitle(editedTitle.trim().ifBlank { "🚆 Train / PNR Ticket" }, enriched)
+                        formatTravelExpenseTitle(editedTitle.trim().ifBlank { "🚆 Train / PNR Ticket" }, parsedTicket)
                     } else {
                         editedTitle.trim().ifBlank { "Group Expense" }
                     }
