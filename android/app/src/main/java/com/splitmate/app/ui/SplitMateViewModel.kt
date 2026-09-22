@@ -24,13 +24,6 @@ import java.util.Locale
 
 import com.splitmate.app.data.UserProfileEntity
 
-data class ReceiptLineItem(
-    val itemId: String,
-    val title: String,
-    val priceCents: Long,
-    val claimedByMemberIds: Set<String> = emptySet()
-)
-
 data class SplitMateUiState(
     val hasRegisteredProfile: Boolean = true,
     val currentUserName: String = "Akshay",
@@ -48,12 +41,6 @@ data class SplitMateUiState(
     val expenses: List<ExpenseEntity> = emptyList(),
     val splits: List<ExpenseSplitEntity> = emptyList(),
     val settlements: List<SettlementEntity> = emptyList(),
-    val receiptTitle: String = "Osteria Del Sole · Table 14",
-    val receiptPayerId: String = "m_1",
-    val activeClaimerPersonaId: String = "m_1",
-    val receiptTaxPercent: Double = 8.875,
-    val receiptTipPercent: Double = 18.0,
-    val receiptItems: List<ReceiptLineItem> = defaultSeedReceiptItems(),
     val statusBannerMessage: String? = null,
     val selectedTabName: String = "LEDGERS",
     val openedGroupDetailId: String? = null,
@@ -75,13 +62,6 @@ data class SplitMateUiState(
 
 fun defaultSeedCurrencies(): List<CurrencyRateEntity> = listOf(
     CurrencyRateEntity("INR", "Indian Rupee", "₹", 1.0, baseCurrency = "INR")
-)
-
-fun defaultSeedReceiptItems(): List<ReceiptLineItem> = listOf(
-    ReceiptLineItem("item_1", "Truffle Tagliatelle", 2800L, setOf("m_1")),
-    ReceiptLineItem("item_2", "Wood-Fired Diavola Pizza", 2400L, setOf("m_2")),
-    ReceiptLineItem("item_3", "Artisanal Carafe Wine", 4200L, setOf("m_1", "m_2", "m_3")),
-    ReceiptLineItem("item_4", "Shared Antipasto Misto", 2600L, emptySet())
 )
 
 data class NewGroupMemberDraft(
@@ -450,7 +430,6 @@ class SplitMateViewModel(
                 expenses = emptyList(),
                 splits = emptyList(),
                 settlements = emptyList(),
-                receiptItems = emptyList(),
                 activeGroupId = "",
                 statusBannerMessage = "App data reset"
             )
@@ -690,12 +669,8 @@ class SplitMateViewModel(
 
     fun selectActiveGroup(groupId: String) {
         _uiState.update { state ->
-            val groupMembers = state.members.filter { it.groupId == groupId }
-            val firstMemberId = groupMembers.firstOrNull()?.memberId ?: "m_1"
             state.copy(
-                activeGroupId = groupId,
-                receiptPayerId = firstMemberId,
-                activeClaimerPersonaId = firstMemberId
+                activeGroupId = groupId
             )
         }
     }
@@ -746,8 +721,6 @@ class SplitMateViewModel(
                 groups = listOf(newGroup) + state.groups,
                 members = state.members + allNewMembers,
                 activeGroupId = groupId,
-                receiptPayerId = meMember.memberId,
-                activeClaimerPersonaId = meMember.memberId,
                 statusBannerMessage = "Created group \"$cleanGroup\" with ${allNewMembers.size} members"
             )
         }
@@ -827,166 +800,6 @@ class SplitMateViewModel(
         }
         viewModelScope.launch(ioDispatcher) {
             dao?.insertMembers(newMembers)
-        }
-    }
-
-    // --- Collaborative Receipt Claim & Remainder Engine Actions ---
-    fun setClaimerPersona(memberId: String) {
-        _uiState.update { it.copy(activeClaimerPersonaId = memberId) }
-    }
-
-    fun setReceiptPayer(memberId: String) {
-        _uiState.update { it.copy(receiptPayerId = memberId) }
-    }
-
-    fun updateReceiptTaxAndTip(taxPercent: Double, tipPercent: Double) {
-        _uiState.update { it.copy(receiptTaxPercent = taxPercent, receiptTipPercent = tipPercent) }
-    }
-
-    fun toggleReceiptItemClaim(itemId: String, memberId: String = _uiState.value.activeClaimerPersonaId) {
-        _uiState.update { state ->
-            val updatedItems = state.receiptItems.map { item ->
-                if (item.itemId == itemId) {
-                    val nextSet = item.claimedByMemberIds.toMutableSet()
-                    if (!nextSet.add(memberId)) nextSet.remove(memberId)
-                    item.copy(claimedByMemberIds = nextSet)
-                } else item
-            }
-            state.copy(receiptItems = updatedItems)
-        }
-    }
-
-    fun addReceiptLineItem(title: String, priceCents: Long) {
-        if (priceCents <= 0L) return
-        val cleanTitle = title.trim().ifEmpty { "Custom Item" }
-        val newItem = ReceiptLineItem(
-            itemId = "item_${System.currentTimeMillis()}",
-            title = cleanTitle,
-            priceCents = priceCents,
-            claimedByMemberIds = setOf(_uiState.value.activeClaimerPersonaId)
-        )
-        _uiState.update { state ->
-            state.copy(receiptItems = state.receiptItems + newItem)
-        }
-    }
-
-    fun splitUnassignedRemainderEqually() {
-        _uiState.update { state ->
-            val allMemberIds = state.activeGroupMembers.map { it.memberId }.toSet()
-            val updatedItems = state.receiptItems.map { item ->
-                if (item.claimedByMemberIds.isEmpty()) {
-                    item.copy(claimedByMemberIds = allMemberIds)
-                } else item
-            }
-            state.copy(
-                receiptItems = updatedItems,
-                statusBannerMessage = "Unassigned remainder split equally across all members (Exact Split)"
-            )
-        }
-    }
-
-    /**
-     * Commits an Itemized Receipt or Custom Expense into the Ledger:
-     * - Locks the exact exchange rate (`lockedExchangeRate`) at transaction creation time.
-     * - Queues as `"PENDING"` when offline (`isOfflineMode == true`) or `"SYNCED"` when online.
-     * - Reconciles penny rounding via Largest Remainder (`0.00¢ drift`).
-     */
-    fun commitCollaborativeExpense(
-        title: String = _uiState.value.receiptTitle,
-        customTotalCents: Long? = null
-    ) {
-        val state = _uiState.value
-        val groupMembers = state.activeGroupMembers
-        if (groupMembers.isEmpty()) return
-
-        val lockedRate = state.activeCurrency.rateFromBase
-        val syncStatus = if (state.isOfflineMode) "PENDING" else "SYNCED"
-        val expenseId = "exp_${System.currentTimeMillis()}"
-
-        val proportionalResult: SplitMateMathEngine.ProportionalSplitResult = if (customTotalCents != null) {
-            val equalAllocations = SplitMateMathEngine.splitEquallyZeroDrift(
-                customTotalCents,
-                groupMembers.map { it.memberId to it.name }
-            )
-            SplitMateMathEngine.ProportionalSplitResult(
-                lockedMultiplier = 1.0,
-                baseSubtotalCents = customTotalCents,
-                taxCents = 0L,
-                tipCents = 0L,
-                totalFinalCents = customTotalCents,
-                unassignedBaseCents = 0L,
-                unassignedFinalCents = 0L,
-                allocations = equalAllocations,
-                driftCents = 0L
-            )
-        } else {
-            val baseSubtotal = state.receiptItems.sumOf { it.priceCents }
-            val taxCents = Math.round(baseSubtotal * (state.receiptTaxPercent / 100.0))
-            val tipCents = Math.round(baseSubtotal * (state.receiptTipPercent / 100.0))
-            val memberClaimsMap = groupMembers.associate { it.memberId to 0L }.toMutableMap()
-
-            state.receiptItems.forEach { item ->
-                val validClaimers = item.claimedByMemberIds.filter { memberClaimsMap.containsKey(it) }
-                if (validClaimers.isNotEmpty()) {
-                    val shares = SplitMateMathEngine.splitEquallyZeroDrift(
-                        item.priceCents,
-                        validClaimers.map { id -> id to id }
-                    )
-                    shares.forEach { s ->
-                        memberClaimsMap[s.memberId] = (memberClaimsMap[s.memberId] ?: 0L) + s.finalCents
-                    }
-                }
-            }
-
-            SplitMateMathEngine.calculateProportionalReceiptSplits(
-                baseSubtotalCents = baseSubtotal,
-                taxCents = taxCents,
-                tipCents = tipCents,
-                payerId = state.receiptPayerId,
-                memberBaseClaimsCents = groupMembers.map { m ->
-                    Triple(m.memberId, m.name, memberClaimsMap[m.memberId] ?: 0L)
-                },
-                attributeRemainderToPayer = true
-            )
-        }
-
-        val expenseEntity = ExpenseEntity(
-            expenseId = expenseId,
-            groupId = state.activeGroupId,
-            title = title.ifBlank { "Collaborative Split" },
-            payerId = state.receiptPayerId,
-            baseSubtotalCents = proportionalResult.baseSubtotalCents,
-            taxCents = proportionalResult.taxCents,
-            tipCents = proportionalResult.tipCents,
-            totalAmountCents = proportionalResult.totalFinalCents,
-            lockedMultiplier = proportionalResult.lockedMultiplier,
-            unassignedBaseCents = proportionalResult.unassignedBaseCents,
-            currencyCode = state.activeCurrencyCode,
-            lockedExchangeRate = lockedRate,
-            syncStatus = syncStatus
-        )
-
-        val splitEntities = proportionalResult.allocations.mapIndexed { idx, alloc ->
-            ExpenseSplitEntity(
-                splitId = "${expenseId}_sp_$idx",
-                expenseId = expenseId,
-                memberId = alloc.memberId,
-                baseClaimedCents = alloc.baseClaimedCents,
-                finalOwedCents = alloc.finalCents,
-                plusOneCent = alloc.plusOneCent
-            )
-        }
-
-        _uiState.update { curr ->
-            curr.copy(
-                expenses = listOf(expenseEntity) + curr.expenses,
-                splits = curr.splits + splitEntities,
-                statusBannerMessage = "Saved \"${expenseEntity.title}\" · Rate locked @ $lockedRate (${expenseEntity.syncStatus})"
-            )
-        }
-
-        viewModelScope.launch(ioDispatcher) {
-            dao?.insertExpenseWithSplits(expenseEntity, splitEntities)
         }
     }
 

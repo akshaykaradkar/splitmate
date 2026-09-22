@@ -70,15 +70,15 @@
 
 ---
 
-## Phase 4: APK Bloat Elimination (~17.1 MB → ~4.0 MB), Dead Code Purge & Architecture Modularization
-- [/] **4.1** **R8 Shrinking, Resource Shrinking & Dead WebView Asset Deletion**:
-  - Delete `android/app/src/main/assets/index.html`, `splitmate-ui.js`, `stitch-interactive.js`, and `styles.css`.
-  - Enable `minifyEnabled true`, `shrinkResources true`, `proguardFiles(...)`, and `resConfigs "en"` in `android/app/build.gradle`, and bump `versionCode 16` / `versionName "1.9.0"`.
-- [/] **4.2** **Dead Code Purge & Test Suite Alignment**:
-  - Remove `ReceiptLineItem`, `defaultSeedReceiptItems()`, `claimReceiptItemToggle()`, `splitUnassignedRemainderEqually()`, `commitCollaborativeExpense()`, `HorizontalFloatingToolbar`, and `SplitMateQuickActionFab` from `SplitMateViewModel.kt`, `Components.kt`, and `SplitMateAppComposable.kt`.
-  - Update `SplitMateViewModelTurbineTest.kt` and `SplitMateComposeUiTest.kt` so all unit and UI tests compile and pass without dead symbols.
-- [/] **4.3** **UI Package Modularization (`ui/dialogs/` & `ui/pnr/`)**:
-  - Extract dialog composables from `SplitMateAppComposable.kt` into `ui/dialogs/GroupAndSettlementDialogs.kt` and PNR helper functions/models into `ui/pnr/PnrTicketModels.kt` (preserving `package com.splitmate.app` in `SplitMateAppComposable.kt`).
-- [/] **4.4** **Phase 4 Final Verification, Release APK Size Audit (`< 5.0 MB`) & Final Git Commit**:
-  - Run `./gradlew testDebugUnitTest` and `./gradlew assembleRelease`.
-  - Verify release APK size (`splitmate-1.9.0.apk` < `5.0 MB`) and create final Git commit `feat(phase-4): ...`.
+## Phase 4: APK Bloat Elimination (~17.1 MB → 2.3 MB), Dead Code Purge & Architecture Modularization
+- [x] **4.1** **R8 Shrinking, Resource Shrinking & Dead WebView Asset Deletion**:
+  - Verified zero WebView assets in `android/app/src/main/assets/`.
+  - Enabled `minifyEnabled true`, `shrinkResources true`, `proguardFiles(...)`, and `resConfigs "en"` in `android/app/build.gradle`, and bumped `versionCode 16` / `versionName "1.9.0"`.
+- [x] **4.2** **Dead Code Purge & Test Suite Alignment**:
+  - Removed `ReceiptLineItem`, `defaultSeedReceiptItems()`, `claimReceiptItemToggle()`, `splitUnassignedRemainderEqually()`, `commitCollaborativeExpense()`, `HorizontalFloatingToolbar`, and `GroupBoardingPassCard` from `SplitMateViewModel.kt`, `Components.kt`, and `SplitMateTheme.kt`.
+  - Updated `SplitMateViewModelTurbineTest.kt` so all 10 unit tests compile and pass without dead symbols.
+- [x] **4.3** **UI Package Modularization (`ui/dialogs/` & `ui/pnr/`)**:
+  - Extracted dialog & atomic composables from `SplitMateAppComposable.kt` into `ui/dialogs/GroupAndSettlementDialogs.kt` and PNR domain models/parser helpers into `ui/pnr/PnrTicketModels.kt`.
+- [x] **4.4** **Phase 4 Final Verification, Release APK Size Audit (`2.3 MB` vs `17.1 MB`) & Final Git Commit**:
+  - Ran `./gradlew testDebugUnitTest assembleRelease` (`BUILD SUCCESSFUL`).
+  - Verified release APK size: **`splitmate-1.9.0.apk` = `2.3 MB`** (down **86.5%** from `17.1 MB`, beating `< 5.0 MB` target) and created final Git commit `feat(phase-4): ...`.

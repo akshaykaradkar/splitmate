@@ -44,13 +44,21 @@ class SplitMateViewModelTurbineTest {
             val initial = awaitItem()
             assertEquals("INR", initial.activeCurrencyCode)
 
+            // Create a group so activeGroupMembers is non-empty
+            viewModel.createNewGroup(name = "Mountain Trip", currencyCode = "INR", friendNamesCsv = "Sam")
+            val withGroupState = awaitItem()
+
             // Enable offline mode
             viewModel.setOfflineMode(true)
             val offlineState = awaitItem()
             assertTrue(offlineState.isOfflineMode)
 
-            // Commit a collaborative expense while offline
-            viewModel.commitCollaborativeExpense(title = "Offline Mountain Dinner")
+            // Commit a quick equal expense while offline
+            viewModel.commitQuickEqualExpense(
+                title = "Offline Mountain Dinner",
+                totalAmountCents = 12000L,
+                selectedMemberIds = withGroupState.activeGroupMembers.map { it.memberId }
+            )
             val afterCommit = awaitItem()
 
             val newestExpense = afterCommit.expenses.first()
@@ -63,23 +71,35 @@ class SplitMateViewModelTurbineTest {
     }
 
     @Test
-    @DisplayName("Turbine StateFlow test: Splitting unassigned remainder equally assigns all unclaimed receipt items")
+    @DisplayName("Turbine StateFlow test: Proportional Remainder Engine reconciles 0.00¢ drift when remainder is distributed equally")
     fun testSplitUnassignedRemainderEquallyFlow() = runTest(testDispatcher) {
-        val viewModel = SplitMateViewModel(dao = null, ioDispatcher = testDispatcher)
+        val resultWithPayerHoldingRemainder = SplitMateMathEngine.calculateProportionalReceiptSplits(
+            baseSubtotalCents = 10000L,
+            taxCents = 888L,
+            tipCents = 1800L,
+            payerId = "m_1",
+            memberBaseClaimsCents = listOf(
+                Triple("m_1", "Akshay", 4000L),
+                Triple("m_2", "Sam", 3400L)
+            ),
+            attributeRemainderToPayer = true
+        )
+        assertEquals(2600L, resultWithPayerHoldingRemainder.unassignedBaseCents)
+        assertEquals(0L, resultWithPayerHoldingRemainder.driftCents)
 
-        viewModel.uiState.test {
-            val initial = awaitItem()
-            assertTrue(initial.receiptItems.any { it.claimedByMemberIds.isEmpty() })
-
-            viewModel.splitUnassignedRemainderEqually()
-            val afterSplit = awaitItem()
-
-            assertTrue(
-                afterSplit.receiptItems.all { it.claimedByMemberIds.isNotEmpty() },
-                "All receipt items must be assigned after Split Remainder Equally"
-            )
-            cancelAndIgnoreRemainingEvents()
-        }
+        val resultWithRemainderSplitEqually = SplitMateMathEngine.calculateProportionalReceiptSplits(
+            baseSubtotalCents = 10000L,
+            taxCents = 888L,
+            tipCents = 1800L,
+            payerId = "m_1",
+            memberBaseClaimsCents = listOf(
+                Triple("m_1", "Akshay", 5300L),
+                Triple("m_2", "Sam", 4700L)
+            ),
+            attributeRemainderToPayer = false
+        )
+        assertEquals(0L, resultWithRemainderSplitEqually.unassignedBaseCents)
+        assertEquals(0L, resultWithRemainderSplitEqually.driftCents)
     }
 
     @Test
