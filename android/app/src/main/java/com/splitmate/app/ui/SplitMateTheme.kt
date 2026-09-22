@@ -1335,7 +1335,8 @@ fun SplitMateCircularLogoBadge(
 @Composable
 fun GroupBoardingPassCard(
     ticket: ParsedTravelTicket,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onPersistUpdatedTitle: ((String) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val localView = androidx.compose.ui.platform.LocalView.current
@@ -1344,6 +1345,41 @@ fun GroupBoardingPassCard(
         androidx.compose.runtime.mutableStateOf<LivePnrStatusSnapshot?>(null)
     }
     var isRefreshingLive by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+
+    fun syncAndPersist(snapshot: LivePnrStatusSnapshot) {
+        liveSnapshot = snapshot
+        if (snapshot.sourceLabel.contains("Live", ignoreCase = true) && snapshot.passengerStatuses.isNotEmpty()) {
+            val shortStatus = when {
+                snapshot.bookingStatusBadge.startsWith("CNF") -> "CNF"
+                snapshot.bookingStatusBadge.startsWith("RAC") -> "RAC"
+                else -> "WL"
+            }
+            val updatedTicket = ticket.copy(
+                pnr = snapshot.pnr,
+                trainOrFlightNo = snapshot.trainNo.ifBlank { ticket.trainOrFlightNo },
+                trainOrCarrierName = snapshot.trainName.ifBlank { ticket.trainOrCarrierName },
+                fromStation = snapshot.fromStation.ifBlank { ticket.fromStation },
+                toStation = snapshot.toStation.ifBlank { ticket.toStation },
+                departureTime = snapshot.departureTime.ifBlank { ticket.departureTime },
+                coachAndSeats = snapshot.passengerStatuses.joinToString(", "),
+                bookingStatus = shortStatus,
+                chartStatus = if (snapshot.chartPrepared) "Chart Prepared" else "Chart Not Prepared",
+                liveTrainRadar = snapshot.liveTrainLocationRadar
+            )
+            onPersistUpdatedTitle?.invoke(formatTravelExpenseTitle("Train / PNR", updatedTicket))
+        }
+    }
+
+    // Automatically check live CRIS / RailYatri status whenever the card is displayed with a 10-digit PNR
+    androidx.compose.runtime.LaunchedEffect(ticket.pnr) {
+        val clean10 = ticket.pnr.replace(Regex("[^0-9]"), "")
+        if (clean10.length == 10) {
+            isRefreshingLive = true
+            val fetched = fetchLivePnrAndTrainStatus(clean10, ticket)
+            syncAndPersist(fetched)
+            isRefreshingLive = false
+        }
+    }
 
     val effectiveStatus = liveSnapshot?.bookingStatusBadge ?: ticket.bookingStatus.ifBlank { "CNF" }
     val isWaitlistedOrRac = effectiveStatus.contains("WL", ignoreCase = true) || effectiveStatus.contains("RAC", ignoreCase = true)
@@ -1490,7 +1526,11 @@ fun GroupBoardingPassCard(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Passenger Status (CNF / WL / RAC)",
+                                text = if (liveSnapshot?.sourceLabel?.contains("Live") == true) {
+                                    "🟢 Live CRIS Passenger Status (Auto-Synced)"
+                                } else {
+                                    "Passenger Status (CNF / WL / RAC)"
+                                },
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 10.sp,
@@ -1563,7 +1603,8 @@ fun GroupBoardingPassCard(
                         performCrispTactileHaptic(context, localView, heavy = false)
                         isRefreshingLive = true
                         coroutineScope.launch {
-                            liveSnapshot = fetchLivePnrAndTrainStatus(ticket.pnr.ifBlank { "8421094312" }, ticket)
+                            val fetched = fetchLivePnrAndTrainStatus(ticket.pnr.ifBlank { "8753634406" }, ticket)
+                            syncAndPersist(fetched)
                             isRefreshingLive = false
                         }
                     },
@@ -1582,7 +1623,7 @@ fun GroupBoardingPassCard(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = if (isRefreshingLive) "Checking CRIS / NTES..." else "Refresh Live CNF/WL & Train Location",
+                            text = if (isRefreshingLive) "Syncing Live CRIS..." else "Refresh Live CNF/WL & Save",
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.Bold,
                             fontSize = 10.sp,

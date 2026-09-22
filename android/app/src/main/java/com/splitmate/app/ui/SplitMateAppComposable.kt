@@ -843,14 +843,14 @@ fun LedgersDashboardScreen(
                             .animateContentSize()
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
+                            val parsedTicketInGroup = remember(expense.title) { extractTravelTicketFromTitle(expense.title) }
+                            val cleanTitleInGroup = parsedTicketInGroup?.cleanTitle ?: expense.title
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 val (catBadgeBg, catBadgeTint) = resolveExpenseCategoryBadgeColors(expense.title, SplitMateTheme.isDark)
-                                val parsedTicketInGroup = remember(expense.title) { extractTravelTicketFromTitle(expense.title) }
-                                val cleanTitleInGroup = parsedTicketInGroup?.cleanTitle ?: expense.title
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                                     Box(
                                         modifier = Modifier
@@ -900,6 +900,16 @@ fun LedgersDashboardScreen(
                                         color = SplitMateTheme.SageText
                                     )
                                 }
+                            }
+
+                            if (parsedTicketInGroup != null) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                GroupBoardingPassCard(
+                                    ticket = parsedTicketInGroup,
+                                    onPersistUpdatedTitle = { newTitle ->
+                                        viewModel.persistLivePnrUpdate(expense.expenseId, newTitle)
+                                    }
+                                )
                             }
 
                             if (isExpanded) {
@@ -1553,6 +1563,15 @@ fun LedgersDashboardScreen(
                             amount = formattedAmt,
                             isPositive = isMePayer
                         )
+                        if (parsedTravel != null) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            GroupBoardingPassCard(
+                                ticket = parsedTravel,
+                                onPersistUpdatedTitle = { newTitle ->
+                                    viewModel.persistLivePnrUpdate(expense.expenseId, newTitle)
+                                }
+                            )
+                        }
                         Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
@@ -3275,7 +3294,12 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
 
                     if (parsedTravelTicket != null) {
                         Spacer(modifier = Modifier.height(10.dp))
-                        GroupBoardingPassCard(ticket = parsedTravelTicket)
+                        GroupBoardingPassCard(
+                            ticket = parsedTravelTicket,
+                            onPersistUpdatedTitle = { newTitle ->
+                                viewModel.persistLivePnrUpdate(expense.expenseId, newTitle)
+                            }
+                        )
                     }
 
                     if (isExpanded) {

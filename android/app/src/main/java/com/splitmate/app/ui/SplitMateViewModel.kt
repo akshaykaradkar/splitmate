@@ -1110,6 +1110,23 @@ class SplitMateViewModel(
         }
     }
 
+    fun persistLivePnrUpdate(expenseId: String, updatedTitle: String) {
+        val currentState = _uiState.value
+        val existing = currentState.expenses.find { it.expenseId == expenseId } ?: return
+        val cleanNew = updatedTitle.trim()
+        if (cleanNew.isBlank() || existing.title == cleanNew) return
+
+        val updatedExpense = existing.copy(title = cleanNew)
+        _uiState.update { curr ->
+            curr.copy(
+                expenses = curr.expenses.map { if (it.expenseId == expenseId) updatedExpense else it }
+            )
+        }
+        viewModelScope.launch(ioDispatcher) {
+            dao?.updateExpenseTitleOnly(expenseId, cleanNew)
+        }
+    }
+
     private fun computeGroupNetBalances(
         groupMembers: List<GroupMemberEntity>,
         groupExpenses: List<ExpenseEntity>,

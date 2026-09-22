@@ -61,6 +61,9 @@ interface SplitMateDao {
         insertExpenseSplits(splits)
     }
 
+    @Query("UPDATE expenses SET title = :newTitle WHERE expenseId = :expenseId")
+    suspend fun updateExpenseTitleOnly(expenseId: String, newTitle: String)
+
     @Query("DELETE FROM expenses WHERE expenseId = :expenseId")
     suspend fun deleteExpense(expenseId: String)
 
