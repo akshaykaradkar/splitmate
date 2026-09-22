@@ -917,6 +917,8 @@ fun LedgersDashboardScreen(
         }
 
         if (showMultiContactSheet) {
+            // CreateGroupDialog is temporarily hidden while ContactPickerBottomSheet is active
+            // so the Dialog Window never overlaps or blocks the BottomSheet.
             ContactPickerBottomSheet(
                 contacts = deviceContacts,
                 isLoading = isLoadingContacts,
@@ -938,9 +940,8 @@ fun LedgersDashboardScreen(
                     showMultiContactSheet = false
                 }
             )
-        }
-
-        Dialog(onDismissRequest = { showNewGroupDialog = false }) {
+        } else {
+            Dialog(onDismissRequest = { showNewGroupDialog = false }) {
             Surface(
                 shape = SplitMateTheme.RadiusDialog,
                 color = SplitMateTheme.SurfaceWhite,
@@ -1207,15 +1208,26 @@ fun LedgersDashboardScreen(
                         }
                     }
 
-                    // 6. Action Buttons
+                    // 6. Action Buttons (Proper 8.dp spacing, End alignment, non-squished height)
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        TextButton(onClick = { showNewGroupDialog = false }) {
-                            Text("Cancel", fontWeight = FontWeight.Bold, color = SplitMateTheme.TextSecondary)
+                        TextButton(
+                            onClick = { showNewGroupDialog = false },
+                            modifier = Modifier.height(46.dp),
+                            contentPadding = PaddingValues(horizontal = 16.dp)
+                        ) {
+                            Text(
+                                text = "Cancel",
+                                fontWeight = FontWeight.Bold,
+                                color = SplitMateTheme.TextSecondary,
+                                maxLines = 1
+                            )
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
                         Button(
                             onClick = {
                                 val finalDrafts = if (customPeerNameInput.isNotBlank()) {
@@ -1234,13 +1246,21 @@ fun LedgersDashboardScreen(
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = SplitMateTheme.PrimaryDark,
                                 contentColor = SplitMateTheme.ScreenBg
-                            )
+                            ),
+                            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp),
+                            modifier = Modifier.height(46.dp)
                         ) {
-                            Text("Create Group", color = SplitMateTheme.ScreenBg, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = "Create Group",
+                                color = SplitMateTheme.ScreenBg,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
                         }
                     }
                 }
             }
+        }
         }
     }
 }

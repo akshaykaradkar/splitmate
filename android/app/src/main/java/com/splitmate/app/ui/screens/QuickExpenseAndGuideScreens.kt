@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Backspace
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.*
@@ -105,13 +104,6 @@ data class QuickParticipant(
     val upiId: String = ""
 )
 
-val DefaultParticipants = listOf(
-    QuickParticipant("1", "You", "AK", "Akshay|Masculine", Color(0xFFD7E8B6), Color(0xFF23201E)),
-    QuickParticipant("2", "Maya", "ML", "Maya|Feminine", Color(0xFFFFD8CC), Color(0xFF8A2E1A)),
-    QuickParticipant("3", "Sam", "SK", "Sam|Masculine", Color(0xFFD0E2FF), Color(0xFF143E82)),
-    QuickParticipant("4", "Priya", "PR", "Priya|Feminine", Color(0xFFFFD5E5), Color(0xFF801844))
-)
-
 private val ParticipantPalette = listOf(
     Color(0xFFD7E8B6) to Color(0xFF23201E),
     Color(0xFFFFD8CC) to Color(0xFF8A2E1A),
@@ -134,6 +126,9 @@ fun QuickExpenseScreen(
 ) {
     val context = LocalContext.current
     val uiState = viewModel?.uiState?.collectAsState()?.value
+    val activeMembers = viewModel?.activeGroupMembers?.collectAsState()?.value
+        ?: uiState?.activeGroupMembers
+        ?: emptyList()
     val isDark = uiState?.isDarkTheme == true || SplitMateTheme.isDark
 
     val screenBg by animateColorAsState(
@@ -167,24 +162,19 @@ fun QuickExpenseScreen(
         label = "QuickExpenseKeypadBorder"
     )
 
-    val activeMembers = uiState?.activeGroupMembers ?: emptyList()
     val participants: List<QuickParticipant> = remember(activeMembers) {
-        if (activeMembers.isNotEmpty()) {
-            activeMembers.mapIndexed { idx, m ->
-                val (bg, fg) = ParticipantPalette[idx % ParticipantPalette.size]
-                val cleanInitials = extractInitialsFromNameOrSeed(m.name)
-                QuickParticipant(
-                    id = m.memberId,
-                    name = if (m.isCurrentUser) "${m.name} (You)" else m.name,
-                    initials = cleanInitials,
-                    avatarSeed = m.avatarSeed,
-                    avatarBg = bg,
-                    avatarFg = fg,
-                    upiId = m.upiId
-                )
-            }
-        } else {
-            DefaultParticipants
+        activeMembers.mapIndexed { idx, m ->
+            val (bg, fg) = ParticipantPalette[idx % ParticipantPalette.size]
+            val cleanInitials = extractInitialsFromNameOrSeed(m.name)
+            QuickParticipant(
+                id = m.memberId,
+                name = if (m.isCurrentUser) "${m.name} (You)" else m.name,
+                initials = cleanInitials,
+                avatarSeed = m.avatarSeed,
+                avatarBg = bg,
+                avatarFg = fg,
+                upiId = m.upiId
+            )
         }
     }
 
@@ -200,8 +190,10 @@ fun QuickExpenseScreen(
     val haptic = LocalHapticFeedback.current
 
     val currencySymbol = "₹"
-    val activeGroupName = uiState?.activeGroup?.name ?: "Create / Select Group"
-    val activeGroupIconName = uiState?.activeGroup?.iconName ?: "Flight"
+    val selectedGroup = uiState?.activeGroup
+    val hasSelectedGroup = selectedGroup != null && participants.isNotEmpty()
+    val activeGroupName = selectedGroup?.name ?: "Select a Group"
+    val activeGroupIconName = selectedGroup?.iconName ?: "Flight"
 
     val numericVal = amountDigits.toLongOrNull() ?: 0L
     val formattedDisplay = if (numericVal == 0L) {
@@ -314,6 +306,7 @@ fun QuickExpenseScreen(
     Scaffold(
         containerColor = screenBg,
         topBar = {
+            // Root BottomNav destination — NO back arrow navigationIcon!
             TopAppBar(
                 title = {
                     Box {
@@ -387,32 +380,10 @@ fun QuickExpenseScreen(
                         }
                     }
                 },
-                navigationIcon = {
-                    IconButton(
-                        onClick = onBackClick,
-                        modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = surfaceColor,
-                            border = BorderStroke(1.dp, keypadBorder),
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = textPrimary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                    }
-                },
                 actions = {
                     Surface(
                         shape = QuickExpenseThemeTokens.RadiusPill,
-                        color = surfaceColor.copy(alpha = 0.9f),
+                        color = surfaceColor,
                         border = BorderStroke(1.dp, keypadBorder),
                         modifier = Modifier.padding(end = 12.dp)
                     ) {
@@ -432,481 +403,583 @@ fun QuickExpenseScreen(
             )
         }
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
+        if (!hasSelectedGroup) {
             // ==================================================================
-            // 1. TOP SECTION: Elevated Category Pill + Tightly Coupled DisplayLarge Amount
+            // M3 EMPTY STATE WHEN NO GROUP IS SELECTED
+            // Hides the Avatar row and Keypad, shows center M3 card & disables Log & Split FAB
             // ==================================================================
             Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 2.dp, bottom = 4.dp)
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                Surface(
-                    onClick = { showEditTitleDialog = true },
-                    shape = QuickExpenseThemeTokens.RadiusPill,
-                    color = surfaceColor,
-                    shadowElevation = 2.dp,
-                    border = BorderStroke(1.dp, if (isDark) Color(0xFF4A332C) else Color(0xFFFFD9CE)),
-                    modifier = Modifier.padding(bottom = 6.dp)
+                Card(
+                    shape = QuickExpenseThemeTokens.RadiusHero,
+                    colors = CardDefaults.cardColors(containerColor = surfaceColor),
+                    border = BorderStroke(1.dp, keypadBorder),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
-                            .background(
-                                Brush.horizontalGradient(
-                                    colors = if (isDark) {
-                                        listOf(Color(0xFF28201D), Color(0xFF33241F))
-                                    } else {
-                                        listOf(Color(0xFFFFF7F3), Color(0xFFFDECE5))
-                                    }
-                                )
-                            )
-                            .padding(horizontal = 14.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Icon(
-                            imageVector = resolveGroupCategoryIcon("", expenseCategoryTitle),
-                            contentDescription = null,
-                            tint = textPrimary,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(68.dp)
+                                .clip(CircleShape)
+                                .background(QuickExpenseThemeTokens.SageSurface),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Groups,
+                                contentDescription = null,
+                                tint = QuickExpenseThemeTokens.SageText,
+                                modifier = Modifier.size(34.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = expenseCategoryTitle,
+                            text = "Please select or create a group to start splitting.",
+                            fontFamily = SplitMateDisplayFontFamily,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = textPrimary,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 24.sp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Create a group in the Ledgers tab or pick an existing group from the top selector.",
                             fontFamily = SplitMateBrandFontFamily,
                             fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = textPrimary
+                            color = textSecondary,
+                            textAlign = TextAlign.Center
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Icon(
-                            imageVector = Icons.Rounded.Edit,
-                            contentDescription = "Edit Category",
-                            tint = textSecondary,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                }
-
-                // DisplayLarge Amount closely beneath category chip
-                Text(
-                    text = formattedDisplay,
-                    fontFamily = SplitMateDisplayFontFamily,
-                    fontSize = 48.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = textPrimary,
-                    letterSpacing = (-1.2).sp,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 52.sp
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                // Real-time Exact Split / Unassigned Badge
-                Surface(
-                    shape = QuickExpenseThemeTokens.RadiusPill,
-                    color = if (memberCount > 0) QuickExpenseThemeTokens.SageSurface else QuickExpenseThemeTokens.TerracottaSurface,
-                    border = BorderStroke(
-                        1.dp,
-                        if (memberCount > 0) QuickExpenseThemeTokens.AccentSage else Color(0xFFFFCCBA)
-                    ),
-                    shadowElevation = 1.dp
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (memberCount > 0) Icons.Rounded.CheckCircle else Icons.Rounded.ErrorOutline,
-                            contentDescription = null,
-                            tint = if (memberCount > 0) QuickExpenseThemeTokens.SageText else QuickExpenseThemeTokens.TerracottaText,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (memberCount > 0) {
-                                "$currencySymbol ${NumberFormat.getNumberInstance(Locale("en", "IN")).format(perPerson)} / person · $memberCount splitting" +
-                                        if (remainder > 0L) " · +$currencySymbol$remainder Unassigned" else " · Exact Split"
-                            } else {
-                                "Select at least 1 person to split"
-                            },
-                            fontFamily = SplitMateBrandFontFamily,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (memberCount > 0) QuickExpenseThemeTokens.SageText else QuickExpenseThemeTokens.TerracottaText
-                        )
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Button(
+                            onClick = {},
+                            enabled = false,
+                            shape = QuickExpenseThemeTokens.RadiusPill,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.ElectricBolt,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Log & Split",
+                                fontFamily = SplitMateDisplayFontFamily,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 14.sp
+                            )
+                        }
                     }
                 }
             }
-
-            // ==================================================================
-            // 2. MID SECTION: Compact Avatar Strip Directly Above Keypad
-            // ==================================================================
+        } else {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 2.dp)
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                // ==================================================================
+                // 1. TOP SECTION: Elevated Category Pill + Tightly Coupled DisplayLarge Amount
+                // ==================================================================
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp, bottom = 4.dp)
                 ) {
-                    Column {
+                    Surface(
+                        onClick = { showEditTitleDialog = true },
+                        shape = QuickExpenseThemeTokens.RadiusPill,
+                        color = surfaceColor,
+                        shadowElevation = 2.dp,
+                        border = BorderStroke(1.dp, if (isDark) Color(0xFF4A332C) else Color(0xFFFFD9CE)),
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .background(
+                                    Brush.horizontalGradient(
+                                        colors = if (isDark) {
+                                            listOf(Color(0xFF28201D), Color(0xFF33241F))
+                                        } else {
+                                            listOf(Color(0xFFFFF7F3), Color(0xFFFDECE5))
+                                        }
+                                    )
+                                )
+                                .padding(horizontal = 14.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = resolveGroupCategoryIcon("", expenseCategoryTitle),
+                                contentDescription = null,
+                                tint = textPrimary,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = expenseCategoryTitle,
+                                fontFamily = SplitMateBrandFontFamily,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = textPrimary
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(
+                                imageVector = Icons.Rounded.Edit,
+                                contentDescription = "Edit Category",
+                                tint = textSecondary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+
+                    // DisplayLarge Amount closely beneath category chip
+                    Text(
+                        text = formattedDisplay,
+                        fontFamily = SplitMateDisplayFontFamily,
+                        fontSize = 48.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = textPrimary,
+                        letterSpacing = (-1.2).sp,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 52.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Real-time Exact Split / Unassigned Badge
+                    Surface(
+                        shape = QuickExpenseThemeTokens.RadiusPill,
+                        color = if (memberCount > 0) QuickExpenseThemeTokens.SageSurface else QuickExpenseThemeTokens.TerracottaSurface,
+                        border = BorderStroke(
+                            1.dp,
+                            if (memberCount > 0) QuickExpenseThemeTokens.AccentSage else Color(0xFFFFCCBA)
+                        ),
+                        shadowElevation = 1.dp
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (memberCount > 0) Icons.Rounded.CheckCircle else Icons.Rounded.ErrorOutline,
+                                contentDescription = null,
+                                tint = if (memberCount > 0) QuickExpenseThemeTokens.SageText else QuickExpenseThemeTokens.TerracottaText,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (memberCount > 0) {
+                                    "$currencySymbol ${NumberFormat.getNumberInstance(Locale("en", "IN")).format(perPerson)} / person · $memberCount splitting" +
+                                        if (remainder > 0L) " · +$currencySymbol$remainder Unassigned" else " · Exact Split"
+                                } else {
+                                    "Select at least 1 person to split"
+                                },
+                                fontFamily = SplitMateBrandFontFamily,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (memberCount > 0) QuickExpenseThemeTokens.SageText else QuickExpenseThemeTokens.TerracottaText
+                            )
+                        }
+                    }
+                }
+
+                // ==================================================================
+                // 2. MID SECTION: Compact Avatar Strip Directly Above Keypad
+                // Clear Button vertically aligned on the exact same row as "Who's in on this?"
+                // ==================================================================
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
                             text = "Who's in on this?",
                             fontFamily = SplitMateDisplayFontFamily,
-                            fontSize = 14.sp,
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = textPrimary
                         )
-                        Text(
-                            text = "Tap to toggle · Long-press friend to link Contact UPI",
-                            fontFamily = SplitMateBrandFontFamily,
-                            fontSize = 11.sp,
-                            color = textSecondary
-                        )
-                    }
 
-                    Surface(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            selectedMemberIds = if (selectedMemberIds.size == participants.size) {
-                                setOf(participants.first().id)
-                            } else {
-                                participants.map { it.id }.toSet()
-                            }
-                        },
-                        shape = QuickExpenseThemeTokens.RadiusPill,
-                        color = QuickExpenseThemeTokens.SageSurface,
-                        border = BorderStroke(1.dp, QuickExpenseThemeTokens.AccentSage.copy(alpha = 0.8f)),
-                        modifier = Modifier.sizeIn(minHeight = 32.dp)
-                    ) {
-                        Text(
-                            text = if (selectedMemberIds.size == participants.size) "Clear" else "Select All (${participants.size})",
-                            fontFamily = SplitMateBrandFontFamily,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = QuickExpenseThemeTokens.SageText,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(horizontal = 2.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    items(participants) { person ->
-                        val isSelected = selectedMemberIds.contains(person.id)
-                        val matchingRoomMember = activeMembers.find { it.memberId == person.id }
-                        val avatarUrl = remember(person.avatarSeed) {
-                            buildDiceBearOpenPeepsUrl(person.avatarSeed)
-                        }
-
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier
-                                .clip(QuickExpenseThemeTokens.RadiusCard)
-                                .combinedClickable(
-                                    onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        selectedMemberIds = if (isSelected) {
-                                            selectedMemberIds - person.id
-                                        } else {
-                                            selectedMemberIds + person.id
-                                        }
-                                    },
-                                    onLongClick = {
-                                        if (matchingRoomMember != null && !matchingRoomMember.isCurrentUser) {
-                                            editingFriend = matchingRoomMember
-                                        }
-                                    }
-                                )
-                                .padding(horizontal = 4.dp, vertical = 2.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(54.dp)
-                                    .shadow(
-                                        elevation = if (isSelected) 5.dp else 1.dp,
-                                        shape = CircleShape
-                                    )
-                                    .clip(CircleShape)
-                                    .background(
-                                        if (isSelected) person.avatarBg else person.avatarBg.copy(alpha = 0.45f)
-                                    )
-                                    .border(
-                                        width = if (isSelected) 3.dp else 1.5.dp,
-                                        color = if (isSelected) QuickExpenseThemeTokens.SageBorder else surfaceColor,
-                                        shape = CircleShape
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = person.initials,
-                                    fontFamily = SplitMateDisplayFontFamily,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = if (isSelected) person.avatarFg else person.avatarFg.copy(alpha = 0.45f)
-                                )
-                                AsyncImage(
-                                    model = ImageRequest.Builder(context)
-                                        .data(avatarUrl)
-                                        .decoderFactory(SvgDecoder.Factory())
-                                        .crossfade(true)
-                                        .build(),
-                                    contentDescription = person.name,
-                                    contentScale = ContentScale.Crop,
-                                    alpha = if (isSelected) 1f else 0.45f,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .clip(CircleShape)
-                                )
-
-                                if (isSelected) {
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.BottomEnd)
-                                            .size(18.dp)
-                                            .clip(CircleShape)
-                                            .background(QuickExpenseThemeTokens.SageBorder)
-                                            .border(1.5.dp, surfaceColor, CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Check,
-                                            contentDescription = "Selected",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(11.dp)
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(4.dp))
-
-                            Text(
-                                text = person.name,
-                                fontFamily = SplitMateBrandFontFamily,
-                                fontSize = 11.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = if (isSelected) textPrimary else textSecondary.copy(alpha = 0.7f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
-            }
-
-            // ==================================================================
-            // 3. BOTTOM SECTION: Tactile M3 Squarcles Keypad + Giant FAB (240dp Total Height)
-            // ==================================================================
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 6.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // Left: 3x4 Keypad Column Grid (4 rows * 54dp + 3 gaps * 8dp = 240dp)
-                    Column(
-                        modifier = Modifier.weight(3f),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        KeypadRow(
-                            keys = listOf("1", "2", "3"),
-                            keypadBg = keypadBg,
-                            keypadBorder = keypadBorder,
-                            textPrimary = textPrimary,
-                            onKeyPress = { key ->
-                                appendDigit(key, amountDigits) { amountDigits = it }
-                            }
-                        )
-
-                        KeypadRow(
-                            keys = listOf("4", "5", "6"),
-                            keypadBg = keypadBg,
-                            keypadBorder = keypadBorder,
-                            textPrimary = textPrimary,
-                            onKeyPress = { key ->
-                                appendDigit(key, amountDigits) { amountDigits = it }
-                            }
-                        )
-
-                        KeypadRow(
-                            keys = listOf("7", "8", "9"),
-                            keypadBg = keypadBg,
-                            keypadBorder = keypadBorder,
-                            textPrimary = textPrimary,
-                            onKeyPress = { key ->
-                                appendDigit(key, amountDigits) { amountDigits = it }
-                            }
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            TactileSquircleKey(
-                                label = "00",
-                                keypadBg = keypadBg,
-                                keypadBorder = keypadBorder,
-                                textPrimary = textPrimary,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(54.dp),
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    if (amountDigits.isNotEmpty() && amountDigits.length < 8) {
-                                        amountDigits += "00"
-                                    }
-                                }
-                            )
-
-                            TactileSquircleKey(
-                                label = "0",
-                                keypadBg = keypadBg,
-                                keypadBorder = keypadBorder,
-                                textPrimary = textPrimary,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(54.dp),
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    if (amountDigits != "0" && amountDigits.length < 8) {
-                                        amountDigits += "0"
-                                    }
-                                }
-                            )
-
-                            TactileSquircleKey(
-                                label = "BACK",
-                                isIcon = true,
-                                icon = Icons.AutoMirrored.Rounded.Backspace,
-                                keypadBg = keypadBg,
-                                keypadBorder = keypadBorder,
-                                textPrimary = textPrimary,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(54.dp),
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    if (amountDigits.isNotEmpty()) {
-                                        amountDigits = amountDigits.dropLast(1)
-                                    }
-                                }
-                            )
-                        }
-                    }
-
-                    // Right: 4th Column (54dp Note Button + 8dp gap + 178dp Log & Split FAB = 240dp)
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
                         Surface(
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                showEditTitleDialog = true
-                                onLogExpenseClick()
+                                selectedMemberIds = if (selectedMemberIds.size == participants.size) {
+                                    setOf(participants.first().id)
+                                } else {
+                                    participants.map { it.id }.toSet()
+                                }
                             },
-                            shape = QuickExpenseThemeTokens.RadiusKeySquircle,
+                            shape = QuickExpenseThemeTokens.RadiusPill,
                             color = QuickExpenseThemeTokens.SageSurface,
-                            shadowElevation = 2.dp,
-                            border = BorderStroke(1.dp, QuickExpenseThemeTokens.AccentSage),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(54.dp)
-                                .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                            border = BorderStroke(1.dp, QuickExpenseThemeTokens.AccentSage.copy(alpha = 0.8f))
                         ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center,
-                                modifier = Modifier.fillMaxSize()
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Rounded.ReceiptLong,
-                                    contentDescription = "Edit Note",
-                                    tint = QuickExpenseThemeTokens.SageText,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Note",
+                                    text = if (selectedMemberIds.size == participants.size) "Clear" else "Select All (${participants.size})",
                                     fontFamily = SplitMateBrandFontFamily,
                                     fontSize = 11.sp,
-                                    fontWeight = FontWeight.ExtraBold,
+                                    fontWeight = FontWeight.Bold,
                                     color = QuickExpenseThemeTokens.SageText
                                 )
                             }
                         }
+                    }
 
-                        Button(
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                val selected = participants.filter { selectedMemberIds.contains(it.id) }
-                                viewModel?.commitQuickEqualExpense(
-                                    title = expenseCategoryTitle,
-                                    totalAmountCents = numericVal * 100L,
-                                    selectedMemberIds = selected.map { it.id }
-                                )
-                                onSaveSplit(numericVal, selected)
-                            },
-                            shape = QuickExpenseThemeTokens.RadiusKeySquircle,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = textPrimary,
-                                contentColor = screenBg
-                            ),
-                            enabled = numericVal > 0L && selectedMemberIds.isNotEmpty(),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(178.dp)
-                                .shadow(6.dp, shape = QuickExpenseThemeTokens.RadiusKeySquircle),
-                            contentPadding = PaddingValues(6.dp)
-                        ) {
+                    Text(
+                        text = "Tap to toggle · Long-press friend to link Contact UPI",
+                        fontFamily = SplitMateBrandFontFamily,
+                        fontSize = 11.sp,
+                        color = textSecondary
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        contentPadding = PaddingValues(horizontal = 2.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(participants, key = { it.id }) { person ->
+                            val isSelected = selectedMemberIds.contains(person.id)
+                            val matchingRoomMember = activeMembers.find { it.memberId == person.id }
+                            val avatarUrl = remember(person.avatarSeed) {
+                                buildDiceBearOpenPeepsUrl(person.avatarSeed)
+                            }
+
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center,
-                                modifier = Modifier.fillMaxSize()
+                                modifier = Modifier
+                                    .clip(QuickExpenseThemeTokens.RadiusCard)
+                                    .combinedClickable(
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            selectedMemberIds = if (isSelected) {
+                                                selectedMemberIds - person.id
+                                            } else {
+                                                selectedMemberIds + person.id
+                                            }
+                                        },
+                                        onLongClick = {
+                                            if (matchingRoomMember != null && !matchingRoomMember.isCurrentUser) {
+                                                editingFriend = matchingRoomMember
+                                            }
+                                        }
+                                    )
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
                             ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = if (isDark) Color(0xFF416913).copy(alpha = 0.35f) else QuickExpenseThemeTokens.AccentSage.copy(alpha = 0.25f),
-                                    modifier = Modifier.size(42.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.ElectricBolt,
-                                            contentDescription = null,
-                                            tint = if (isDark) Color(0xFF416913) else QuickExpenseThemeTokens.AccentSage,
-                                            modifier = Modifier.size(24.dp)
+                                Box(
+                                    modifier = Modifier
+                                        .size(54.dp)
+                                        .shadow(
+                                            elevation = if (isSelected) 5.dp else 1.dp,
+                                            shape = CircleShape
                                         )
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (isSelected) person.avatarBg else person.avatarBg.copy(alpha = 0.45f)
+                                        )
+                                        .border(
+                                            width = if (isSelected) 3.dp else 1.5.dp,
+                                            color = if (isSelected) QuickExpenseThemeTokens.SageBorder else surfaceColor,
+                                            shape = CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = person.initials,
+                                        fontFamily = SplitMateDisplayFontFamily,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = if (isSelected) person.avatarFg else person.avatarFg.copy(alpha = 0.45f)
+                                    )
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(context)
+                                            .data(avatarUrl)
+                                            .decoderFactory(SvgDecoder.Factory())
+                                            .crossfade(true)
+                                            .build(),
+                                        contentDescription = person.name,
+                                        contentScale = ContentScale.Crop,
+                                        alpha = if (isSelected) 1f else 0.45f,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clip(CircleShape)
+                                    )
+
+                                    if (isSelected) {
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.BottomEnd)
+                                                .size(18.dp)
+                                                .clip(CircleShape)
+                                                .background(QuickExpenseThemeTokens.SageBorder)
+                                                .border(1.5.dp, surfaceColor, CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Check,
+                                                contentDescription = "Selected",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(11.dp)
+                                            )
+                                        }
                                     }
                                 }
-                                Spacer(modifier = Modifier.height(6.dp))
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
                                 Text(
-                                    text = "Log &\nSplit",
-                                    fontFamily = SplitMateDisplayFontFamily,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = screenBg,
-                                    textAlign = TextAlign.Center,
-                                    lineHeight = 17.sp
+                                    text = person.name,
+                                    fontFamily = SplitMateBrandFontFamily,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSelected) textPrimary else textSecondary.copy(alpha = 0.7f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
+                            }
+                        }
+                    }
+                }
+
+                // ==================================================================
+                // 3. BOTTOM SECTION: Tactile M3 Squarcles Keypad + 2-Row Log & Split FAB
+                // (4 rows * 54dp + 3 gaps * 8dp = 240dp; Right Column = 54dp Note + 54dp C + 116dp 2-Row FAB)
+                // ==================================================================
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Left: 3x4 Keypad Column Grid (4 rows * 54dp + 3 gaps * 8dp = 240dp)
+                        Column(
+                            modifier = Modifier.weight(3f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            KeypadRow(
+                                keys = listOf("1", "2", "3"),
+                                keypadBg = keypadBg,
+                                keypadBorder = keypadBorder,
+                                textPrimary = textPrimary,
+                                onKeyPress = { key ->
+                                    appendDigit(key, amountDigits) { amountDigits = it }
+                                }
+                            )
+
+                            KeypadRow(
+                                keys = listOf("4", "5", "6"),
+                                keypadBg = keypadBg,
+                                keypadBorder = keypadBorder,
+                                textPrimary = textPrimary,
+                                onKeyPress = { key ->
+                                    appendDigit(key, amountDigits) { amountDigits = it }
+                                }
+                            )
+
+                            KeypadRow(
+                                keys = listOf("7", "8", "9"),
+                                keypadBg = keypadBg,
+                                keypadBorder = keypadBorder,
+                                textPrimary = textPrimary,
+                                onKeyPress = { key ->
+                                    appendDigit(key, amountDigits) { amountDigits = it }
+                                }
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                TactileSquircleKey(
+                                    label = "00",
+                                    keypadBg = keypadBg,
+                                    keypadBorder = keypadBorder,
+                                    textPrimary = textPrimary,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(54.dp),
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        if (amountDigits.isNotEmpty() && amountDigits.length < 8) {
+                                            amountDigits += "00"
+                                        }
+                                    }
+                                )
+
+                                TactileSquircleKey(
+                                    label = "0",
+                                    keypadBg = keypadBg,
+                                    keypadBorder = keypadBorder,
+                                    textPrimary = textPrimary,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(54.dp),
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        if (amountDigits != "0" && amountDigits.length < 8) {
+                                            amountDigits += "0"
+                                        }
+                                    }
+                                )
+
+                                TactileSquircleKey(
+                                    label = "BACK",
+                                    isIcon = true,
+                                    icon = Icons.AutoMirrored.Rounded.Backspace,
+                                    keypadBg = keypadBg,
+                                    keypadBorder = keypadBorder,
+                                    textPrimary = textPrimary,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(54.dp),
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        if (amountDigits.isNotEmpty()) {
+                                            amountDigits = amountDigits.dropLast(1)
+                                        }
+                                    }
+                                )
+                            }
+                        }
+
+                        // Right: 4th Column (Row 1 = 54dp Note, Row 2 = 54dp Clear "C", Rows 3 & 4 = 116dp 2-Row Log & Split FAB)
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Surface(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    showEditTitleDialog = true
+                                    onLogExpenseClick()
+                                },
+                                shape = QuickExpenseThemeTokens.RadiusKeySquircle,
+                                color = QuickExpenseThemeTokens.SageSurface,
+                                shadowElevation = 2.dp,
+                                border = BorderStroke(1.dp, QuickExpenseThemeTokens.AccentSage),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(54.dp)
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center,
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Rounded.ReceiptLong,
+                                        contentDescription = "Edit Note",
+                                        tint = QuickExpenseThemeTokens.SageText,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Note",
+                                        fontFamily = SplitMateBrandFontFamily,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = QuickExpenseThemeTokens.SageText
+                                    )
+                                }
+                            }
+
+                            TactileSquircleKey(
+                                label = "C",
+                                keypadBg = keypadBg,
+                                keypadBorder = keypadBorder,
+                                textPrimary = textPrimary,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(54.dp),
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    amountDigits = "0"
+                                }
+                            )
+
+                            // Log & Split FAB spanning EXACTLY two rows in height (54dp + 8dp + 54dp = 116dp)
+                            Button(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    val selected = participants.filter { selectedMemberIds.contains(it.id) }
+                                    viewModel?.commitQuickEqualExpense(
+                                        title = expenseCategoryTitle,
+                                        totalAmountCents = numericVal * 100L,
+                                        selectedMemberIds = selected.map { it.id }
+                                    )
+                                    onSaveSplit(numericVal, selected)
+                                },
+                                shape = QuickExpenseThemeTokens.RadiusKeySquircle,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = textPrimary,
+                                    contentColor = screenBg
+                                ),
+                                enabled = hasSelectedGroup && numericVal > 0L && selectedMemberIds.isNotEmpty(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(116.dp)
+                                    .shadow(6.dp, shape = QuickExpenseThemeTokens.RadiusKeySquircle),
+                                contentPadding = PaddingValues(6.dp)
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center,
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = if (isDark) Color(0xFF416913).copy(alpha = 0.35f) else QuickExpenseThemeTokens.AccentSage.copy(alpha = 0.25f),
+                                        modifier = Modifier.size(34.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.ElectricBolt,
+                                                contentDescription = null,
+                                                tint = if (isDark) Color(0xFF416913) else QuickExpenseThemeTokens.AccentSage,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Log &\nSplit",
+                                        fontFamily = SplitMateDisplayFontFamily,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = screenBg,
+                                        textAlign = TextAlign.Center,
+                                        lineHeight = 16.sp
+                                    )
+                                }
                             }
                         }
                     }
@@ -1075,6 +1148,13 @@ fun EditFriendUpiDialog(
         }
     }
 
+    val avatarPreviewUrl = remember(friendName, selectedPresentationStyle) {
+        buildDiceBearOpenPeepsUrl(friendName.ifBlank { member.name }, selectedPresentationStyle)
+    }
+    val cleanInitials = remember(friendName, member.name) {
+        extractInitialsFromNameOrSeed(friendName.ifBlank { member.name })
+    }
+
     if (showInAppContactPicker) {
         ContactPickerBottomSheet(
             contacts = deviceContacts,
@@ -1089,200 +1169,194 @@ fun EditFriendUpiDialog(
                     friendName = chosen.name
                     pickedPhoneNumber = chosen.cleanPhone
                 }
+                showInAppContactPicker = false
             }
         )
-    }
-
-    val avatarPreviewUrl = remember(friendName, selectedPresentationStyle) {
-        buildDiceBearOpenPeepsUrl(friendName.ifBlank { member.name }, selectedPresentationStyle)
-    }
-    val cleanInitials = remember(friendName, member.name) {
-        extractInitialsFromNameOrSeed(friendName.ifBlank { member.name })
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = QuickExpenseThemeTokens.SurfaceWhite,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(52.dp)
-                        .clip(CircleShape)
-                        .background(QuickExpenseThemeTokens.AccentSage)
-                        .border(2.dp, QuickExpenseThemeTokens.SageBorder, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = cleanInitials,
-                        fontFamily = SplitMateDisplayFontFamily,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = QuickExpenseThemeTokens.SageText
-                    )
-                    AsyncImage(
-                        model = ImageRequest.Builder(context)
-                            .data(avatarPreviewUrl)
-                            .decoderFactory(SvgDecoder.Factory())
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = "Friend Avatar",
-                        contentScale = ContentScale.Crop,
+    } else {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            containerColor = QuickExpenseThemeTokens.SurfaceWhite,
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
                         modifier = Modifier
-                            .fillMaxSize()
+                            .size(52.dp)
                             .clip(CircleShape)
-                    )
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(
-                        text = "Edit Member",
-                        fontFamily = SplitMateDisplayFontFamily,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = QuickExpenseThemeTokens.PrimaryDark
-                    )
-                    Text(
-                        text = "Update profile and phone contact",
-                        fontFamily = SplitMateBrandFontFamily,
-                        fontSize = 12.sp,
-                        color = QuickExpenseThemeTokens.TextSecondary
-                    )
-                }
-            }
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                // 1. Presentation Style Toggle (Masculine, Feminine, Neutral)
-                Column {
-                    Text(
-                        text = "Presentation Style",
-                        fontFamily = SplitMateBrandFontFamily,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = QuickExpenseThemeTokens.PrimaryDark,
-                        modifier = Modifier.padding(bottom = 6.dp)
-                    )
-                    Surface(
-                        shape = QuickExpenseThemeTokens.RadiusPill,
-                        color = QuickExpenseThemeTokens.SurfaceKeypad,
-                        border = BorderStroke(1.dp, QuickExpenseThemeTokens.BorderLight),
-                        modifier = Modifier.fillMaxWidth()
+                            .background(QuickExpenseThemeTokens.AccentSage)
+                            .border(2.dp, QuickExpenseThemeTokens.SageBorder, CircleShape),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Row(
+                        Text(
+                            text = cleanInitials,
+                            fontFamily = SplitMateDisplayFontFamily,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = QuickExpenseThemeTokens.SageText
+                        )
+                        AsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(avatarPreviewUrl)
+                                .decoderFactory(SvgDecoder.Factory())
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = "Friend Avatar",
+                            contentScale = ContentScale.Crop,
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                .fillMaxSize()
+                                .clip(CircleShape)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "Edit Member",
+                            fontFamily = SplitMateDisplayFontFamily,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = QuickExpenseThemeTokens.PrimaryDark
+                        )
+                        Text(
+                            text = "Update profile and phone contact",
+                            fontFamily = SplitMateBrandFontFamily,
+                            fontSize = 12.sp,
+                            color = QuickExpenseThemeTokens.TextSecondary
+                        )
+                    }
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // 1. Presentation Style Toggle (Masculine, Feminine, Neutral)
+                    Column {
+                        Text(
+                            text = "Presentation Style",
+                            fontFamily = SplitMateBrandFontFamily,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = QuickExpenseThemeTokens.PrimaryDark,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+                        Surface(
+                            shape = QuickExpenseThemeTokens.RadiusPill,
+                            color = QuickExpenseThemeTokens.SurfaceKeypad,
+                            border = BorderStroke(1.dp, QuickExpenseThemeTokens.BorderLight),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            listOf("Masculine", "Feminine", "Neutral").forEach { style ->
-                                val isSelected = selectedPresentationStyle == style
-                                Surface(
-                                    onClick = { selectedPresentationStyle = style },
-                                    shape = QuickExpenseThemeTokens.RadiusPill,
-                                    color = if (isSelected) QuickExpenseThemeTokens.PrimaryDark else Color.Transparent,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(36.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text(
-                                            text = style,
-                                            fontFamily = SplitMateBrandFontFamily,
-                                            fontSize = 12.sp,
-                                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                            color = if (isSelected) QuickExpenseThemeTokens.ScreenBg else QuickExpenseThemeTokens.TextSecondary
-                                        )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                listOf("Masculine", "Feminine", "Neutral").forEach { style ->
+                                    val isSelected = selectedPresentationStyle == style
+                                    Surface(
+                                        onClick = { selectedPresentationStyle = style },
+                                        shape = QuickExpenseThemeTokens.RadiusPill,
+                                        color = if (isSelected) QuickExpenseThemeTokens.PrimaryDark else Color.Transparent,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(36.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(
+                                                text = style,
+                                                fontFamily = SplitMateBrandFontFamily,
+                                                fontSize = 12.sp,
+                                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                                color = if (isSelected) QuickExpenseThemeTokens.ScreenBg else QuickExpenseThemeTokens.TextSecondary
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
                     }
+
+                    // 2. Friend's Name Field
+                    OutlinedTextField(
+                        value = friendName,
+                        onValueChange = { friendName = it },
+                        label = { Text("Friend's Name", fontFamily = SplitMateBrandFontFamily) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = QuickExpenseThemeTokens.PrimaryDark,
+                            unfocusedTextColor = QuickExpenseThemeTokens.PrimaryDark,
+                            focusedBorderColor = QuickExpenseThemeTokens.PrimaryDark,
+                            unfocusedBorderColor = QuickExpenseThemeTokens.BorderLight
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // 3. Pick from Contacts Button (Opens In-App ContactPickerBottomSheet)
+                    Button(
+                        onClick = {
+                            val hasPermission = ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.READ_CONTACTS
+                            ) == PackageManager.PERMISSION_GRANTED
+                            if (hasPermission) {
+                                loadAndOpenSheet()
+                            } else {
+                                permissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+                            }
+                        },
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = QuickExpenseThemeTokens.SageSurface,
+                            contentColor = QuickExpenseThemeTokens.SageText
+                        ),
+                        border = BorderStroke(1.5.dp, QuickExpenseThemeTokens.SageBorder),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Contacts,
+                            contentDescription = null,
+                            tint = QuickExpenseThemeTokens.SageText,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (pickedPhoneNumber.length == 10) "Change Linked Contact (+91 $pickedPhoneNumber)" else "+ Link Contact",
+                            fontFamily = SplitMateBrandFontFamily,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 14.sp,
+                            color = QuickExpenseThemeTokens.SageText
+                        )
+                    }
                 }
-
-                // 2. Friend's Name Field
-                OutlinedTextField(
-                    value = friendName,
-                    onValueChange = { friendName = it },
-                    label = { Text("Friend's Name", fontFamily = SplitMateBrandFontFamily) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = QuickExpenseThemeTokens.PrimaryDark,
-                        unfocusedTextColor = QuickExpenseThemeTokens.PrimaryDark,
-                        focusedBorderColor = QuickExpenseThemeTokens.PrimaryDark,
-                        unfocusedBorderColor = QuickExpenseThemeTokens.BorderLight
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                // 3. Pick from Contacts Button (Opens In-App ContactPickerBottomSheet)
+            },
+            confirmButton = {
                 Button(
                     onClick = {
-                        val hasPermission = ContextCompat.checkSelfPermission(
-                            context,
-                            Manifest.permission.READ_CONTACTS
-                        ) == PackageManager.PERMISSION_GRANTED
-                        if (hasPermission) {
-                            loadAndOpenSheet()
-                        } else {
-                            permissionLauncher.launch(Manifest.permission.READ_CONTACTS)
-                        }
+                        val cleanName = friendName.trim().ifEmpty { member.name }
+                        val styledSeed = "$cleanName|$selectedPresentationStyle"
+                        onSave(cleanName, resolvedPhoneUpi, styledSeed)
                     },
-                    shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = QuickExpenseThemeTokens.SageSurface,
-                        contentColor = QuickExpenseThemeTokens.SageText
-                    ),
-                    border = BorderStroke(1.5.dp, QuickExpenseThemeTokens.SageBorder),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Contacts,
-                        contentDescription = null,
-                        tint = QuickExpenseThemeTokens.SageText,
-                        modifier = Modifier.size(18.dp)
+                        containerColor = QuickExpenseThemeTokens.PrimaryDark,
+                        contentColor = QuickExpenseThemeTokens.ScreenBg
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                ) {
                     Text(
-                        text = if (pickedPhoneNumber.length == 10) "Change Linked Contact (+91 $pickedPhoneNumber)" else "+ Link Contact",
+                        "Save Member",
                         fontFamily = SplitMateBrandFontFamily,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 14.sp,
-                        color = QuickExpenseThemeTokens.SageText
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) {
+                    Text(
+                        "Cancel",
+                        fontFamily = SplitMateBrandFontFamily,
+                        color = QuickExpenseThemeTokens.TextSecondary
                     )
                 }
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val cleanName = friendName.trim().ifEmpty { member.name }
-                    val styledSeed = "$cleanName|$selectedPresentationStyle"
-                    onSave(cleanName, resolvedPhoneUpi, styledSeed)
-                },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = QuickExpenseThemeTokens.PrimaryDark,
-                    contentColor = QuickExpenseThemeTokens.ScreenBg
-                )
-            ) {
-                Text(
-                    "Save Member",
-                    fontFamily = SplitMateBrandFontFamily,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(
-                    "Cancel",
-                    fontFamily = SplitMateBrandFontFamily,
-                    color = QuickExpenseThemeTokens.TextSecondary
-                )
-            }
-        }
-    )
+        )
+    }
 }

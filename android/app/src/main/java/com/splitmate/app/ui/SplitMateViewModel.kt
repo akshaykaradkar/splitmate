@@ -121,6 +121,10 @@ class SplitMateViewModel(
     )
     val uiState: StateFlow<SplitMateUiState> = _uiState.asStateFlow()
 
+    val activeGroupMembers: StateFlow<List<GroupMemberEntity>> = _uiState.map { state ->
+        state.activeGroupMembers
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     private val _deviceContacts = MutableStateFlow<List<DeviceContact>>(emptyList())
     val deviceContacts: StateFlow<List<DeviceContact>> = _deviceContacts.asStateFlow()
 
