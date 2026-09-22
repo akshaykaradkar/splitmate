@@ -1554,24 +1554,20 @@ fun LedgersDashboardScreen(
                         val (catBg, catTint) = resolveExpenseCategoryBadgeColors(expense.title, SplitMateTheme.isDark)
                         val parsedTravel = extractTravelTicketFromTitle(expense.title)
                         val cleanTitle = parsedTravel?.cleanTitle ?: expense.title
+                        val subText = if (parsedTravel != null && parsedTravel.pnr.isNotBlank()) {
+                            "PNR ${parsedTravel.pnr} (${parsedTravel.bookingStatus}) · Paid by ${if (isMePayer) "you" else (payer?.name ?: "Member")}"
+                        } else {
+                            "Paid by ${if (isMePayer) "you" else (payer?.name ?: "Member")} · Tap group to view details"
+                        }
                         ActivityItemRow(
                             icon = resolveExpenseCategoryIcon(expense.title),
                             iconBg = catBg,
                             iconTint = catTint,
                             title = cleanTitle,
-                            subtitle = "Paid by ${if (isMePayer) "you" else (payer?.name ?: "Member")} · Tap group to view details",
+                            subtitle = subText,
                             amount = formattedAmt,
                             isPositive = isMePayer
                         )
-                        if (parsedTravel != null) {
-                            Spacer(modifier = Modifier.height(6.dp))
-                            GroupBoardingPassCard(
-                                ticket = parsedTravel,
-                                onPersistUpdatedTitle = { newTitle ->
-                                    viewModel.persistLivePnrUpdate(expense.expenseId, newTitle)
-                                }
-                            )
-                        }
                         Spacer(modifier = Modifier.height(8.dp))
                     }
                 }

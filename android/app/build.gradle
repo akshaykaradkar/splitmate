@@ -12,8 +12,8 @@ android {
         applicationId "com.splitmate.app"
         minSdk 26
         targetSdk 34
-        versionCode 11
-        versionName "1.8.2"
+        versionCode 12
+        versionName "1.8.4"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -30,7 +30,7 @@ android {
 
     applicationVariants.all { variant ->
         variant.outputs.all {
-            outputFileName = "splitmate-1.8.2.apk"
+            outputFileName = "splitmate-1.8.4.apk"
         }
     }
 
