@@ -242,9 +242,48 @@ fun QuickExpenseScreen(
         var chartStatusInput by remember { mutableStateOf(existingTicket?.chartStatus ?: "Chart Prepared") }
         var liveRadarPreview by remember { mutableStateOf(existingTicket?.liveTrainRadar ?: "") }
         var isCheckingLivePnr by remember { mutableStateOf(false) }
-        var rawSmsPasteInput by remember { mutableStateOf("") }
         val pnrScope = androidx.compose.runtime.rememberCoroutineScope()
         val dialogView = androidx.compose.ui.platform.LocalView.current
+
+        val triggerLivePnrLookup: (String) -> Unit = { targetPnr ->
+            val clean10 = targetPnr.replace(Regex("[^0-9]"), "").take(10)
+            if (clean10.length == 10 && !isCheckingLivePnr) {
+                com.splitmate.app.ui.performCrispTactileHaptic(context, dialogView, heavy = true)
+                isCheckingLivePnr = true
+                pnrScope.launch {
+                    val snap = com.splitmate.app.ui.fetchLivePnrAndTrainStatus(
+                        pnr = clean10,
+                        fallbackTicket = com.splitmate.app.ui.ParsedTravelTicket(
+                            pnr = clean10,
+                            trainOrFlightNo = trainNoInput,
+                            fromStation = fromStationInput,
+                            toStation = toStationInput,
+                            departureTime = depTimeInput,
+                            coachAndSeats = coachSeatsInput
+                        )
+                    )
+                    pnrInput = snap.pnr
+                    trainNoInput = snap.trainNo
+                    fromStationInput = snap.fromStation
+                    toStationInput = snap.toStation
+                    depTimeInput = snap.departureTime
+                    coachSeatsInput = snap.passengerStatuses.joinToString(", ")
+                    bookingStatusInput = snap.bookingStatusBadge
+                    chartStatusInput = if (snap.chartPrepared) "Chart Prepared" else "Chart Not Prepared"
+                    liveRadarPreview = buildString {
+                        if (snap.totalFareRupees > 0) append("Total IRCTC Fare: ₹${snap.totalFareRupees} · ")
+                        append("${snap.liveTrainLocationRadar} · ${snap.confirmationProbability}")
+                    }
+                    if (snap.trainName.isNotBlank()) {
+                        draftTitle = "Train ${snap.trainNo} ${snap.trainName}"
+                    }
+                    if (snap.totalFareRupees > 0 && (amountDigits == "0" || amountDigits.isEmpty())) {
+                        amountDigits = snap.totalFareRupees.toString()
+                    }
+                    isCheckingLivePnr = false
+                }
+            }
+        }
 
         val presetCategories = remember {
             listOf(
@@ -274,7 +313,7 @@ fun QuickExpenseScreen(
                     )
                     Text(
                         if (pendingCommitAfterCategorySelection) "Pick a category or enter a title to finish logging ₹$numericVal"
-                        else "Select category or attach Indian Railway PNR (CNF / WL / RAC + Live Radar)",
+                        else "Select category or enter a 10-digit IRCTC PNR for live status & fare",
                         fontFamily = SplitMateBrandFontFamily,
                         fontWeight = FontWeight.Medium,
                         fontSize = 12.sp,
@@ -319,7 +358,7 @@ fun QuickExpenseScreen(
                         value = draftTitle,
                         onValueChange = { draftTitle = it },
                         label = { Text("Expense Title / Category *", fontFamily = SplitMateBrandFontFamily) },
-                        placeholder = { Text("e.g. Hampi Train Tickets, Beach Shack Lunch", fontFamily = SplitMateBrandFontFamily) },
+                        placeholder = { Text("e.g. Paschim SF Express, Beach Shack Lunch", fontFamily = SplitMateBrandFontFamily) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = textPrimary,
@@ -336,7 +375,7 @@ fun QuickExpenseScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Attach Train PNR / Flight Ticket?",
+                            text = "Attach Live Train PNR / Flight Ticket?",
                             fontFamily = SplitMateBrandFontFamily,
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
@@ -361,169 +400,59 @@ fun QuickExpenseScreen(
                                 modifier = Modifier.padding(10.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                LazyRow(
+                                Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    item {
-                                        Surface(
-                                            onClick = {
-                                                com.splitmate.app.ui.performCrispTactileHaptic(context, dialogView, heavy = false)
-                                                val clip = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-                                                val clipText = clip?.primaryClip?.getItemAt(0)?.text?.toString().orEmpty()
-                                                val sampleOrClip = if (clipText.contains("PNR", ignoreCase = true) || clipText.contains("TRAIN", ignoreCase = true)) {
-                                                    clipText
-                                                } else {
-                                                    "PNR:8421094312,TRAIN:16592,DOJ:24-09-26,3A,SBC-HPT,Dep:22:00,B2-45 LB,B2-46 MB,Chart Prepared,Fare:3420"
-                                                }
-                                                rawSmsPasteInput = sampleOrClip
-                                                val parsed = com.splitmate.app.ui.parseIrctcOrTravelTicketText(sampleOrClip)
-                                                if (parsed.pnr.isNotBlank()) pnrInput = parsed.pnr
-                                                if (parsed.trainOrFlightNo.isNotBlank()) trainNoInput = parsed.trainOrFlightNo
-                                                if (parsed.fromStation.isNotBlank()) fromStationInput = parsed.fromStation
-                                                if (parsed.toStation.isNotBlank()) toStationInput = parsed.toStation
-                                                if (parsed.departureTime.isNotBlank()) depTimeInput = parsed.departureTime
-                                                if (parsed.coachAndSeats.isNotBlank()) coachSeatsInput = parsed.coachAndSeats
-                                                bookingStatusInput = parsed.bookingStatus
-                                                chartStatusInput = parsed.chartStatus
-                                                if (parsed.fareRupees.isNotBlank() && (amountDigits == "0" || amountDigits.isEmpty())) {
-                                                    amountDigits = parsed.fareRupees.substringBefore(".")
-                                                }
-                                            },
-                                            shape = QuickExpenseThemeTokens.RadiusPill,
-                                            color = QuickExpenseThemeTokens.SageText
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.ContentPaste,
-                                                    contentDescription = null,
-                                                    tint = Color.White,
-                                                    modifier = Modifier.size(13.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text(
-                                                    text = "Paste CNF SMS",
-                                                    fontFamily = SplitMateBrandFontFamily,
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontSize = 11.sp,
-                                                    color = Color.White
-                                                )
+                                    OutlinedTextField(
+                                        value = pnrInput,
+                                        onValueChange = { newValue ->
+                                            val clean = newValue.replace(Regex("[^0-9]"), "").take(10)
+                                            pnrInput = clean
+                                            if (clean.length == 10) {
+                                                triggerLivePnrLookup(clean)
                                             }
-                                        }
-                                    }
+                                        },
+                                        label = { Text("Enter 10-Digit PNR", fontSize = 11.sp) },
+                                        placeholder = { Text("8753634406", fontSize = 11.sp) },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1.25f)
+                                    )
 
-                                    item {
-                                        Surface(
-                                            onClick = {
-                                                com.splitmate.app.ui.performCrispTactileHaptic(context, dialogView, heavy = false)
-                                                val wlSample = "PNR:6539182045,TRAIN:12952,DOJ:25-09-26,2A,NDLS-MMCT,Dep:16:55,GNWL 4,RAC 11,Chart Not Prepared,Fare:5840"
-                                                rawSmsPasteInput = wlSample
-                                                val parsed = com.splitmate.app.ui.parseIrctcOrTravelTicketText(wlSample)
-                                                pnrInput = parsed.pnr
-                                                trainNoInput = parsed.trainOrFlightNo
-                                                fromStationInput = parsed.fromStation
-                                                toStationInput = parsed.toStation
-                                                depTimeInput = parsed.departureTime
-                                                coachSeatsInput = parsed.coachAndSeats
-                                                bookingStatusInput = parsed.bookingStatus
-                                                chartStatusInput = parsed.chartStatus
-                                                if (parsed.fareRupees.isNotBlank() && (amountDigits == "0" || amountDigits.isEmpty())) {
-                                                    amountDigits = parsed.fareRupees.substringBefore(".")
-                                                }
-                                            },
-                                            shape = QuickExpenseThemeTokens.RadiusPill,
-                                            color = Color(0xFFE06B52)
+                                    Surface(
+                                        onClick = {
+                                            val pnrToQuery = pnrInput.ifBlank { "8753634406" }
+                                            pnrInput = pnrToQuery
+                                            triggerLivePnrLookup(pnrToQuery)
+                                        },
+                                        shape = QuickExpenseThemeTokens.RadiusPill,
+                                        color = Color(0xFF23201E),
+                                        modifier = Modifier.padding(top = 6.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Text(
-                                                    text = "⏳ Test WL / RAC SMS",
-                                                    fontFamily = SplitMateBrandFontFamily,
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontSize = 11.sp,
-                                                    color = Color.White
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    item {
-                                        Surface(
-                                            onClick = {
-                                                com.splitmate.app.ui.performCrispTactileHaptic(context, dialogView, heavy = true)
-                                                isCheckingLivePnr = true
-                                                pnrScope.launch {
-                                                    val snap = com.splitmate.app.ui.fetchLivePnrAndTrainStatus(
-                                                        pnr = pnrInput.ifBlank { "8753634406" },
-                                                        fallbackTicket = com.splitmate.app.ui.ParsedTravelTicket(
-                                                            pnr = pnrInput,
-                                                            trainOrFlightNo = trainNoInput,
-                                                            fromStation = fromStationInput,
-                                                            toStation = toStationInput,
-                                                            departureTime = depTimeInput,
-                                                            coachAndSeats = coachSeatsInput
-                                                        )
-                                                    )
-                                                    pnrInput = snap.pnr
-                                                    trainNoInput = snap.trainNo
-                                                    fromStationInput = snap.fromStation
-                                                    toStationInput = snap.toStation
-                                                    depTimeInput = snap.departureTime
-                                                    coachSeatsInput = snap.passengerStatuses.joinToString(", ")
-                                                    bookingStatusInput = snap.bookingStatusBadge
-                                                    chartStatusInput = if (snap.chartPrepared) "Chart Prepared" else "Chart Not Prepared"
-                                                    liveRadarPreview = buildString {
-                                                        if (snap.totalFareRupees > 0) append("Total IRCTC Fare: ₹${snap.totalFareRupees} · ")
-                                                        append("${snap.liveTrainLocationRadar} · ${snap.confirmationProbability}")
-                                                    }
-                                                    if (snap.trainName.isNotBlank()) {
-                                                        draftTitle = "Train ${snap.trainNo} ${snap.trainName}"
-                                                    }
-                                                    if (snap.totalFareRupees > 0 && (amountDigits == "0" || amountDigits.isEmpty())) {
-                                                        amountDigits = snap.totalFareRupees.toString()
-                                                    }
-                                                    isCheckingLivePnr = false
-                                                }
-                                            },
-                                            shape = QuickExpenseThemeTokens.RadiusPill,
-                                            color = Color(0xFF23201E)
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.Sync,
-                                                    contentDescription = null,
-                                                    tint = Color.White,
-                                                    modifier = Modifier.size(13.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text(
-                                                    text = if (isCheckingLivePnr) "Checking CRIS..." else "Check Live PNR Status",
-                                                    fontFamily = SplitMateBrandFontFamily,
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontSize = 11.sp,
-                                                    color = Color.White
-                                                )
-                                            }
+                                            Icon(
+                                                imageVector = Icons.Rounded.Sync,
+                                                contentDescription = null,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = if (isCheckingLivePnr) "Fetching..." else "Check PNR",
+                                                fontFamily = SplitMateBrandFontFamily,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 11.sp,
+                                                color = Color.White
+                                            )
                                         }
                                     }
                                 }
 
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    OutlinedTextField(
-                                        value = pnrInput,
-                                        onValueChange = { pnrInput = it.take(10) },
-                                        label = { Text("10-Digit PNR", fontSize = 11.sp) },
-                                        singleLine = true,
-                                        modifier = Modifier.weight(1.2f)
-                                    )
                                     OutlinedTextField(
                                         value = trainNoInput,
                                         onValueChange = {
@@ -539,9 +468,9 @@ fun QuickExpenseScreen(
                                             }
                                         },
                                         label = { Text("Train/Flight #", fontSize = 11.sp) },
-                                        placeholder = { Text("16592", fontSize = 11.sp) },
+                                        placeholder = { Text("12925", fontSize = 11.sp) },
                                         singleLine = true,
-                                        modifier = Modifier.weight(1f)
+                                        modifier = Modifier.fillMaxWidth()
                                     )
                                 }
 
