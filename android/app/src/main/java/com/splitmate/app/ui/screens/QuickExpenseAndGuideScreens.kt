@@ -260,7 +260,9 @@ fun QuickExpenseScreen(
                             toStation = toStationInput,
                             departureTime = depTimeInput,
                             coachAndSeats = coachSeatsInput
-                        )
+                        ),
+                        forceManualRefresh = true,
+                        context = context
                     )
                     pnrInput = snap.pnr
                     trainNoInput = snap.trainNo

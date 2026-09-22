@@ -979,10 +979,83 @@ fun enrichTicketWithOfflineCatalog(ticket: ParsedTravelTicket): ParsedTravelTick
 
 private val InMemoryPnrSnapshotCache = java.util.concurrent.ConcurrentHashMap<String, LivePnrStatusSnapshot>()
 private val InMemoryPnrLastFetchEpochMs = java.util.concurrent.ConcurrentHashMap<String, Long>()
+private val InFlightPnrMutexMap = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.sync.Mutex>()
 
 private const val AUTO_SYNC_COOLDOWN_MS = 6L * 60L * 60L * 1000L // 6 hours for WL/RAC background checks
 private const val TRAVEL_DAY_AUTO_SYNC_COOLDOWN_MS = 30L * 60L * 1000L // 30 mins on Day of Journey (Charting window)
 private const val MANUAL_REFRESH_DEBOUNCE_MS = 60L * 1000L // 60 seconds anti-spam guard for Akamai WAF
+
+fun loadPersistedPnrSnapshot(context: Context, pnr: String): LivePnrStatusSnapshot? {
+    val cleanPnr = pnr.replace(Regex("[^0-9]"), "").take(10)
+    if (cleanPnr.length != 10) return null
+    InMemoryPnrSnapshotCache[cleanPnr]?.let { return it }
+    val prefs = context.getSharedPreferences("splitmate_pnr_rate_guard", Context.MODE_PRIVATE)
+    val rawJson = prefs.getString("snapshot_json_$cleanPnr", null) ?: return null
+    val savedSyncMs = prefs.getLong("last_sync_$cleanPnr", 0L)
+    if (savedSyncMs > 0L) {
+        InMemoryPnrLastFetchEpochMs[cleanPnr] = savedSyncMs
+    }
+    return runCatching {
+        val obj = org.json.JSONObject(rawJson)
+        val paxArr = obj.optJSONArray("passengerStatuses")
+        val paxList = mutableListOf<String>()
+        if (paxArr != null) {
+            for (i in 0 until paxArr.length()) {
+                paxList.add(paxArr.optString(i))
+            }
+        }
+        LivePnrStatusSnapshot(
+            pnr = obj.optString("pnr", cleanPnr),
+            trainNo = obj.optString("trainNo", ""),
+            trainName = obj.optString("trainName", ""),
+            fromStation = obj.optString("fromStation", ""),
+            toStation = obj.optString("toStation", ""),
+            departureTime = obj.optString("departureTime", ""),
+            travelClass = obj.optString("travelClass", ""),
+            totalFareRupees = obj.optInt("totalFareRupees", 0),
+            bookingStatusBadge = obj.optString("bookingStatusBadge", "CNF"),
+            chartPrepared = obj.optBoolean("chartPrepared", false),
+            passengerStatuses = paxList,
+            coachPositionHint = obj.optString("coachPositionHint", ""),
+            liveTrainLocationRadar = obj.optString("liveTrainLocationRadar", ""),
+            confirmationProbability = obj.optString("confirmationProbability", ""),
+            sourceLabel = obj.optString("sourceLabel", "Live CRIS Cache (Rate-Limit Protected)")
+        ).also { InMemoryPnrSnapshotCache[cleanPnr] = it }
+    }.getOrNull()
+}
+
+private fun savePersistedPnrSnapshot(context: Context?, snapshot: LivePnrStatusSnapshot) {
+    val cleanPnr = snapshot.pnr.replace(Regex("[^0-9]"), "").take(10)
+    if (cleanPnr.length != 10) return
+    val now = System.currentTimeMillis()
+    InMemoryPnrSnapshotCache[cleanPnr] = snapshot
+    InMemoryPnrLastFetchEpochMs[cleanPnr] = now
+    if (context == null) return
+    runCatching {
+        val obj = org.json.JSONObject().apply {
+            put("pnr", snapshot.pnr)
+            put("trainNo", snapshot.trainNo)
+            put("trainName", snapshot.trainName)
+            put("fromStation", snapshot.fromStation)
+            put("toStation", snapshot.toStation)
+            put("departureTime", snapshot.departureTime)
+            put("travelClass", snapshot.travelClass)
+            put("totalFareRupees", snapshot.totalFareRupees)
+            put("bookingStatusBadge", snapshot.bookingStatusBadge)
+            put("chartPrepared", snapshot.chartPrepared)
+            put("passengerStatuses", org.json.JSONArray(snapshot.passengerStatuses))
+            put("coachPositionHint", snapshot.coachPositionHint)
+            put("liveTrainLocationRadar", snapshot.liveTrainLocationRadar)
+            put("confirmationProbability", snapshot.confirmationProbability)
+            put("sourceLabel", snapshot.sourceLabel)
+        }
+        context.getSharedPreferences("splitmate_pnr_rate_guard", Context.MODE_PRIVATE)
+            .edit()
+            .putLong("last_sync_$cleanPnr", now)
+            .putString("snapshot_json_$cleanPnr", obj.toString())
+            .apply()
+    }
+}
 
 fun shouldSkipAutoPnrNetworkPoll(
     context: Context,
@@ -991,6 +1064,9 @@ fun shouldSkipAutoPnrNetworkPoll(
 ): Boolean {
     val cleanPnr = pnr.replace(Regex("[^0-9]"), "").take(10)
     if (cleanPnr.length != 10) return true
+
+    // Hydrate disk cache into RAM on cold start
+    loadPersistedPnrSnapshot(context, cleanPnr)
 
     // Rule 1: Terminal State Lock — Once all seats are CNF AND Chart is Prepared, status NEVER changes again!
     val isAlreadyFullyConfirmed = ticket.bookingStatus.equals("CNF", ignoreCase = true) &&
@@ -1034,23 +1110,44 @@ fun recordPnrSyncTimestamp(context: Context, pnr: String) {
 suspend fun fetchLivePnrAndTrainStatus(
     pnr: String,
     fallbackTicket: ParsedTravelTicket = ParsedTravelTicket(),
-    forceManualRefresh: Boolean = false
+    forceManualRefresh: Boolean = false,
+    context: Context? = null
 ): LivePnrStatusSnapshot = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
     val cleanPnr = pnr.replace(Regex("[^0-9]"), "").take(10)
+    val pnrMutex = InFlightPnrMutexMap.getOrPut(cleanPnr.ifBlank { "default" }) { kotlinx.coroutines.sync.Mutex() }
 
-    // Anti-spam Akamai WAF Debounce (60 seconds even on manual button taps; 6 hours on auto checks)
-    val cachedSnapshot = InMemoryPnrSnapshotCache[cleanPnr]
-    val lastFetchMs = InMemoryPnrLastFetchEpochMs[cleanPnr] ?: 0L
-    val elapsedMs = System.currentTimeMillis() - lastFetchMs
-    if (cachedSnapshot != null) {
-        val minWait = if (forceManualRefresh) MANUAL_REFRESH_DEBOUNCE_MS else AUTO_SYNC_COOLDOWN_MS
-        if (elapsedMs in 0 until minWait) {
-            val minsAgo = (elapsedMs / 60000L).coerceAtLeast(0L)
-            return@withContext cachedSnapshot.copy(
-                sourceLabel = "Live CRIS Cache (${if (minsAgo == 0L) "<1m" else "${minsAgo}m"} ago · Rate-Limit Protected)"
-            )
+    pnrMutex.lock()
+    try {
+        if (context != null && cleanPnr.length == 10) {
+            loadPersistedPnrSnapshot(context, cleanPnr)
         }
-    }
+        val cachedSnapshot = InMemoryPnrSnapshotCache[cleanPnr]
+        val diskSyncMs = if (context != null && cleanPnr.length == 10) {
+            context.getSharedPreferences("splitmate_pnr_rate_guard", Context.MODE_PRIVATE)
+                .getLong("last_sync_$cleanPnr", 0L)
+        } else 0L
+        val lastFetchMs = maxOf(InMemoryPnrLastFetchEpochMs[cleanPnr] ?: 0L, diskSyncMs)
+        val elapsedMs = System.currentTimeMillis() - lastFetchMs
+
+        if (cachedSnapshot != null) {
+            val minWait = if (forceManualRefresh) MANUAL_REFRESH_DEBOUNCE_MS else AUTO_SYNC_COOLDOWN_MS
+            if (elapsedMs in 0 until minWait) {
+                val minsAgo = (elapsedMs / 60000L).coerceAtLeast(0L)
+                return@withContext cachedSnapshot.copy(
+                    sourceLabel = "Live CRIS Cache (${if (minsAgo == 0L) "<1m" else "${minsAgo}m"} ago · Rate-Limit Protected)"
+                )
+            }
+        }
+
+        // Stamp timestamp BEFORE opening network socket so even concurrent or aborted attempts cannot spam Akamai WAF
+        if (cleanPnr.length == 10) {
+            val preNow = System.currentTimeMillis()
+            InMemoryPnrLastFetchEpochMs[cleanPnr] = preNow
+            context?.getSharedPreferences("splitmate_pnr_rate_guard", Context.MODE_PRIVATE)
+                ?.edit()
+                ?.putLong("last_sync_$cleanPnr", preNow)
+                ?.apply()
+        }
 
     var scrapedTrainNo = fallbackTicket.trainOrFlightNo
     var scrapedTrainName = fallbackTicket.trainOrCarrierName
@@ -1240,28 +1337,30 @@ suspend fun fetchLivePnrAndTrainStatus(
     val radarPair = OfflineTrainIntermediateRadar[resolvedTrainNo]
         ?: ("Route: ${resolveStationDisplayName(resolvedFrom)} → ${resolveStationDisplayName(resolvedTo)} · Dep $resolvedDep" to "Class ${scrapedTravelClass.ifBlank { "3A" }} · Total Ticket Fare: ${if (scrapedTotalFare > 0) "₹$scrapedTotalFare" else "IRCTC Verified"}")
 
-    val snapshot = LivePnrStatusSnapshot(
-        pnr = cleanPnr.ifBlank { "8753634406" },
-        trainNo = resolvedTrainNo,
-        trainName = resolvedTrainName,
-        fromStation = resolvedFrom,
-        toStation = resolvedTo,
-        departureTime = resolvedDep,
-        travelClass = scrapedTravelClass,
-        totalFareRupees = scrapedTotalFare,
-        bookingStatusBadge = overallBadge,
-        chartPrepared = scrapedChart,
-        passengerStatuses = scrapedPassengers,
-        coachPositionHint = scrapedCoachPosition.ifBlank { radarPair.second },
-        liveTrainLocationRadar = radarPair.first,
-        confirmationProbability = confirmationProb,
-        sourceLabel = if (liveNetworkHit) "Live CRIS / RailYatri SSR JSON (₹0 Free)" else "Offline Catalog Fallback"
-    )
-    if (liveNetworkHit && cleanPnr.length == 10) {
-        InMemoryPnrSnapshotCache[cleanPnr] = snapshot
-        InMemoryPnrLastFetchEpochMs[cleanPnr] = System.currentTimeMillis()
+        val snapshot = LivePnrStatusSnapshot(
+            pnr = cleanPnr.ifBlank { "8753634406" },
+            trainNo = resolvedTrainNo,
+            trainName = resolvedTrainName,
+            fromStation = resolvedFrom,
+            toStation = resolvedTo,
+            departureTime = resolvedDep,
+            travelClass = scrapedTravelClass,
+            totalFareRupees = scrapedTotalFare,
+            bookingStatusBadge = overallBadge,
+            chartPrepared = scrapedChart,
+            passengerStatuses = scrapedPassengers,
+            coachPositionHint = scrapedCoachPosition.ifBlank { radarPair.second },
+            liveTrainLocationRadar = radarPair.first,
+            confirmationProbability = confirmationProb,
+            sourceLabel = if (liveNetworkHit) "Live CRIS / RailYatri SSR JSON (₹0 Free)" else "Offline Catalog Fallback"
+        )
+        if (liveNetworkHit && cleanPnr.length == 10) {
+            savePersistedPnrSnapshot(context, snapshot)
+        }
+        snapshot
+    } finally {
+        pnrMutex.unlock()
     }
-    snapshot
 }
 
 fun formatTravelExpenseTitle(baseCategory: String, ticket: ParsedTravelTicket): String {
@@ -1417,7 +1516,7 @@ fun GroupBoardingPassCard(
     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
     val cleanCardPnr = ticket.pnr.replace(Regex("[^0-9]"), "").take(10)
     var liveSnapshot by androidx.compose.runtime.remember(ticket.pnr, ticket.coachAndSeats) {
-        androidx.compose.runtime.mutableStateOf<LivePnrStatusSnapshot?>(InMemoryPnrSnapshotCache[cleanCardPnr])
+        androidx.compose.runtime.mutableStateOf<LivePnrStatusSnapshot?>(loadPersistedPnrSnapshot(context, cleanCardPnr))
     }
     var isRefreshingLive by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
@@ -1453,9 +1552,11 @@ fun GroupBoardingPassCard(
     androidx.compose.runtime.LaunchedEffect(ticket.pnr) {
         if (cleanCardPnr.length == 10 && !shouldSkipAutoPnrNetworkPoll(context, cleanCardPnr, ticket)) {
             isRefreshingLive = true
-            val fetched = fetchLivePnrAndTrainStatus(cleanCardPnr, ticket, forceManualRefresh = false)
+            val fetched = fetchLivePnrAndTrainStatus(cleanCardPnr, ticket, forceManualRefresh = false, context = context)
             syncAndPersist(fetched)
             isRefreshingLive = false
+        } else if (liveSnapshot == null && cleanCardPnr.length == 10) {
+            liveSnapshot = loadPersistedPnrSnapshot(context, cleanCardPnr)
         }
     }
 
@@ -1684,7 +1785,8 @@ fun GroupBoardingPassCard(
                             val fetched = fetchLivePnrAndTrainStatus(
                                 ticket.pnr.ifBlank { "8753634406" },
                                 ticket,
-                                forceManualRefresh = true
+                                forceManualRefresh = true,
+                                context = context
                             )
                             syncAndPersist(fetched)
                             isRefreshingLive = false
