@@ -340,7 +340,9 @@ fun SplitMateMainDashboardScaffold(
                         )
                     },
                     onNavigateToPnrSplit = {
-                        showPnrReviewScreen = true
+                        if (uiState.groups.isNotEmpty()) {
+                            showPnrReviewScreen = true
+                        }
                     },
                     onAvatarSettingsClick = onOpenSettings
                 )
@@ -354,7 +356,11 @@ fun SplitMateMainDashboardScaffold(
                         }
                     },
                     onOpenPnrDirectSplit = {
-                        showPnrReviewScreen = true
+                        if (uiState.groups.isNotEmpty()) {
+                            showPnrReviewScreen = true
+                        } else {
+                            viewModel.selectTab(SplitMateTab.LEDGERS.name)
+                        }
                     },
                     onSaveSplit = { _, _ ->
                         // Return directly inside the group where the expense was logged!
@@ -1296,74 +1302,155 @@ fun LedgersDashboardScreen(
                                 Text("Log Expense", fontFamily = SplitMateTheme.FontRounded, color = Color(0xFF23201E), fontWeight = FontWeight.Bold)
                             }
                         }
+                    }
+                }
+            }
+        }
 
-                        Spacer(modifier = Modifier.height(10.dp))
+        // 2.5. STANDALONE HERO FEATURE ELEMENT: IRCTC Train PNR Direct Split
+        item {
+            val hasGroups = activeGroups.isNotEmpty()
+            val totalLoggedPnrs = remember(uiState.expenses) {
+                uiState.expenses.count { it.title.contains("PNR:", ignoreCase = true) }
+            }
 
-                        // Dedicated Hero Entry: IRCTC Train PNR Direct Split (Tactile Boarding Pass)
+            Card(
+                onClick = {
+                    if (hasGroups) {
+                        onNavigateToPnrSplit()
+                    } else {
+                        android.widget.Toast.makeText(
+                            context,
+                            "Please create a Group first before splitting an IRCTC PNR ticket!",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                        showNewGroupDialog = true
+                    }
+                },
+                shape = SplitMateTheme.RadiusHero,
+                colors = CardDefaults.cardColors(
+                    containerColor = if (hasGroups) Color(0xFF264010) else SplitMateTheme.SurfaceMuted
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = if (hasGroups) 6.dp else 0.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(
+                        width = 1.5.dp,
+                        color = if (hasGroups) Color(0xFF4A7325) else SplitMateTheme.BorderLight,
+                        shape = SplitMateTheme.RadiusHero
+                    )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            if (hasGroups) {
+                                Brush.verticalGradient(
+                                    colors = listOf(Color(0xFF264010), Color(0xFF1B2E0B))
+                                )
+                            } else {
+                                Brush.verticalGradient(
+                                    colors = listOf(SplitMateTheme.SurfaceMuted, SplitMateTheme.SurfaceMuted)
+                                )
+                            }
+                        )
+                        .padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Surface(
-                            onClick = onNavigateToPnrSplit,
-                            shape = SplitMateTheme.RadiusButton,
-                            color = Color(0xFF264010),
-                            border = BorderStroke(1.dp, Color(0xFF4A7325)),
-                            modifier = Modifier.fillMaxWidth()
+                            shape = SplitMateTheme.RadiusBadge,
+                            color = if (hasGroups) Color(0xFF345418) else SplitMateTheme.SurfaceWhite,
+                            border = BorderStroke(
+                                1.dp,
+                                if (hasGroups) Color(0xFF4A7325) else SplitMateTheme.BorderLight
+                            )
                         ) {
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 11.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(34.dp)
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(Color(0xFF345418)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Train,
-                                            contentDescription = "IRCTC PNR Direct Split",
-                                            tint = Color(0xFFD7E8B6),
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Column {
-                                        Text(
-                                            text = "IRCTC Train PNR Direct Split",
-                                            fontFamily = SplitMateTheme.FontRounded,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            fontSize = 13.sp,
-                                            color = Color.White
-                                        )
-                                        Text(
-                                            text = "Enter 10-digit PNR · Live Status & Select Members",
-                                            fontFamily = SplitMateTheme.FontRounded,
-                                            fontWeight = FontWeight.Medium,
-                                            fontSize = 11.sp,
-                                            color = Color(0xFFC5D6A7)
-                                        )
-                                    }
-                                }
-                                Surface(
-                                    shape = RoundedCornerShape(999.dp),
-                                    color = Color(0xFFD7E8B6)
-                                ) {
-                                    Text(
-                                        text = "Split PNR →",
-                                        fontFamily = SplitMateTheme.FontRounded,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 11.sp,
-                                        color = Color(0xFF1B2E0B),
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Rounded.Train,
+                                    contentDescription = null,
+                                    tint = if (hasGroups) Color(0xFFD7E8B6) else SplitMateTheme.TextSecondary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (hasGroups) "IRCTC DIRECT SPLIT · HERO FEATURE" else "LOCKED · CREATE A GROUP FIRST",
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 10.sp,
+                                    letterSpacing = 0.7.sp,
+                                    color = if (hasGroups) Color(0xFFD7E8B6) else SplitMateTheme.TextSecondary
+                                )
                             }
+                        }
+
+                        if (hasGroups && totalLoggedPnrs > 0) {
+                            Surface(
+                                shape = SplitMateTheme.RadiusBadge,
+                                color = Color(0xFFD7E8B6)
+                            ) {
+                                Text(
+                                    text = "$totalLoggedPnrs PNR${if (totalLoggedPnrs > 1) "s" else ""} Logged",
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF1B2E0B),
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Split Train Ticket by 10-Digit PNR",
+                                fontFamily = SplitMateTheme.FontDisplay,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 19.sp,
+                                color = if (hasGroups) Color.White else SplitMateTheme.PrimaryDark
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = if (hasGroups)
+                                    "Auto-fetches IRCTC fare & passenger list, lets you pick which group members are on the ticket, and splits exact shares."
+                                else
+                                    "Create a trip group first (+ New Group above) so you can select which friends are on your train PNR.",
+                                fontFamily = SplitMateTheme.FontRounded,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 12.sp,
+                                lineHeight = 16.sp,
+                                color = if (hasGroups) Color(0xFFC5D6A7) else SplitMateTheme.TextSecondary
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (hasGroups) Color(0xFFD7E8B6) else SplitMateTheme.SurfaceWhite,
+                            border = if (hasGroups) null else BorderStroke(1.dp, SplitMateTheme.BorderLight)
+                        ) {
+                            Text(
+                                text = if (hasGroups) "Enter PNR →" else "+ Create Group",
+                                fontFamily = SplitMateTheme.FontRounded,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 12.sp,
+                                color = if (hasGroups) Color(0xFF1B2E0B) else SplitMateTheme.PrimaryDark,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                            )
                         }
                     }
                 }

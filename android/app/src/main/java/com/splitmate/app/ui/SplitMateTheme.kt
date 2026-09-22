@@ -1523,14 +1523,14 @@ suspend fun fetchLivePnrAndTrainStatus(
         ?: ("Route: ${resolveStationDisplayName(resolvedFrom)} → ${resolveStationDisplayName(resolvedTo)} · Dep $resolvedDep" to "Class ${scrapedTravelClass.ifBlank { "3A" }} · Bill: ${if (scrapedTotalFare > 0) "₹$allIncStr (Base ₹$scrapedTotalFare + IRCTC Fee ₹$convFeeRupeesStr + Ins ₹$insFeeRupeesStr)" else "IRCTC Verified"}")
 
         val snapshot = LivePnrStatusSnapshot(
-            pnr = cleanPnr.ifBlank { "8753634406" },
+            pnr = cleanPnr,
             trainNo = resolvedTrainNo,
             trainName = resolvedTrainName,
             fromStation = resolvedFrom,
             toStation = resolvedTo,
             departureTime = resolvedDep,
-            travelClass = scrapedTravelClass.ifBlank { "3A" },
-            totalFareRupees = if (scrapedTotalFare > 0) scrapedTotalFare else 7500,
+            travelClass = scrapedTravelClass,
+            totalFareRupees = scrapedTotalFare,
             passengerCount = paxCount,
             bookingStatusBadge = overallBadge,
             chartPrepared = scrapedChart,
@@ -1538,8 +1538,8 @@ suspend fun fetchLivePnrAndTrainStatus(
             structuredPassengers = scrapedStructuredPassengers,
             fromStationName = resolvedFromName,
             toStationName = resolvedToName,
-            arrivalTime = scrapedArr.ifBlank { "01:45 PM · Next Day" },
-            durationText = scrapedDuration.ifBlank { "26h 15m" },
+            arrivalTime = scrapedArr,
+            durationText = scrapedDuration,
             quotaText = scrapedQuota,
             coachPositionHint = scrapedCoachPosition.ifBlank { radarPair.second },
             liveTrainLocationRadar = radarPair.first,
@@ -1975,7 +1975,7 @@ fun GroupBoardingPassCard(
                         isRefreshingLive = true
                         coroutineScope.launch {
                             val fetched = fetchLivePnrAndTrainStatus(
-                                ticket.pnr.ifBlank { "8753634406" },
+                                ticket.pnr,
                                 ticket,
                                 forceManualRefresh = true,
                                 context = context

@@ -15,27 +15,24 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ConfirmationNumber
-import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Groups
-import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Train
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -54,7 +51,6 @@ import com.splitmate.app.ui.ParsedTravelTicket
 import com.splitmate.app.ui.SplitMateViewModel
 import com.splitmate.app.ui.fetchLivePnrAndTrainStatus
 import com.splitmate.app.ui.formatTravelExpenseTitle
-import com.splitmate.app.ui.loadPersistedPnrSnapshot
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -62,20 +58,17 @@ import java.util.Locale
 // 1. DESIGN TOKENS — "TACTILE LUXURY PAPER BOARDING PASS"
 // ============================================================================
 object TactilePaperPassTokens {
-    // Canvas & Paper Stock
     val CanvasBackground = Color(0xFFFAF7F2)       // Warm Eggshell Linen
     val PaperSurface = Color(0xFFFFFDF9)           // Tactile High-Grade Paper Ivory
     val PaperStubSurface = Color(0xFFF6F2EA)       // Slightly recessed stub paper
     val HairlineBorder = Color(0xFFE5DEC9)         // Warm crisp stone border
     val PerforationLine = Color(0xFFD6CEBE)        // Perforated tear line
 
-    // Forest Botanical Header
     val ForestTop = Color(0xFF264010)              // Deep Organic Forest Green
     val ForestBottom = Color(0xFF1B2E0B)           // Richer Pine Shadow
     val ForestBadgeFill = Color(0xFF345418)        // Translucent pill surface
     val ForestBadgeStroke = Color(0xFF4A7325)      // Crisp moss highlight
 
-    // Semantic Status Accents
     val AmberChartBg = Color(0xFFFEF3D6)           // Warm Amber Pill
     val AmberChartBorder = Color(0xFFF7D788)
     val AmberChartText = Color(0xFF9E5808)
@@ -88,7 +81,6 @@ object TactilePaperPassTokens {
     val SageConfirmedBorder = Color(0xFFC2E0A3)
     val SageConfirmedText = Color(0xFF2B520D)
 
-    // Typography Ink
     val InkPrimary = Color(0xFF1E1C1A)             // Deep Charcoal Ink
     val InkSecondary = Color(0xFF6B655E)           // Warm Slate Ink
     val InkMuted = Color(0xFF9C9488)               // Muted Stone Label
@@ -112,7 +104,6 @@ class TactilePaperPerforatedShape(
         val notchCenterY = size.height * perforationRatio
 
         val path = Path().apply {
-            // Top-left corner
             moveTo(0f, cornerRadius)
             arcTo(
                 rect = Rect(0f, 0f, cornerRadius * 2, cornerRadius * 2),
@@ -120,7 +111,6 @@ class TactilePaperPerforatedShape(
                 sweepAngleDegrees = 90f,
                 forceMoveTo = false
             )
-            // Top edge to top-right corner
             lineTo(size.width - cornerRadius, 0f)
             arcTo(
                 rect = Rect(size.width - cornerRadius * 2, 0f, size.width, cornerRadius * 2),
@@ -128,9 +118,7 @@ class TactilePaperPerforatedShape(
                 sweepAngleDegrees = 90f,
                 forceMoveTo = false
             )
-            // Right edge down to notch
             lineTo(size.width, notchCenterY - notchRadius)
-            // Right inward semicircle notch
             arcTo(
                 rect = Rect(
                     size.width - notchRadius,
@@ -142,7 +130,6 @@ class TactilePaperPerforatedShape(
                 sweepAngleDegrees = -180f,
                 forceMoveTo = false
             )
-            // Right edge down to bottom-right corner
             lineTo(size.width, size.height - cornerRadius)
             arcTo(
                 rect = Rect(
@@ -155,7 +142,6 @@ class TactilePaperPerforatedShape(
                 sweepAngleDegrees = 90f,
                 forceMoveTo = false
             )
-            // Bottom edge to bottom-left corner
             lineTo(cornerRadius, size.height)
             arcTo(
                 rect = Rect(0f, size.height - cornerRadius * 2, cornerRadius * 2, size.height),
@@ -163,9 +149,7 @@ class TactilePaperPerforatedShape(
                 sweepAngleDegrees = 90f,
                 forceMoveTo = false
             )
-            // Left edge up to notch
             lineTo(0f, notchCenterY + notchRadius)
-            // Left inward semicircle notch
             arcTo(
                 rect = Rect(
                     -notchRadius,
@@ -202,7 +186,6 @@ data class PassengerTicketRow(
 @Composable
 fun PnrExpenseReviewScreen(
     viewModel: SplitMateViewModel,
-    initialPnr: String = "8753634406",
     onBackClick: () -> Unit = {},
     onExpenseAdded: () -> Unit = onBackClick
 ) {
@@ -213,63 +196,33 @@ fun PnrExpenseReviewScreen(
     val activeGroup = uiState.activeGroup
     val groupMembers = uiState.activeGroupMembers
 
-    var pnrInput by remember { mutableStateOf(initialPnr.filter { it.isDigit() }.take(10).ifBlank { "8753634406" }) }
+    // Start completely empty — NEVER pre-filled with any hardcoded PNR!
+    var pnrInput by remember { mutableStateOf("") }
     var isFetching by remember { mutableStateOf(false) }
     var fetchError by remember { mutableStateOf<String?>(null) }
+    var isSubmitting by remember { mutableStateOf(false) }
 
-    // Load cached snapshot first or default fallback for 8753634406 so the card renders immediately
-    var liveSnapshot by remember {
-        mutableStateOf(
-            loadPersistedPnrSnapshot(context, pnrInput) ?: LivePnrStatusSnapshot(
-                pnr = "8753634406",
-                trainNo = "12925",
-                trainName = "PASCHIM EXPRESS",
-                fromStation = "BDTS",
-                toStation = "CDG",
-                departureTime = "28 Apr, 2026 · 11:25",
-                travelClass = "3A",
-                totalFareRupees = 7500,
-                passengerCount = 4,
-                bookingStatusBadge = "WL",
-                chartPrepared = false,
-                passengerStatuses = listOf(
-                    "P1: PQWL 14 → WL 7",
-                    "P2: PQWL 15 → WL 8",
-                    "P3: PQWL 16 → WL 9",
-                    "P4: PQWL 17 → WL 10"
-                ),
-                structuredPassengers = listOf(
-                    LivePnrPassenger("P1", "PQWL 14", "WL 7", "Waitlist"),
-                    LivePnrPassenger("P2", "PQWL 15", "WL 8", "Waitlist"),
-                    LivePnrPassenger("P3", "PQWL 16", "WL 9", "Waitlist"),
-                    LivePnrPassenger("P4", "PQWL 17", "WL 10", "Waitlist")
-                ),
-                fromStationName = "Bandra Terminus",
-                toStationName = "Chandigarh Jn",
-                arrivalTime = "15:50",
-                durationText = "28h 25m",
-                quotaText = "GN",
-                coachPositionHint = "3A Coaches: B1–B6",
-                liveTrainLocationRadar = "Live IRCTC Sync · BDTS → CDG",
-                confirmationProbability = "Medium-High Confirmation Chance",
-                sourceLabel = "Live IRCTC Sync"
-            )
-        )
-    }
-
-    // Toggle for including official IRCTC Convenience Fee (₹23.60 for AC UPI / ₹11.80 Non-AC UPI) + Travel Insurance (₹0.45/pax)
-    var includeIrctcStatutoryFees by remember { mutableStateOf(true) }
+    // Start null — only populated when the user fetches a real 10-digit PNR from the backend API!
+    var liveSnapshot by remember { mutableStateOf<LivePnrStatusSnapshot?>(null) }
 
     // Selected member IDs for splitting the ticket
     var selectedMemberIds by remember(groupMembers) {
         mutableStateOf(groupMembers.map { it.memberId }.toSet())
     }
 
-    // Trigger live API fetch on launch if not cached or to ensure fresh data
-    fun triggerLivePnrLookup(targetPnr: String, forceManual: Boolean) {
+    // Check which PNRs are already logged in the active group (supports multiple different PNRs, blocks duplicate of the same PNR)
+    val existingPnrExpensesInGroup = remember(uiState.expenses, uiState.activeGroupId) {
+        uiState.expenses.filter { it.groupId == uiState.activeGroupId && it.title.contains("PNR:", ignoreCase = true) }
+    }
+    val isPnrAlreadyAddedInGroup = remember(liveSnapshot, existingPnrExpensesInGroup) {
+        val currentPnr = liveSnapshot?.pnr?.trim().orEmpty()
+        currentPnr.length == 10 && existingPnrExpensesInGroup.any { it.title.contains(currentPnr) }
+    }
+
+    fun triggerLivePnrLookup(targetPnr: String) {
         val clean = targetPnr.filter { it.isDigit() }.take(10)
         if (clean.length != 10) {
-            fetchError = "Enter a valid 10-digit IRCTC PNR number"
+            fetchError = "Please enter a valid 10-digit IRCTC PNR number"
             return
         }
         fetchError = null
@@ -278,25 +231,22 @@ fun PnrExpenseReviewScreen(
             val fetched = fetchLivePnrAndTrainStatus(
                 pnr = clean,
                 fallbackTicket = ParsedTravelTicket(pnr = clean),
-                forceManualRefresh = forceManual,
+                forceManualRefresh = true,
                 context = context
             )
             isFetching = false
-            liveSnapshot = fetched
+            if (fetched.totalFareRupees > 0 || fetched.trainNo.isNotBlank() || fetched.structuredPassengers.isNotEmpty()) {
+                liveSnapshot = fetched
+                // Pre-select up to `effectivePassengerCount` members from the active group so the count matches the ticket passengers!
+                val paxCount = fetched.effectivePassengerCount.coerceAtLeast(1)
+                if (groupMembers.isNotEmpty()) {
+                    selectedMemberIds = groupMembers.take(paxCount).map { it.memberId }.toSet()
+                }
+            } else {
+                fetchError = "Could not fetch live IRCTC details for PNR $clean. Please verify the 10-digit PNR number."
+            }
         }
     }
-
-    LaunchedEffect(Unit) {
-        triggerLivePnrLookup(pnrInput, forceManual = false)
-    }
-
-    // Determine Base Fare and All-Inclusive Fare in Paise (Cents)
-    val baseFareRupees = liveSnapshot.totalFareRupees.takeIf { it > 0 } ?: 7500
-    val baseFarePaise = baseFareRupees * 100L
-    val convenienceFeePaise = liveSnapshot.irctcConvenienceFeeUpiPaise
-    val insuranceFeePaise = liveSnapshot.travelInsurancePaise
-    val allInclusiveFarePaise = baseFarePaise + convenienceFeePaise + insuranceFeePaise
-    val effectiveTotalPaise = if (includeIrctcStatutoryFees) allInclusiveFarePaise else baseFarePaise
 
     // Format helper for Rupee strings
     fun formatPaiseDisplay(paise: Long): String {
@@ -309,50 +259,63 @@ fun PnrExpenseReviewScreen(
         }
     }
 
+    val snapshot = liveSnapshot
+    val ticketPassengerCount = snapshot?.effectivePassengerCount?.coerceAtLeast(1) ?: 1
+    val baseFarePaise = snapshot?.baseFarePaise ?: 0L
+    val convenienceFeePaise = if (snapshot != null && snapshot.totalFareRupees > 0) snapshot.irctcConvenienceFeeUpiPaise else 0L
+    val insuranceFeePaise = if (snapshot != null && snapshot.totalFareRupees > 0) snapshot.travelInsurancePaise else 0L
+    val effectiveTotalPaise = baseFarePaise + convenienceFeePaise + insuranceFeePaise
+
     val selectedMembersList = remember(groupMembers, selectedMemberIds) {
         groupMembers.filter { it.memberId in selectedMemberIds }
     }
-    val effectiveSelectedCount = selectedMembersList.size.coerceAtLeast(1)
-    val perSelectedMemberSharePaise = effectiveTotalPaise / effectiveSelectedCount
+    // Divide by the selected members (or by the ticket's passenger count if the group has fewer members so far)
+    val effectiveDividerCount = if (selectedMembersList.size >= 2) {
+        selectedMembersList.size
+    } else {
+        selectedMembersList.size.coerceAtLeast(ticketPassengerCount)
+    }
+    val perPersonTicketSharePaise = if (effectiveDividerCount > 0) effectiveTotalPaise / effectiveDividerCount else 0L
+    val perSelectedMemberSharePaise = if (selectedMembersList.isNotEmpty()) effectiveTotalPaise / selectedMembersList.size else perPersonTicketSharePaise
 
-    // Build PassengerTicketRow list strictly from liveSnapshot.structuredPassengers + group members
-    val passengerRows = remember(liveSnapshot, groupMembers, selectedMembersList) {
-        val apiPassengers = liveSnapshot.structuredPassengers.ifEmpty {
-            listOf(
-                LivePnrPassenger("P1", "PQWL 14", "WL 7", "Waitlist"),
-                LivePnrPassenger("P2", "PQWL 15", "WL 8", "Waitlist"),
-                LivePnrPassenger("P3", "PQWL 16", "WL 9", "Waitlist"),
-                LivePnrPassenger("P4", "PQWL 17", "WL 10", "Waitlist")
-            )
-        }
-        val memberPool = if (selectedMembersList.isNotEmpty()) selectedMembersList else groupMembers
-        apiPassengers.mapIndexed { idx, pax ->
-            val matchedMember = memberPool.getOrNull(idx)
-            val displayName = when {
-                matchedMember != null && matchedMember.isCurrentUser -> "${matchedMember.name} (You)"
-                matchedMember != null -> matchedMember.name
-                idx == 0 -> "Passenger 1 (You)"
-                else -> "Passenger ${idx + 1}"
+    // Build PassengerTicketRow list strictly from snapshot.structuredPassengers + selected group members
+    val passengerRows = remember(snapshot, selectedMembersList) {
+        if (snapshot == null) {
+            emptyList()
+        } else {
+            snapshot.structuredPassengers.mapIndexed { idx, pax ->
+                val matchedMember = selectedMembersList.getOrNull(idx)
+                val displayName = when {
+                    matchedMember != null && matchedMember.isCurrentUser -> "${matchedMember.name} (You)"
+                    matchedMember != null -> matchedMember.name
+                    else -> "Passenger ${idx + 1} (Tap below to assign member)"
+                }
+                val isCnf = pax.currentStatus.uppercase(Locale.US).let {
+                    it.startsWith("CNF") || it.startsWith("CONFIRM") || it.startsWith("RAC")
+                }
+                val cleanPaxId = if (pax.passengerNumber.startsWith("P", ignoreCase = true)) {
+                    pax.passengerNumber.uppercase(Locale.US)
+                } else {
+                    "P${pax.passengerNumber}"
+                }
+                PassengerTicketRow(
+                    id = cleanPaxId,
+                    memberId = matchedMember?.memberId,
+                    name = displayName,
+                    isPayer = matchedMember?.isCurrentUser ?: (idx == 0),
+                    bookingStatus = pax.initialStatus,
+                    currentStatus = pax.currentStatus,
+                    isConfirmed = isCnf
+                )
             }
-            val isCnf = pax.currentStatus.uppercase(Locale.US).let {
-                it.startsWith("CNF") || it.startsWith("CONFIRM") || it.startsWith("RAC")
-            }
-            val cleanPaxId = if (pax.passengerNumber.startsWith("P", ignoreCase = true)) {
-                pax.passengerNumber.uppercase(Locale.US)
-            } else {
-                "P${pax.passengerNumber}"
-            }
-            PassengerTicketRow(
-                id = cleanPaxId,
-                memberId = matchedMember?.memberId,
-                name = displayName,
-                isPayer = matchedMember?.isCurrentUser ?: (idx == 0),
-                bookingStatus = pax.initialStatus,
-                currentStatus = pax.currentStatus,
-                isConfirmed = isCnf
-            )
         }
     }
+
+    val canConfirmExpense = snapshot != null &&
+        effectiveTotalPaise > 0L &&
+        selectedMemberIds.isNotEmpty() &&
+        !isPnrAlreadyAddedInGroup &&
+        !isSubmitting
 
     Scaffold(
         containerColor = TactilePaperPassTokens.CanvasBackground,
@@ -383,14 +346,14 @@ fun PnrExpenseReviewScreen(
 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "Review Train Expense",
+                        text = "IRCTC Train PNR Split",
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp,
                         color = TactilePaperPassTokens.InkPrimary
                     )
                     Text(
-                        text = "IRCTC Direct Split · ${activeGroup?.name ?: "Group Ledger"}",
+                        text = "Active Group: ${activeGroup?.name ?: "Select a Group"}",
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Medium,
                         fontSize = 12.sp,
@@ -398,7 +361,6 @@ fun PnrExpenseReviewScreen(
                     )
                 }
 
-                // Group switcher button if user has multiple groups
                 var showGroupDropdown by remember { mutableStateOf(false) }
                 Box {
                     Surface(
@@ -441,91 +403,72 @@ fun PnrExpenseReviewScreen(
             }
         },
         bottomBar = {
-            Surface(
-                color = TactilePaperPassTokens.CanvasBackground.copy(alpha = 0.96f),
-                tonalElevation = 8.dp,
-                shadowElevation = 16.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+            if (snapshot != null) {
+                Surface(
+                    color = TactilePaperPassTokens.CanvasBackground.copy(alpha = 0.96f),
+                    tonalElevation = 8.dp,
+                    shadowElevation = 16.dp
                 ) {
-                    // Secondary Edit Action
-                    OutlinedButton(
-                        onClick = { includeIrctcStatutoryFees = !includeIrctcStatutoryFees },
-                        shape = RoundedCornerShape(16.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.5.dp, TactilePaperPassTokens.HairlineBorder),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = TactilePaperPassTokens.PaperSurface,
-                            contentColor = TactilePaperPassTokens.InkPrimary
-                        ),
-                        modifier = Modifier.height(54.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.SwapHoriz,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (includeIrctcStatutoryFees) "Base ₹${baseFareRupees}" else "+IRCTC Fee",
-                            fontFamily = FigtreeFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
-                        )
-                    }
-
-                    // Primary Forest Action Pill
-                    Button(
-                        onClick = {
-                            if (selectedMemberIds.isEmpty()) return@Button
-                            val chartText = if (liveSnapshot.chartPrepared) "Chart Prepared" else "Chart Not Prepared"
-                            val formattedTitle = formatTravelExpenseTitle(
-                                baseCategory = "${liveSnapshot.trainName.ifBlank { "Paschim SF Express" }} (${liveSnapshot.fromStation.ifBlank { "BDTS" }} → ${liveSnapshot.toStation.ifBlank { "CDG" }})",
-                                ticket = com.splitmate.app.ui.ParsedTravelTicket(
-                                    pnr = liveSnapshot.pnr,
-                                    trainOrFlightNo = "${liveSnapshot.trainNo.ifBlank { "12925" }} ${liveSnapshot.trainName.ifBlank { "Paschim SF Express" }}".trim(),
-                                    fromStation = liveSnapshot.fromStation.ifBlank { "BDTS" },
-                                    toStation = liveSnapshot.toStation.ifBlank { "CDG" },
-                                    departureTime = liveSnapshot.departureTime,
-                                    coachAndSeats = "Class ${liveSnapshot.travelClass.ifBlank { "3A" }} · ${selectedMemberIds.size} Pax (${formatPaiseDisplay(perSelectedMemberSharePaise)}/person)",
-                                    bookingStatus = liveSnapshot.bookingStatusBadge,
-                                    chartStatus = chartText
-                                )
-                            )
-                            viewModel.commitQuickEqualExpense(
-                                title = formattedTitle,
-                                totalAmountCents = effectiveTotalPaise,
-                                selectedMemberIds = selectedMemberIds.toList()
-                            )
-                            onExpenseAdded()
-                        },
-                        enabled = selectedMemberIds.isNotEmpty(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = TactilePaperPassTokens.ForestTop,
-                            contentColor = Color.White
-                        ),
+                    Column(
                         modifier = Modifier
-                            .weight(1f)
-                            .height(54.dp)
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(horizontal = 20.dp, vertical = 14.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.CheckCircle,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Confirm & Add to Ledger",
-                            fontFamily = FigtreeFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp
-                        )
+                        Button(
+                            onClick = {
+                                if (!canConfirmExpense) return@Button
+                                isSubmitting = true
+                                val chartText = if (snapshot.chartPrepared) "Chart Prepared" else "Chart Not Prepared"
+                                val formattedTitle = formatTravelExpenseTitle(
+                                    baseCategory = "${snapshot.trainName} (${snapshot.fromStation} → ${snapshot.toStation})",
+                                    ticket = ParsedTravelTicket(
+                                        pnr = snapshot.pnr,
+                                        trainOrFlightNo = "${snapshot.trainNo} ${snapshot.trainName}".trim(),
+                                        fromStation = snapshot.fromStation,
+                                        toStation = snapshot.toStation,
+                                        departureTime = snapshot.departureTime,
+                                        coachAndSeats = "Class ${snapshot.travelClass} · ${selectedMemberIds.size} Pax (${formatPaiseDisplay(perSelectedMemberSharePaise)}/person)",
+                                        bookingStatus = snapshot.bookingStatusBadge,
+                                        chartStatus = chartText
+                                    )
+                                )
+                                viewModel.commitQuickEqualExpense(
+                                    title = formattedTitle,
+                                    totalAmountCents = effectiveTotalPaise,
+                                    selectedMemberIds = selectedMemberIds.toList()
+                                )
+                                onExpenseAdded()
+                            },
+                            enabled = canConfirmExpense,
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = TactilePaperPassTokens.ForestTop,
+                                contentColor = Color.White,
+                                disabledContainerColor = Color(0xFFD5CFC2),
+                                disabledContentColor = Color(0xFF6B655E)
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(54.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.CheckCircle,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = when {
+                                    isPnrAlreadyAddedInGroup -> "PNR ${snapshot.pnr} Already Added to Ledger"
+                                    selectedMemberIds.isEmpty() -> "Select At Least 1 Group Member Below"
+                                    else -> "Confirm & Add ${formatPaiseDisplay(effectiveTotalPaise)} (${formatPaiseDisplay(perSelectedMemberSharePaise)}/person)"
+                                },
+                                fontFamily = FigtreeFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                        }
                     }
                 }
             }
@@ -539,13 +482,53 @@ fun PnrExpenseReviewScreen(
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 1. PNR SEARCH / LOOKUP BAR
+            // 1. PNR SEARCH / LOOKUP BAR (Starts empty, auto-fetches on 10 digits or button tap)
             PnrSearchLookupCard(
                 pnrValue = pnrInput,
-                onPnrChange = { pnrInput = it.filter { ch -> ch.isDigit() }.take(10) },
+                onPnrChange = { newValue ->
+                    val digits = newValue.filter { ch -> ch.isDigit() }.take(10)
+                    pnrInput = digits
+                    if (digits.length == 10 && digits != liveSnapshot?.pnr && !isFetching) {
+                        triggerLivePnrLookup(digits)
+                    }
+                },
                 isFetching = isFetching,
-                onFetchClick = { triggerLivePnrLookup(pnrInput, forceManual = true) }
+                onFetchClick = { triggerLivePnrLookup(pnrInput) }
             )
+
+            // Show already-logged PNRs in this group (proving multiple different PNRs are supported & preventing duplicates)
+            if (existingPnrExpensesInGroup.isNotEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = TactilePaperPassTokens.PaperSurface,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, TactilePaperPassTokens.HairlineBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "LOGGED TRAIN TICKETS IN ${activeGroup?.name?.uppercase(Locale.US) ?: "THIS GROUP"} (${existingPnrExpensesInGroup.size})",
+                            fontFamily = FigtreeFontFamily,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 10.sp,
+                            letterSpacing = 0.7.sp,
+                            color = TactilePaperPassTokens.SageConfirmedText
+                        )
+                        existingPnrExpensesInGroup.forEach { exp ->
+                            val extractedPnr = Regex("""PNR:\s*(\d{10})""").find(exp.title)?.groupValues?.getOrNull(1) ?: "Ticket"
+                            Text(
+                                text = "✓ PNR $extractedPnr · ${formatPaiseDisplay(exp.totalAmountCents)} (Multiple different PNRs supported)",
+                                fontFamily = FigtreeFontFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 12.sp,
+                                color = TactilePaperPassTokens.InkSecondary
+                            )
+                        }
+                    }
+                }
+            }
 
             if (fetchError != null) {
                 Surface(
@@ -565,62 +548,131 @@ fun PnrExpenseReviewScreen(
                 }
             }
 
-            // Extract date & time parts cleanly from departureTime (e.g. "28-04-2026 11:25")
-            val depParts = liveSnapshot.departureTime.split("·", " ").map { it.trim() }.filter { it.isNotBlank() }
-            val depDateDisplay = depParts.firstOrNull() ?: "28 Apr, 2026"
-            val depTimeDisplay = depParts.getOrNull(1) ?: "11:25"
+            if (isPnrAlreadyAddedInGroup && snapshot != null) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = TactilePaperPassTokens.AmberChartBg,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, TactilePaperPassTokens.AmberChartBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "PNR ${snapshot.pnr} is already added to ${activeGroup?.name ?: "this group"}. Each PNR can only be added once per group. Enter a different 10-digit PNR above to add another ticket.",
+                        fontFamily = FigtreeFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = TactilePaperPassTokens.AmberChartText,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                    )
+                }
+            }
 
-            // 2. THE HERO ELEMENT: TACTILE PAPER BOARDING PASS
-            TactilePaperBoardingPass(
-                pnrNumber = liveSnapshot.pnr,
-                trainNumber = liveSnapshot.trainNo.ifBlank { "12925" },
-                trainName = liveSnapshot.trainName.ifBlank { "Paschim SF Express" }
-                    .lowercase(Locale.US)
-                    .split(" ")
-                    .joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } },
-                travelClass = "Class ${liveSnapshot.travelClass.ifBlank { "3A" }} · ${
-                    if (liveSnapshot.quotaText == "TQ") "Tatkal" else "IRCTC"
-                } Electronic Ticket",
-                chartStatus = if (liveSnapshot.chartPrepared) "Chart Prepared" else "Chart Not Prepared",
-                originCode = liveSnapshot.fromStation.ifBlank { "BDTS" },
-                originName = liveSnapshot.fromStationName.ifBlank { "Bandra Terminus" },
-                departureTime = depTimeDisplay,
-                departureDate = depDateDisplay,
-                destinationCode = liveSnapshot.toStation.ifBlank { "CDG" },
-                destinationName = liveSnapshot.toStationName.ifBlank { "Chandigarh Jn" },
-                arrivalTime = liveSnapshot.arrivalTime.ifBlank { "15:50" },
-                arrivalDate = "Next Day Arrival",
-                duration = liveSnapshot.durationText.ifBlank { "28h 25m" },
-                totalFareDisplay = formatPaiseDisplay(effectiveTotalPaise),
-                perPersonShareDisplay = formatPaiseDisplay(perSelectedMemberSharePaise),
-                passengers = passengerRows
-            )
-
-            // 3. INTERACTIVE MEMBER SELECTION & PER-PERSON SPLIT CARD
-            MemberSplitSelectionCard(
-                groupName = activeGroup?.name ?: "Group Ledger",
-                members = groupMembers,
-                selectedMemberIds = selectedMemberIds,
-                onToggleMember = { memberId ->
-                    selectedMemberIds = if (memberId in selectedMemberIds) {
-                        if (selectedMemberIds.size > 1) selectedMemberIds - memberId else selectedMemberIds
-                    } else {
-                        selectedMemberIds + memberId
+            // 2. EMPTY STATE WHEN NO PNR IS ENTERED YET vs LIVE BOARDING PASS WHEN FETCHED
+            if (snapshot == null) {
+                Surface(
+                    shape = RoundedCornerShape(22.dp),
+                    color = TactilePaperPassTokens.PaperSurface,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, TactilePaperPassTokens.HairlineBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(54.dp)
+                                .clip(CircleShape)
+                                .background(TactilePaperPassTokens.SageConfirmedBg),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Train,
+                                contentDescription = null,
+                                tint = TactilePaperPassTokens.SageConfirmedText,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                        Text(
+                            text = "Enter Your 10-Digit IRCTC PNR Above",
+                            fontFamily = FigtreeFontFamily,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 17.sp,
+                            color = TactilePaperPassTokens.InkPrimary
+                        )
+                        Text(
+                            text = "Nothing is pre-filled or hardcoded. Type your 10-digit PNR number above to fetch live train route, passenger statuses, and exact IRCTC bill.",
+                            fontFamily = FigtreeFontFamily,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 13.sp,
+                            color = TactilePaperPassTokens.InkSecondary,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
                     }
-                },
-                onSelectAll = {
-                    selectedMemberIds = groupMembers.map { it.memberId }.toSet()
-                },
-                totalFareDisplay = formatPaiseDisplay(effectiveTotalPaise),
-                perMemberShareDisplay = formatPaiseDisplay(perSelectedMemberSharePaise),
-                payerReimbursementDisplay = formatPaiseDisplay(
-                    effectiveTotalPaise - (if (selectedMembersList.any { it.isCurrentUser }) perSelectedMemberSharePaise else 0L)
-                ),
-                includeIrctcStatutoryFees = includeIrctcStatutoryFees,
-                onToggleStatutoryFees = { includeIrctcStatutoryFees = !includeIrctcStatutoryFees },
-                convenienceFeeDisplay = formatPaiseDisplay(convenienceFeePaise),
-                insuranceFeeDisplay = formatPaiseDisplay(insuranceFeePaise)
-            )
+                }
+            } else {
+                val depParts = snapshot.departureTime.split("·", " ").map { it.trim() }.filter { it.isNotBlank() }
+                val depDateDisplay = depParts.firstOrNull().orEmpty()
+                val depTimeDisplay = depParts.getOrNull(1).orEmpty()
+
+                // LIVE TACTILE PAPER BOARDING PASS
+                TactilePaperBoardingPass(
+                    pnrNumber = snapshot.pnr,
+                    trainNumber = snapshot.trainNo,
+                    trainName = snapshot.trainName
+                        .lowercase(Locale.US)
+                        .split(" ")
+                        .joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } },
+                    travelClass = "Class ${snapshot.travelClass} · ${
+                        if (snapshot.quotaText == "TQ") "Tatkal" else "IRCTC"
+                    } Electronic Ticket",
+                    chartStatus = if (snapshot.chartPrepared) "Chart Prepared" else "Chart Not Prepared",
+                    originCode = snapshot.fromStation,
+                    originName = snapshot.fromStationName.ifBlank { snapshot.fromStation },
+                    departureTime = depTimeDisplay,
+                    departureDate = depDateDisplay,
+                    destinationCode = snapshot.toStation,
+                    destinationName = snapshot.toStationName.ifBlank { snapshot.toStation },
+                    arrivalTime = snapshot.arrivalTime,
+                    arrivalDate = if (snapshot.arrivalTime.isNotBlank()) "Scheduled Arrival" else "",
+                    duration = snapshot.durationText,
+                    totalFareDisplay = formatPaiseDisplay(effectiveTotalPaise),
+                    baseFareDisplay = formatPaiseDisplay(baseFarePaise),
+                    convenienceFeeDisplay = formatPaiseDisplay(convenienceFeePaise),
+                    insuranceFeeDisplay = formatPaiseDisplay(insuranceFeePaise),
+                    perPersonShareDisplay = formatPaiseDisplay(perSelectedMemberSharePaise),
+                    passengerCount = ticketPassengerCount,
+                    passengers = passengerRows
+                )
+
+                // 3. INTERACTIVE MEMBER SELECTION CARD: ASK WHICH MEMBERS FROM THE GROUP ARE ON THIS TICKET
+                MemberSplitSelectionCard(
+                    groupName = activeGroup?.name ?: "Group",
+                    ticketPassengerCount = ticketPassengerCount,
+                    members = groupMembers,
+                    selectedMemberIds = selectedMemberIds,
+                    onToggleMember = { memberId ->
+                        selectedMemberIds = if (memberId in selectedMemberIds) {
+                            if (selectedMemberIds.size > 1) selectedMemberIds - memberId else selectedMemberIds
+                        } else {
+                            selectedMemberIds + memberId
+                        }
+                    },
+                    onSelectExactTicketCount = {
+                        selectedMemberIds = groupMembers.take(ticketPassengerCount).map { it.memberId }.toSet()
+                    },
+                    onAddMemberToGroup = { newFriendName ->
+                        viewModel.addMemberToActiveGroup(newFriendName)
+                    },
+                    totalFareDisplay = formatPaiseDisplay(effectiveTotalPaise),
+                    perMemberShareDisplay = formatPaiseDisplay(perSelectedMemberSharePaise),
+                    payerReimbursementDisplay = formatPaiseDisplay(
+                        (effectiveTotalPaise - (if (selectedMembersList.any { it.isCurrentUser }) perSelectedMemberSharePaise else 0L)).coerceAtLeast(0L)
+                    )
+                )
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
         }
@@ -674,61 +726,71 @@ fun PnrSearchLookupCard(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "IRCTC 10-DIGIT PNR NUMBER",
+                        text = "ENTER 10-DIGIT IRCTC PNR NUMBER",
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 10.sp,
                         letterSpacing = 0.8.sp,
                         color = TactilePaperPassTokens.InkMuted
                     )
-                    BasicTextField(
-                        value = pnrValue,
-                        onValueChange = onPnrChange,
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        textStyle = TextStyle(
-                            fontFamily = FigtreeFontFamily,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 17.sp,
-                            letterSpacing = 1.4.sp,
-                            color = TactilePaperPassTokens.InkPrimary
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Box(contentAlignment = Alignment.CenterStart) {
+                        if (pnrValue.isEmpty()) {
+                            Text(
+                                text = "Tap here to enter 10-digit PNR...",
+                                fontFamily = FigtreeFontFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 15.sp,
+                                color = TactilePaperPassTokens.InkMuted
+                            )
+                        }
+                        BasicTextField(
+                            value = pnrValue,
+                            onValueChange = onPnrChange,
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            textStyle = TextStyle(
+                                fontFamily = FigtreeFontFamily,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 17.sp,
+                                letterSpacing = 1.4.sp,
+                                color = TactilePaperPassTokens.InkPrimary
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
             }
 
             Surface(
                 onClick = onFetchClick,
                 shape = RoundedCornerShape(12.dp),
-                color = TactilePaperPassTokens.SageConfirmedBg,
-                border = androidx.compose.foundation.BorderStroke(1.dp, TactilePaperPassTokens.SageConfirmedBorder)
+                color = TactilePaperPassTokens.ForestTop
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (isFetching) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(14.dp),
                             strokeWidth = 2.dp,
-                            color = TactilePaperPassTokens.SageConfirmedText
+                            color = Color.White
                         )
                     } else {
                         Icon(
-                            imageVector = Icons.Rounded.Refresh,
+                            imageVector = Icons.Rounded.Search,
                             contentDescription = "Fetch Live PNR",
-                            tint = TactilePaperPassTokens.SageConfirmedText,
-                            modifier = Modifier.size(14.dp)
+                            tint = Color(0xFFD7E8B6),
+                            modifier = Modifier.size(15.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(5.dp))
                     Text(
-                        text = if (isFetching) "Syncing..." else "Fetched",
+                        text = if (isFetching) "Fetching..." else "Fetch PNR",
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,
-                        color = TactilePaperPassTokens.SageConfirmedText
+                        color = Color.White
                     )
                 }
             }
@@ -756,10 +818,14 @@ fun TactilePaperBoardingPass(
     arrivalDate: String,
     duration: String,
     totalFareDisplay: String,
+    baseFareDisplay: String,
+    convenienceFeeDisplay: String,
+    insuranceFeeDisplay: String,
     perPersonShareDisplay: String,
+    passengerCount: Int,
     passengers: List<PassengerTicketRow>
 ) {
-    val ticketShape = remember { TactilePaperPerforatedShape(perforationRatio = 0.77f) }
+    val ticketShape = remember { TactilePaperPerforatedShape(perforationRatio = 0.76f) }
     val isChartPrepared = chartStatus.lowercase(Locale.US).let {
         it.contains("prepared") && !it.contains("not")
     }
@@ -773,9 +839,7 @@ fun TactilePaperBoardingPass(
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
 
-            // ----------------------------------------------------------------
             // SECTION A: FOREST BOTANICAL HEADER + ROUTE STRIP
-            // ----------------------------------------------------------------
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -789,7 +853,6 @@ fun TactilePaperBoardingPass(
                     )
                     .padding(20.dp)
             ) {
-                // Top Row: Train Pill & Chart Status Pill
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -837,7 +900,6 @@ fun TactilePaperBoardingPass(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // Chart Status Badge
                     Surface(
                         shape = RoundedCornerShape(20.dp),
                         color = if (isChartPrepared) TactilePaperPassTokens.SageConfirmedBg else TactilePaperPassTokens.AmberChartBg,
@@ -870,15 +932,13 @@ fun TactilePaperBoardingPass(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(22.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
-                // Route Strip: Origin -> Duration Track -> Destination
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Origin Station
                     Column(horizontalAlignment = Alignment.Start) {
                         Text(
                             text = originCode,
@@ -895,37 +955,40 @@ fun TactilePaperBoardingPass(
                             fontSize = 12.sp,
                             color = Color(0xFFD7E8B6)
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "$departureTime · $departureDate",
-                            fontFamily = FigtreeFontFamily,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 11.sp,
-                            color = Color(0xFFAEC48A)
-                        )
+                        if (departureTime.isNotBlank() || departureDate.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = listOf(departureTime, departureDate).filter { it.isNotBlank() }.joinToString(" · "),
+                                fontFamily = FigtreeFontFamily,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 11.sp,
+                                color = Color(0xFFAEC48A)
+                            )
+                        }
                     }
 
-                    // Center Duration & Track Graphic
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
                             .weight(1f)
                             .padding(horizontal = 12.dp)
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = TactilePaperPassTokens.ForestBadgeFill
-                        ) {
-                            Text(
-                                text = duration,
-                                fontFamily = FigtreeFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                color = Color(0xFFD7E8B6),
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
-                            )
+                        if (duration.isNotBlank()) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = TactilePaperPassTokens.ForestBadgeFill
+                            ) {
+                                Text(
+                                    text = duration,
+                                    fontFamily = FigtreeFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp,
+                                    color = Color(0xFFD7E8B6),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
                         }
-                        Spacer(modifier = Modifier.height(6.dp))
                         Canvas(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -952,7 +1015,6 @@ fun TactilePaperBoardingPass(
                         }
                     }
 
-                    // Destination Station
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
                             text = destinationCode,
@@ -969,21 +1031,21 @@ fun TactilePaperBoardingPass(
                             fontSize = 12.sp,
                             color = Color(0xFFD7E8B6)
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "$arrivalTime · $arrivalDate",
-                            fontFamily = FigtreeFontFamily,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 11.sp,
-                            color = Color(0xFFAEC48A)
-                        )
+                        if (arrivalTime.isNotBlank() || arrivalDate.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = listOf(arrivalTime, arrivalDate).filter { it.isNotBlank() }.joinToString(" · "),
+                                fontFamily = FigtreeFontFamily,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 11.sp,
+                                color = Color(0xFFAEC48A)
+                            )
+                        }
                     }
                 }
             }
 
-            // ----------------------------------------------------------------
             // SECTION B: PASSENGER MANIFEST & LIVE STATUS TABLE
-            // ----------------------------------------------------------------
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -995,7 +1057,7 @@ fun TactilePaperBoardingPass(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "VERIFIED PASSENGER STATUS (${passengers.size})",
+                        text = "VERIFIED PASSENGERS ON PNR (${passengers.size})",
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
@@ -1003,7 +1065,7 @@ fun TactilePaperBoardingPass(
                         color = TactilePaperPassTokens.InkMuted
                     )
                     Text(
-                        text = "INITIAL → CURRENT",
+                        text = "BOOKING → LIVE STATUS",
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
@@ -1026,7 +1088,6 @@ fun TactilePaperBoardingPass(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.weight(1f)
                         ) {
-                            // Passenger Index Badge
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
                                 color = if (pax.isPayer) TactilePaperPassTokens.SageConfirmedBg else Color(0xFFF0ECE1),
@@ -1056,16 +1117,15 @@ fun TactilePaperBoardingPass(
                                     color = TactilePaperPassTokens.InkPrimary
                                 )
                                 Text(
-                                    text = if (pax.isPayer) "Ticket Payer · Paid $totalFareDisplay" else "Share: $perPersonShareDisplay",
+                                    text = "Per-Passenger Share: $perPersonShareDisplay",
                                     fontFamily = FigtreeFontFamily,
-                                    fontWeight = FontWeight.Medium,
+                                    fontWeight = FontWeight.SemiBold,
                                     fontSize = 11.sp,
-                                    color = TactilePaperPassTokens.InkSecondary
+                                    color = TactilePaperPassTokens.SageConfirmedText
                                 )
                             }
                         }
 
-                        // Booking -> Current Status Pill
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = pax.bookingStatus,
@@ -1105,9 +1165,7 @@ fun TactilePaperBoardingPass(
                 }
             }
 
-            // ----------------------------------------------------------------
             // SECTION C: PHYSICAL PERFORATED TEAR-OFF LINE
-            // ----------------------------------------------------------------
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1123,9 +1181,7 @@ fun TactilePaperBoardingPass(
                 )
             }
 
-            // ----------------------------------------------------------------
-            // SECTION D: BOTTOM TICKET STUB (TOTAL FARE & BARCODE)
-            // ----------------------------------------------------------------
+            // SECTION D: BOTTOM TICKET STUB (TOTAL ALL-INCLUSIVE FARE, PER-PASSENGER SHARE & BARCODE)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1136,7 +1192,7 @@ fun TactilePaperBoardingPass(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "TOTAL VERIFIED FARE",
+                        text = "ALL-INCLUSIVE IRCTC FARE ($passengerCount PASSENGERS)",
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 10.sp,
@@ -1149,7 +1205,7 @@ fun TactilePaperBoardingPass(
                             text = totalFareDisplay,
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.Black,
-                            fontSize = 26.sp,
+                            fontSize = 24.sp,
                             letterSpacing = (-0.5).sp,
                             color = TactilePaperPassTokens.InkPrimary
                         )
@@ -1159,23 +1215,30 @@ fun TactilePaperBoardingPass(
                             color = TactilePaperPassTokens.SageConfirmedBg
                         ) {
                             Text(
-                                text = "$perPersonShareDisplay / person",
+                                text = "$perPersonShareDisplay / each",
                                 fontFamily = FigtreeFontFamily,
-                                fontWeight = FontWeight.Bold,
+                                fontWeight = FontWeight.ExtraBold,
                                 fontSize = 11.sp,
                                 color = TactilePaperPassTokens.SageConfirmedText,
                                 modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                             )
                         }
                     }
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = "Base $baseFareDisplay + IRCTC Conv. $convenienceFeeDisplay + Insurance $insuranceFeeDisplay",
+                        fontFamily = FigtreeFontFamily,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 10.sp,
+                        color = TactilePaperPassTokens.InkSecondary
+                    )
                 }
 
-                // Realistic Vertical Barcode + PNR Stamp
                 Column(horizontalAlignment = Alignment.End) {
                     TactileBarcode(
                         modifier = Modifier
-                            .width(96.dp)
-                            .height(28.dp)
+                            .width(88.dp)
+                            .height(26.dp)
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     val formattedPnr = if (pnrNumber.length == 10) {
@@ -1196,23 +1259,23 @@ fun TactilePaperBoardingPass(
 }
 
 // ============================================================================
-// 7. INTERACTIVE GROUP MEMBER SELECTION & SPLIT BREAKDOWN CARD
+// 7. INTERACTIVE GROUP MEMBER SELECTION ("SELECT WHICH PASSENGERS ARE ON THIS TICKET")
 // ============================================================================
 @Composable
 private fun MemberSplitSelectionCard(
     groupName: String,
+    ticketPassengerCount: Int,
     members: List<GroupMemberEntity>,
     selectedMemberIds: Set<String>,
     onToggleMember: (String) -> Unit,
-    onSelectAll: () -> Unit,
+    onSelectExactTicketCount: () -> Unit,
+    onAddMemberToGroup: (String) -> Unit,
     totalFareDisplay: String,
     perMemberShareDisplay: String,
-    payerReimbursementDisplay: String,
-    includeIrctcStatutoryFees: Boolean,
-    onToggleStatutoryFees: () -> Unit,
-    convenienceFeeDisplay: String,
-    insuranceFeeDisplay: String
+    payerReimbursementDisplay: String
 ) {
+    var quickAddName by remember { mutableStateOf("") }
+
     Surface(
         shape = RoundedCornerShape(22.dp),
         color = TactilePaperPassTokens.PaperSurface,
@@ -1226,96 +1289,90 @@ private fun MemberSplitSelectionCard(
                 .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Header Row: Splitting equally among X members + Select All pill
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Rounded.Groups,
-                        contentDescription = null,
-                        tint = TactilePaperPassTokens.ForestTop,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Splitting equally among ${selectedMemberIds.size} members",
+                        text = "Who is on this ticket? (${selectedMemberIds.size} of $ticketPassengerCount selected)",
                         fontFamily = FigtreeFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 15.sp,
                         color = TactilePaperPassTokens.InkPrimary
+                    )
+                    Text(
+                        text = "Select the $ticketPassengerCount passengers from $groupName ($perMemberShareDisplay each)",
+                        fontFamily = FigtreeFontFamily,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 12.sp,
+                        color = TactilePaperPassTokens.InkSecondary
                     )
                 }
 
                 Surface(
-                    onClick = onSelectAll,
+                    onClick = onSelectExactTicketCount,
                     shape = RoundedCornerShape(999.dp),
                     color = TactilePaperPassTokens.SageConfirmedBg,
                     border = androidx.compose.foundation.BorderStroke(1.dp, TactilePaperPassTokens.SageConfirmedBorder)
                 ) {
                     Text(
-                        text = if (selectedMemberIds.size == members.size) "$perMemberShareDisplay / each" else "Select All (${members.size})",
+                        text = "Select $ticketPassengerCount Pax",
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
                         color = TactilePaperPassTokens.SageConfirmedText,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                     )
                 }
             }
 
-            // Optional IRCTC Statutory Fee Breakdown Banner (toggleable)
-            Surface(
-                onClick = onToggleStatutoryFees,
-                shape = RoundedCornerShape(14.dp),
-                color = if (includeIrctcStatutoryFees) TactilePaperPassTokens.SageConfirmedBg.copy(alpha = 0.65f) else TactilePaperPassTokens.PaperStubSurface,
-                border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    if (includeIrctcStatutoryFees) TactilePaperPassTokens.SageConfirmedBorder else TactilePaperPassTokens.HairlineBorder
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 9.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+            // If the group currently has fewer members than the ticket's passenger count, let the user add the remaining passengers right here!
+            if (members.size < ticketPassengerCount) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = TactilePaperPassTokens.AmberChartBg,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, TactilePaperPassTokens.AmberChartBorder),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         Text(
-                            text = if (includeIrctcStatutoryFees)
-                                "✓ IRCTC All-Inclusive Bill ($totalFareDisplay)"
-                            else
-                                "Base Ticket Fare ($totalFareDisplay) · Tap to add IRCTC Fees",
+                            text = "This PNR has $ticketPassengerCount passengers, but $groupName currently has ${members.size} member(s). Add ${ticketPassengerCount - members.size} more passenger(s) to split $totalFareDisplay ÷ $ticketPassengerCount:",
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
-                            color = if (includeIrctcStatutoryFees) TactilePaperPassTokens.SageConfirmedText else TactilePaperPassTokens.InkPrimary
+                            color = TactilePaperPassTokens.AmberChartText
                         )
-                        Text(
-                            text = "Convenience Fee $convenienceFeeDisplay (incl. GST) + Insurance $insuranceFeeDisplay",
-                            fontFamily = FigtreeFontFamily,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 11.sp,
-                            color = TactilePaperPassTokens.InkSecondary
-                        )
-                    }
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (includeIrctcStatutoryFees) TactilePaperPassTokens.ForestTop else Color.White,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, TactilePaperPassTokens.HairlineBorder)
-                    ) {
-                        Text(
-                            text = if (includeIrctcStatutoryFees) "INCLUDED" else "+ ADD",
-                            fontFamily = FigtreeFontFamily,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 10.sp,
-                            color = if (includeIrctcStatutoryFees) Color.White else TactilePaperPassTokens.InkPrimary,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = quickAddName,
+                                onValueChange = { quickAddName = it },
+                                placeholder = { Text("Enter passenger name (e.g. Rahul)", fontSize = 12.sp) },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Button(
+                                onClick = {
+                                    if (quickAddName.isNotBlank()) {
+                                        onAddMemberToGroup(quickAddName.trim())
+                                        quickAddName = ""
+                                    }
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = TactilePaperPassTokens.ForestTop)
+                            ) {
+                                Icon(Icons.Rounded.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Add", fontFamily = FigtreeFontFamily, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
                     }
                 }
             }
@@ -1343,7 +1400,6 @@ private fun MemberSplitSelectionCard(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.weight(1f)
                     ) {
-                        // Tactile Checkbox / Avatar Badge
                         Box(
                             modifier = Modifier
                                 .size(36.dp)
@@ -1394,7 +1450,7 @@ private fun MemberSplitSelectionCard(
                                 text = when {
                                     !isSelected -> "Not on this ticket · Excluded"
                                     member.isCurrentUser -> "Paid full $totalFareDisplay"
-                                    else -> "Owes you · via UPI"
+                                    else -> "Owes you $perMemberShareDisplay · via UPI"
                                 },
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Medium,
@@ -1404,7 +1460,6 @@ private fun MemberSplitSelectionCard(
                         }
                     }
 
-                    // Right-aligned Share & Payer Reimbursement
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
                             text = if (isSelected) perMemberShareDisplay else "₹0",

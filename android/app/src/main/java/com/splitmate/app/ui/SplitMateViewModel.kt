@@ -495,6 +495,15 @@ class SplitMateViewModel(
         val groupMembers = state.activeGroupMembers
         if (groupMembers.isEmpty()) return
 
+        // Guard against adding the exact same 10-digit PNR twice to the same group ledger
+        val pnrMatch = Regex("""PNR:\s*(\d{10})""", RegexOption.IGNORE_CASE).find(title)?.groupValues?.getOrNull(1)
+        if (!pnrMatch.isNullOrBlank()) {
+            val alreadyExistsInGroup = state.expenses.any { existingExp ->
+                existingExp.groupId == state.activeGroupId && existingExp.title.contains(pnrMatch)
+            }
+            if (alreadyExistsInGroup) return
+        }
+
         val chosenMembers = groupMembers.filter { selectedMemberIds.contains(it.memberId) }
             .ifEmpty { groupMembers }
         val payer = groupMembers.find { it.isCurrentUser } ?: groupMembers.first()
