@@ -104,6 +104,7 @@ data class SettlementTransferUiModel(
     val toName: String,
     val toSeed: String,
     val upiId: String,
+    val cleanPhone: String,
     val hasLinkedPhone: Boolean,
     val amount: String,
     val formattedDisplayAmount: String,
@@ -119,6 +120,21 @@ class SplitMateViewModel(
         if (dao == null) createInitialSeededState() else createCleanProductionInitialState()
     )
     val uiState: StateFlow<SplitMateUiState> = _uiState.asStateFlow()
+
+    private val _deviceContacts = MutableStateFlow<List<DeviceContact>>(emptyList())
+    val deviceContacts: StateFlow<List<DeviceContact>> = _deviceContacts.asStateFlow()
+
+    private val _isLoadingContacts = MutableStateFlow(false)
+    val isLoadingContacts: StateFlow<Boolean> = _isLoadingContacts.asStateFlow()
+
+    fun loadDeviceContacts(context: android.content.Context) {
+        viewModelScope.launch(ioDispatcher) {
+            _isLoadingContacts.value = true
+            val loaded = queryAllDeviceContacts(context.applicationContext)
+            _deviceContacts.value = loaded
+            _isLoadingContacts.value = false
+        }
+    }
 
     val totalBalance: StateFlow<String> = _uiState.map { state ->
         val sym = "₹"
@@ -159,13 +175,12 @@ class SplitMateViewModel(
                 val badgeText = when {
                     myNetCents > 0L -> "YOU GET BACK $sym$absStr"
                     myNetCents < 0L -> "YOU OWE $sym$absStr"
-                    else -> "✓ ${sym}0.00 All settled up"
+                    else -> "All settled up"
                 }
-                val rawEdges = (groupExpenses.size * groupMembers.size).coerceAtLeast(simplified.size)
                 val pillText = if (simplified.isEmpty()) {
-                    "Equilibrium Reached"
+                    "All settled up"
                 } else {
-                    "⚡ Greedy: $rawEdges → ${simplified.size} transfers"
+                    "${simplified.size} simplified settlements"
                 }
                 val visibleSeeds = groupMembers.take(4).map { it.avatarSeed }
                 val rem = (groupMembers.size - visibleSeeds.size).coerceAtLeast(0)
@@ -207,9 +222,9 @@ class SplitMateViewModel(
                 val fromMember = groupMembers.find { it.memberId == tr.fromMemberId }
                 val toMember = groupMembers.find { it.memberId == tr.toMemberId }
                 val savedUpi = toMember?.upiId?.trim().orEmpty()
-                val phonePrefix = savedUpi.substringBefore("@")
-                val hasPhoneLinked = phonePrefix.length >= 6 && phonePrefix.all { it.isDigit() }
-                val resolvedUpiId = if (hasPhoneLinked) savedUpi else ""
+                val clean10Phone = cleanIndianTenDigitPhone(savedUpi.substringBefore("@"))
+                val hasPhoneLinked = clean10Phone.length == 10
+                val resolvedUpiId = if (hasPhoneLinked) "${clean10Phone}@upi" else ""
                 val majorStr = String.format(Locale.US, "%.2f", tr.amountCents / 100.0)
                 SettlementTransferUiModel(
                     transfer = tr,
@@ -220,6 +235,7 @@ class SplitMateViewModel(
                     toName = if (toMember?.isCurrentUser == true) "You" else tr.toName,
                     toSeed = toMember?.avatarSeed ?: tr.toName,
                     upiId = resolvedUpiId,
+                    cleanPhone = if (hasPhoneLinked) clean10Phone else "",
                     hasLinkedPhone = hasPhoneLinked,
                     amount = majorStr,
                     formattedDisplayAmount = "$sym$majorStr",
@@ -383,7 +399,7 @@ class SplitMateViewModel(
                 currentUserCountry = countryName,
                 activeCurrencyCode = currencyCode,
                 userUpiId = defaultUpi,
-                statusBannerMessage = "Welcome $cleanName · Profile saved to local SQLite Vault"
+                statusBannerMessage = "Welcome $cleanName"
             )
         }
         viewModelScope.launch(ioDispatcher) {
@@ -422,7 +438,7 @@ class SplitMateViewModel(
                 settlements = emptyList(),
                 receiptItems = emptyList(),
                 activeGroupId = "",
-                statusBannerMessage = "Local SQLite Vault cleared"
+                statusBannerMessage = "App data reset"
             )
         }
         viewModelScope.launch(ioDispatcher) {
@@ -522,6 +538,7 @@ class SplitMateViewModel(
         }
     }
 
+    @Suppress("UNUSED_PARAMETER")
     fun syncLiveCurrencyRatesFromFrankfurter(base: String = "INR") {
         _uiState.update {
             it.copy(
@@ -536,6 +553,7 @@ class SplitMateViewModel(
         _uiState.update { it.copy(isOfflineMode = offline) }
     }
 
+    @Suppress("UNUSED_PARAMETER")
     fun updateUserProfile(newName: String, newCurrencyCode: String) {
         val cleanName = newName.trim().ifEmpty { "Akshay" }
         _uiState.update { state ->
@@ -591,8 +609,8 @@ class SplitMateViewModel(
         val friendMembers = memberDrafts.mapIndexedNotNull { index, draft ->
             val fName = draft.name.trim()
             if (fName.isEmpty()) null else {
-                val cleanPhone = draft.cleanPhone.replace(Regex("[^0-9]"), "")
-                val autoUpiId = if (cleanPhone.length >= 6) "${cleanPhone.takeLast(10)}@upi" else ""
+                val cleanPhone = cleanIndianTenDigitPhone(draft.cleanPhone)
+                val autoUpiId = if (cleanPhone.length == 10) "${cleanPhone}@upi" else ""
                 val style = draft.presentationStyle.ifBlank { "Neutral" }
                 GroupMemberEntity(
                     memberId = "${groupId}_f$index",
@@ -623,6 +641,7 @@ class SplitMateViewModel(
         }
     }
 
+    @Suppress("UNUSED_PARAMETER")
     fun createNewGroup(
         name: String,
         currencyCode: String,

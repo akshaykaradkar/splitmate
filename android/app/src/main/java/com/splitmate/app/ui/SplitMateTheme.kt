@@ -8,24 +8,23 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Cabin
-import androidx.compose.material.icons.rounded.Celebration
-import androidx.compose.material.icons.rounded.Flight
-import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.LocalBar
-import androidx.compose.material.icons.rounded.LocalCafe
-import androidx.compose.material.icons.rounded.Restaurant
-import androidx.compose.material.icons.rounded.ShoppingCart
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Typography
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -34,6 +33,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.googlefonts.Font
 import androidx.compose.ui.text.googlefonts.GoogleFont
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.splitmate.app.R
@@ -43,7 +43,6 @@ import com.splitmate.app.R
 // ==============================================================================
 object DesignSystemBindings {
     // 1. Google Material 3 (`design_systems/google-material-3/DESIGN.md`)
-    //    Dark Tonal Elevation Hierarchy (`ref-palette-neutral10` #1E1E1E, `ref-palette-neutral17` #2A2A2A)
     val GM3LightBackground = Color(0xFFFAF7F2)
     val GM3LightCardSurface = Color(0xFFFFFFFF)
     val GM3LightKeypadSurface = Color(0xFFF3EFEA)
@@ -62,7 +61,6 @@ object DesignSystemBindings {
     val GM3ShapePill = RoundedCornerShape(50)
 
     // 2. Android Motion (`design_systems/android-motion/DESIGN.md`)
-    //    Container Color Morphing (400ms FastOutSlowInEasing) & Tactile Spring Physics
     fun <T> themeColorTween() = tween<T>(durationMillis = 400, easing = FastOutSlowInEasing)
     fun <T> tactileSpring() = spring<T>(
         dampingRatio = Spring.DampingRatioMediumBouncy,
@@ -70,7 +68,6 @@ object DesignSystemBindings {
     )
 
     // 3. Elements GM3 (`design_systems/elements-3/DESIGN.md`)
-    //    Semantic Financial State Tokens (Creditor Sage vs. Debtor Terracotta)
     val ElementsCreditorContainer = Color(0xFFD7E8B6)
     val ElementsCreditorOnContainer = Color(0xFF2D4810)
     val ElementsDebtorContainer = Color(0xFFFED8C8)
@@ -82,7 +79,6 @@ object DesignSystemBindings {
     val ElementsNegativeText = Color(0xFFE06B52)
 
     // 4. Android Pixel Design System (`design_systems/android-pixel-design-system/DESIGN.md`)
-    //    High-density 8dp/4dp rhythm & compact fintech ergonomics
     val PixelCardInternalPadding = 14.dp
     val PixelSectionSpacing = 12.dp
     val PixelCompactItemSpacing = 8.dp
@@ -148,109 +144,117 @@ private val SplitMateDarkColorScheme = darkColorScheme(
     outline = DesignSystemBindings.GM3DarkBorder
 )
 
-// Premium Fintech Google Fonts ("Plus Jakarta Sans" & "Outfit")
-private val googleFontProvider = GoogleFont.Provider(
+private val fontProvider = GoogleFont.Provider(
     providerAuthority = "com.google.android.gms.fonts",
     providerPackage = "com.google.android.gms",
     certificates = R.array.com_google_android_gms_fonts_certs
 )
 
-private val plusJakartaSansFont = GoogleFont("Plus Jakarta Sans")
-private val outfitFont = GoogleFont("Outfit")
-
-val SplitMateDisplayFontFamily = FontFamily(
-    Font(googleFont = outfitFont, fontProvider = googleFontProvider, weight = FontWeight.Bold),
-    Font(googleFont = outfitFont, fontProvider = googleFontProvider, weight = FontWeight.ExtraBold),
-    Font(googleFont = outfitFont, fontProvider = googleFontProvider, weight = FontWeight.SemiBold)
+val PlusJakartaSansFont = FontFamily(
+    Font(googleFont = GoogleFont("Plus Jakarta Sans"), fontProvider = fontProvider, weight = FontWeight.Medium),
+    Font(googleFont = GoogleFont("Plus Jakarta Sans"), fontProvider = fontProvider, weight = FontWeight.SemiBold),
+    Font(googleFont = GoogleFont("Plus Jakarta Sans"), fontProvider = fontProvider, weight = FontWeight.Bold),
+    Font(googleFont = GoogleFont("Plus Jakarta Sans"), fontProvider = fontProvider, weight = FontWeight.ExtraBold)
 )
 
-val SplitMateBrandFontFamily = FontFamily(
-    Font(googleFont = plusJakartaSansFont, fontProvider = googleFontProvider, weight = FontWeight.Normal),
-    Font(googleFont = plusJakartaSansFont, fontProvider = googleFontProvider, weight = FontWeight.Medium),
-    Font(googleFont = plusJakartaSansFont, fontProvider = googleFontProvider, weight = FontWeight.SemiBold),
-    Font(googleFont = plusJakartaSansFont, fontProvider = googleFontProvider, weight = FontWeight.Bold),
-    Font(googleFont = plusJakartaSansFont, fontProvider = googleFontProvider, weight = FontWeight.ExtraBold)
+val JetBrainsMonoFont = FontFamily(
+    Font(googleFont = GoogleFont("JetBrains Mono"), fontProvider = fontProvider, weight = FontWeight.Medium),
+    Font(googleFont = GoogleFont("JetBrains Mono"), fontProvider = fontProvider, weight = FontWeight.SemiBold),
+    Font(googleFont = GoogleFont("JetBrains Mono"), fontProvider = fontProvider, weight = FontWeight.Bold)
 )
 
 val SplitMateTypography = Typography(
     displayLarge = TextStyle(
-        fontFamily = SplitMateDisplayFontFamily,
+        fontFamily = PlusJakartaSansFont,
         fontWeight = FontWeight.ExtraBold,
-        fontSize = 42.sp,
-        lineHeight = 46.sp,
+        fontSize = 48.sp,
+        lineHeight = 52.sp,
+        letterSpacing = (-1.5).sp
+    ),
+    displayMedium = TextStyle(
+        fontFamily = PlusJakartaSansFont,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 36.sp,
+        lineHeight = 42.sp,
         letterSpacing = (-1.0).sp
     ),
     headlineLarge = TextStyle(
-        fontFamily = SplitMateDisplayFontFamily,
+        fontFamily = PlusJakartaSansFont,
         fontWeight = FontWeight.ExtraBold,
         fontSize = 26.sp,
         lineHeight = 32.sp,
         letterSpacing = (-0.5).sp
     ),
     headlineMedium = TextStyle(
-        fontFamily = SplitMateDisplayFontFamily,
+        fontFamily = PlusJakartaSansFont,
         fontWeight = FontWeight.Bold,
         fontSize = 20.sp,
-        lineHeight = 26.sp
+        lineHeight = 26.sp,
+        letterSpacing = (-0.3).sp
     ),
     titleLarge = TextStyle(
-        fontFamily = SplitMateBrandFontFamily,
+        fontFamily = PlusJakartaSansFont,
         fontWeight = FontWeight.Bold,
-        fontSize = 18.sp,
-        lineHeight = 24.sp
+        fontSize = 17.sp,
+        lineHeight = 22.sp
     ),
     titleMedium = TextStyle(
-        fontFamily = SplitMateBrandFontFamily,
+        fontFamily = PlusJakartaSansFont,
         fontWeight = FontWeight.SemiBold,
         fontSize = 15.sp,
         lineHeight = 20.sp
     ),
     bodyLarge = TextStyle(
-        fontFamily = SplitMateBrandFontFamily,
+        fontFamily = PlusJakartaSansFont,
         fontWeight = FontWeight.Medium,
         fontSize = 15.sp,
-        lineHeight = 22.sp
+        lineHeight = 20.sp
     ),
     bodyMedium = TextStyle(
-        fontFamily = SplitMateBrandFontFamily,
-        fontWeight = FontWeight.Normal,
+        fontFamily = PlusJakartaSansFont,
+        fontWeight = FontWeight.Medium,
         fontSize = 13.sp,
         lineHeight = 18.sp
     ),
     labelLarge = TextStyle(
-        fontFamily = SplitMateBrandFontFamily,
+        fontFamily = PlusJakartaSansFont,
         fontWeight = FontWeight.Bold,
-        fontSize = 13.sp,
+        fontSize = 12.sp,
         lineHeight = 16.sp,
-        letterSpacing = 0.2.sp
+        letterSpacing = 0.5.sp
+    ),
+    labelMedium = TextStyle(
+        fontFamily = JetBrainsMonoFont,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 12.sp,
+        lineHeight = 16.sp
     )
 )
 
 /**
- * Extracts ONLY the first 1-2 uppercase letters of a user's ACTUAL NAME.
- * Never returns "Masculine", "Feminine", or "Neutral" even if the seed is "Akshay|Masculine".
+ * Extracts strictly the first 1 or 2 uppercase letters of the person's ACTUAL NAME.
+ * Never renders "Masculine", "Feminine", "Neutral", or numeric suffixes.
  */
 fun extractInitialsFromNameOrSeed(rawNameOrSeed: String): String {
-    val withoutStyle = rawNameOrSeed
-        .substringBefore('|')
-        .substringBefore('_')
+    val basePart = rawNameOrSeed
+        .substringBefore("|")
+        .substringBefore("_")
         .replace("(You)", "", ignoreCase = true)
         .replace("Masculine", "", ignoreCase = true)
         .replace("Feminine", "", ignoreCase = true)
         .replace("Neutral", "", ignoreCase = true)
         .trim()
 
-    if (withoutStyle.isEmpty()) return "A"
-    val parts = withoutStyle.split(Regex("\\s+")).filter { it.isNotBlank() }
+    val words = basePart.split(Regex("\\s+")).filter { it.isNotBlank() && it.first().isLetter() }
     return when {
-        parts.size >= 2 -> "${parts[0].first()}${parts[1].first()}".uppercase()
-        else -> parts[0].take(1).uppercase()
+        words.size >= 2 -> "${words[0].first().uppercaseChar()}${words[1].first().uppercaseChar()}"
+        words.size == 1 -> words[0].take(1).uppercase()
+        else -> basePart.firstOrNull { it.isLetter() }?.uppercaseChar()?.toString() ?: "S"
     }
 }
 
 /**
- * Builds a DiceBear Open-Peeps SVG URL with Presentation Style (`Masculine`, `Feminine`, `Neutral`).
- * Supports encoding the style in the seed as `"Name|Masculine"`, `"Name|Feminine"`, or `"Name|Neutral"`.
+ * Builds a gender-aware DiceBear 9.x `open-peeps` SVG URL.
  */
 fun buildDiceBearOpenPeepsUrl(rawSeed: String, styleOverride: String? = null): String {
     val parts = rawSeed.split("|")
@@ -265,7 +269,7 @@ fun buildDiceBearOpenPeepsUrl(rawSeed: String, styleOverride: String? = null): S
 }
 
 /**
- * 8 Expressive Material 3 Category Icons for Group Creation & Group Cards (Point 3).
+ * 8 Expressive Material 3 Category Icons for Group Creation & Group Cards.
  */
 data class GroupCategoryIconOption(
     val id: String,
@@ -306,58 +310,358 @@ fun resolveGroupCategoryIcon(iconName: String, fallbackGroupName: String = ""): 
     }
 }
 
-/**
- * Queries Android's ContentResolver for a picked Contact URI, retrieves their `DISPLAY_NAME`
- * and `NUMBER` from `ContactsContract.CommonDataKinds.Phone`, strips all non-digits (`+91`, spaces, hyphens),
- * and returns `(displayName, cleanTenDigits)`.
- */
-fun extractPhoneAndNameFromContactUri(
-    context: Context,
-    contactUri: Uri
-): Pair<String, String>? {
-    return try {
-        var contactId = ""
-        var displayName = ""
-        context.contentResolver.query(
-            contactUri,
-            arrayOf(ContactsContract.Contacts._ID, ContactsContract.Contacts.DISPLAY_NAME),
-            null,
-            null,
-            null
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val idIdx = cursor.getColumnIndex(ContactsContract.Contacts._ID)
-                val nameIdx = cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME)
-                if (idIdx >= 0) contactId = cursor.getString(idIdx).orEmpty()
-                if (nameIdx >= 0) displayName = cursor.getString(nameIdx).orEmpty()
-            }
-        }
+// ==============================================================================
+// IN-APP DEVICE CONTACT MODEL, PHONE CLEANER & MULTI-SELECT MODAL BOTTOM SHEET
+// ==============================================================================
 
-        var rawNumber = ""
-        if (contactId.isNotEmpty()) {
-            context.contentResolver.query(
-                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER),
-                "${ContactsContract.CommonDataKinds.Phone.CONTACT_ID} = ?",
-                arrayOf(contactId),
-                null
-            )?.use { phoneCursor ->
-                if (phoneCursor.moveToFirst()) {
-                    val numIdx = phoneCursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-                    if (numIdx >= 0) rawNumber = phoneCursor.getString(numIdx).orEmpty()
+data class DeviceContact(
+    val name: String,
+    val cleanPhone: String,
+    val formattedPhone: String
+)
+
+fun cleanIndianTenDigitPhone(rawNumber: String): String {
+    val digitsOnly = rawNumber.replace(Regex("[^0-9]"), "")
+    return when {
+        digitsOnly.length >= 12 && digitsOnly.startsWith("91") -> digitsOnly.substring(2).takeLast(10)
+        digitsOnly.length == 11 && digitsOnly.startsWith("0") -> digitsOnly.substring(1)
+        digitsOnly.length > 10 -> digitsOnly.takeLast(10)
+        else -> digitsOnly
+    }
+}
+
+fun formatTenDigitIndianPhone(cleanPhone: String): String {
+    return if (cleanPhone.length == 10) {
+        "+91 ${cleanPhone.substring(0, 5)} ${cleanPhone.substring(5)}"
+    } else {
+        cleanPhone
+    }
+}
+
+fun queryAllDeviceContacts(context: Context): List<DeviceContact> {
+    val contactsByPhone = linkedMapOf<String, DeviceContact>()
+    try {
+        val projection = arrayOf(
+            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+            ContactsContract.CommonDataKinds.Phone.NUMBER
+        )
+        context.contentResolver.query(
+            ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+            projection,
+            null,
+            null,
+            "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} ASC"
+        )?.use { cursor ->
+            val nameIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+            val numberIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+            while (cursor.moveToNext()) {
+                val rawName = if (nameIndex >= 0) cursor.getString(nameIndex).orEmpty().trim() else ""
+                val rawNumber = if (numberIndex >= 0) cursor.getString(numberIndex).orEmpty().trim() else ""
+                val clean10 = cleanIndianTenDigitPhone(rawNumber)
+                if (rawName.isNotEmpty() && clean10.length == 10 && !contactsByPhone.containsKey(clean10)) {
+                    contactsByPhone[clean10] = DeviceContact(
+                        name = rawName,
+                        cleanPhone = clean10,
+                        formattedPhone = formatTenDigitIndianPhone(clean10)
+                    )
                 }
             }
         }
+    } catch (_: SecurityException) {
+    } catch (_: Exception) {
+    }
+    return contactsByPhone.values.toList()
+}
 
-        val digitsOnly = rawNumber.replace(Regex("[^0-9]"), "")
-        val normalizedTenDigits = when {
-            digitsOnly.length == 12 && digitsOnly.startsWith("91") -> digitsOnly.substring(2)
-            digitsOnly.length == 11 && digitsOnly.startsWith("0") -> digitsOnly.substring(1)
-            else -> digitsOnly
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ContactPickerBottomSheet(
+    contacts: List<DeviceContact>,
+    isLoading: Boolean = false,
+    multiSelect: Boolean = true,
+    preSelectedPhones: Set<String> = emptySet(),
+    initialSelectedPhones: Set<String> = preSelectedPhones,
+    title: String = "Add Members from Contacts",
+    subtitle: String = "Select friends from your phonebook",
+    onDismissRequest: () -> Unit = {},
+    onDismiss: () -> Unit = onDismissRequest,
+    onConfirmSelected: (List<DeviceContact>) -> Unit = {},
+    onConfirmSelection: (List<DeviceContact>) -> Unit = onConfirmSelected
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedPhones by remember(initialSelectedPhones) {
+        mutableStateOf(initialSelectedPhones.toSet())
+    }
+
+    val filteredContacts = remember(contacts, searchQuery) {
+        val q = searchQuery.trim().lowercase()
+        if (q.isEmpty()) {
+            contacts
+        } else {
+            contacts.filter {
+                it.name.lowercase().contains(q) || it.cleanPhone.contains(q)
+            }
         }
-        displayName to normalizedTenDigits
-    } catch (e: Exception) {
-        null
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 20.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (multiSelect && contacts.isNotEmpty()) {
+                    TextButton(
+                        onClick = {
+                            selectedPhones = if (selectedPhones.size == filteredContacts.size && filteredContacts.isNotEmpty()) {
+                                emptySet()
+                            } else {
+                                selectedPhones + filteredContacts.map { it.cleanPhone }
+                            }
+                        }
+                    ) {
+                        Text(
+                            text = if (selectedPhones.size == filteredContacts.size && filteredContacts.isNotEmpty()) {
+                                "Clear"
+                            } else {
+                                "Select All"
+                            },
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = {
+                    Text(
+                        text = "Search by name or 10-digit phone...",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Rounded.Search,
+                        contentDescription = "Search contacts",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(
+                                imageVector = Icons.Rounded.Close,
+                                contentDescription = "Clear search",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(16.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                }
+            } else if (filteredContacts.isEmpty()) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Contacts,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(32.dp)
+                        )
+                        Text(
+                            text = if (contacts.isEmpty()) {
+                                "No contacts with 10-digit phone numbers found on this device"
+                            } else {
+                                "No contacts matching \"$searchQuery\""
+                            },
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 180.dp, max = 340.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(filteredContacts, key = { it.cleanPhone }) { contact ->
+                        val isChecked = selectedPhones.contains(contact.cleanPhone)
+                        val toggleSelection = {
+                            selectedPhones = if (multiSelect) {
+                                if (isChecked) selectedPhones - contact.cleanPhone else selectedPhones + contact.cleanPhone
+                            } else {
+                                setOf(contact.cleanPhone)
+                            }
+                        }
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .clickable { toggleSelection() },
+                            shape = RoundedCornerShape(16.dp),
+                            color = if (isChecked) {
+                                BuckwheatSageContainer.copy(alpha = 0.45f)
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                            },
+                            border = BorderStroke(
+                                width = if (isChecked) 1.5.dp else 1.dp,
+                                color = if (isChecked) BuckwheatOlivePrimary else MaterialTheme.colorScheme.outline
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                if (isChecked) BuckwheatSageContainer else BuckwheatLavenderContainer
+                                            )
+                                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = extractInitialsFromNameOrSeed(contact.name),
+                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
+                                            color = if (isChecked) BuckwheatOlivePrimary else BuckwheatCharcoal
+                                        )
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = contact.name,
+                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = contact.formattedPhone,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                Checkbox(
+                                    checked = isChecked,
+                                    onCheckedChange = { toggleSelection() },
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = BuckwheatOlivePrimary,
+                                        checkmarkColor = Color.White
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            val selectedCount = selectedPhones.size
+            Button(
+                onClick = {
+                    val selectedList = contacts.filter { selectedPhones.contains(it.cleanPhone) }
+                    if (selectedList.isNotEmpty()) {
+                        onConfirmSelection(selectedList)
+                    }
+                    onDismiss()
+                },
+                enabled = selectedCount > 0,
+                shape = RoundedCornerShape(50),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.onSurface,
+                    contentColor = MaterialTheme.colorScheme.surface
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+            ) {
+                Text(
+                    text = if (multiSelect) {
+                        "Add Selected ($selectedCount)"
+                    } else {
+                        "Link Selected Contact"
+                    },
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
+                )
+            }
+        }
     }
 }
 
@@ -395,3 +699,7 @@ fun SplitMateExpressiveTheme(
         content = content
     )
 }
+
+val SplitMateBrandFontFamily: FontFamily = FontFamily.SansSerif
+val SplitMateDisplayFontFamily: FontFamily = FontFamily.SansSerif
+

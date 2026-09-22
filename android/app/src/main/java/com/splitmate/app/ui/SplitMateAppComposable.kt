@@ -18,7 +18,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
+import androidx.compose.material.icons.automirrored.rounded.TrendingDown
+import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
@@ -50,6 +53,7 @@ import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.splitmate.app.data.GroupMemberEntity
+import com.splitmate.app.ui.ContactPickerBottomSheet
 import com.splitmate.app.ui.DesignSystemBindings
 import com.splitmate.app.ui.GroupCategoryIcons
 import com.splitmate.app.ui.NewGroupMemberDraft
@@ -58,7 +62,6 @@ import com.splitmate.app.ui.SplitMateDisplayFontFamily
 import com.splitmate.app.ui.SplitMateViewModel
 import com.splitmate.app.ui.buildDiceBearOpenPeepsUrl
 import com.splitmate.app.ui.extractInitialsFromNameOrSeed
-import com.splitmate.app.ui.extractPhoneAndNameFromContactUri
 import com.splitmate.app.ui.resolveGroupCategoryIcon
 import com.splitmate.app.ui.screens.EditFriendUpiDialog
 import com.splitmate.app.ui.screens.OnboardingSetupScreen
@@ -515,14 +518,25 @@ fun LedgersDashboardScreen(
                                 shape = SplitMateTheme.RadiusBadge,
                                 color = SplitMateTheme.SurfaceWhite.copy(alpha = 0.85f)
                             ) {
-                                Text(
-                                    text = if (isNegativeBalance) "↑ You owe overall" else "↓ You are owed overall",
-                                    fontFamily = SplitMateTheme.FontRounded,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isNegativeBalance) SplitMateTheme.TerracottaText else SplitMateTheme.SageText,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = if (isNegativeBalance) Icons.AutoMirrored.Rounded.TrendingUp else Icons.AutoMirrored.Rounded.TrendingDown,
+                                        contentDescription = null,
+                                        tint = if (isNegativeBalance) SplitMateTheme.TerracottaText else SplitMateTheme.SageText,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (isNegativeBalance) "You owe overall" else "You are owed overall",
+                                        fontFamily = SplitMateTheme.FontRounded,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isNegativeBalance) SplitMateTheme.TerracottaText else SplitMateTheme.SageText
+                                    )
+                                }
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
@@ -533,7 +547,7 @@ fun LedgersDashboardScreen(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = if (uiState.isOfflineMode) "Offline Vault" else "Live Sync",
+                                    text = if (uiState.isOfflineMode) "Offline" else "Live Sync",
                                     fontFamily = SplitMateTheme.FontRounded,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
@@ -553,7 +567,7 @@ fun LedgersDashboardScreen(
                         )
 
                         Text(
-                            text = "✓ Across ${activeGroups.size} active groups · Exact Split",
+                            text = "Across ${activeGroups.size} active groups",
                             fontFamily = SplitMateTheme.FontRounded,
                             fontSize = 13.sp,
                             color = SplitMateTheme.TextSecondary,
@@ -590,7 +604,7 @@ fun LedgersDashboardScreen(
                                     .weight(1f)
                                     .sizeIn(minHeight = 46.dp)
                             ) {
-                                Icon(Icons.Rounded.ReceiptLong, contentDescription = null, tint = Color(0xFF23201E), modifier = Modifier.size(18.dp))
+                                Icon(Icons.AutoMirrored.Rounded.ReceiptLong, contentDescription = null, tint = Color(0xFF23201E), modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text("Log Expense", fontFamily = SplitMateTheme.FontRounded, color = Color(0xFF23201E), fontWeight = FontWeight.Bold)
                             }
@@ -629,13 +643,22 @@ fun LedgersDashboardScreen(
                     }
                 }
 
-                Text(
-                    text = "Sort by balance ⇅",
-                    fontFamily = SplitMateTheme.FontRounded,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = SplitMateTheme.TextSecondary
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Sort by balance",
+                        fontFamily = SplitMateTheme.FontRounded,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SplitMateTheme.TextSecondary
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.Rounded.SwapVert,
+                        contentDescription = null,
+                        tint = SplitMateTheme.TextSecondary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
             }
         }
 
@@ -877,35 +900,44 @@ fun LedgersDashboardScreen(
         var selectedIconKey by remember { mutableStateOf("Flight") }
         var selectedMembers by remember { mutableStateOf(listOf<NewGroupMemberDraft>()) }
         var customPeerNameInput by remember { mutableStateOf("") }
+        var showMultiContactSheet by remember { mutableStateOf(false) }
 
-        val contactPickerLauncher = rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.PickContact()
-        ) { contactUri: Uri? ->
-            if (contactUri != null) {
-                val extracted = extractPhoneAndNameFromContactUri(context, contactUri)
-                if (extracted != null) {
-                    val (contactName, cleanPhone) = extracted
-                    val resolvedName = contactName.trim().ifEmpty { "Friend" }
-                    if (selectedMembers.none { it.name.equals(resolvedName, ignoreCase = true) }) {
-                        selectedMembers = selectedMembers + NewGroupMemberDraft(
-                            name = resolvedName,
-                            cleanPhone = cleanPhone
-                        )
-                    }
-                } else {
-                    Toast.makeText(context, "Unable to read contact details", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
+        val deviceContacts by viewModel.deviceContacts.collectAsState()
+        val isLoadingContacts by viewModel.isLoadingContacts.collectAsState()
 
         val contactsPermissionLauncher = rememberLauncherForActivityResult(
             contract = ActivityResultContracts.RequestPermission()
         ) { granted: Boolean ->
             if (granted) {
-                contactPickerLauncher.launch(null)
+                viewModel.loadDeviceContacts(context)
+                showMultiContactSheet = true
             } else {
-                Toast.makeText(context, "Contacts permission allows 1-tap UPI linking", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Contacts permission allows selecting friends for UPI", Toast.LENGTH_SHORT).show()
             }
+        }
+
+        if (showMultiContactSheet) {
+            ContactPickerBottomSheet(
+                contacts = deviceContacts,
+                isLoading = isLoadingContacts,
+                multiSelect = true,
+                initialSelectedPhones = selectedMembers.map { it.cleanPhone }.filter { it.isNotEmpty() }.toSet(),
+                onDismiss = { showMultiContactSheet = false },
+                onConfirmSelection = { chosenContacts ->
+                    val newDrafts = chosenContacts.map { contact ->
+                        NewGroupMemberDraft(
+                            name = contact.name,
+                            cleanPhone = contact.cleanPhone
+                        )
+                    }
+                    val existingNames = selectedMembers.map { it.name.lowercase(Locale.US) }.toSet()
+                    val merged = selectedMembers + newDrafts.filterNot {
+                        existingNames.contains(it.name.lowercase(Locale.US))
+                    }
+                    selectedMembers = merged
+                    showMultiContactSheet = false
+                }
+            )
         }
 
         Dialog(onDismissRequest = { showNewGroupDialog = false }) {
@@ -946,7 +978,7 @@ fun LedgersDashboardScreen(
                                 color = SplitMateTheme.PrimaryDark
                             )
                             Text(
-                                text = "Select icon & add members from Contacts",
+                                text = "Select icon & multi-select members from Contacts",
                                 fontSize = 12.sp,
                                 color = SplitMateTheme.TextSecondary
                             )
@@ -1028,7 +1060,7 @@ fun LedgersDashboardScreen(
                         }
                     }
 
-                    // 3. Prominent "+ Add Members from Contacts" Button
+                    // 3. Prominent "+ Add Members from Contacts" Button (Opens In-App Multi-Select Sheet)
                     Button(
                         onClick = {
                             val hasPermission = ContextCompat.checkSelfPermission(
@@ -1036,7 +1068,8 @@ fun LedgersDashboardScreen(
                                 Manifest.permission.READ_CONTACTS
                             ) == PackageManager.PERMISSION_GRANTED
                             if (hasPermission) {
-                                contactPickerLauncher.launch(null)
+                                viewModel.loadDeviceContacts(context)
+                                showMultiContactSheet = true
                             } else {
                                 contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
                             }
@@ -1213,43 +1246,27 @@ fun LedgersDashboardScreen(
 }
 
 // ==============================================================================
-// TAB 3: SETTLE (Greedy Debt Simplification & UPI Deep Linking + Friend UPI Editor)
+// TAB 3: SETTLE (Greedy Debt Simplification & Direct UPI + Direct WhatsApp Link)
 // ==============================================================================
 @Composable
 fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
     val context = LocalContext.current
     val settlementPlan by viewModel.settlementPlan.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
-    var editingFriend by remember { mutableStateOf<GroupMemberEntity?>(null) }
-    var targetMemberForContactLink by remember { mutableStateOf<GroupMemberEntity?>(null) }
-    val rawDebtEdges = (uiState.expenses.size * uiState.activeGroupMembers.size).coerceAtLeast(settlementPlan.size)
+    val deviceContacts by viewModel.deviceContacts.collectAsState()
+    val isLoadingContacts by viewModel.isLoadingContacts.collectAsState()
 
-    val directContactPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickContact()
-    ) { contactUri: Uri? ->
-        val memberToUpdate = targetMemberForContactLink
-        if (contactUri != null && memberToUpdate != null) {
-            val extracted = extractPhoneAndNameFromContactUri(context, contactUri)
-            if (extracted != null && extracted.second.isNotBlank()) {
-                val cleanPhone = extracted.second
-                viewModel.updateFriendUpi(
-                    memberId = memberToUpdate.memberId,
-                    newName = memberToUpdate.name,
-                    newUpiId = "$cleanPhone@upi",
-                    newAvatarSeed = memberToUpdate.avatarSeed
-                )
-            } else {
-                Toast.makeText(context, "Could not read phone number from selected contact", Toast.LENGTH_SHORT).show()
-            }
-        }
-        targetMemberForContactLink = null
-    }
+    var targetMemberForContactLink by remember { mutableStateOf<GroupMemberEntity?>(null) }
+    var showContactLinkSheet by remember { mutableStateOf(false) }
+
+    val rawDebtEdges = (uiState.expenses.size * uiState.activeGroupMembers.size).coerceAtLeast(settlementPlan.size)
 
     val directContactPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted: Boolean ->
         if (granted && targetMemberForContactLink != null) {
-            directContactPickerLauncher.launch(null)
+            viewModel.loadDeviceContacts(context)
+            showContactLinkSheet = true
         } else {
             Toast.makeText(context, "Contacts permission required to link phone for UPI", Toast.LENGTH_SHORT).show()
         }
@@ -1263,19 +1280,35 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
             Manifest.permission.READ_CONTACTS
         ) == PackageManager.PERMISSION_GRANTED
         if (hasPermission) {
-            directContactPickerLauncher.launch(null)
+            viewModel.loadDeviceContacts(context)
+            showContactLinkSheet = true
         } else {
             directContactPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
         }
     }
 
-    editingFriend?.let { friend ->
-        EditFriendUpiDialog(
-            member = friend,
-            onDismiss = { editingFriend = null },
-            onSave = { newName, newUpi, newAvatarSeed ->
-                viewModel.updateFriendUpi(friend.memberId, newName, newUpi, newAvatarSeed)
-                editingFriend = null
+    if (showContactLinkSheet && targetMemberForContactLink != null) {
+        val memberToUpdate = targetMemberForContactLink!!
+        ContactPickerBottomSheet(
+            contacts = deviceContacts,
+            isLoading = isLoadingContacts,
+            multiSelect = false,
+            onDismiss = {
+                showContactLinkSheet = false
+                targetMemberForContactLink = null
+            },
+            onConfirmSelection = { chosen ->
+                val picked = chosen.firstOrNull()
+                if (picked != null && picked.cleanPhone.length == 10) {
+                    viewModel.updateFriendUpi(
+                        memberId = memberToUpdate.memberId,
+                        newName = memberToUpdate.name,
+                        newUpiId = "${picked.cleanPhone}@upi",
+                        newAvatarSeed = memberToUpdate.avatarSeed
+                    )
+                }
+                showContactLinkSheet = false
+                targetMemberForContactLink = null
             }
         )
     }
@@ -1296,7 +1329,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                 color = SplitMateTheme.PrimaryDark
             )
             Text(
-                text = "Min-Cash Flow network simplification & Phone-Linked UPI",
+                text = "Minimum-cash-flow settlements with direct UPI & WhatsApp",
                 fontFamily = SplitMateTheme.FontRounded,
                 fontSize = 12.sp,
                 color = SplitMateTheme.TextSecondary
@@ -1374,7 +1407,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                             Spacer(modifier = Modifier.width(8.dp))
                             Surface(shape = SplitMateTheme.RadiusBadge, color = SplitMateTheme.SurfaceMuted) {
                                 Text(
-                                    text = "${transfer.fromName} pays ${transfer.formattedDisplayAmount} →",
+                                    text = "${transfer.fromName} pays ${transfer.formattedDisplayAmount} to ${transfer.toName}",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = SplitMateTheme.PrimaryDark,
@@ -1397,78 +1430,24 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // Phone-Linked Status Chip or "+ Link Contact" Chip
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            onClick = { launchContactPickerForMember(toRoomMember) },
-                            shape = SplitMateTheme.RadiusBadge,
-                            color = if (transfer.hasLinkedPhone) SplitMateTheme.SageSurface else SplitMateTheme.TerracottaSurface,
-                            border = BorderStroke(
-                                1.dp,
-                                if (transfer.hasLinkedPhone) SplitMateTheme.AccentSage else SplitMateTheme.TerracottaText.copy(alpha = 0.4f)
-                            )
+                    if (transfer.hasLinkedPhone) {
+                        // Primary Action: High-Emphasis "Pay via UPI" + Mark Paid
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = if (transfer.hasLinkedPhone) Icons.Rounded.CheckCircle else Icons.Rounded.PersonAddAlt1,
-                                    contentDescription = null,
-                                    tint = if (transfer.hasLinkedPhone) SplitMateTheme.SageText else SplitMateTheme.TerracottaText,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = if (transfer.hasLinkedPhone) {
-                                        "Phone Linked: ${transfer.upiId}"
-                                    } else {
-                                        "+ Link Contact"
-                                    },
-                                    fontFamily = SplitMateTheme.FontRounded,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = if (transfer.hasLinkedPhone) SplitMateTheme.SageText else SplitMateTheme.TerracottaText
-                                )
-                            }
-                        }
-
-                        if (toRoomMember != null) {
-                            TextButton(
-                                onClick = { editingFriend = toRoomMember },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = "Avatar & Handle",
-                                    fontFamily = SplitMateTheme.FontRounded,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = SplitMateTheme.TextSecondary
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        if (transfer.hasLinkedPhone) {
                             Button(
                                 onClick = {
                                     val upiUri = Uri.parse(
-                                        "upi://pay?pa=${transfer.upiId}&pn=${Uri.encode(transfer.toName)}&am=${transfer.amount}&cu=INR"
+                                        "upi://pay?pa=${transfer.cleanPhone}@upi&pn=" +
+                                            Uri.encode(transfer.toName) +
+                                            "&am=" + transfer.amount +
+                                            "&cu=INR"
                                     )
-                                    val upiIntent = Intent(Intent.ACTION_VIEW, upiUri)
-                                    context.startActivity(Intent.createChooser(upiIntent, "Pay with UPI"))
+                                    val intent = Intent(Intent.ACTION_VIEW, upiUri)
+                                    context.startActivity(Intent.createChooser(intent, "Pay with UPI"))
                                 },
                                 shape = SplitMateTheme.RadiusButton,
                                 colors = ButtonDefaults.buttonColors(
@@ -1479,22 +1458,79 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                     .weight(1.35f)
                                     .sizeIn(minHeight = 46.dp)
                             ) {
-                                Icon(Icons.Rounded.AccountBalance, contentDescription = null, tint = SplitMateTheme.ScreenBg, modifier = Modifier.size(16.dp))
+                                Icon(
+                                    imageVector = Icons.Rounded.AccountBalanceWallet,
+                                    contentDescription = null,
+                                    tint = SplitMateTheme.ScreenBg,
+                                    modifier = Modifier.size(16.dp)
+                                )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Pay via UPI (Phone Linked)",
+                                    text = "Pay via UPI",
                                     fontFamily = SplitMateTheme.FontRounded,
                                     fontWeight = FontWeight.Bold,
                                     color = SplitMateTheme.ScreenBg,
-                                    fontSize = 12.sp,
+                                    fontSize = 13.sp,
                                     maxLines = 1
                                 )
                             }
-                        } else {
-                            Button(
+
+                            OutlinedButton(
+                                onClick = { viewModel.markGreedyTransferSettled(transfer.transfer) },
+                                shape = SplitMateTheme.RadiusButton,
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = SplitMateTheme.PrimaryDark),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .sizeIn(minHeight = 46.dp)
+                            ) {
+                                Text("Mark Paid", fontFamily = SplitMateTheme.FontRounded, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Secondary Action: Direct WhatsApp Link via OutlinedButton + Vector Icon
+                        OutlinedButton(
+                            onClick = {
+                                val whatsappUri = Uri.parse(
+                                    "https://api.whatsapp.com/send?phone=91" +
+                                        transfer.cleanPhone +
+                                        "&text=" +
+                                        Uri.encode("Hey " + transfer.toName + ", reminder to settle ₹" + transfer.amount + " on SplitMate.")
+                                )
+                                val whatsappIntent = Intent(Intent.ACTION_VIEW, whatsappUri)
+                                context.startActivity(whatsappIntent)
+                            },
+                            shape = SplitMateTheme.RadiusButton,
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = SplitMateTheme.PrimaryDark),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .sizeIn(minHeight = 44.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.Chat,
+                                contentDescription = null,
+                                tint = SplitMateTheme.PrimaryDark,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Remind on WhatsApp",
+                                fontFamily = SplitMateTheme.FontRounded,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
+                            )
+                        }
+                    } else {
+                        // Phone number missing -> ONLY ONE unified FilledTonalButton: "+ Link Contact"
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilledTonalButton(
                                 onClick = { launchContactPickerForMember(toRoomMember) },
                                 shape = SplitMateTheme.RadiusButton,
-                                colors = ButtonDefaults.buttonColors(
+                                colors = ButtonDefaults.filledTonalButtonColors(
                                     containerColor = SplitMateTheme.AccentSage,
                                     contentColor = Color(0xFF23201E)
                                 ),
@@ -1502,7 +1538,12 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                     .weight(1.35f)
                                     .sizeIn(minHeight = 46.dp)
                             ) {
-                                Icon(Icons.Rounded.Contacts, contentDescription = null, tint = Color(0xFF23201E), modifier = Modifier.size(16.dp))
+                                Icon(
+                                    imageVector = Icons.Rounded.Contacts,
+                                    contentDescription = null,
+                                    tint = Color(0xFF23201E),
+                                    modifier = Modifier.size(16.dp)
+                                )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = "+ Link Contact",
@@ -1512,41 +1553,19 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                     fontSize = 13.sp
                                 )
                             }
-                        }
 
-                        OutlinedButton(
-                            onClick = { viewModel.markGreedyTransferSettled(transfer.transfer) },
-                            shape = SplitMateTheme.RadiusButton,
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = SplitMateTheme.PrimaryDark),
-                            modifier = Modifier
-                                .weight(1f)
-                                .sizeIn(minHeight = 46.dp)
-                        ) {
-                            Text("Mark Paid", fontFamily = SplitMateTheme.FontRounded, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            OutlinedButton(
+                                onClick = { viewModel.markGreedyTransferSettled(transfer.transfer) },
+                                shape = SplitMateTheme.RadiusButton,
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = SplitMateTheme.PrimaryDark),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .sizeIn(minHeight = 46.dp)
+                            ) {
+                                Text("Mark Paid", fontFamily = SplitMateTheme.FontRounded, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    AssistChip(
-                        onClick = {
-                            val upiText = if (transfer.hasLinkedPhone) " (${transfer.upiId})" else ""
-                            val sendIntent = Intent().apply {
-                                action = Intent.ACTION_SEND
-                                putExtra(
-                                    Intent.EXTRA_TEXT,
-                                    "Hey ${transfer.fromName}! Reminder for ${transfer.formattedDisplayAmount} settlement to ${transfer.toName}$upiText on SplitMate."
-                                )
-                                type = "text/plain"
-                            }
-                            context.startActivity(Intent.createChooser(sendIntent, "Share via"))
-                        },
-                        label = { Text("💬 Send WhatsApp Reminder", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
-                        leadingIcon = { Icon(Icons.Rounded.Share, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                        shape = SplitMateTheme.RadiusButton,
-                        colors = AssistChipDefaults.assistChipColors(containerColor = SplitMateTheme.SurfaceMuted),
-                        modifier = Modifier.sizeIn(minHeight = 42.dp)
-                    )
                 }
             }
         }
@@ -1577,13 +1596,13 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("All Accounts Balanced", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = SplitMateTheme.PrimaryDark)
-                    Text("Zero debt loop detected · Exact Split Certified", fontSize = 12.sp, color = SplitMateTheme.TextSecondary)
+                    Text("Zero open balances across group members", fontSize = 12.sp, color = SplitMateTheme.TextSecondary)
                     Spacer(modifier = Modifier.height(10.dp))
                     Surface(
                         shape = SplitMateTheme.RadiusBadge,
                         color = SplitMateTheme.PrimaryDark
                     ) {
-                        Text("Equilibrium Reached", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SplitMateTheme.ScreenBg, modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp))
+                        Text("Settled", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SplitMateTheme.ScreenBg, modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp))
                     }
                 }
             }
@@ -1592,7 +1611,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
 }
 
 // ==============================================================================
-// TAB 4: AUDIT (History, Rollback & Offline Vault)
+// TAB 4: ACTIVITY (History & Rollback)
 // ==============================================================================
 @Composable
 fun AuditVaultScreen(viewModel: SplitMateViewModel) {
@@ -1608,21 +1627,21 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
     ) {
         item {
             Text(
-                text = "Audit & Local Vault",
+                text = "Activity & History",
                 fontFamily = SplitMateTheme.FontDisplay,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = SplitMateTheme.PrimaryDark
             )
             Text(
-                text = "Cryptographic ledger footprint and SQLite persistence",
+                text = "Complete timeline of group expenses and settlements",
                 fontFamily = SplitMateTheme.FontRounded,
                 fontSize = 12.sp,
                 color = SplitMateTheme.TextSecondary
             )
         }
 
-        // 1. Vault Status Banner
+        // 1. Activity Status Banner
         item {
             Card(
                 shape = SplitMateTheme.RadiusPanel,
@@ -1645,12 +1664,12 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
                                 .background(SplitMateTheme.AccentSage),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Rounded.Storage, contentDescription = null, tint = Color(0xFF23201E))
+                            Icon(Icons.Rounded.History, contentDescription = null, tint = Color(0xFF23201E))
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Text("Private On-Device Vault", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = SplitMateTheme.PrimaryDark)
-                            Text("Room SQLite · Native ₹ INR Vault", fontSize = 12.sp, color = SplitMateTheme.TextSecondary)
+                            Text("Expense History", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = SplitMateTheme.PrimaryDark)
+                            Text("All transactions saved on this device", fontSize = 12.sp, color = SplitMateTheme.TextSecondary)
                         }
                     }
 
@@ -1664,17 +1683,17 @@ fun AuditVaultScreen(viewModel: SplitMateViewModel) {
                         ) {
                             Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF388E3C)))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("${uiState.expenses.size} Synced", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SplitMateTheme.SageText)
+                            Text("${uiState.expenses.size} Recorded", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SplitMateTheme.SageText)
                         }
                     }
                 }
             }
         }
 
-        // 2. Transaction Audit Feed
+        // 2. Transaction Feed
         item {
             Text(
-                text = "Live Ledger Audit Log",
+                text = "Recent Expenses",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = SplitMateTheme.TextSecondary

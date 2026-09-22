@@ -19,6 +19,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Backspace
+import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -45,13 +47,18 @@ import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.splitmate.app.SplitMateTheme
 import com.splitmate.app.data.GroupMemberEntity
+import com.splitmate.app.ui.ContactPickerBottomSheet
 import com.splitmate.app.ui.DesignSystemBindings
+import com.splitmate.app.ui.DeviceContact
 import com.splitmate.app.ui.SplitMateBrandFontFamily
 import com.splitmate.app.ui.SplitMateDisplayFontFamily
+import com.splitmate.app.ui.queryAllDeviceContacts
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.splitmate.app.ui.SplitMateViewModel
 import com.splitmate.app.ui.buildDiceBearOpenPeepsUrl
 import com.splitmate.app.ui.extractInitialsFromNameOrSeed
-import com.splitmate.app.ui.extractPhoneAndNameFromContactUri
 import com.splitmate.app.ui.resolveGroupCategoryIcon
 import java.text.NumberFormat
 import java.util.Locale
@@ -182,7 +189,7 @@ fun QuickExpenseScreen(
     }
 
     var amountDigits by remember { mutableStateOf("450") }
-    var expenseCategoryTitle by remember { mutableStateOf("🍜 Dinner & Food Tab") }
+    var expenseCategoryTitle by remember { mutableStateOf("Dinner & Food") }
     var showEditTitleDialog by remember { mutableStateOf(false) }
     var showGroupDropdown by remember { mutableStateOf(false) }
     var editingFriend by remember { mutableStateOf<GroupMemberEntity?>(null) }
@@ -209,6 +216,16 @@ fun QuickExpenseScreen(
 
     if (showEditTitleDialog) {
         var draftTitle by remember { mutableStateOf(expenseCategoryTitle) }
+        val presetCategories = remember {
+            listOf(
+                "Dinner & Food" to Icons.Rounded.Restaurant,
+                "Travel & Flight" to Icons.Rounded.Flight,
+                "Groceries" to Icons.Rounded.ShoppingCart,
+                "Home & Rent" to Icons.Rounded.Home,
+                "Party & Drinks" to Icons.Rounded.LocalBar,
+                "Coffee & Cafe" to Icons.Rounded.LocalCafe
+            )
+        }
         AlertDialog(
             onDismissRequest = { showEditTitleDialog = false },
             containerColor = surfaceColor,
@@ -221,19 +238,45 @@ fun QuickExpenseScreen(
                 )
             },
             text = {
-                OutlinedTextField(
-                    value = draftTitle,
-                    onValueChange = { draftTitle = it },
-                    label = { Text("What was this expense for?", fontFamily = SplitMateBrandFontFamily) },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = textPrimary,
-                        unfocusedTextColor = textPrimary,
-                        focusedBorderColor = textPrimary,
-                        unfocusedBorderColor = keypadBorder
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(presetCategories) { (catLabel, catIcon) ->
+                            val isSelected = draftTitle.equals(catLabel, ignoreCase = true)
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { draftTitle = catLabel },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = catIcon,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        text = catLabel,
+                                        fontFamily = SplitMateBrandFontFamily,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = draftTitle,
+                        onValueChange = { draftTitle = it },
+                        label = { Text("What was this expense for?", fontFamily = SplitMateBrandFontFamily) },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = textPrimary,
+                            unfocusedTextColor = textPrimary,
+                            focusedBorderColor = textPrimary,
+                            unfocusedBorderColor = keypadBorder
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             },
             confirmButton = {
                 Button(
@@ -374,7 +417,7 @@ fun QuickExpenseScreen(
                         modifier = Modifier.padding(end = 12.dp)
                     ) {
                         Text(
-                            text = "₹ INR • Exact Split",
+                            text = "₹ INR • Equal Split",
                             fontFamily = SplitMateBrandFontFamily,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -428,6 +471,13 @@ fun QuickExpenseScreen(
                             .padding(horizontal = 14.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Icon(
+                            imageVector = resolveGroupCategoryIcon("", expenseCategoryTitle),
+                            contentDescription = null,
+                            tint = textPrimary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = expenseCategoryTitle,
                             fontFamily = SplitMateBrandFontFamily,
@@ -746,7 +796,7 @@ fun QuickExpenseScreen(
                             TactileSquircleKey(
                                 label = "BACK",
                                 isIcon = true,
-                                icon = Icons.Rounded.Backspace,
+                                icon = Icons.AutoMirrored.Rounded.Backspace,
                                 keypadBg = keypadBg,
                                 keypadBorder = keypadBorder,
                                 textPrimary = textPrimary,
@@ -789,7 +839,7 @@ fun QuickExpenseScreen(
                                 modifier = Modifier.fillMaxSize()
                             ) {
                                 Icon(
-                                    imageVector = Icons.Rounded.ReceiptLong,
+                                    imageVector = Icons.AutoMirrored.Rounded.ReceiptLong,
                                     contentDescription = "Edit Note",
                                     tint = QuickExpenseThemeTokens.SageText,
                                     modifier = Modifier.size(18.dp)
@@ -974,7 +1024,7 @@ private fun appendDigit(key: String, current: String, onUpdate: (String) -> Unit
 }
 
 // ==============================================================================
-// EDIT FRIEND PERSONA & NATIVE CONTACTS UPI DIALOG (Points 1 & 4)
+// EDIT FRIEND PERSONA & IN-APP CONTACT PICKER DIALOG
 // ==============================================================================
 @Composable
 fun EditFriendUpiDialog(
@@ -983,6 +1033,7 @@ fun EditFriendUpiDialog(
     onSave: (name: String, upiId: String, avatarSeed: String) -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val initialStyle = remember(member.avatarSeed) {
         member.avatarSeed.substringAfter('|', "Neutral").takeIf {
             it in listOf("Masculine", "Feminine", "Neutral")
@@ -990,36 +1041,29 @@ fun EditFriendUpiDialog(
     }
     var friendName by remember(member) { mutableStateOf(member.name) }
     var selectedPresentationStyle by remember(member) { mutableStateOf(initialStyle) }
-    var selectedUpiHandleSuffix by remember(member.upiId) {
-        mutableStateOf(if (member.upiId.endsWith("@paytm")) "paytm" else "upi")
-    }
 
     val initialCleanDigits = remember(member.upiId) {
         member.upiId.substringBefore('@').replace(Regex("[^0-9]"), "")
     }
     var pickedPhoneNumber by remember(member) { mutableStateOf(initialCleanDigits) }
-    val resolvedPhoneUpi = remember(pickedPhoneNumber, selectedUpiHandleSuffix) {
-        if (pickedPhoneNumber.length >= 6) {
-            "$pickedPhoneNumber@$selectedUpiHandleSuffix"
+    val resolvedPhoneUpi = remember(pickedPhoneNumber) {
+        if (pickedPhoneNumber.length == 10) {
+            "$pickedPhoneNumber@upi"
         } else {
             ""
         }
     }
 
-    val contactPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickContact()
-    ) { contactUri: Uri? ->
-        if (contactUri != null) {
-            val extracted = extractPhoneAndNameFromContactUri(context, contactUri)
-            if (extracted != null) {
-                val (contactName, cleanDigits) = extracted
-                if (contactName.isNotBlank()) {
-                    friendName = contactName
-                }
-                if (cleanDigits.isNotBlank()) {
-                    pickedPhoneNumber = cleanDigits
-                }
-            }
+    var showInAppContactPicker by remember { mutableStateOf(false) }
+    var deviceContacts by remember { mutableStateOf<List<DeviceContact>>(emptyList()) }
+    var isLoadingContacts by remember { mutableStateOf(false) }
+
+    val loadAndOpenSheet = {
+        showInAppContactPicker = true
+        scope.launch {
+            isLoadingContacts = true
+            deviceContacts = withContext(Dispatchers.IO) { queryAllDeviceContacts(context) }
+            isLoadingContacts = false
         }
     }
 
@@ -1027,8 +1071,26 @@ fun EditFriendUpiDialog(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted: Boolean ->
         if (granted) {
-            contactPickerLauncher.launch(null)
+            loadAndOpenSheet()
         }
+    }
+
+    if (showInAppContactPicker) {
+        ContactPickerBottomSheet(
+            contacts = deviceContacts,
+            isLoading = isLoadingContacts,
+            multiSelect = false,
+            title = "Link Contact for ${friendName.ifBlank { member.name }}",
+            subtitle = "Select a phone contact to enable direct UPI and WhatsApp",
+            onDismissRequest = { showInAppContactPicker = false },
+            onConfirmSelected = { selected ->
+                val chosen = selected.firstOrNull()
+                if (chosen != null) {
+                    friendName = chosen.name
+                    pickedPhoneNumber = chosen.cleanPhone
+                }
+            }
+        )
     }
 
     val avatarPreviewUrl = remember(friendName, selectedPresentationStyle) {
@@ -1074,14 +1136,14 @@ fun EditFriendUpiDialog(
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(
-                        text = "Friend Profile & Contact Link",
+                        text = "Edit Member",
                         fontFamily = SplitMateDisplayFontFamily,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = QuickExpenseThemeTokens.PrimaryDark
                     )
                     Text(
-                        text = "Avatar Style & Phone-Linked UPI",
+                        text = "Update profile and phone contact",
                         fontFamily = SplitMateBrandFontFamily,
                         fontSize = 12.sp,
                         color = QuickExpenseThemeTokens.TextSecondary
@@ -1154,7 +1216,7 @@ fun EditFriendUpiDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // 3. Pick from Contacts Button (Strictly derives UPI from contact phone number)
+                // 3. Pick from Contacts Button (Opens In-App ContactPickerBottomSheet)
                 Button(
                     onClick = {
                         val hasPermission = ContextCompat.checkSelfPermission(
@@ -1162,7 +1224,7 @@ fun EditFriendUpiDialog(
                             Manifest.permission.READ_CONTACTS
                         ) == PackageManager.PERMISSION_GRANTED
                         if (hasPermission) {
-                            contactPickerLauncher.launch(null)
+                            loadAndOpenSheet()
                         } else {
                             permissionLauncher.launch(Manifest.permission.READ_CONTACTS)
                         }
@@ -1178,72 +1240,19 @@ fun EditFriendUpiDialog(
                         .height(48.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Rounded.ContactPhone,
+                        imageVector = Icons.Rounded.Contacts,
                         contentDescription = null,
                         tint = QuickExpenseThemeTokens.SageText,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "+ Link Phone from Contacts",
+                        text = if (pickedPhoneNumber.length == 10) "Change Linked Contact (+91 $pickedPhoneNumber)" else "+ Link Contact",
                         fontFamily = SplitMateBrandFontFamily,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 14.sp,
                         color = QuickExpenseThemeTokens.SageText
                     )
-                }
-
-                // 4. Resolved Phone UPI Route Card + @upi / @paytm Suffix Pill
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = QuickExpenseThemeTokens.SurfaceKeypad,
-                    border = BorderStroke(1.dp, QuickExpenseThemeTokens.BorderLight),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Derived UPI Route",
-                                fontFamily = SplitMateBrandFontFamily,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = QuickExpenseThemeTokens.TextSecondary
-                            )
-                            Text(
-                                text = resolvedPhoneUpi.ifBlank { "No Contact Number Linked" },
-                                fontFamily = SplitMateDisplayFontFamily,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = QuickExpenseThemeTokens.PrimaryDark
-                            )
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            listOf("upi", "paytm").forEach { suffix ->
-                                val active = selectedUpiHandleSuffix == suffix
-                                Surface(
-                                    onClick = { selectedUpiHandleSuffix = suffix },
-                                    shape = QuickExpenseThemeTokens.RadiusPill,
-                                    color = if (active) QuickExpenseThemeTokens.PrimaryDark else Color.Transparent,
-                                    border = BorderStroke(1.dp, QuickExpenseThemeTokens.BorderLight)
-                                ) {
-                                    Text(
-                                        text = "@$suffix",
-                                        fontFamily = SplitMateBrandFontFamily,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (active) QuickExpenseThemeTokens.ScreenBg else QuickExpenseThemeTokens.TextSecondary,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
                 }
             }
         },
@@ -1260,7 +1269,7 @@ fun EditFriendUpiDialog(
                 )
             ) {
                 Text(
-                    "Save Friend & Link",
+                    "Save Member",
                     fontFamily = SplitMateBrandFontFamily,
                     fontWeight = FontWeight.Bold
                 )

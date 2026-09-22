@@ -45,7 +45,6 @@ import com.splitmate.app.ui.SplitMateBrandFontFamily
 import com.splitmate.app.ui.SplitMateDisplayFontFamily
 import com.splitmate.app.ui.buildDiceBearOpenPeepsUrl
 import com.splitmate.app.ui.extractInitialsFromNameOrSeed
-import com.splitmate.app.ui.extractPhoneAndNameFromContactUri
 
 // ==============================================================================
 // SPLITMATE M3 EXPRESSIVE THEME TOKENS & SHAPES (GM3 DARK ELEVATION COMPLIANT)
@@ -177,7 +176,7 @@ fun OnboardingSetupScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Zero-Signup · Native INR (₹) Vault",
+                            text = "Split Bills Effortlessly with Friends",
                             fontFamily = SplitMateBrandFontFamily,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
@@ -198,7 +197,7 @@ fun OnboardingSetupScreen(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Set up your local profile & avatar persona.",
+                    text = "Set up your profile name and avatar style.",
                     fontFamily = SplitMateBrandFontFamily,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
@@ -233,7 +232,6 @@ fun OnboardingSetupScreen(
                             .background(Color(0xFFE9F2D8)),
                         contentAlignment = Alignment.Center
                     ) {
-                        // Clean 1-2 letter name initials ONLY (never "Masculine"/"Feminine")
                         Text(
                             text = cleanInitials,
                             fontFamily = SplitMateDisplayFontFamily,
@@ -276,7 +274,7 @@ fun OnboardingSetupScreen(
                     horizontalAlignment = Alignment.Start
                 ) {
                     Text(
-                        text = "Avatar Hair & Presentation Style",
+                        text = "Avatar Presentation Style",
                         fontFamily = SplitMateBrandFontFamily,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
@@ -353,43 +351,6 @@ fun OnboardingSetupScreen(
                         .fillMaxWidth()
                         .sizeIn(minHeight = 54.dp)
                 )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Math & Vault Trust Indicator
-                Surface(
-                    shape = SplitMateThemeTokens.RadiusCard,
-                    color = SplitMateThemeTokens.SageSurface,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Shield,
-                            contentDescription = null,
-                            tint = SplitMateThemeTokens.SageText,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = "Exact Split Precision Engine (₹ INR)",
-                                fontFamily = SplitMateBrandFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                color = SplitMateThemeTokens.SageText
-                            )
-                            Text(
-                                text = "Integer-paise precision with local Room SQLite storage.",
-                                fontFamily = SplitMateBrandFontFamily,
-                                fontSize = 12.sp,
-                                color = Color(0xFF23201E)
-                            )
-                        }
-                    }
-                }
             }
 
             // CTA: Primary pill button at bottom
@@ -420,7 +381,7 @@ fun OnboardingSetupScreen(
                         horizontalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = "Create Profile & Enter Vault",
+                            text = "Continue to SplitMate",
                             fontFamily = SplitMateBrandFontFamily,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.ExtraBold,
@@ -435,15 +396,6 @@ fun OnboardingSetupScreen(
                         )
                     }
                 }
-
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Encrypted On-Device · No External Accounts Needed",
-                    fontFamily = SplitMateBrandFontFamily,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = secondaryText
-                )
             }
         }
     }
@@ -451,15 +403,20 @@ fun OnboardingSetupScreen(
 
 // ==============================================================================
 // SCREEN 2: UserSettingsScreen()
+// Strictly contains:
+// 1. User Profile Name & Avatar presentation style
+// 2. Appearance (Dark Theme toggle)
+// 3. Data Management (Reset App Data)
 // ==============================================================================
+@Suppress("UNUSED_PARAMETER")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UserSettingsScreen(
     userName: String = "Akshay",
     avatarSeed: String = userName,
-    upiId: String = "9876543210@upi",
-    defaultCurrencyCode: String = "INR (₹)",
-    totalBalanceText: String = "+₹0.00",
+    upiId: String = "",
+    defaultCurrencyCode: String = "INR",
+    totalBalanceText: String = "₹0.00",
     activeGroupsCount: Int = 0,
     isDarkThemeInitial: Boolean = false,
     allCurrencies: List<com.splitmate.app.data.CurrencyRateEntity> = emptyList(),
@@ -467,13 +424,20 @@ fun UserSettingsScreen(
     onBackClick: () -> Unit = {},
     onUpdateUpiId: (String) -> Unit = {},
     onUpdateCurrencyCode: (String) -> Unit = {},
+    onUpdateUserProfile: (newName: String, newSeed: String) -> Unit = { _, _ -> },
     onThemeToggle: (isDark: Boolean) -> Unit = {},
     onClearVaultClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var isDarkTheme by remember(isDarkThemeInitial) { mutableStateOf(isDarkThemeInitial) }
-    var showClearVaultDialog by remember { mutableStateOf(false) }
-    var showLinkPhoneDialog by remember { mutableStateOf(false) }
+    var showResetDataDialog by remember { mutableStateOf(false) }
+
+    var editedName by remember(userName) { mutableStateOf(userName) }
+    val initialStyle = remember(avatarSeed) {
+        val part = avatarSeed.substringAfter('|', "Masculine")
+        if (part in listOf("Masculine", "Feminine", "Neutral")) part else "Masculine"
+    }
+    var selectedStyle by remember(initialStyle) { mutableStateOf(initialStyle) }
 
     val screenBg by animateColorAsState(
         targetValue = if (isDarkTheme) DesignSystemBindings.GM3DarkBackground else DesignSystemBindings.GM3LightBackground,
@@ -506,11 +470,14 @@ fun UserSettingsScreen(
         label = "SettingsBorderColor"
     )
 
-    val diceBearSvgUrl = remember(avatarSeed) {
-        buildDiceBearOpenPeepsUrl(avatarSeed)
+    val effectiveSeed = remember(editedName, selectedStyle) {
+        "${editedName.trim().ifEmpty { "Explorer" }}|$selectedStyle"
     }
-    val cleanInitials = remember(userName) {
-        extractInitialsFromNameOrSeed(userName)
+    val diceBearSvgUrl = remember(effectiveSeed) {
+        buildDiceBearOpenPeepsUrl(effectiveSeed)
+    }
+    val cleanInitials = remember(editedName) {
+        extractInitialsFromNameOrSeed(editedName.ifBlank { userName })
     }
 
     Scaffold(
@@ -538,33 +505,6 @@ fun UserSettingsScreen(
                         )
                     }
                 },
-                actions = {
-                    Surface(
-                        shape = SplitMateThemeTokens.RadiusPill,
-                        color = SplitMateThemeTokens.SageSurface,
-                        modifier = Modifier.padding(end = 16.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF388E3C))
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "v8.0 INR Vault",
-                                fontFamily = SplitMateBrandFontFamily,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = SplitMateThemeTokens.SageText
-                            )
-                        }
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = screenBg
                 )
@@ -577,161 +517,233 @@ fun UserSettingsScreen(
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(top = 8.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Header: Avatar (88dp) overlapping a compact card with User's Name and Phone-linked UPI
+            // Section 1: User Profile Name & Avatar Presentation Style
             item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                    contentAlignment = Alignment.TopCenter
-                ) {
+                Column {
+                    Text(
+                        text = "Profile & Avatar",
+                        fontFamily = SplitMateDisplayFontFamily,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = textPrimary,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                    )
+
                     Card(
                         shape = SplitMateThemeTokens.RadiusCard,
                         colors = CardDefaults.cardColors(containerColor = cardBg),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 44.dp)
                             .border(1.dp, borderColor, SplitMateThemeTokens.RadiusCard)
-                            .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 16.dp)
-                                .padding(top = 42.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Text(
-                                text = userName,
-                                fontFamily = SplitMateDisplayFontFamily,
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = textPrimary
+                            Box(
+                                modifier = Modifier
+                                    .size(84.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        Brush.radialGradient(
+                                            colors = listOf(
+                                                SplitMateThemeTokens.AccentSage,
+                                                Color(0xFFB5DC82)
+                                            )
+                                        )
+                                    )
+                                    .border(3.dp, cardBg, CircleShape)
+                                    .shadow(elevation = 6.dp, shape = CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = cleanInitials,
+                                    fontFamily = SplitMateDisplayFontFamily,
+                                    fontSize = 22.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = SplitMateThemeTokens.SageText
+                                )
+                                AsyncImage(
+                                    model = ImageRequest.Builder(context)
+                                        .data(diceBearSvgUrl)
+                                        .decoderFactory(SvgDecoder.Factory())
+                                        .crossfade(true)
+                                        .build(),
+                                    contentDescription = "Profile Avatar",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(CircleShape)
+                                )
+                            }
+
+                            OutlinedTextField(
+                                value = editedName,
+                                onValueChange = { editedName = it },
+                                label = {
+                                    Text(
+                                        text = "Display Name",
+                                        fontFamily = SplitMateBrandFontFamily,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Person,
+                                        contentDescription = null,
+                                        tint = textPrimary
+                                    )
+                                },
+                                singleLine = true,
+                                shape = RoundedCornerShape(16.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = textPrimary,
+                                    unfocusedTextColor = textPrimary,
+                                    focusedContainerColor = mutedBg.copy(alpha = 0.4f),
+                                    unfocusedContainerColor = mutedBg.copy(alpha = 0.4f),
+                                    focusedBorderColor = textPrimary,
+                                    unfocusedBorderColor = borderColor,
+                                    focusedLabelColor = textPrimary,
+                                    unfocusedLabelColor = textSecondary
+                                ),
+                                modifier = Modifier.fillMaxWidth()
                             )
 
-                            Spacer(modifier = Modifier.height(6.dp))
-
-                            // Phone-linked UPI Chip with Contact Picker Action
-                            Surface(
-                                shape = SplitMateThemeTokens.RadiusPill,
-                                color = mutedBg,
-                                onClick = { showLinkPhoneDialog = true }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    text = "Avatar Presentation Style",
+                                    fontFamily = SplitMateBrandFontFamily,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = textSecondary,
+                                    modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
+                                )
+                                Surface(
+                                    shape = SplitMateThemeTokens.RadiusPill,
+                                    color = mutedBg,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .border(1.dp, borderColor, SplitMateThemeTokens.RadiusPill)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.ContactPhone,
-                                        contentDescription = null,
-                                        tint = textPrimary,
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = upiId.ifBlank { "Link Phone via Contacts" },
-                                        fontFamily = SplitMateBrandFontFamily,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = textPrimary
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Icon(
-                                        imageVector = Icons.Rounded.Contacts,
-                                        contentDescription = "Link Contact Phone",
-                                        tint = textSecondary,
-                                        modifier = Modifier.size(14.dp)
-                                    )
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(4.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        listOf("Masculine", "Feminine", "Neutral").forEach { style ->
+                                            val isSelected = selectedStyle == style
+                                            Surface(
+                                                onClick = { selectedStyle = style },
+                                                shape = SplitMateThemeTokens.RadiusPill,
+                                                color = if (isSelected) textPrimary else Color.Transparent,
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(38.dp)
+                                            ) {
+                                                Box(contentAlignment = Alignment.Center) {
+                                                    Text(
+                                                        text = style,
+                                                        fontFamily = SplitMateBrandFontFamily,
+                                                        fontSize = 13.sp,
+                                                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                                        color = if (isSelected) screenBg else textSecondary
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // Stats Bento Grid
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            Button(
+                                onClick = {
+                                    val clean = editedName.trim().ifEmpty { "Explorer" }
+                                    onUpdateUserProfile(clean, "$clean|$selectedStyle")
+                                    Toast.makeText(context, "Profile updated", Toast.LENGTH_SHORT).show()
+                                },
+                                shape = SplitMateThemeTokens.RadiusPill,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = textPrimary,
+                                    contentColor = screenBg
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(46.dp)
                             ) {
-                                Surface(
-                                    shape = SplitMateThemeTokens.RadiusPanel,
-                                    color = SplitMateThemeTokens.SageSurface,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(12.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        Text("Balance", fontFamily = SplitMateBrandFontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SplitMateThemeTokens.SageText)
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text(totalBalanceText, fontFamily = SplitMateDisplayFontFamily, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = SplitMateThemeTokens.SageText)
-                                    }
-                                }
-
-                                Surface(
-                                    shape = SplitMateThemeTokens.RadiusPanel,
-                                    color = mutedBg,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(12.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        Text("Active Groups", fontFamily = SplitMateBrandFontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = textSecondary)
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text("$activeGroupsCount Ledgers", fontFamily = SplitMateDisplayFontFamily, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = textPrimary)
-                                    }
-                                }
+                                Text(
+                                    text = "Save Profile",
+                                    fontFamily = SplitMateBrandFontFamily,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 14.sp
+                                )
                             }
                         }
                     }
+                }
+            }
 
-                    // Overlapping Avatar (88dp with clean initials fallback + DiceBear SVG)
-                    Box(
+            // Section 2: Appearance (Dark Theme Toggle)
+            item {
+                Column {
+                    Text(
+                        text = "Appearance",
+                        fontFamily = SplitMateDisplayFontFamily,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = textPrimary,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                    )
+
+                    Card(
+                        shape = SplitMateThemeTokens.RadiusCard,
+                        colors = CardDefaults.cardColors(containerColor = cardBg),
                         modifier = Modifier
-                            .size(88.dp)
-                            .clip(CircleShape)
-                            .background(
-                                Brush.radialGradient(
-                                    colors = listOf(
-                                        SplitMateThemeTokens.AccentSage,
-                                        Color(0xFFB5DC82)
+                            .fillMaxWidth()
+                            .border(1.dp, borderColor, SplitMateThemeTokens.RadiusCard)
+                    ) {
+                        SettingsRowItem(
+                            icon = if (isDarkTheme) Icons.Rounded.DarkMode else Icons.Rounded.LightMode,
+                            iconBg = Color(0xFFE8EDFB),
+                            iconTint = Color(0xFF244896),
+                            title = "Dark Theme",
+                            subtitle = "Switch between light and dark appearances",
+                            titleColor = textPrimary,
+                            subtitleColor = textSecondary,
+                            trailingContent = {
+                                Switch(
+                                    checked = isDarkTheme,
+                                    onCheckedChange = {
+                                        isDarkTheme = it
+                                        onThemeToggle(it)
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = Color.White,
+                                        checkedTrackColor = Color(0xFF416913),
+                                        uncheckedThumbColor = Color(0xFF23201E),
+                                        uncheckedTrackColor = mutedBg
                                     )
                                 )
-                            )
-                            .border(4.dp, cardBg, CircleShape)
-                            .shadow(elevation = 8.dp, shape = CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = cleanInitials,
-                            fontFamily = SplitMateDisplayFontFamily,
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = SplitMateThemeTokens.SageText
-                        )
-                        AsyncImage(
-                            model = ImageRequest.Builder(context)
-                                .data(diceBearSvgUrl)
-                                .decoderFactory(SvgDecoder.Factory())
-                                .crossfade(true)
-                                .build(),
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(CircleShape)
+                            },
+                            onClick = {
+                                isDarkTheme = !isDarkTheme
+                                onThemeToggle(isDarkTheme)
+                            }
                         )
                     }
                 }
             }
 
-            // Section 1: "Payment & Native INR Vault"
+            // Section 3: Data Management (Reset App Data)
             item {
                 Column {
                     Text(
-                        text = "Payment & UPI Settings",
+                        text = "Data Management",
                         fontFamily = SplitMateDisplayFontFamily,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.ExtraBold,
@@ -746,183 +758,33 @@ fun UserSettingsScreen(
                             .fillMaxWidth()
                             .border(1.dp, borderColor, SplitMateThemeTokens.RadiusCard)
                     ) {
-                        Column {
-                            // Row 1: Link Phone via Contacts for UPI
-                            SettingsRowItem(
-                                icon = Icons.Rounded.ContactPhone,
-                                iconBg = SplitMateThemeTokens.SageSurface,
-                                iconTint = SplitMateThemeTokens.SageText,
-                                title = "Phone-Linked UPI Address",
-                                subtitle = upiId.ifBlank { "Tap to link via Android Contacts" },
-                                trailingContent = {
-                                    Surface(
-                                        shape = SplitMateThemeTokens.RadiusPill,
-                                        color = mutedBg
-                                    ) {
-                                        Text(
-                                            text = "Link Contact",
-                                            fontFamily = SplitMateBrandFontFamily,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = textPrimary,
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                        )
-                                    }
-                                },
-                                onClick = { showLinkPhoneDialog = true }
-                            )
-
-                            HorizontalDivider(
-                                color = borderColor.copy(alpha = 0.6f),
-                                modifier = Modifier.padding(horizontal = 14.dp)
-                            )
-
-                            // Row 2: Native INR Currency (Locked)
-                            SettingsRowItem(
-                                icon = Icons.Rounded.AccountBalanceWallet,
-                                iconBg = SplitMateThemeTokens.SageSurface,
-                                iconTint = SplitMateThemeTokens.SageText,
-                                title = "Native Ledger Currency",
-                                subtitle = "Indian Rupee (₹ INR) · UPI Native",
-                                trailingContent = {
-                                    Surface(
-                                        shape = SplitMateThemeTokens.RadiusPill,
-                                        color = SplitMateThemeTokens.SageSurface
-                                    ) {
-                                        Text(
-                                            text = "₹ INR",
-                                            fontFamily = SplitMateBrandFontFamily,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = SplitMateThemeTokens.SageText,
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                        )
-                                    }
-                                },
-                                onClick = {}
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Section 2: "App Preferences"
-            item {
-                Column {
-                    Text(
-                        text = "App Preferences",
-                        fontFamily = SplitMateDisplayFontFamily,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = textPrimary,
-                        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
-                    )
-
-                    Card(
-                        shape = SplitMateThemeTokens.RadiusCard,
-                        colors = CardDefaults.cardColors(containerColor = cardBg),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, borderColor, SplitMateThemeTokens.RadiusCard)
-                    ) {
-                        Column {
-                            // Row 1: Dark/Light Theme Switch
-                            SettingsRowItem(
-                                icon = if (isDarkTheme) Icons.Rounded.DarkMode else Icons.Rounded.LightMode,
-                                iconBg = Color(0xFFE8EDFB),
-                                iconTint = Color(0xFF244896),
-                                title = "Dark / Light Theme",
-                                subtitle = if (isDarkTheme) "Dark Surface (#121212 · #1E1E1E)" else "Warm Cream Eggshell (#FAF7F2)",
-                                trailingContent = {
-                                    Switch(
-                                        checked = isDarkTheme,
-                                        onCheckedChange = {
-                                            isDarkTheme = it
-                                            onThemeToggle(it)
-                                        },
-                                        colors = SwitchDefaults.colors(
-                                            checkedThumbColor = Color.White,
-                                            checkedTrackColor = Color(0xFF416913),
-                                            uncheckedThumbColor = Color(0xFF23201E),
-                                            uncheckedTrackColor = mutedBg
-                                        )
-                                    )
-                                },
-                                onClick = {
-                                    isDarkTheme = !isDarkTheme
-                                    onThemeToggle(isDarkTheme)
-                                }
-                            )
-
-                            HorizontalDivider(
-                                color = borderColor.copy(alpha = 0.6f),
-                                modifier = Modifier.padding(horizontal = 14.dp)
-                            )
-
-                            // Row 2: Clear Local Vault
-                            SettingsRowItem(
-                                icon = Icons.Rounded.DeleteForever,
-                                iconBg = SplitMateThemeTokens.TerracottaSurface,
-                                iconTint = SplitMateThemeTokens.TerracottaText,
-                                title = "Clear Local Vault",
-                                subtitle = "Reset SQLite database & erase offline ledgers",
-                                isDestructive = true,
-                                trailingContent = {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                                        contentDescription = null,
-                                        tint = SplitMateThemeTokens.TerracottaText
-                                    )
-                                },
-                                onClick = { showClearVaultDialog = true }
-                            )
-                        }
-                    }
-                }
-            }
-
-            // About & Safety Assurance Footer
-            item {
-                Card(
-                    shape = SplitMateThemeTokens.RadiusPanel,
-                    colors = CardDefaults.cardColors(containerColor = SplitMateThemeTokens.SageSurface),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Lock,
-                            contentDescription = null,
-                            tint = SplitMateThemeTokens.SageText,
-                            modifier = Modifier.size(22.dp)
+                        SettingsRowItem(
+                            icon = Icons.Rounded.DeleteForever,
+                            iconBg = SplitMateThemeTokens.TerracottaSurface,
+                            iconTint = SplitMateThemeTokens.TerracottaText,
+                            title = "Reset App Data",
+                            subtitle = "Permanently delete all groups, members, and expense history from this device.",
+                            titleColor = SplitMateThemeTokens.TerracottaText,
+                            subtitleColor = textSecondary,
+                            isDestructive = true,
+                            trailingContent = {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                                    contentDescription = null,
+                                    tint = SplitMateThemeTokens.TerracottaText
+                                )
+                            },
+                            onClick = { showResetDataDialog = true }
                         )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = "Cryptographic Ledger Sovereignty",
-                                fontFamily = SplitMateBrandFontFamily,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = SplitMateThemeTokens.SageText
-                            )
-                            Text(
-                                text = "All splits calculated with Exact Split parity and held securely in local SQLite.",
-                                fontFamily = SplitMateBrandFontFamily,
-                                fontSize = 11.sp,
-                                color = Color(0xFF23201E)
-                            )
-                        }
                     }
                 }
             }
         }
     }
 
-    // M3 Expressive Dialog 1: Clear Local Vault Confirmation
-    if (showClearVaultDialog) {
-        Dialog(onDismissRequest = { showClearVaultDialog = false }) {
+    // Confirmation Dialog for Reset App Data
+    if (showResetDataDialog) {
+        Dialog(onDismissRequest = { showResetDataDialog = false }) {
             Surface(
                 shape = RoundedCornerShape(28.dp),
                 color = cardBg,
@@ -947,7 +809,7 @@ fun UserSettingsScreen(
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "Clear Local Vault?",
+                            text = "Reset App Data?",
                             fontFamily = SplitMateDisplayFontFamily,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.ExtraBold,
@@ -955,7 +817,7 @@ fun UserSettingsScreen(
                         )
                     }
                     Text(
-                        text = "This will erase all cached expenses, group ledgers, and participant claim records stored on this device. This action cannot be undone.",
+                        text = "Permanently delete all groups, members, and expense history from this device. This action cannot be undone.",
                         fontFamily = SplitMateBrandFontFamily,
                         color = textSecondary,
                         fontSize = 14.sp,
@@ -966,7 +828,7 @@ fun UserSettingsScreen(
                         horizontalArrangement = Arrangement.End
                     ) {
                         TextButton(
-                            onClick = { showClearVaultDialog = false },
+                            onClick = { showResetDataDialog = false },
                             shape = SplitMateThemeTokens.RadiusButton
                         ) {
                             Text("Cancel", fontFamily = SplitMateBrandFontFamily, fontWeight = FontWeight.Bold, color = textPrimary)
@@ -974,184 +836,13 @@ fun UserSettingsScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
                             onClick = {
-                                showClearVaultDialog = false
+                                showResetDataDialog = false
                                 onClearVaultClick()
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = SplitMateThemeTokens.TerracottaText),
                             shape = SplitMateThemeTokens.RadiusButton
                         ) {
-                            Text("Clear All Data", fontFamily = SplitMateBrandFontFamily, fontWeight = FontWeight.Bold, color = Color.White)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // M3 Expressive Dialog 2: Phone-Linked UPI Selector via Android Contacts (Zero Manual UPI Text Fields!)
-    if (showLinkPhoneDialog) {
-        val initialDigits = remember(upiId) {
-            upiId.substringBefore("@").filter { it.isDigit() }
-        }
-        var pickedPhoneDigits by remember(initialDigits) { mutableStateOf(initialDigits) }
-        var selectedSuffix by remember(upiId) {
-            mutableStateOf(if (upiId.endsWith("@paytm")) "@paytm" else "@upi")
-        }
-
-        val contactLauncher = rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.PickContact()
-        ) { uri ->
-            if (uri != null) {
-                val extracted = extractPhoneAndNameFromContactUri(context, uri)
-                if (extracted != null && extracted.second.isNotEmpty()) {
-                    pickedPhoneDigits = extracted.second
-                } else {
-                    Toast.makeText(context, "Could not read phone number from selected contact", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-
-        val permissionLauncher = rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.RequestPermission()
-        ) { granted ->
-            if (granted) {
-                contactLauncher.launch(null)
-            } else {
-                Toast.makeText(context, "Contacts permission required to link phone number", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        Dialog(onDismissRequest = { showLinkPhoneDialog = false }) {
-            Surface(
-                shape = RoundedCornerShape(28.dp),
-                color = cardBg,
-                shadowElevation = 16.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, borderColor, RoundedCornerShape(28.dp))
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = "Link Phone for UPI",
-                        fontFamily = SplitMateDisplayFontFamily,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = textPrimary
-                    )
-                    Text(
-                        text = "Pick your phone number from Android Contacts to derive your native UPI route automatically.",
-                        fontFamily = SplitMateBrandFontFamily,
-                        fontSize = 13.sp,
-                        color = textSecondary
-                    )
-
-                    Button(
-                        onClick = {
-                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
-                                contactLauncher.launch(null)
-                            } else {
-                                permissionLauncher.launch(Manifest.permission.READ_CONTACTS)
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = SplitMateThemeTokens.AccentSage,
-                            contentColor = SplitMateThemeTokens.SageText
-                        ),
-                        shape = SplitMateThemeTokens.RadiusButton,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                    ) {
-                        Icon(Icons.Rounded.Contacts, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Pick Phone from Contacts",
-                            fontFamily = SplitMateBrandFontFamily,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 14.sp
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf("@upi", "@paytm").forEach { suffix ->
-                            val isSelected = selectedSuffix == suffix
-                            Surface(
-                                onClick = { selectedSuffix = suffix },
-                                shape = SplitMateThemeTokens.RadiusPill,
-                                color = if (isSelected) textPrimary else mutedBg,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(38.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(
-                                        text = "Route: $suffix",
-                                        fontFamily = SplitMateBrandFontFamily,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = if (isSelected) screenBg else textPrimary
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Surface(
-                        shape = SplitMateThemeTokens.RadiusButton,
-                        color = mutedBg,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Derived UPI Route:",
-                                fontFamily = SplitMateBrandFontFamily,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = textSecondary
-                            )
-                            Text(
-                                text = if (pickedPhoneDigits.length >= 6) "$pickedPhoneDigits$selectedSuffix" else "No Contact Linked",
-                                fontFamily = SplitMateBrandFontFamily,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = textPrimary
-                            )
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        TextButton(onClick = { showLinkPhoneDialog = false }) {
-                            Text("Cancel", fontFamily = SplitMateBrandFontFamily, fontWeight = FontWeight.Bold, color = textPrimary)
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Button(
-                            onClick = {
-                                if (pickedPhoneDigits.length >= 6) {
-                                    onUpdateUpiId("$pickedPhoneDigits$selectedSuffix")
-                                }
-                                showLinkPhoneDialog = false
-                            },
-                            enabled = pickedPhoneDigits.length >= 6,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = textPrimary,
-                                contentColor = screenBg
-                            ),
-                            shape = SplitMateThemeTokens.RadiusButton
-                        ) {
-                            Text("Save Phone Link", fontFamily = SplitMateBrandFontFamily, fontWeight = FontWeight.Bold, color = screenBg)
+                            Text("Reset Data", fontFamily = SplitMateBrandFontFamily, fontWeight = FontWeight.Bold, color = Color.White)
                         }
                     }
                 }
@@ -1170,6 +861,8 @@ fun SettingsRowItem(
     iconTint: Color,
     title: String,
     subtitle: String,
+    titleColor: Color = SplitMateThemeTokens.PrimaryDark,
+    subtitleColor: Color = SplitMateThemeTokens.TextSecondary,
     isDestructive: Boolean = false,
     trailingContent: @Composable () -> Unit,
     onClick: () -> Unit
@@ -1215,15 +908,15 @@ fun SettingsRowItem(
                         fontFamily = SplitMateBrandFontFamily,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (isDestructive) SplitMateThemeTokens.TerracottaText else SplitMateThemeTokens.PrimaryDark
+                        color = if (isDestructive) SplitMateThemeTokens.TerracottaText else titleColor
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = subtitle,
                         fontFamily = SplitMateBrandFontFamily,
                         fontSize = 12.sp,
-                        color = SplitMateThemeTokens.TextSecondary,
-                        maxLines = 1
+                        color = subtitleColor,
+                        maxLines = 2
                     )
                 }
             }
