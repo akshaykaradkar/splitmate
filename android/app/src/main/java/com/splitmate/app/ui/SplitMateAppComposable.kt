@@ -987,7 +987,22 @@ fun LedgersDashboardScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    SplitMateCircularLogoBadge(sizeDp = 44)
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(SplitMateTheme.SurfaceWhite)
+                            .border(1.dp, SplitMateTheme.BorderLight, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                            contentDescription = "SplitMate Official App Logo",
+                            modifier = Modifier
+                                .size(42.dp)
+                                .scale(1.25f)
+                        )
+                    }
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
@@ -1361,7 +1376,10 @@ fun LedgersDashboardScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.Top
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f).padding(end = 8.dp)
+                        ) {
                             Box(
                                 modifier = Modifier
                                     .size(42.dp)
@@ -1373,9 +1391,34 @@ fun LedgersDashboardScreen(
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
-                                Text(groupCard.name, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = SplitMateTheme.PrimaryDark)
-                                Text("${groupCard.memberCount} members · Tap to view expenses", fontSize = 12.sp, color = SplitMateTheme.TextSecondary)
+                                Text(
+                                    text = groupCard.name,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = SplitMateTheme.PrimaryDark,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "${groupCard.memberCount} members · Tap to view expenses",
+                                    fontSize = 12.sp,
+                                    color = SplitMateTheme.TextSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
+                        }
+
+                        val statusLabel = when {
+                            groupCard.netBalanceCents > 0L -> "YOU GET BACK"
+                            groupCard.netBalanceCents < 0L -> "YOU OWE"
+                            else -> "ALL SETTLED"
+                        }
+                        val numericBadgeAmount = if (groupCard.netBalanceCents == 0L) {
+                            "₹0.00"
+                        } else {
+                            val sign = if (groupCard.netBalanceCents > 0L) "+" else "-"
+                            "$sign₹${String.format(Locale.US, "%.2f", kotlin.math.abs(groupCard.netBalanceCents) / 100.0)}"
                         }
 
                         Column(horizontalAlignment = Alignment.End) {
@@ -1384,23 +1427,27 @@ fun LedgersDashboardScreen(
                                 color = if (groupCard.netBalanceCents == 0L) SplitMateTheme.SageSurface else SplitMateTheme.SurfaceWhite.copy(alpha = 0.9f)
                             ) {
                                 Text(
-                                    text = groupCard.statusPillText,
+                                    text = statusLabel,
                                     fontFamily = SplitMateTheme.FontRounded,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     letterSpacing = 0.5.sp,
                                     color = badgeTextColor,
+                                    maxLines = 1,
+                                    softWrap = false,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = groupCard.formattedBadgeText,
+                                text = numericBadgeAmount,
                                 fontFamily = SplitMateTheme.FontDisplay,
-                                fontSize = 28.sp,
+                                fontSize = 24.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                letterSpacing = (-1.1).sp,
+                                letterSpacing = (-0.9).sp,
                                 color = badgeTextColor,
+                                maxLines = 1,
+                                softWrap = false,
                                 style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
                             )
                         }

@@ -5,20 +5,15 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Perfect Circular Background Disc (Warm Cream #FAF6F0) -->
-    <path
-        android:fillColor="#FAF6F0"
-        android:pathData="M54,54m-36,0a36,36 0,1 1,72 0a36,36 0,1 1,-72 0" />
-
-    <!-- Upper-Left True Circular Split Hemisphere (Sage Olive #D7E8B6) -->
+    <!-- Upper-Left Organic Split Hemisphere (Sage Olive #D7E8B6) -->
     <path
         android:fillColor="#D7E8B6"
-        android:pathData="M32,70 A28,28 0 0,1 70,32 Z" />
+        android:pathData="M33,56 C30,42 41,30 56,32 L68,32 C70,32 71,35 69,37 L37,69 C35,71 32,70 32,68 Z" />
 
-    <!-- Lower-Right True Circular Split Hemisphere (Terracotta Coral #E06B52) -->
+    <!-- Lower-Right Organic Split Hemisphere (Terracotta Coral #E06B52) -->
     <path
         android:fillColor="#E06B52"
-        android:pathData="M76,38 A28,28 0 0,1 38,76 Z" />
+        android:pathData="M75,52 C78,66 67,78 52,76 L40,76 C38,76 37,73 39,71 L71,39 C73,37 76,38 76,40 Z" />
 
     <!-- Upper Equilibrium Dot (Deep Olive #365314) -->
     <path
