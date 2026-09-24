@@ -48,20 +48,163 @@ object PnrNetworkRepository {
     private val rateLimitMutex = Mutex()
     private val inFlightPnrDeferreds = HashMap<String, Deferred<LivePnrStatusSnapshot>>()
 
-    private val lruSnapshotCache = LruCache<String, LivePnrStatusSnapshot>(32)
-    private val lastSyncEpochMsCache = LruCache<String, Long>(32)
-    private val lastFailedSyncEpochMsCache = LruCache<String, Long>(32)
+    private const val MAX_CACHE_ENTRIES = 64
+
+    private val lruSnapshotCache = object : LinkedHashMap<String, LivePnrStatusSnapshot>(MAX_CACHE_ENTRIES, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, LivePnrStatusSnapshot>?): Boolean = size > MAX_CACHE_ENTRIES
+    }
+    private val lruFlightResultCache = object : LinkedHashMap<String, UniversalFlightTicketExtractor.UniversalFlightTicketResult>(MAX_CACHE_ENTRIES, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, UniversalFlightTicketExtractor.UniversalFlightTicketResult>?): Boolean = size > MAX_CACHE_ENTRIES
+    }
+    private val lastSyncEpochMsCache = object : LinkedHashMap<String, Long>(MAX_CACHE_ENTRIES, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?): Boolean = size > MAX_CACHE_ENTRIES
+    }
+    private val lastFailedSyncEpochMsCache = object : LinkedHashMap<String, Long>(MAX_CACHE_ENTRIES, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?): Boolean = size > MAX_CACHE_ENTRIES
+    }
+
+    /**
+     * Normalizes either a 10-digit Indian Railways PNR (e.g., `8412659012`)
+     * or a 6-character Airline/GDS PNR (e.g., `D9GQ3Z`, `KLMNPQ`).
+     */
+    fun normalizePnrKey(pnr: String): String {
+        val raw = pnr.trim().uppercase(Locale.US).replace(Regex("[^A-Z0-9]"), "")
+        val digitsOnly = raw.filter { it.isDigit() }
+        if (digitsOnly.length == 10 && raw.length >= 10) return digitsOnly.take(10)
+        if (raw.length == 6 && raw.all { it.isLetterOrDigit() }) return raw
+        return digitsOnly.take(10)
+    }
+
+    /**
+     * Returns `true` when every passenger on the snapshot is already Confirmed (`CNF`)
+     * with zero `WL` (Waitlisted) or `RAC` statuses remaining.
+     *
+     * Once `true`, the ticket is **Permanently Confirmed (`IMMUTABLE_CNF`)** — it will NEVER
+     * downgrade back to Waitlisted and must be served 100% offline forever (`Infinite TTL`)
+     * without ever querying the internet again (even in zero-connectivity areas like Hampi).
+     */
+    fun isSnapshotAllConfirmed(snapshot: LivePnrStatusSnapshot?): Boolean {
+        if (snapshot == null || !snapshot.isLiveVerified) return false
+        val badge = snapshot.bookingStatusBadge.trim().uppercase(Locale.US)
+        val badgeIsCnf = badge.startsWith("CNF") || badge == "CONFIRMED"
+        if (!badgeIsCnf) return false
+
+        val hasPendingStatus = snapshot.passengerStatuses.any { status ->
+            val u = status.uppercase(Locale.US)
+            u.contains("WL") || u.contains("RAC") || u.contains("WAITLIST")
+        } || snapshot.structuredPassengers.any { sp ->
+            val u = "${sp.currentStatus} ${sp.statusLabel}".uppercase(Locale.US)
+            u.contains("WL") || u.contains("RAC") || u.contains("WAITLIST")
+        }
+        return !hasPendingStatus
+    }
+
+    /**
+     * Returns `true` if a `ParsedTravelTicket` is already fully confirmed (`CNF` / Flight PDF).
+     */
+    fun isTicketAllConfirmed(ticket: ParsedTravelTicket): Boolean {
+        val key = normalizePnrKey(ticket.pnr)
+        if (key.length != 6 && key.length != 10) return false
+        val badge = ticket.bookingStatus.trim().uppercase(Locale.US)
+        val isCnf = badge.startsWith("CNF") || badge == "CONFIRMED" || (key.length == 6 && ticket.chartStatus.contains("Flight", ignoreCase = true))
+        if (!isCnf) return false
+        val seatsUpper = ticket.coachAndSeats.uppercase(Locale.US)
+        return !seatsUpper.contains("WL") && !seatsUpper.contains("RAC") && !seatsUpper.contains("WAITLIST")
+    }
+
+    /**
+     * Automatically indexes and persists an extracted Flight PDF (`UniversalFlightTicketResult`)
+     * under its 6-character PNR (e.g., `D9GQ3Z`) as a Permanently Confirmed (`CNF`) offline snapshot.
+     */
+    fun saveConfirmedFlightTicketToVault(
+        context: Context?,
+        result: UniversalFlightTicketExtractor.UniversalFlightTicketResult
+    ): LivePnrStatusSnapshot? {
+        val cleanPnr = normalizePnrKey(result.pnr)
+        if (cleanPnr.length != 6 || !result.isValidFlightTicket) return null
+        synchronized(lruFlightResultCache) {
+            lruFlightResultCache[cleanPnr] = result
+        }
+        val paxStatuses = if (result.passengers.isNotEmpty()) {
+            result.passengers.mapIndexed { idx, pax ->
+                val seatPart = if (pax.seatNumber.isNotBlank() && pax.seatNumber != "-") "Seat ${pax.seatNumber}" else "CNF"
+                "P${idx + 1}: ${pax.fullName} ($seatPart · ${pax.passengerType})"
+            }
+        } else {
+            listOf("P1: Confirmed Passenger (CNF)")
+        }
+        val structuredPax = if (result.passengers.isNotEmpty()) {
+            result.passengers.mapIndexed { idx, pax ->
+                val seatCode = if (pax.seatNumber.isNotBlank() && pax.seatNumber != "-") "CNF / ${pax.seatNumber}" else "CNF"
+                LivePnrPassenger(
+                    passengerNumber = pax.fullName.ifBlank { "P${idx + 1}" },
+                    initialStatus = seatCode,
+                    currentStatus = seatCode,
+                    statusLabel = "Confirmed (${pax.passengerType})"
+                )
+            }
+        } else {
+            listOf(LivePnrPassenger("P1", "CNF", "CNF", "Confirmed"))
+        }
+        val snapshot = LivePnrStatusSnapshot(
+            pnr = cleanPnr,
+            trainNo = result.flightNumber,
+            trainName = result.airlineName.ifBlank { "Flight" },
+            fromStation = result.originIata,
+            toStation = result.destinationIata,
+            departureTime = listOf(result.travelDate, result.departureTime).filter { it.isNotBlank() }.joinToString(" • "),
+            travelClass = listOf(result.cabinClass, result.fareType).filter { it.isNotBlank() }.joinToString(" • ").ifBlank { "Economy" },
+            totalFareRupees = (result.totalFarePaise / 100L).toInt(),
+            passengerCount = result.passengers.size.coerceAtLeast(1),
+            bookingStatusBadge = "CNF (Confirmed)",
+            chartPrepared = true,
+            passengerStatuses = paxStatuses,
+            structuredPassengers = structuredPax,
+            fromStationName = result.originCity.ifBlank { result.originIata },
+            toStationName = result.destinationCity.ifBlank { result.destinationIata },
+            arrivalTime = result.arrivalTime,
+            durationText = result.durationText,
+            quotaText = result.fareType.ifBlank { "REG" },
+            coachPositionHint = listOf(
+                if (result.cabinBaggage.isNotBlank()) "Cabin: ${result.cabinBaggage}" else "",
+                if (result.checkInBaggage.isNotBlank()) "Check-in: ${result.checkInBaggage}" else ""
+            ).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "Confirmed Flight Ticket · Offline Ready" },
+            liveTrainLocationRadar = "✈️ ${result.airlineName} ${result.flightNumber} · ${result.originCity.ifBlank { result.originIata }} ➔ ${result.destinationCity.ifBlank { result.destinationIata }}",
+            confirmationProbability = "100% Confirmed · Saved in Offline PNR Vault",
+            sourceLabel = "Confirmed Offline Vault (Flight PDF · 0 Internet Used)",
+            isLiveVerified = true,
+            isManualEntry = false
+        )
+        savePersistedPnrSnapshot(context, snapshot)
+        return snapshot
+    }
+
+    fun loadConfirmedFlightTicketResult(
+        context: Context?,
+        pnr: String
+    ): UniversalFlightTicketExtractor.UniversalFlightTicketResult? {
+        val cleanPnr = normalizePnrKey(pnr)
+        if (cleanPnr.length != 6) return null
+        synchronized(lruFlightResultCache) {
+            lruFlightResultCache[cleanPnr]?.let { return it }
+        }
+        return null
+    }
 
     fun loadPersistedPnrSnapshot(context: Context?, pnr: String): LivePnrStatusSnapshot? = runCatching {
-        val cleanPnr = pnr.replace(Regex("[^0-9]"), "").take(10)
-        if (cleanPnr.length != 10) return null
-        lruSnapshotCache.get(cleanPnr)?.let { return it }
+        val cleanPnr = normalizePnrKey(pnr)
+        if (cleanPnr.length != 10 && cleanPnr.length != 6) return null
+        synchronized(lruSnapshotCache) {
+            lruSnapshotCache[cleanPnr]?.let { return it }
+        }
         if (context == null) return null
         val prefs = EncryptedPrefsProvider.getPnrVaultPrefs(context)
         val rawJson = prefs.getString("snapshot_json_$cleanPnr", null) ?: return null
         val savedSyncMs = prefs.getLong("last_sync_$cleanPnr", 0L)
         if (savedSyncMs > 0L) {
-            lastSyncEpochMsCache.put(cleanPnr, savedSyncMs)
+            synchronized(lastSyncEpochMsCache) {
+                lastSyncEpochMsCache[cleanPnr] = savedSyncMs
+            }
         }
         val obj = JSONObject(rawJson)
         val paxArr = obj.optJSONArray("passengerStatuses")
@@ -111,16 +254,24 @@ object PnrNetworkRepository {
             sourceLabel = obj.optString("sourceLabel", "Live CRIS Cache (Encrypted Vault)"),
             isLiveVerified = obj.optBoolean("isLiveVerified", true),
             isManualEntry = obj.optBoolean("isManualEntry", false)
-        ).also { lruSnapshotCache.put(cleanPnr, it) }
+        ).also {
+            synchronized(lruSnapshotCache) {
+                lruSnapshotCache[cleanPnr] = it
+            }
+        }
     }.getOrNull()
 
     fun savePersistedPnrSnapshot(context: Context?, snapshot: LivePnrStatusSnapshot) {
         runCatching {
-            val cleanPnr = snapshot.pnr.replace(Regex("[^0-9]"), "").take(10)
-            if (cleanPnr.length != 10 || !snapshot.isLiveVerified) return
+            val cleanPnr = normalizePnrKey(snapshot.pnr)
+            if ((cleanPnr.length != 10 && cleanPnr.length != 6) || !snapshot.isLiveVerified) return
             val now = System.currentTimeMillis()
-            lruSnapshotCache.put(cleanPnr, snapshot)
-            lastSyncEpochMsCache.put(cleanPnr, now)
+            synchronized(lruSnapshotCache) {
+                lruSnapshotCache[cleanPnr] = snapshot
+            }
+            synchronized(lastSyncEpochMsCache) {
+                lastSyncEpochMsCache[cleanPnr] = now
+            }
             if (context == null) return
             val structJsonArr = JSONArray()
             snapshot.structuredPassengers.forEach { sp ->
@@ -134,7 +285,7 @@ object PnrNetworkRepository {
                 )
             }
             val obj = JSONObject().apply {
-                put("pnr", snapshot.pnr)
+                put("pnr", cleanPnr)
                 put("trainNo", snapshot.trainNo)
                 put("trainName", snapshot.trainName)
                 put("fromStation", snapshot.fromStation)
@@ -169,21 +320,23 @@ object PnrNetworkRepository {
     }
 
     fun shouldSkipAutoPnrNetworkPoll(
-        context: Context,
+        context: Context?,
         pnr: String,
         ticket: ParsedTravelTicket
     ): Boolean = runCatching {
-        val cleanPnr = pnr.replace(Regex("[^0-9]"), "").take(10)
+        val cleanPnr = normalizePnrKey(pnr)
+        // 6-character Flight PNRs are always 100% confirmed and stored locally
+        if (cleanPnr.length == 6) return true
         if (cleanPnr.length != 10) return true
 
-        loadPersistedPnrSnapshot(context, cleanPnr)
+        // Rule 1: If the ticket itself or its cached snapshot is already CONFIRMED (all passengers CNF, no WL/RAC),
+        // NEVER query the internet again (Permanent Offline Lock).
+        if (isTicketAllConfirmed(ticket)) return true
 
-        val isAlreadyFullyConfirmed = ticket.bookingStatus.equals("CNF", ignoreCase = true) &&
-            !ticket.coachAndSeats.contains("WL", ignoreCase = true) &&
-            !ticket.coachAndSeats.contains("RAC", ignoreCase = true) &&
-            ticket.chartStatus.contains("Prepared", ignoreCase = true) &&
-            !ticket.chartStatus.contains("Not", ignoreCase = true)
-        if (isAlreadyFullyConfirmed) return true
+        val cached = loadPersistedPnrSnapshot(context, cleanPnr)
+        if (isSnapshotAllConfirmed(cached)) return true
+
+        if (context == null) return true
 
         val cal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata"))
         val hour = cal.get(Calendar.HOUR_OF_DAY)
@@ -191,8 +344,9 @@ object PnrNetworkRepository {
         if ((hour == 23 && minute >= 30) || (hour == 0 && minute <= 30)) return true
 
         val prefs = EncryptedPrefsProvider.getPnrVaultPrefs(context)
+        val memSyncMs = synchronized(lastSyncEpochMsCache) { lastSyncEpochMsCache[cleanPnr] ?: 0L }
         val lastSyncMs = maxOf(
-            lastSyncEpochMsCache.get(cleanPnr) ?: 0L,
+            memSyncMs,
             prefs.getLong("last_sync_$cleanPnr", 0L)
         )
         val nowMs = System.currentTimeMillis()
@@ -205,10 +359,12 @@ object PnrNetworkRepository {
 
     fun recordPnrSyncTimestamp(context: Context, pnr: String) {
         runCatching {
-            val cleanPnr = pnr.replace(Regex("[^0-9]"), "").take(10)
-            if (cleanPnr.length != 10) return
+            val cleanPnr = normalizePnrKey(pnr)
+            if (cleanPnr.length != 10 && cleanPnr.length != 6) return
             val now = System.currentTimeMillis()
-            lastSyncEpochMsCache.put(cleanPnr, now)
+            synchronized(lastSyncEpochMsCache) {
+                lastSyncEpochMsCache[cleanPnr] = now
+            }
             EncryptedPrefsProvider.getPnrVaultPrefs(context)
                 .edit()
                 .putLong("last_sync_$cleanPnr", now)
@@ -222,26 +378,53 @@ object PnrNetworkRepository {
         forceManualRefresh: Boolean = false,
         context: Context? = null
     ): LivePnrStatusSnapshot {
-        val cleanPnr = pnr.replace(Regex("[^0-9]"), "").take(10)
-        if (cleanPnr.length != 10) {
+        val cleanPnr = normalizePnrKey(pnr)
+        if (cleanPnr.length != 10 && cleanPnr.length != 6) {
             return buildUnverifiedManualFallbackSnapshot(
                 cleanPnr = cleanPnr,
                 fallbackTicket = fallbackTicket,
-                reasonLabel = "Enter a valid 10-digit PNR or enter fare manually"
+                reasonLabel = "Enter a valid 10-digit Train PNR or 6-char Flight PNR"
             )
         }
 
-        // STAGE 1: L1 LruCache & L2 EncryptedSharedPreferences Cache Lookup (0 tokens consumed)
+        // STAGE 1: L1 In-Memory Cache & L2 EncryptedSharedPreferences Vault Lookup (0 network tokens consumed)
         val cachedSnapshot = loadPersistedPnrSnapshot(context, cleanPnr)
+
+        // PERMANENT OFFLINE LOCK FOR CONFIRMED TICKETS (Train 10-Digit CNF or Flight 6-Char PNR):
+        // Once all passengers are Confirmed (`CNF`, zero WL/RAC), the ticket will NEVER revert to Waitlisted.
+        // Return immediately from the local vault forever (`Infinite TTL`) with ZERO internet calls!
+        if (cachedSnapshot != null && isSnapshotAllConfirmed(cachedSnapshot)) {
+            return cachedSnapshot.copy(
+                sourceLabel = "Confirmed Offline Vault (Permanent CNF · 0 Internet Used)"
+            )
+        }
+
+        // If `fallbackTicket` passed by caller is already fully confirmed (`CNF`), promote it into the Permanent Offline Vault
+        if (isTicketAllConfirmed(fallbackTicket.copy(pnr = cleanPnr))) {
+            val promoted = buildConfirmedSnapshotFromTicket(cleanPnr, fallbackTicket)
+            savePersistedPnrSnapshot(context, promoted)
+            return promoted
+        }
+
+        // 6-character Airline PNR: never poll Indian Railways 10-digit CRIS endpoints
+        if (cleanPnr.length == 6) {
+            return cachedSnapshot ?: buildUnverifiedManualFallbackSnapshot(
+                cleanPnr = cleanPnr,
+                fallbackTicket = fallbackTicket,
+                reasonLabel = "Import Flight Ticket PDF once to lock PNR $cleanPnr permanently offline"
+            )
+        }
+
         val nowMs = System.currentTimeMillis()
         val prefs = context?.let { EncryptedPrefsProvider.getPnrVaultPrefs(it) }
+        val memSyncMs = synchronized(lastSyncEpochMsCache) { lastSyncEpochMsCache[cleanPnr] ?: 0L }
         val lastSyncMs = maxOf(
-            lastSyncEpochMsCache.get(cleanPnr) ?: 0L,
+            memSyncMs,
             prefs?.getLong("last_sync_$cleanPnr", 0L) ?: 0L
         )
         val elapsedPositiveMs = nowMs - lastSyncMs
 
-        // STAGE 2: 6-Hour Positive TTL / 60-Second Manual Refresh Debounce / 60-Second Negative Failure Debounce
+        // STAGE 2: For Waitlisted (WL) / RAC tickets ONLY, apply 6-Hour Positive TTL / 60-Second Manual Refresh Debounce
         if (cachedSnapshot != null && cachedSnapshot.isLiveVerified) {
             val minWait = if (forceManualRefresh) MANUAL_REFRESH_DEBOUNCE_MS else AUTO_SYNC_COOLDOWN_MS
             if (elapsedPositiveMs in 0 until minWait) {
@@ -253,8 +436,9 @@ object PnrNetworkRepository {
         }
 
         if (!forceManualRefresh) {
+            val memFailedMs = synchronized(lastFailedSyncEpochMsCache) { lastFailedSyncEpochMsCache[cleanPnr] ?: 0L }
             val lastFailedMs = maxOf(
-                lastFailedSyncEpochMsCache.get(cleanPnr) ?: 0L,
+                memFailedMs,
                 prefs?.getLong("last_failed_sync_$cleanPnr", 0L) ?: 0L
             )
             if (nowMs - lastFailedMs in 0 until NEGATIVE_FAILURE_DEBOUNCE_MS) {
@@ -279,6 +463,53 @@ object PnrNetworkRepository {
             }.also { inFlightPnrDeferreds[cleanPnr] = it }
         }
         return deferred.await()
+    }
+
+    private fun buildConfirmedSnapshotFromTicket(
+        cleanPnr: String,
+        ticket: ParsedTravelTicket
+    ): LivePnrStatusSnapshot {
+        val paxRaw = ticket.coachAndSeats
+            .split(",", "|")
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .ifEmpty { listOf("P1: Confirmed (CNF)") }
+        val structured = paxRaw.mapIndexed { idx, s ->
+            LivePnrPassenger(
+                passengerNumber = "P${idx + 1}",
+                initialStatus = s,
+                currentStatus = s,
+                statusLabel = "Confirmed"
+            )
+        }
+        val originCode = ticket.fromStation.ifBlank { "ORIG" }
+        val destCode = ticket.toStation.ifBlank { "DEST" }
+        return LivePnrStatusSnapshot(
+            pnr = cleanPnr,
+            trainNo = ticket.trainOrFlightNo,
+            trainName = ticket.trainOrCarrierName.ifBlank { if (cleanPnr.length == 6) "Confirmed Flight" else "Confirmed Train" },
+            fromStation = originCode,
+            toStation = destCode,
+            departureTime = listOf(ticket.departureDate, ticket.departureTime).filter { it.isNotBlank() }.joinToString(" • "),
+            travelClass = if (cleanPnr.length == 6) "Economy" else "3A",
+            totalFareRupees = ticket.fareRupees.replace(",", "").toDoubleOrNull()?.toInt() ?: 0,
+            passengerCount = paxRaw.size.coerceAtLeast(1),
+            bookingStatusBadge = "CNF (Confirmed)",
+            chartPrepared = true,
+            passengerStatuses = paxRaw,
+            structuredPassengers = structured,
+            fromStationName = resolveStationDisplayName(originCode),
+            toStationName = resolveStationDisplayName(destCode),
+            arrivalTime = "",
+            durationText = "",
+            quotaText = "GN",
+            coachPositionHint = "100% Confirmed · Permanently Locked in Offline Vault",
+            liveTrainLocationRadar = "Route: $originCode ➔ $destCode",
+            confirmationProbability = "100% Confirmed · 0 Internet Needed",
+            sourceLabel = "Confirmed Offline Vault (Permanent CNF · 0 Internet Used)",
+            isLiveVerified = true,
+            isManualEntry = false
+        )
     }
 
     private suspend fun executeTokenGuardedNetworkFetch(
@@ -306,7 +537,9 @@ object PnrNetworkRepository {
                     ?.putString("global_pnr_fetch_epochs_csv", recentEpochs.joinToString(","))
                     ?.putLong("last_sync_$cleanPnr", now)
                     ?.apply()
-                lastSyncEpochMsCache.put(cleanPnr, now)
+                synchronized(lastSyncEpochMsCache) {
+                    lastSyncEpochMsCache[cleanPnr] = now
+                }
                 true
             }
         }
@@ -498,9 +731,13 @@ object PnrNetworkRepository {
 
         if (!liveNetworkHit) {
             val failEpoch = System.currentTimeMillis()
-            lastFailedSyncEpochMsCache.put(cleanPnr, failEpoch)
+            synchronized(lastFailedSyncEpochMsCache) {
+                lastFailedSyncEpochMsCache[cleanPnr] = failEpoch
+            }
             prefs?.edit()?.putLong("last_failed_sync_$cleanPnr", failEpoch)?.apply()
-            return cachedSnapshot ?: buildUnverifiedManualFallbackSnapshot(
+            return cachedSnapshot?.copy(
+                sourceLabel = "Offline / No Signal · Showing Last Known Status (${cachedSnapshot.bookingStatusBadge})"
+            ) ?: buildUnverifiedManualFallbackSnapshot(
                 cleanPnr = cleanPnr,
                 fallbackTicket = fallbackTicket,
                 reasonLabel = "Live CRIS servers unreachable — Enter ticket fare & route manually"
@@ -613,4 +850,96 @@ object PnrNetworkRepository {
             isManualEntry = true
         )
     }
+
+    /**
+     * Queries public unauthenticated FlightRadar24 JSON endpoint for a given Flight Number (e.g., `6E 282`, `AI 865`)
+     * to resolve or enrich live schedule/delay/route metadata with bounded 4,000ms socket timeout.
+     */
+    fun fetchLiveFlightStatusByNumber(
+        flightNumber: String,
+        optionalPnr: String = ""
+    ): LivePnrStatusSnapshot? = runCatching {
+        val cleanFlight = flightNumber.replace(Regex("[^A-Za-z0-9]"), "").uppercase(Locale.US)
+        if (cleanFlight.length < 3) return null
+        val cacheKey = "FLIGHT_${optionalPnr.ifBlank { cleanFlight }}"
+        lruSnapshotCache.get(cacheKey)?.let { return it }
+
+        val url = URL("https://api.flightradar24.com/common/v1/flight/list.json?query=$cleanFlight&fetchBy=flight&page=1&limit=1")
+        val conn = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = SOCKET_TIMEOUT_MS
+            readTimeout = SOCKET_TIMEOUT_MS
+            setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36")
+            setRequestProperty("Accept", "application/json")
+        }
+        try {
+            if (conn.responseCode != 200) return null
+            val root = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+            val item = root.optJSONObject("result")
+                ?.optJSONObject("response")
+                ?.optJSONArray("data")
+                ?.optJSONObject(0) ?: return null
+
+            val resolvedNo = item.optJSONObject("identification")
+                ?.optJSONObject("number")
+                ?.optString("default", cleanFlight) ?: cleanFlight
+            val statusText = item.optJSONObject("status")?.optString("text", "Scheduled") ?: "Scheduled"
+            val aircraftCode = item.optJSONObject("aircraft")?.optJSONObject("model")?.optString("code", "").orEmpty()
+
+            val originObj = item.optJSONObject("airport")?.optJSONObject("origin")
+            val destObj = item.optJSONObject("airport")?.optJSONObject("destination")
+            val fromIata = originObj?.optJSONObject("code")?.optString("iata", "").orEmpty()
+            val toIata = destObj?.optJSONObject("code")?.optString("iata", "").orEmpty()
+            val fromCity = originObj?.optJSONObject("region")?.optString("city", fromIata).orEmpty()
+            val toCity = destObj?.optJSONObject("region")?.optString("city", toIata).orEmpty()
+
+            val schedObj = item.optJSONObject("time")?.optJSONObject("scheduled")
+            val depEpochSec = schedObj?.optLong("departure", 0L) ?: 0L
+            val arrEpochSec = schedObj?.optLong("arrival", 0L) ?: 0L
+            val istFormat = SimpleDateFormat("HH:mm", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("Asia/Kolkata")
+            }
+            val depTime = if (depEpochSec > 0L) istFormat.format(Date(depEpochSec * 1000L)) else ""
+            val arrTime = if (arrEpochSec > 0L) istFormat.format(Date(arrEpochSec * 1000L)) else ""
+
+            val snapshot = LivePnrStatusSnapshot(
+                pnr = optionalPnr.ifBlank { resolvedNo },
+                trainNo = resolvedNo,
+                trainName = if (aircraftCode.isNotBlank()) "Flight $resolvedNo ($aircraftCode)" else "Flight $resolvedNo",
+                fromStation = fromIata,
+                toStation = toIata,
+                departureTime = depTime,
+                travelClass = "ECONOMY",
+                totalFareRupees = 0,
+                passengerCount = 1,
+                bookingStatusBadge = "CNF",
+                chartPrepared = true,
+                passengerStatuses = listOf("CNF • $statusText"),
+                structuredPassengers = listOf(
+                    LivePnrPassenger(
+                        passengerNumber = "P1",
+                        initialStatus = "CNF",
+                        currentStatus = statusText,
+                        statusLabel = statusText
+                    )
+                ),
+                fromStationName = if (fromCity.isNotBlank()) "$fromIata ($fromCity)" else fromIata,
+                toStationName = if (toCity.isNotBlank()) "$toIata ($toCity)" else toIata,
+                arrivalTime = arrTime,
+                durationText = "",
+                quotaText = "FLIGHT",
+                coachPositionHint = "Flight $resolvedNo • $statusText",
+                liveTrainLocationRadar = statusText,
+                confirmationProbability = "100% Confirmed",
+                sourceLabel = "Live Flight Status",
+                isLiveVerified = true,
+                isManualEntry = false
+            )
+            lruSnapshotCache.put(cacheKey, snapshot)
+            snapshot
+        } finally {
+            conn.disconnect()
+        }
+    }.getOrNull()
 }
+

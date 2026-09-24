@@ -65,11 +65,15 @@ import com.splitmate.app.ui.SplitMateViewModel
 import com.splitmate.app.ui.buildDiceBearOpenPeepsUrl
 import com.splitmate.app.ui.extractInitialsFromNameOrSeed
 import com.splitmate.app.ui.resolveGroupCategoryIcon
+import com.splitmate.app.ui.components.ActiveTravelPassMode
+import com.splitmate.app.ui.components.AnimatedTransitDeckHeroCard
 import com.splitmate.app.ui.screens.EditFriendUpiDialog
+import com.splitmate.app.ui.screens.FlightExpenseReviewScreen
 import com.splitmate.app.ui.screens.OnboardingSetupScreen
 import com.splitmate.app.ui.screens.PnrExpenseReviewScreen
 import com.splitmate.app.ui.screens.QuickExpenseScreen
 import com.splitmate.app.ui.screens.UserSettingsScreen
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 // ==============================================================================
@@ -232,16 +236,112 @@ fun SplitMateMainDashboardScaffold(
     viewModel: SplitMateViewModel,
     onOpenSettings: () -> Unit
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val currentTab = remember(uiState.selectedTabName) {
         runCatching { SplitMateTab.valueOf(uiState.selectedTabName) }.getOrDefault(SplitMateTab.LEDGERS)
     }
     var showPnrReviewScreen by remember { mutableStateOf(false) }
     var activeReviewPnr by remember { mutableStateOf("") }
+    var activeFlightTicketResult by remember {
+        mutableStateOf<com.splitmate.app.data.UniversalFlightTicketExtractor.UniversalFlightTicketResult?>(null)
+    }
 
-    // Intercept system Back when PNR review screen is open or when on SPLIT, SETTLE, or AUDIT
-    androidx.activity.compose.BackHandler(enabled = showPnrReviewScreen || currentTab != SplitMateTab.LEDGERS) {
-        if (showPnrReviewScreen) {
+    val flightPdfPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val activeGrp = uiState.activeGroup ?: uiState.groups.firstOrNull()
+            val memberNames = if (activeGrp != null) {
+                uiState.members.filter { it.groupId == activeGrp.groupId }.map { it.name }
+            } else {
+                uiState.members.map { it.name }.distinct()
+            }
+            coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                val extracted = runCatching {
+                    context.contentResolver.openInputStream(uri)?.use { stream ->
+                        com.splitmate.app.data.UniversalFlightTicketExtractor.extractFromPdfStream(
+                            inputStream = stream,
+                            groupMemberNames = memberNames,
+                            context = context
+                        )
+                    }
+                }.getOrNull()
+
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    if (extracted != null && (extracted.isValidFlightTicket || extracted.totalFarePaise > 0L)) {
+                        activeFlightTicketResult = extracted
+                    } else {
+                        Toast.makeText(
+                            context,
+                            "Could not detect a valid Flight E-Ticket in this PDF.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            }
+        }
+    }
+
+    fun openPnrOrFlightTicket(pnrRaw: String) {
+        val normalized = com.splitmate.app.data.PnrNetworkRepository.normalizePnrKey(pnrRaw)
+        if (normalized.length == 6) {
+            val cachedFlight = com.splitmate.app.data.PnrNetworkRepository.loadConfirmedFlightTicketResult(context, normalized)
+            if (cachedFlight != null) {
+                activeFlightTicketResult = cachedFlight
+                return
+            }
+            val persistedSnap = com.splitmate.app.data.PnrNetworkRepository.loadPersistedPnrSnapshot(context, normalized)
+            if (persistedSnap != null) {
+                activeFlightTicketResult = com.splitmate.app.data.UniversalFlightTicketExtractor.UniversalFlightTicketResult(
+                    pnr = normalized,
+                    otaBookingId = "PNR-$normalized",
+                    airlineCode = persistedSnap.trainNo.substringBefore(" "),
+                    airlineName = persistedSnap.trainName,
+                    flightNumber = persistedSnap.trainNo,
+                    originIata = persistedSnap.fromStation,
+                    originCity = persistedSnap.fromStationName,
+                    originAirportName = persistedSnap.fromStationName,
+                    destinationIata = persistedSnap.toStation,
+                    destinationCity = persistedSnap.toStationName,
+                    destinationAirportName = persistedSnap.toStationName,
+                    travelDate = persistedSnap.departureTime.substringBefore("•").trim(),
+                    bookingDate = "",
+                    departureTime = persistedSnap.departureTime.substringAfter("•", persistedSnap.departureTime).trim(),
+                    arrivalTime = persistedSnap.arrivalTime,
+                    durationText = persistedSnap.durationText,
+                    cabinClass = persistedSnap.travelClass.substringBefore("•").trim().ifBlank { "Economy" },
+                    fareType = persistedSnap.quotaText,
+                    cabinBaggage = "7 Kgs",
+                    checkInBaggage = "15 Kgs",
+                    passengers = persistedSnap.structuredPassengers.map { sp ->
+                        com.splitmate.app.data.UniversalFlightTicketExtractor.ExtractedFlightPassenger(
+                            fullName = sp.passengerNumber,
+                            seatNumber = sp.currentStatus.substringAfter("/", "-").trim(),
+                            eTicketOrPnr = normalized
+                        )
+                    },
+                    matchedGroupMembers = emptyList(),
+                    totalFarePaise = persistedSnap.totalFareRupees.toLong() * 100L,
+                    discountSavedPaise = 0L,
+                    paymentMethod = "UPI",
+                    extractionDurationMs = 0L
+                )
+                return
+            }
+        }
+        activeReviewPnr = pnrRaw
+        showPnrReviewScreen = true
+    }
+
+    // Intercept system Back when Flight review, Train PNR review, or sub-tab is open
+    androidx.activity.compose.BackHandler(
+        enabled = activeFlightTicketResult != null || showPnrReviewScreen || currentTab != SplitMateTab.LEDGERS
+    ) {
+        if (activeFlightTicketResult != null) {
+            activeFlightTicketResult = null
+        } else if (showPnrReviewScreen) {
             showPnrReviewScreen = false
             activeReviewPnr = ""
         } else if (uiState.returnToGroupDetailId != null) {
@@ -249,6 +349,25 @@ fun SplitMateMainDashboardScaffold(
         } else {
             viewModel.selectTab(SplitMateTab.LEDGERS.name)
         }
+    }
+
+    activeFlightTicketResult?.let { flightResult ->
+        com.splitmate.app.ui.screens.FlightExpenseReviewScreen(
+            viewModel = viewModel,
+            extractedTicket = flightResult,
+            onPickAnotherPdfClick = {
+                flightPdfPickerLauncher.launch("application/pdf")
+            },
+            onBackClick = {
+                activeFlightTicketResult = null
+            },
+            onConfirmAndAddToLedger = {
+                activeFlightTicketResult = null
+                val loggedGroupId = viewModel.uiState.value.activeGroup?.groupId
+                viewModel.finishSubFlowToGroupDetail(loggedGroupId)
+            }
+        )
+        return
     }
 
     if (showPnrReviewScreen) {
@@ -353,10 +472,14 @@ fun SplitMateMainDashboardScaffold(
                             showPnrReviewScreen = true
                         }
                     },
+                    onUploadFlightPdf = {
+                        if (uiState.groups.isNotEmpty()) {
+                            flightPdfPickerLauncher.launch("application/pdf")
+                        }
+                    },
                     onOpenPnrWithTicket = { pnr ->
                         if (uiState.groups.isNotEmpty()) {
-                            activeReviewPnr = pnr
-                            showPnrReviewScreen = true
+                            openPnrOrFlightTicket(pnr)
                         }
                     },
                     onAvatarSettingsClick = onOpenSettings
@@ -389,8 +512,7 @@ fun SplitMateMainDashboardScaffold(
                     viewModel = viewModel,
                     onOpenPnrWithTicket = { groupId, pnr ->
                         viewModel.selectActiveGroup(groupId)
-                        activeReviewPnr = pnr
-                        showPnrReviewScreen = true
+                        openPnrOrFlightTicket(pnr)
                     }
                 )
             }
@@ -467,6 +589,7 @@ fun LedgersDashboardScreen(
     onNavigateToSplit: () -> Unit = {},
     onNavigateToSettle: () -> Unit = {},
     onNavigateToPnrSplit: () -> Unit = {},
+    onUploadFlightPdf: () -> Unit = {},
     onOpenPnrWithTicket: (String) -> Unit = {},
     onAvatarSettingsClick: () -> Unit = {}
 ) {
@@ -672,6 +795,32 @@ fun LedgersDashboardScreen(
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 12.sp,
                                     color = Color.White
+                                )
+                            }
+                        }
+
+                        Surface(
+                            onClick = onUploadFlightPdf,
+                            shape = SplitMateTheme.RadiusBadge,
+                            color = Color(0xFF2B2768),
+                            border = BorderStroke(1.dp, Color(0xFF4B459E))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.FlightTakeoff,
+                                    contentDescription = "Flight PDF",
+                                    tint = Color(0xFFEEF2FF),
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = "Flight PDF",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 12.sp,
+                                    color = Color(0xFFEEF2FF)
                                 )
                             }
                         }
@@ -1460,15 +1609,28 @@ fun LedgersDashboardScreen(
             }
         }
 
-        // 2.5. STANDALONE HERO FEATURE ELEMENT: IRCTC Train PNR Direct Split
+        // 2.5. STANDALONE HERO FEATURE ELEMENT: Interactive Stacked Transit Pass Deck (Train PNR + Flight PDF)
         item {
             val hasGroups = activeGroups.isNotEmpty()
-            val totalLoggedPnrs = remember(uiState.expenses) {
-                uiState.expenses.count { it.title.contains("PNR:", ignoreCase = true) }
+            val totalLoggedTrainPnrs = remember(uiState.expenses) {
+                uiState.expenses.count {
+                    it.title.contains("PNR:", ignoreCase = true) &&
+                        !it.title.contains("Flight", ignoreCase = true) &&
+                        !it.title.contains("Airfare", ignoreCase = true)
+                }
+            }
+            val totalLoggedFlightPnrs = remember(uiState.expenses) {
+                uiState.expenses.count {
+                    it.title.contains("PNR:", ignoreCase = true) &&
+                        (it.title.contains("Flight", ignoreCase = true) || it.title.contains("Airfare", ignoreCase = true))
+                }
             }
 
-            Card(
-                onClick = {
+            AnimatedTransitDeckHeroCard(
+                initialPassMode = ActiveTravelPassMode.TRAIN,
+                trainCountLogged = totalLoggedTrainPnrs,
+                flightCountActive = totalLoggedFlightPnrs,
+                onEnterTrainPnrClick = {
                     if (hasGroups) {
                         onNavigateToPnrSplit()
                     } else {
@@ -1480,134 +1642,19 @@ fun LedgersDashboardScreen(
                         showNewGroupDialog = true
                     }
                 },
-                shape = SplitMateTheme.RadiusHero,
-                colors = CardDefaults.cardColors(
-                    containerColor = if (hasGroups) Color(0xFF264010) else SplitMateTheme.SurfaceMuted
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = if (hasGroups) 6.dp else 0.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(
-                        width = 1.5.dp,
-                        color = if (hasGroups) Color(0xFF4A7325) else SplitMateTheme.BorderLight,
-                        shape = SplitMateTheme.RadiusHero
-                    )
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            if (hasGroups) {
-                                Brush.verticalGradient(
-                                    colors = listOf(Color(0xFF264010), Color(0xFF1B2E0B))
-                                )
-                            } else {
-                                Brush.verticalGradient(
-                                    colors = listOf(SplitMateTheme.SurfaceMuted, SplitMateTheme.SurfaceMuted)
-                                )
-                            }
-                        )
-                        .padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = SplitMateTheme.RadiusBadge,
-                            color = if (hasGroups) Color(0xFF345418) else SplitMateTheme.SurfaceWhite,
-                            border = BorderStroke(
-                                1.dp,
-                                if (hasGroups) Color(0xFF4A7325) else SplitMateTheme.BorderLight
-                            )
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Train,
-                                    contentDescription = null,
-                                    tint = if (hasGroups) Color(0xFFD7E8B6) else SplitMateTheme.TextSecondary,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = if (hasGroups) "IRCTC DIRECT SPLIT · HERO FEATURE" else "LOCKED · CREATE A GROUP FIRST",
-                                    fontFamily = SplitMateTheme.FontRounded,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 10.sp,
-                                    letterSpacing = 0.7.sp,
-                                    color = if (hasGroups) Color(0xFFD7E8B6) else SplitMateTheme.TextSecondary
-                                )
-                            }
-                        }
-
-                        if (hasGroups && totalLoggedPnrs > 0) {
-                            Surface(
-                                shape = SplitMateTheme.RadiusBadge,
-                                color = Color(0xFFD7E8B6)
-                            ) {
-                                Text(
-                                    text = "$totalLoggedPnrs PNR${if (totalLoggedPnrs > 1) "s" else ""} Logged",
-                                    fontFamily = SplitMateTheme.FontRounded,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 11.sp,
-                                    color = Color(0xFF1B2E0B),
-                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Split Train Ticket by 10-Digit PNR",
-                                fontFamily = SplitMateTheme.FontDisplay,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 19.sp,
-                                color = if (hasGroups) Color.White else SplitMateTheme.PrimaryDark
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = if (hasGroups)
-                                    "Auto-fetches IRCTC fare & passenger list, lets you pick which group members are on the ticket, and splits exact shares."
-                                else
-                                    "Create a trip group first (+ New Group above) so you can select which friends are on your train PNR.",
-                                fontFamily = SplitMateTheme.FontRounded,
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 12.sp,
-                                lineHeight = 16.sp,
-                                color = if (hasGroups) Color(0xFFC5D6A7) else SplitMateTheme.TextSecondary
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(12.dp))
-
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = if (hasGroups) Color(0xFFD7E8B6) else SplitMateTheme.SurfaceWhite,
-                            border = if (hasGroups) null else BorderStroke(1.dp, SplitMateTheme.BorderLight)
-                        ) {
-                            Text(
-                                text = if (hasGroups) "Enter PNR →" else "+ Create Group",
-                                fontFamily = SplitMateTheme.FontRounded,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 12.sp,
-                                color = if (hasGroups) Color(0xFF1B2E0B) else SplitMateTheme.PrimaryDark,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
-                            )
-                        }
+                onUploadFlightPdfClick = {
+                    if (hasGroups) {
+                        onUploadFlightPdf()
+                    } else {
+                        android.widget.Toast.makeText(
+                            context,
+                            "Please create a Group first before uploading a Flight E-Ticket PDF!",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                        showNewGroupDialog = true
                     }
                 }
-            }
+            )
         }
 
         // 3. Section Header: Active Groups
