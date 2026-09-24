@@ -782,14 +782,31 @@ val SplitMateDisplayFontFamily: FontFamily = FigtreeFontFamily
 // ==============================================================================
 // EXPENSE CATEGORY ICON & COLOR RESOLVER (Tab 1 Recent Activity, Group View & Tab 4 Audit)
 // ==============================================================================
+fun isFlightTicketExpense(
+    title: String,
+    parsedTicket: ParsedTravelTicket? = extractTravelTicketFromTitle(title)
+): Boolean {
+    val cleanPnr = parsedTicket?.pnr?.trim().orEmpty()
+    if (cleanPnr.length == 6 && cleanPnr.all { it.isLetterOrDigit() }) {
+        return true
+    }
+    if (cleanPnr.length == 10 && cleanPnr.all { it.isDigit() }) {
+        return false
+    }
+    val lower = title.lowercase()
+    return lower.contains("flight") || lower.contains("airfare") || lower.contains("indigo") ||
+        lower.contains("air india") || lower.contains("akasa") || lower.contains("spicejet") ||
+        lower.contains("vistara") || lower.contains("airport") || lower.contains("boarding") ||
+        Regex("""\b(6e|ai|ix|qp|sg|uk)[\s\-]?\d{2,4}\b""", RegexOption.IGNORE_CASE).containsMatchIn(title)
+}
+
 fun resolveExpenseCategoryIcon(title: String): ImageVector {
     val lower = title.lowercase()
     return when {
+        isFlightTicketExpense(title) -> Icons.Rounded.FlightTakeoff
         lower.contains("train") || lower.contains("pnr") || lower.contains("irctc") ||
             lower.contains("express") || lower.contains("rajdhani") || lower.contains("shatabdi") ||
             lower.contains("vande") || lower.contains("rail") || lower.contains("berth") -> Icons.Rounded.Train
-        lower.contains("flight") || lower.contains("indigo") || lower.contains("air ") ||
-            lower.contains("airport") || lower.contains("vistara") || lower.contains("boarding") -> Icons.Rounded.FlightTakeoff
         lower.contains("cab") || lower.contains("auto") || lower.contains("uber") ||
             lower.contains("ola") || lower.contains("rapido") || lower.contains("taxi") ||
             lower.contains("fuel") || lower.contains("petrol") || lower.contains("toll") -> Icons.Rounded.LocalTaxi
@@ -818,9 +835,11 @@ fun resolveExpenseCategoryIcon(title: String): ImageVector {
 fun resolveExpenseCategoryBadgeColors(title: String, isDark: Boolean): Pair<Color, Color> {
     val lower = title.lowercase()
     return when {
+        isFlightTicketExpense(title) ->
+            if (isDark) Color(0xFF282552) to Color(0xFFDCE3FD) else Color(0xFFEEF2FF) to Color(0xFF2B2768)
         lower.contains("train") || lower.contains("pnr") || lower.contains("irctc") || lower.contains("rail") ->
             if (isDark) Color(0xFF283A18) to Color(0xFFD7E8B6) else Color(0xFFDCE9B9) to Color(0xFF365314)
-        lower.contains("flight") || lower.contains("air") || lower.contains("hotel") || lower.contains("stay") ->
+        lower.contains("hotel") || lower.contains("stay") ->
             if (isDark) Color(0xFF222A4A) to Color(0xFFC7D2FE) else Color(0xFFE0E7FF) to Color(0xFF3730A3)
         lower.contains("cab") || lower.contains("auto") || lower.contains("uber") || lower.contains("taxi") || lower.contains("fuel") ->
             if (isDark) Color(0xFF3D2E14) to Color(0xFFFDE68A) else Color(0xFFFEF3C7) to Color(0xFF92400E)
@@ -940,10 +959,31 @@ fun CompactLedgerTicketStub(
     val context = LocalContext.current
     val localView = androidx.compose.ui.platform.LocalView.current
     val isDark = SplitMateTheme.isDark
-    val stubBg = if (isDark) Color(0xFF212B18) else Color(0xFFF3F7EA)
-    val stubBorder = if (isDark) Color(0xFF3B5224) else Color(0xFFCDE0A8)
-    val badgeBg = if (isDark) Color(0xFF2D401B) else Color(0xFFDCE9B9)
-    val badgeText = if (isDark) Color(0xFFD7E8B6) else Color(0xFF365314)
+    val isFlight = isFlightTicketExpense(ticket.cleanTitle, ticket)
+    val stubBg = when {
+        isFlight && isDark -> Color(0xFF1B1936)
+        isFlight -> Color(0xFFF3F5FF)
+        isDark -> Color(0xFF212B18)
+        else -> Color(0xFFF3F7EA)
+    }
+    val stubBorder = when {
+        isFlight && isDark -> Color(0xFF3E397A)
+        isFlight -> Color(0xFFC7D2FE)
+        isDark -> Color(0xFF3B5224)
+        else -> Color(0xFFCDE0A8)
+    }
+    val badgeBg = when {
+        isFlight && isDark -> Color(0xFF2B2768)
+        isFlight -> Color(0xFFEEF2FF)
+        isDark -> Color(0xFF2D401B)
+        else -> Color(0xFFDCE9B9)
+    }
+    val badgeText = when {
+        isFlight && isDark -> Color(0xFFDCE3FD)
+        isFlight -> Color(0xFF2B2768)
+        isDark -> Color(0xFFD7E8B6)
+        else -> Color(0xFF365314)
+    }
 
     val fromCode = ticket.fromStation.ifBlank { "ORG" }.uppercase(java.util.Locale.US)
     val toCode = ticket.toStation.ifBlank { "DST" }.uppercase(java.util.Locale.US)
@@ -979,8 +1019,8 @@ fun CompactLedgerTicketStub(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Rounded.Train,
-                        contentDescription = "IRCTC Ticket Stub",
+                        imageVector = if (isFlight) Icons.Rounded.FlightTakeoff else Icons.Rounded.Train,
+                        contentDescription = if (isFlight) "Flight Ticket Stub" else "IRCTC Ticket Stub",
                         tint = badgeText,
                         modifier = Modifier.size(18.dp)
                     )

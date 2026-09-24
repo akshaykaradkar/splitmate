@@ -247,9 +247,15 @@ fun PnrExpenseReviewScreen(
 
     var liveSnapshot by remember { mutableStateOf<LivePnrStatusSnapshot?>(null) }
 
-    // Check which PNRs are already logged in the active group
+    // Check which 10-digit IRCTC Train PNRs are already logged in the active group (excluding 6-char Flight PNRs)
     val existingPnrExpensesInGroup = remember(uiState.expenses, uiState.activeGroupId) {
-        uiState.expenses.filter { it.groupId == uiState.activeGroupId && it.title.contains("PNR:", ignoreCase = true) }
+        uiState.expenses.filter { exp ->
+            exp.groupId == uiState.activeGroupId &&
+                exp.title.contains("PNR:", ignoreCase = true) &&
+                com.splitmate.app.ui.extractTravelTicketFromTitle(exp.title)?.pnr?.let { pnr ->
+                    pnr.length == 10 && pnr.all { ch -> ch.isDigit() }
+                } == true
+        }
     }
 
     // Reactive lookup of an existing logged expense matching the active 10-digit PNR
@@ -315,9 +321,19 @@ fun PnrExpenseReviewScreen(
                 }
                 selectedPayerId = existingMatch.payerId
             } else if (fetched.isLiveVerified && fetched.totalFareRupees > 0) {
+                val matchedTrainMembers = fetched.structuredPassengers.mapNotNull { pax ->
+                    matchSinglePassengerToGroupMember(pax.passengerNumber, groupMembers)
+                }.distinctBy { it.memberId }
+                if (matchedTrainMembers.isNotEmpty()) {
+                    selectedPayerId = matchedTrainMembers.first().memberId
+                }
                 val paxCount = fetched.effectivePassengerCount.coerceAtLeast(1)
                 if (groupMembers.isNotEmpty()) {
-                    selectedMemberIds = groupMembers.take(paxCount).map { it.memberId }.toSet()
+                    selectedMemberIds = if (matchedTrainMembers.size >= 2) {
+                        matchedTrainMembers.map { it.memberId }.toSet()
+                    } else {
+                        groupMembers.take(paxCount.coerceAtLeast(groupMembers.size)).map { it.memberId }.toSet()
+                    }
                 }
             } else {
                 fetchError = "Live IRCTC server unreachable or rate-limited — Enter ticket fare & route manually below."
