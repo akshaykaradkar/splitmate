@@ -448,7 +448,12 @@ fun UserSettingsScreen(
         val part = avatarSeed.substringAfter('|', "Masculine")
         if (part in listOf("Masculine", "Feminine", "Neutral")) part else "Masculine"
     }
+    val initialSeedSuffix = remember(avatarSeed) {
+        val basePart = avatarSeed.substringBefore('|')
+        if (basePart.contains('_')) basePart.substringAfterLast('_') else ""
+    }
     var selectedStyle by remember(initialStyle) { mutableStateOf(initialStyle) }
+    var currentSeedSuffix by remember(initialSeedSuffix) { mutableStateOf(initialSeedSuffix) }
 
     val screenBg by animateColorAsState(
         targetValue = if (isDarkTheme) DesignSystemBindings.GM3DarkBackground else DesignSystemBindings.GM3LightBackground,
@@ -481,8 +486,16 @@ fun UserSettingsScreen(
         label = "SettingsBorderColor"
     )
 
-    val effectiveSeed = remember(editedName, selectedStyle) {
-        "${editedName.trim().ifEmpty { "Explorer" }}|$selectedStyle"
+    val effectiveSeed = remember(editedName, currentSeedSuffix, selectedStyle, avatarSeed, userName) {
+        val cleanEdited = editedName.trim().ifEmpty { "Explorer" }
+        val basePart = if (cleanEdited == userName.trim() && currentSeedSuffix == initialSeedSuffix && avatarSeed.isNotBlank()) {
+            avatarSeed.substringBefore('|').ifBlank { cleanEdited }
+        } else if (currentSeedSuffix.isNotBlank()) {
+            "${cleanEdited}_$currentSeedSuffix"
+        } else {
+            cleanEdited
+        }
+        "$basePart|$selectedStyle"
     }
     val diceBearSvgUrl = remember(effectiveSeed) {
         buildDiceBearOpenPeepsUrl(effectiveSeed)
@@ -569,7 +582,8 @@ fun UserSettingsScreen(
                                         )
                                     )
                                     .border(3.dp, cardBg, CircleShape)
-                                    .shadow(elevation = 6.dp, shape = CircleShape),
+                                    .shadow(elevation = 6.dp, shape = CircleShape)
+                                    .clickable { currentSeedSuffix = (100..999).random().toString() },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
@@ -592,6 +606,14 @@ fun UserSettingsScreen(
                                         .clip(CircleShape)
                                 )
                             }
+                            Text(
+                                text = "Tap avatar to randomize look",
+                                fontFamily = SplitMateBrandFontFamily,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = textSecondary,
+                                modifier = Modifier.clickable { currentSeedSuffix = (100..999).random().toString() }
+                            )
 
                             OutlinedTextField(
                                 value = editedName,

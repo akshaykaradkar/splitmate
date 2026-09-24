@@ -174,7 +174,9 @@ class SplitMateViewModel(
                 } else {
                     "${simplified.size} simplified settlements"
                 }
-                val visibleSeeds = groupMembers.take(4).map { it.avatarSeed }
+                val visibleSeeds = groupMembers.take(4).map { m ->
+                    if (m.isCurrentUser && state.currentUserSeed.isNotBlank()) state.currentUserSeed else m.avatarSeed
+                }
                 val rem = (groupMembers.size - visibleSeeds.size).coerceAtLeast(0)
 
                 ActiveGroupCardUiModel(
@@ -222,10 +224,18 @@ class SplitMateViewModel(
                     transfer = tr,
                     fromMemberId = tr.fromMemberId,
                     fromName = if (fromMember?.isCurrentUser == true) "You" else tr.fromName,
-                    fromSeed = fromMember?.avatarSeed ?: tr.fromName,
+                    fromSeed = if (fromMember?.isCurrentUser == true && state.currentUserSeed.isNotBlank()) {
+                        state.currentUserSeed
+                    } else {
+                        fromMember?.avatarSeed ?: tr.fromName
+                    },
                     toMemberId = tr.toMemberId,
                     toName = if (toMember?.isCurrentUser == true) "You" else tr.toName,
-                    toSeed = toMember?.avatarSeed ?: tr.toName,
+                    toSeed = if (toMember?.isCurrentUser == true && state.currentUserSeed.isNotBlank()) {
+                        state.currentUserSeed
+                    } else {
+                        toMember?.avatarSeed ?: tr.toName
+                    },
                     upiId = resolvedUpiId,
                     cleanPhone = if (hasPhoneLinked) clean10Phone else "",
                     hasLinkedPhone = hasPhoneLinked,
@@ -385,19 +395,29 @@ class SplitMateViewModel(
             upiId = defaultUpi,
             isDarkTheme = _uiState.value.isDarkTheme
         )
-        _uiState.update {
-            it.copy(
+        val updatedCurrentUserMembers = _uiState.value.members
+            .filter { it.isCurrentUser }
+            .map { it.copy(name = cleanName, avatarSeed = cleanSeed, upiId = it.upiId.ifBlank { defaultUpi }) }
+
+        _uiState.update { state ->
+            state.copy(
                 hasRegisteredProfile = true,
                 currentUserName = cleanName,
                 currentUserSeed = cleanSeed,
                 currentUserCountry = countryName,
                 activeCurrencyCode = currencyCode,
                 userUpiId = defaultUpi,
+                members = state.members.map { m ->
+                    if (m.isCurrentUser) m.copy(name = cleanName, avatarSeed = cleanSeed, upiId = m.upiId.ifBlank { defaultUpi }) else m
+                },
                 statusBannerMessage = "Welcome $cleanName"
             )
         }
         viewModelScope.launch(ioDispatcher) {
             dao?.upsertUserProfile(profile)
+            if (updatedCurrentUserMembers.isNotEmpty()) {
+                dao?.insertMembers(updatedCurrentUserMembers)
+            }
         }
     }
 

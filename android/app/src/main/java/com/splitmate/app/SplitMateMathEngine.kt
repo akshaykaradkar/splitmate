@@ -314,6 +314,7 @@ object SplitMateMathEngine {
         val summaries = participantIds.mapNotNull { memberId ->
             val outgoing = transfers
                 .filter { it.fromMemberId == memberId && it.amountCents > 0L }
+                .sortedWith(compareByDescending<SimplifiedTransfer> { it.amountCents }.thenBy { it.toName })
                 .map { tr ->
                     MemberPaymentLeg(
                         counterpartyMemberId = tr.toMemberId,
@@ -333,6 +334,7 @@ object SplitMateMathEngine {
                         formattedAmount = formatCurrencyCents(tr.amountCents, currencySymbol)
                     )
                 }
+                .sortedWith(compareBy<MemberPaymentLeg> { it.counterpartyName }.thenByDescending { it.amountCents })
 
             val totalOut = outgoing.sumOf { it.amountCents }
             val totalIn = incoming.sumOf { it.amountCents }
@@ -360,10 +362,10 @@ object SplitMateMathEngine {
         }
 
         return summaries.sortedWith(
-            compareByDescending<MemberSettlementSummary> { it.hasMultipleOutgoing }
-                .thenByDescending { it.totalOutgoingCents }
-                .thenByDescending { it.isCurrentUser }
-                .thenByDescending { it.totalIncomingCents }
+            compareByDescending<MemberSettlementSummary> { it.isCurrentUser }
+                .thenByDescending { it.hasMultipleOutgoing }
+                .thenByDescending { it.hasIncoming && !it.hasOutgoing }
+                .thenByDescending { maxOf(it.totalOutgoingCents, it.totalIncomingCents) }
                 .thenBy { it.memberName }
         )
     }
