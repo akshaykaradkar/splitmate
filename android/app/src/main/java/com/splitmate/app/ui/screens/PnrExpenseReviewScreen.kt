@@ -259,11 +259,19 @@ fun PnrExpenseReviewScreen(
     }
 
     // Reactive lookup of an existing logged expense matching the active 10-digit PNR
-    val selectedExistingExpense = remember(existingPnrExpensesInGroup, pnrInput, liveSnapshot) {
+    val selectedExistingExpense = remember(existingPnrExpensesInGroup, uiState.expenses, pnrInput, liveSnapshot) {
         val clean10 = (liveSnapshot?.pnr?.takeIf { it.length == 10 } ?: pnrInput.filter { it.isDigit() }).take(10)
         if (clean10.length == 10) {
             existingPnrExpensesInGroup.firstOrNull { it.title.contains(clean10) }
+                ?: viewModel.findExistingExpenseByPnr(clean10, uiState.activeGroupId)?.first
         } else null
+    }
+
+    LaunchedEffect(selectedExistingExpense?.groupId) {
+        val matchedGroupId = selectedExistingExpense?.groupId
+        if (!matchedGroupId.isNullOrBlank() && matchedGroupId != uiState.activeGroupId) {
+            viewModel.selectActiveGroup(matchedGroupId)
+        }
     }
 
     // Selected member IDs for splitting the ticket (hydrates from existing expense splits if inspecting/editing)
@@ -522,9 +530,17 @@ fun PnrExpenseReviewScreen(
                     ) {
                         uiState.groups.forEach { group ->
                             DropdownMenuItem(
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Train,
+                                        contentDescription = null,
+                                        tint = TactilePaperPassTokens.SageConfirmedText,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
                                 text = {
                                     Text(
-                                        text = "🚆  ${group.name}",
+                                        text = group.name,
                                         fontFamily = FigtreeFontFamily,
                                         fontWeight = if (group.groupId == activeGroup?.groupId) FontWeight.Bold else FontWeight.Medium
                                     )
@@ -1341,6 +1357,15 @@ fun TactilePaperBoardingPass(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.weight(1f)
                         ) {
+                            com.splitmate.app.AvatarToken(
+                                initials = pax.name,
+                                bg = if (pax.isPayer) TactilePaperPassTokens.SageConfirmedBg else Color(0xFFF0ECE1),
+                                textColor = if (pax.isPayer) TactilePaperPassTokens.SageConfirmedText else TactilePaperPassTokens.InkSecondary,
+                                size = 34
+                            )
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
                                 color = if (pax.isPayer) TactilePaperPassTokens.SageConfirmedBg else Color(0xFFF0ECE1),
@@ -1353,13 +1378,13 @@ fun TactilePaperBoardingPass(
                                     text = pax.id,
                                     fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 12.sp,
+                                    fontSize = 11.sp,
                                     color = if (pax.isPayer) TactilePaperPassTokens.SageConfirmedText else TactilePaperPassTokens.InkSecondary,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                                 )
                             }
 
-                            Spacer(modifier = Modifier.width(10.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
 
                             Column {
                                 Text(
@@ -1718,37 +1743,33 @@ private fun MemberSplitSelectionCard(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.weight(1f)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    when {
-                                        !isSelected -> Color(0xFFEAE4D7)
-                                        isPayer -> TactilePaperPassTokens.ForestTop
-                                        else -> TactilePaperPassTokens.SageConfirmedBg
-                                    }
-                                )
-                                .border(
-                                    1.dp,
-                                    if (isSelected) TactilePaperPassTokens.SageConfirmedBorder else TactilePaperPassTokens.HairlineBorder,
-                                    CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (isSelected) {
+                        Box(modifier = Modifier.size(40.dp)) {
+                            com.splitmate.app.AvatarToken(
+                                initials = member.avatarSeed.ifBlank { member.name },
+                                bg = if (isSelected) TactilePaperPassTokens.SageConfirmedBg else Color(0xFFEAE4D7),
+                                textColor = TactilePaperPassTokens.SageConfirmedText,
+                                size = 38
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .align(Alignment.BottomEnd)
+                                    .clip(CircleShape)
+                                    .background(
+                                        when {
+                                            !isSelected -> Color(0xFFD6CFC0)
+                                            isPayer -> TactilePaperPassTokens.ForestTop
+                                            else -> TactilePaperPassTokens.SageConfirmedText
+                                        }
+                                    )
+                                    .border(1.5.dp, TactilePaperPassTokens.PaperSurface, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 Icon(
-                                    imageVector = Icons.Rounded.Check,
-                                    contentDescription = "Selected",
-                                    tint = if (isPayer) Color.White else TactilePaperPassTokens.SageConfirmedText,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Rounded.Close,
-                                    contentDescription = "Excluded",
-                                    tint = TactilePaperPassTokens.InkMuted,
-                                    modifier = Modifier.size(16.dp)
+                                    imageVector = if (isSelected) Icons.Rounded.Check else Icons.Rounded.Close,
+                                    contentDescription = if (isSelected) "Selected" else "Excluded",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(10.dp)
                                 )
                             }
                         }

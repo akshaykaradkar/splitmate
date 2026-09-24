@@ -432,7 +432,7 @@ fun QuickExpenseScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "🚆 IRCTC Train PNR Direct Split",
+                                    text = "IRCTC Train PNR Direct Split",
                                     fontFamily = SplitMateBrandFontFamily,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 13.sp,

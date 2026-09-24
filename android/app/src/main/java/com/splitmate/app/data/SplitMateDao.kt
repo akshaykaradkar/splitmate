@@ -32,6 +32,9 @@ interface SplitMateDao {
     @Upsert
     suspend fun insertGroup(group: ExpenseGroupEntity)
 
+    @Query("UPDATE expense_groups SET name = :newName, iconName = :newIconName WHERE groupId = :groupId")
+    suspend fun updateGroupDetails(groupId: String, newName: String, newIconName: String)
+
     @Upsert
     suspend fun insertMembers(members: List<GroupMemberEntity>)
 

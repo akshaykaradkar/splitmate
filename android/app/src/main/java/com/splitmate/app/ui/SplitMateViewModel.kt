@@ -499,15 +499,30 @@ class SplitMateViewModel(
         val groupMembers = state.activeGroupMembers
         if (groupMembers.isEmpty()) return
 
-        // Guard against adding the exact same 10-digit PNR twice to the same group ledger
+        // Guard against adding the exact same 6-char Flight PNR or 10-digit Train PNR twice to the group ledger
+        val bracketPnr = Regex("""\[PNR:([A-Za-z0-9]{6,12})\]""", RegexOption.IGNORE_CASE)
+            .find(title)?.groupValues?.getOrNull(1)?.uppercase(Locale.US)
         val pnrDigits = Regex("""\b(\d{10})\b""").find(title)?.groupValues?.getOrNull(1)
-        if (!pnrDigits.isNullOrBlank()) {
-            val alreadyExistsInGroup = state.expenses.any { existingExp ->
-                existingExp.groupId == state.activeGroupId && existingExp.title.contains(pnrDigits)
+        val detectedPnr = bracketPnr ?: pnrDigits
+
+        if (!detectedPnr.isNullOrBlank()) {
+            val existingExp = state.expenses.firstOrNull { exp ->
+                exp.groupId == state.activeGroupId && (
+                    exp.title.contains("[PNR:$detectedPnr]", ignoreCase = true) ||
+                        exp.title.contains(detectedPnr, ignoreCase = true)
+                    )
             }
-            if (alreadyExistsInGroup) {
+            if (existingExp != null) {
+                // Do NOT count as a new expense — update the earlier logged expense in place
+                editExistingExpense(
+                    expenseId = existingExp.expenseId,
+                    newTitle = title,
+                    newTotalRupees = totalAmountCents / 100.0,
+                    newPayerId = payerMemberId ?: existingExp.payerId,
+                    selectedMemberIds = selectedMemberIds
+                )
                 _uiState.update { curr ->
-                    curr.copy(statusBannerMessage = "PNR $pnrDigits is already logged in this group ledger")
+                    curr.copy(statusBannerMessage = "PNR $detectedPnr already added — updated earlier expense without duplicating")
                 }
                 return
             }
@@ -764,6 +779,61 @@ class SplitMateViewModel(
             .filter { it.isNotEmpty() }
             .map { NewGroupMemberDraft(name = it) }
         createNewGroupWithContacts(name = name, iconName = iconName, memberDrafts = drafts)
+    }
+
+    /**
+     * Renames an existing group (and optionally updates its iconName) and reflects it reactively
+     * across all screens, dropdowns, and Room persistence.
+     */
+    fun renameGroup(groupId: String, newName: String, newIconName: String? = null) {
+        val cleanName = newName.trim()
+        if (cleanName.isEmpty()) return
+        val existingGroup = _uiState.value.groups.find { it.groupId == groupId } ?: return
+        val resolvedIcon = newIconName?.trim()?.ifEmpty { existingGroup.iconName } ?: existingGroup.iconName
+
+        _uiState.update { state ->
+            val updatedGroups = state.groups.map { grp ->
+                if (grp.groupId == groupId) grp.copy(name = cleanName, iconName = resolvedIcon) else grp
+            }
+            state.copy(
+                groups = updatedGroups,
+                statusBannerMessage = "Renamed group to \"$cleanName\""
+            )
+        }
+
+        viewModelScope.launch(ioDispatcher) {
+            dao?.updateGroupDetails(
+                groupId = groupId,
+                newName = cleanName,
+                newIconName = resolvedIcon
+            )
+        }
+    }
+
+    /**
+     * Finds an already-logged expense matching [pnr] (6-char Flight PNR or 10-digit Train PNR),
+     * prioritizing [preferredGroupId] (e.g., activeGroupId / openedGroupDetailId) and falling back
+     * to any group in the ledger.
+     */
+    fun findExistingExpenseByPnr(
+        pnr: String,
+        preferredGroupId: String? = null
+    ): Pair<ExpenseEntity, ExpenseGroupEntity?>? {
+        val cleanPnr = pnr.trim().uppercase(Locale.US)
+        if (cleanPnr.length < 6) return null
+        val state = _uiState.value
+        val targetGroupId = preferredGroupId ?: state.openedGroupDetailId ?: state.activeGroupId
+
+        val allMatches = state.expenses.filter { exp ->
+            exp.title.contains("[PNR:$cleanPnr]", ignoreCase = true) ||
+                Regex("""\b${Regex.escape(cleanPnr)}\b""", RegexOption.IGNORE_CASE).containsMatchIn(exp.title)
+        }
+        val bestMatch = allMatches.firstOrNull { it.groupId == targetGroupId }
+            ?: allMatches.firstOrNull()
+            ?: return null
+
+        val matchedGroup = state.groups.find { it.groupId == bestMatch.groupId }
+        return bestMatch to matchedGroup
     }
 
     fun addMemberToActiveGroup(friendName: String) {

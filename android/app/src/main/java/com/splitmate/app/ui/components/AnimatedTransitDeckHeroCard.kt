@@ -21,7 +21,12 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -332,6 +337,8 @@ private fun TrainPassCard(
         label = "TrainGlideProgress"
     )
 
+    val trainVectorPainter = rememberVectorPainter(Icons.Rounded.Train)
+
     // Signal light beacon pulse
     val beaconPulse by infiniteTransition.animateFloat(
         initialValue = 0.35f,
@@ -375,12 +382,17 @@ private fun TrainPassCard(
                     color = AnimatedTransitDeckTokens.SpecularRim,
                     shape = ticketShape
                 )
-                // Kinetic Vector Rail Canvas (Twin Curving Tracks + Gliding Train + Station Beacon)
+                // Kinetic Vector Rail Canvas (Twin Curving Tracks + Coupled Coaches + Locomotive Icon + Headlight Cone)
                 .drawBehind {
                     val w = size.width
                     val h = size.height
-                    val trackColor = Color.White.copy(alpha = 0.14f * alpha)
-                    val sleeperColor = Color.White.copy(alpha = 0.08f * alpha)
+                    val trackColor = Color.White.copy(alpha = 0.20f * alpha)
+                    val sleeperColor = Color.White.copy(alpha = 0.12f * alpha)
+
+                    val p0 = Offset(w * 0.55f, h)
+                    val p1 = Offset(w * 0.68f, h * 0.70f)
+                    val p2 = Offset(w * 0.75f, h * 0.36f)
+                    val p3 = Offset(w * 1.05f, h * 0.06f)
 
                     // Track 1
                     val rail1 = Path().apply {
@@ -396,9 +408,9 @@ private fun TrainPassCard(
                     drawPath(rail1, color = trackColor, style = Stroke(width = 2.dp.toPx()))
                     drawPath(rail2, color = trackColor, style = Stroke(width = 2.dp.toPx()))
 
-                    // Cross sleepers (ties)
-                    val sleeperDash = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 11.dp.toPx()), 0f)
-                    drawPath(rail1, color = sleeperColor, style = Stroke(width = 14.dp.toPx(), pathEffect = sleeperDash))
+                    // Cross sleepers (wooden/steel railway ties)
+                    val sleeperDash = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 10.dp.toPx()), 0f)
+                    drawPath(rail1, color = sleeperColor, style = Stroke(width = 15.dp.toPx(), pathEffect = sleeperDash))
 
                     // Station node beacon
                     val beaconCenter = Offset(w * 0.88f, h * 0.36f)
@@ -413,34 +425,79 @@ private fun TrainPassCard(
                         center = beaconCenter
                     )
 
-                    // Kinetic Gliding Train Silhouette
+                    // Coupled Trailing Coach Cars following the Locomotive on the Rail
                     val t = trainProgress
-                    val trainPos = cubicBezierPoint(
-                        p0 = Offset(w * 0.55f, h),
-                        p1 = Offset(w * 0.68f, h * 0.70f),
-                        p2 = Offset(w * 0.75f, h * 0.36f),
-                        p3 = Offset(w * 1.05f, h * 0.06f),
-                        t = t
+                    listOf(0.15f, 0.08f).forEach { lag ->
+                        val coachT = (t - lag)
+                        if (coachT in 0.02f..0.98f) {
+                            val coachPos = cubicBezierPoint(p0, p1, p2, p3, coachT)
+                            val coachAngle = cubicBezierTangentAngle(p0, p1, p2, p3, coachT)
+                            withTransform({
+                                translate(coachPos.x, coachPos.y)
+                                rotate(coachAngle, Offset.Zero)
+                            }) {
+                                drawRoundRect(
+                                    color = AnimatedTransitDeckTokens.SagePillBg.copy(alpha = 0.55f * alpha),
+                                    topLeft = Offset(-7.dp.toPx(), -4.dp.toPx()),
+                                    size = Size(14.dp.toPx(), 8.dp.toPx()),
+                                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx(), 3.dp.toPx())
+                                )
+                            }
+                        }
+                    }
+
+                    // Locomotive Position & Rhythmic Rail-Clack Micro-Bounce
+                    val rawTrainPos = cubicBezierPoint(p0, p1, p2, p3, t)
+                    val clackBounceY = sin(t * 38f) * 1.1f.dp.toPx()
+                    val trainPos = Offset(rawTrainPos.x, rawTrainPos.y + clackBounceY)
+                    val tangentAngle = cubicBezierTangentAngle(p0, p1, p2, p3, t)
+                    val rad = Math.toRadians(tangentAngle.toDouble())
+
+                    // Golden-Sage Locomotive Headlight Cone projecting along the track
+                    val beamLength = 26.dp.toPx()
+                    val beamSpread = 9.dp.toPx()
+                    val noseX = trainPos.x + cos(rad).toFloat() * 10.dp.toPx()
+                    val noseY = trainPos.y + sin(rad).toFloat() * 10.dp.toPx()
+                    val farX = noseX + cos(rad).toFloat() * beamLength
+                    val farY = noseY + sin(rad).toFloat() * beamLength
+                    val perpX = -sin(rad).toFloat() * beamSpread
+                    val perpY = cos(rad).toFloat() * beamSpread
+
+                    val beamPath = Path().apply {
+                        moveTo(noseX, noseY)
+                        lineTo(farX + perpX, farY + perpY)
+                        lineTo(farX - perpX, farY - perpY)
+                        close()
+                    }
+                    drawPath(
+                        path = beamPath,
+                        color = Color(0xFFFFF59D).copy(alpha = 0.26f * alpha)
                     )
 
-                    // Train Engine Capsule + Headlight Glow
+                    // Locomotive Medallion + Actual Train Vector Icon (Icons.Rounded.Train)
+                    val medallionRadius = 11.dp.toPx()
                     drawCircle(
-                        color = Color.White.copy(alpha = 0.25f * alpha),
-                        radius = 8.dp.toPx(),
+                        color = AnimatedTransitDeckTokens.SageForestEnd.copy(alpha = 0.92f * alpha),
+                        radius = medallionRadius + 2.dp.toPx(),
                         center = trainPos
                     )
                     drawCircle(
-                        color = AnimatedTransitDeckTokens.SagePillBg.copy(alpha = 0.90f * alpha),
-                        radius = 4.5.dp.toPx(),
+                        color = AnimatedTransitDeckTokens.SagePillBg.copy(alpha = 0.98f * alpha),
+                        radius = medallionRadius,
                         center = trainPos
                     )
-                    // Headlight beam vector
-                    drawLine(
-                        color = Color.White.copy(alpha = 0.40f * alpha),
-                        start = trainPos,
-                        end = Offset(trainPos.x + 16.dp.toPx(), trainPos.y - 12.dp.toPx()),
-                        strokeWidth = 2.dp.toPx()
-                    )
+                    val iconPx = 14.dp.toPx()
+                    withTransform({
+                        translate(trainPos.x - iconPx / 2f, trainPos.y - iconPx / 2f)
+                    }) {
+                        with(trainVectorPainter) {
+                            draw(
+                                size = Size(iconPx, iconPx),
+                                alpha = alpha,
+                                colorFilter = ColorFilter.tint(AnimatedTransitDeckTokens.SagePillText)
+                            )
+                        }
+                    }
                 }
                 .padding(horizontal = 18.dp, vertical = 14.dp)
         ) {
@@ -645,6 +702,8 @@ private fun FlightPassCard(
         label = "AirplaneGlideProgress"
     )
 
+    val flightVectorPainter = rememberVectorPainter(Icons.Rounded.Flight)
+
     // Radar pulse wave expansion
     val radarPulse by infiniteTransition.animateFloat(
         initialValue = 0.2f,
@@ -688,16 +747,21 @@ private fun FlightPassCard(
                     color = AnimatedTransitDeckTokens.SpecularRim,
                     shape = ticketShape
                 )
-                // Kinetic Vector Aeronautical Canvas (Contrail Path + Gliding Airplane + Radar Rings)
+                // Kinetic Vector Aeronautical Canvas (Contrail Path + Banking Jet Aircraft Icon + Radar Rings)
                 .drawBehind {
                     val w = size.width
                     val h = size.height
-                    val contrailBaseColor = Color.White.copy(alpha = 0.14f * alpha)
+                    val contrailBaseColor = Color.White.copy(alpha = 0.16f * alpha)
+
+                    val p0 = Offset(w * 0.44f, h * 0.96f)
+                    val p1 = Offset(w * 0.60f, h * 0.65f)
+                    val p2 = Offset(w * 0.76f, h * 0.58f)
+                    val p3 = Offset(w * 0.98f, h * 0.14f)
 
                     // Parabolic contrail path
                     val contrailPath = Path().apply {
-                        moveTo(w * 0.44f, h * 0.96f)
-                        cubicTo(w * 0.60f, h * 0.65f, w * 0.76f, h * 0.58f, w * 0.98f, h * 0.14f)
+                        moveTo(p0.x, p0.y)
+                        cubicTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y)
                     }
 
                     // Main dashed contrail line
@@ -713,46 +777,64 @@ private fun FlightPassCard(
                     // Radar node and expanding ring wave
                     val beaconCenter = Offset(w * 0.95f, h * 0.18f)
                     drawCircle(
-                        color = AnimatedTransitDeckTokens.SkySignalBlue.copy(alpha = (1f - radarPulse) * 0.25f * alpha),
+                        color = AnimatedTransitDeckTokens.SkySignalBlue.copy(alpha = (1f - radarPulse) * 0.28f * alpha),
                         radius = (36 * radarPulse).dp.toPx(),
                         center = beaconCenter,
                         style = Stroke(width = 1.5.dp.toPx())
                     )
                     drawCircle(
-                        color = AnimatedTransitDeckTokens.SkyBluePillBg.copy(alpha = 0.70f * alpha),
+                        color = AnimatedTransitDeckTokens.SkyBluePillBg.copy(alpha = 0.75f * alpha),
                         radius = 4.dp.toPx(),
                         center = beaconCenter
                     )
 
-                    // Gliding Airplane position
+                    // Gliding Jet Aircraft Position & Tangent Angle
                     val t = flightProgress
-                    val planePos = cubicBezierPoint(
-                        p0 = Offset(w * 0.44f, h * 0.96f),
-                        p1 = Offset(w * 0.60f, h * 0.65f),
-                        p2 = Offset(w * 0.76f, h * 0.58f),
-                        p3 = Offset(w * 0.98f, h * 0.14f),
-                        t = t
-                    )
+                    val planePos = cubicBezierPoint(p0 = p0, p1 = p1, p2 = p2, p3 = p3, t = t)
+                    val tangentDeg = cubicBezierTangentAngle(p0 = p0, p1 = p1, p2 = p2, p3 = p3, t = t)
+                    // Icons.Rounded.Flight nose points UP (-90 deg), so +90 aligns the nose along the tangent
+                    val planeRotation = tangentDeg + 90f
 
-                    // Minimalist Airplane Silhouette Glyph
+                    // Twin Wingtip Jet Contrail Wakes trailing behind the plane
+                    val wakePos1 = cubicBezierPoint(p0, p1, p2, p3, (t - 0.09f).coerceIn(0f, 1f))
+                    val wakePos2 = cubicBezierPoint(p0, p1, p2, p3, (t - 0.17f).coerceIn(0f, 1f))
+                    if (t > 0.05f) {
+                        drawLine(
+                            color = AnimatedTransitDeckTokens.SkyBluePillBg.copy(alpha = 0.55f * alpha),
+                            start = planePos,
+                            end = wakePos1,
+                            strokeWidth = 3.dp.toPx(),
+                            cap = StrokeCap.Round
+                        )
+                        drawLine(
+                            color = Color.White.copy(alpha = 0.25f * alpha),
+                            start = wakePos1,
+                            end = wakePos2,
+                            strokeWidth = 1.8.dp.toPx(),
+                            cap = StrokeCap.Round
+                        )
+                    }
+
+                    // Luminous Periwinkle Radar Halo + Rotated Jet Vector Icon (Icons.Rounded.Flight)
                     drawCircle(
-                        color = Color.White.copy(alpha = 0.35f * alpha),
-                        radius = 7.dp.toPx(),
+                        color = AnimatedTransitDeckTokens.SkySignalBlue.copy(alpha = 0.22f * alpha),
+                        radius = 13.dp.toPx(),
                         center = planePos
                     )
-                    drawCircle(
-                        color = AnimatedTransitDeckTokens.SkyBluePillBg.copy(alpha = 0.95f * alpha),
-                        radius = 4.5.dp.toPx(),
-                        center = planePos
-                    )
-                    // Trailing jet vapor puff
-                    drawLine(
-                        color = Color.White.copy(alpha = 0.45f * alpha),
-                        start = planePos,
-                        end = Offset(planePos.x - 14.dp.toPx(), planePos.y + 10.dp.toPx()),
-                        strokeWidth = 2.dp.toPx(),
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f), 0f)
-                    )
+                    val jetSizePx = 21.dp.toPx()
+                    withTransform({
+                        translate(planePos.x, planePos.y)
+                        rotate(planeRotation, Offset.Zero)
+                        translate(-jetSizePx / 2f, -jetSizePx / 2f)
+                    }) {
+                        with(flightVectorPainter) {
+                            draw(
+                                size = Size(jetSizePx, jetSizePx),
+                                alpha = alpha,
+                                colorFilter = ColorFilter.tint(AnimatedTransitDeckTokens.SkyBluePillBg)
+                            )
+                        }
+                    }
                 }
                 .padding(horizontal = 18.dp, vertical = 14.dp)
         ) {
@@ -944,4 +1026,17 @@ private fun cubicBezierPoint(
     val x = uuu * p0.x + 3 * uu * t * p1.x + 3 * u * tt * p2.x + ttt * p3.x
     val y = uuu * p0.y + 3 * uu * t * p1.y + 3 * u * tt * p2.y + ttt * p3.y
     return Offset(x, y)
+}
+
+private fun cubicBezierTangentAngle(
+    p0: Offset,
+    p1: Offset,
+    p2: Offset,
+    p3: Offset,
+    t: Float
+): Float {
+    val u = 1f - t
+    val dx = 3f * u * u * (p1.x - p0.x) + 6f * u * t * (p2.x - p1.x) + 3f * t * t * (p3.x - p2.x)
+    val dy = 3f * u * u * (p1.y - p0.y) + 6f * u * t * (p2.y - p1.y) + 3f * t * t * (p3.y - p2.y)
+    return Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
 }

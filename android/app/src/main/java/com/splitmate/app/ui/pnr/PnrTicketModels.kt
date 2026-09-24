@@ -168,14 +168,38 @@ suspend fun fetchLivePnrAndTrainStatus(
 )
 
 fun formatTravelExpenseTitle(baseCategory: String, ticket: ParsedTravelTicket): String {
-    if (!ticket.hasTicketMetadata) return baseCategory.ifBlank { "Travel & Ticket" }
+    val cleanBase = baseCategory
+        .replace("🚆", "")
+        .replace("✈️", "")
+        .replace("✈", "")
+        .trim()
+    if (!ticket.hasTicketMetadata) return cleanBase.ifBlank { "Travel Ticket" }
+
+    val pnrTrim = ticket.pnr.trim()
+    val isFlightTicket = (pnrTrim.length == 6 && pnrTrim.any { it.isLetter() }) ||
+        Regex("""^[A-Z0-9]{2}-\d{2,4}$""", RegexOption.IGNORE_CASE).matches(ticket.trainOrFlightNo.trim()) ||
+        cleanBase.contains("Flight", ignoreCase = true) ||
+        cleanBase.contains("IndiGo", ignoreCase = true) ||
+        cleanBase.contains("Air India", ignoreCase = true) ||
+        cleanBase.contains("Akasa", ignoreCase = true) ||
+        cleanBase.contains("SpiceJet", ignoreCase = true) ||
+        cleanBase.contains("Vistara", ignoreCase = true)
+
     val parts = mutableListOf<String>()
     val labelPrefix = when {
+        isFlightTicket && ticket.trainOrCarrierName.isNotBlank() && ticket.trainOrFlightNo.isNotBlank() ->
+            "Flight ${ticket.trainOrFlightNo} ${ticket.trainOrCarrierName}"
+        isFlightTicket && ticket.trainOrFlightNo.isNotBlank() ->
+            "Flight ${ticket.trainOrFlightNo}"
+        isFlightTicket && cleanBase.isNotBlank() ->
+            cleanBase
         ticket.trainOrCarrierName.isNotBlank() && ticket.trainOrFlightNo.isNotBlank() ->
             "Train ${ticket.trainOrFlightNo} ${ticket.trainOrCarrierName}"
-        ticket.trainOrFlightNo.isNotBlank() -> "Train/Flight ${ticket.trainOrFlightNo}"
-        ticket.trainOrCarrierName.isNotBlank() -> ticket.trainOrCarrierName
-        else -> baseCategory.ifBlank { "Train / Travel Ticket" }
+        ticket.trainOrFlightNo.isNotBlank() ->
+            "Train ${ticket.trainOrFlightNo}"
+        ticket.trainOrCarrierName.isNotBlank() ->
+            ticket.trainOrCarrierName
+        else -> cleanBase.ifBlank { if (isFlightTicket) "Flight Ticket" else "Train Ticket" }
     }
     parts.add(labelPrefix)
     if (ticket.pnr.isNotBlank()) parts.add("PNR: ${ticket.pnr}")
@@ -197,6 +221,7 @@ fun extractTravelTicketFromTitle(title: String): ParsedTravelTicket? {
     if (!title.contains("PNR:", ignoreCase = true) &&
         !title.contains("Seats:", ignoreCase = true) &&
         !title.contains("Train", ignoreCase = true) &&
+        !title.contains("Flight", ignoreCase = true) &&
         !title.contains("->") &&
         !title.contains("→")
     ) {
@@ -228,8 +253,15 @@ fun extractTravelTicketFromTitle(title: String): ParsedTravelTicket? {
                 toSt = seg.substringAfter("→").trim()
             }
             idx == 0 -> {
-                val cleanFirst = seg.replace("Train/Flight", "").replace("Train", "").trim()
-                val numMatch = Regex("""^(\d{5}|[A-Z0-9]{2}-\d{3,4})\s*(.*)$""").find(cleanFirst)
+                val cleanFirst = seg
+                    .replace("🚆", "")
+                    .replace("✈️", "")
+                    .replace("✈", "")
+                    .replace("Train/Flight", "")
+                    .replace("Flight", "")
+                    .replace("Train", "")
+                    .trim()
+                val numMatch = Regex("""^(\d{5}|[A-Z0-9]{2}-\d{2,4})\s*(.*)$""", RegexOption.IGNORE_CASE).find(cleanFirst)
                 if (numMatch != null) {
                     trainNo = numMatch.groupValues[1]
                     trainName = numMatch.groupValues[2]
@@ -242,6 +274,26 @@ fun extractTravelTicketFromTitle(title: String): ParsedTravelTicket? {
     if (seats.contains("WL", ignoreCase = true) && status == "CNF") status = "WL"
     if (seats.contains("RAC", ignoreCase = true) && status == "CNF") status = "RAC"
 
+    val isFlight = (pnr.length == 6 && pnr.any { it.isLetter() }) ||
+        Regex("""^[A-Z0-9]{2}-\d{2,4}$""", RegexOption.IGNORE_CASE).matches(trainNo)
+
+    val rawFirstSegment = segments.firstOrNull()
+        ?.replace("🚆", "")
+        ?.replace("✈️", "")
+        ?.replace("✈", "")
+        ?.trim()
+        .orEmpty()
+
+    val normalizedCleanTitle = when {
+        isFlight && rawFirstSegment.startsWith("Train/Flight ", ignoreCase = true) ->
+            "Flight " + rawFirstSegment.substringAfter(" ").trim()
+        isFlight && rawFirstSegment.startsWith("Train ", ignoreCase = true) ->
+            "Flight " + rawFirstSegment.substringAfter(" ").trim()
+        rawFirstSegment.isNotBlank() -> rawFirstSegment
+        isFlight -> "Flight Ticket"
+        else -> "Train Ticket"
+    }
+
     val parsed = ParsedTravelTicket(
         pnr = pnr,
         trainOrFlightNo = trainNo,
@@ -252,7 +304,7 @@ fun extractTravelTicketFromTitle(title: String): ParsedTravelTicket? {
         coachAndSeats = seats,
         bookingStatus = status,
         chartStatus = if (status.contains("WL", ignoreCase = true)) "Chart Not Prepared" else "Chart Prepared",
-        cleanTitle = segments.firstOrNull()?.trim().orEmpty().ifBlank { "Train / PNR Ticket" }
+        cleanTitle = normalizedCleanTitle
     )
     return if (parsed.hasTicketMetadata) parsed else null
 }

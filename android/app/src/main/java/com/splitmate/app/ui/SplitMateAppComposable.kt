@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -271,6 +272,19 @@ fun SplitMateMainDashboardScaffold(
 
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     if (extracted != null && (extracted.isValidFlightTicket || extracted.totalFarePaise > 0L)) {
+                        val existingMatch = viewModel.findExistingExpenseByPnr(
+                            pnr = extracted.pnr,
+                            preferredGroupId = uiState.openedGroupDetailId ?: uiState.activeGroupId
+                        )
+                        if (existingMatch != null) {
+                            val (existingExp, matchedGroup) = existingMatch
+                            viewModel.selectActiveGroup(existingExp.groupId)
+                            Toast.makeText(
+                                context,
+                                "PNR ${extracted.pnr} is already added in ${matchedGroup?.name ?: "Group"}! Showing earlier expense.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
                         activeFlightTicketResult = extracted
                     } else {
                         Toast.makeText(
@@ -531,9 +545,7 @@ fun SplitMateBottomNavigationBar(
         label = "BottomNavSurface"
     )
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .navigationBarsPadding(),
+        modifier = Modifier.fillMaxWidth(),
         color = navSurfaceColor,
         shadowElevation = 8.dp,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
@@ -541,6 +553,7 @@ fun SplitMateBottomNavigationBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .navigationBarsPadding()
                 .padding(horizontal = 14.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
@@ -744,6 +757,94 @@ fun LedgersDashboardScreen(
         )
     }
 
+    var editingGroupTarget by remember { mutableStateOf<com.splitmate.app.data.ExpenseGroupEntity?>(null) }
+
+    editingGroupTarget?.let { targetGroup ->
+        var draftGroupName by remember(targetGroup.groupId) { mutableStateOf(targetGroup.name) }
+        var draftIconName by remember(targetGroup.groupId) { mutableStateOf(targetGroup.iconName.ifBlank { "Flight" }) }
+
+        AlertDialog(
+            onDismissRequest = { editingGroupTarget = null },
+            containerColor = SplitMateTheme.SurfaceWhite,
+            title = {
+                Text(
+                    text = "Edit Group Name",
+                    fontFamily = SplitMateTheme.FontDisplay,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 18.sp,
+                    color = SplitMateTheme.PrimaryDark
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = draftGroupName,
+                        onValueChange = { draftGroupName = it },
+                        label = { Text("Group Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        text = "Group Category Icon",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SplitMateTheme.TextSecondary
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(GroupCategoryIcons) { option ->
+                            val iconKey = option.id
+                            val iconVector = option.icon
+                            val isSelected = draftIconName.equals(iconKey, ignoreCase = true)
+                            Surface(
+                                onClick = { draftIconName = iconKey },
+                                shape = CircleShape,
+                                color = if (isSelected) SplitMateTheme.AccentSage else SplitMateTheme.SurfaceMuted,
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.BorderLight
+                                ),
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = iconVector,
+                                        contentDescription = option.label,
+                                        tint = if (isSelected) Color(0xFF23201E) else SplitMateTheme.TextSecondary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val clean = draftGroupName.trim()
+                        if (clean.isNotEmpty()) {
+                            viewModel.renameGroup(targetGroup.groupId, clean, draftIconName)
+                            editingGroupTarget = null
+                        }
+                    },
+                    enabled = draftGroupName.trim().isNotEmpty(),
+                    shape = SplitMateTheme.RadiusBadge,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = SplitMateTheme.PrimaryDark,
+                        contentColor = SplitMateTheme.ScreenBg
+                    )
+                ) {
+                    Text("Save Name", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingGroupTarget = null }) {
+                    Text("Cancel", color = SplitMateTheme.TextSecondary)
+                }
+            }
+        )
+    }
+
     val openedGroup = uiState.groups.find { it.groupId == openedGroupDetailId }
     if (showAddContactsToExistingGroupSheet && openedGroup != null) {
         ContactPickerBottomSheet(
@@ -770,10 +871,10 @@ fun LedgersDashboardScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Back to All Groups Header
+            // Back to All Groups Header — Keep Settle Up 100% visible at all times
             item {
                 Row(
                     modifier = Modifier
@@ -810,12 +911,7 @@ fun LedgersDashboardScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(8.dp))
-
                     Row(
-                        modifier = Modifier
-                            .weight(1f, fill = false)
-                            .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -848,67 +944,12 @@ fun LedgersDashboardScreen(
                                 )
                                 Spacer(modifier = Modifier.width(5.dp))
                                 Text(
-                                    text = "+ Add Contact",
+                                    text = "+ Contact",
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 12.sp,
                                     maxLines = 1,
                                     softWrap = false,
                                     color = SplitMateTheme.SageText
-                                )
-                            }
-                        }
-
-                        Surface(
-                            onClick = onNavigateToPnrSplit,
-                            shape = SplitMateTheme.RadiusBadge,
-                            color = Color(0xFF264010)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Train,
-                                    contentDescription = "Split PNR",
-                                    tint = Color(0xFFD7E8B6),
-                                    modifier = Modifier.size(15.dp)
-                                )
-                                Spacer(modifier = Modifier.width(5.dp))
-                                Text(
-                                    text = "Split PNR",
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 12.sp,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    color = Color.White
-                                )
-                            }
-                        }
-
-                        Surface(
-                            onClick = onUploadFlightPdf,
-                            shape = SplitMateTheme.RadiusBadge,
-                            color = if (SplitMateTheme.isDark) Color(0xFF282552) else Color(0xFF2B2768),
-                            border = BorderStroke(1.dp, if (SplitMateTheme.isDark) Color(0xFF5650B8) else Color(0xFF4B459E))
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.FlightTakeoff,
-                                    contentDescription = "Flight PDF",
-                                    tint = if (SplitMateTheme.isDark) Color(0xFFDCE3FD) else Color(0xFFEEF2FF),
-                                    modifier = Modifier.size(15.dp)
-                                )
-                                Spacer(modifier = Modifier.width(5.dp))
-                                Text(
-                                    text = "Flight PDF",
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 12.sp,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    color = if (SplitMateTheme.isDark) Color(0xFFDCE3FD) else Color(0xFFEEF2FF)
                                 )
                             }
                         }
@@ -958,25 +999,52 @@ fun LedgersDashboardScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f).padding(end = 8.dp)
+                            ) {
                                 Box(
                                     modifier = Modifier
                                         .size(48.dp)
                                         .clip(CircleShape)
-                                        .background(SplitMateTheme.SageSurface),
+                                        .background(SplitMateTheme.SageSurface)
+                                        .clickable { editingGroupTarget = openedGroup },
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(groupIcon, contentDescription = null, tint = SplitMateTheme.SageText, modifier = Modifier.size(24.dp))
+                                    Icon(groupIcon, contentDescription = "Edit Group Icon", tint = SplitMateTheme.SageText, modifier = Modifier.size(24.dp))
                                 }
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column {
-                                    Text(
-                                        text = openedGroup.name,
-                                        fontFamily = SplitMateTheme.FontDisplay,
-                                        fontSize = 22.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = SplitMateTheme.PrimaryDark
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = openedGroup.name,
+                                            fontFamily = SplitMateTheme.FontDisplay,
+                                            fontSize = 21.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = SplitMateTheme.PrimaryDark,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f, fill = false)
+                                        )
+                                        Surface(
+                                            onClick = { editingGroupTarget = openedGroup },
+                                            shape = CircleShape,
+                                            color = SplitMateTheme.SageSurface,
+                                            border = BorderStroke(1.dp, SplitMateTheme.AccentSage)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Edit,
+                                                contentDescription = "Edit Group Name",
+                                                tint = SplitMateTheme.SageText,
+                                                modifier = Modifier
+                                                    .padding(5.dp)
+                                                    .size(13.dp)
+                                            )
+                                        }
+                                    }
                                     Text(
                                         text = "${groupMembers.size} members · ${groupExpenses.size} expenses",
                                         fontSize = 12.sp,
@@ -1106,7 +1174,7 @@ fun LedgersDashboardScreen(
                 }
             }
 
-            // TACTILE PAPER PNR STUDIO HERO LAUNCHER + HORIZONTAL LOGGED PNR STRIP (10-DIGIT TRAIN ONLY)
+            // UNIFIED 3D FLIP TRAVEL PASS CARD (Train Pass ⇄ Flight Pass on Button Click — NOT Stacked Cards)
             item {
                 val allTravelTicketsInGroup = remember(groupExpenses) {
                     groupExpenses.mapNotNull { exp ->
@@ -1126,230 +1194,346 @@ fun LedgersDashboardScreen(
                     }
                 }
 
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    // 1. IRCTC Train PNR Studio (Strictly 10-digit Train PNRs)
-                    Surface(
-                        shape = SplitMateTheme.RadiusCard,
-                        color = if (SplitMateTheme.isDark) Color(0xFF1F2B16) else Color(0xFFEAF3D5),
-                        border = BorderStroke(1.dp, if (SplitMateTheme.isDark) Color(0xFF3D5428) else Color(0xFFC5DCA0)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(40.dp)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(Color(0xFF264010)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Train,
-                                            contentDescription = null,
-                                            tint = Color(0xFFD7E8B6),
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column {
-                                        Text(
-                                            text = "Tactile Paper IRCTC PNR Studio",
-                                            fontFamily = SplitMateTheme.FontDisplay,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            fontSize = 15.sp,
-                                            color = SplitMateTheme.PrimaryDark
-                                        )
-                                        Text(
-                                            text = if (trainPnrExpensesInGroup.isEmpty()) {
-                                                "Fetch live 10-digit PNR boarding pass & split by passenger"
-                                            } else {
-                                                "${trainPnrExpensesInGroup.size} train ticket(s) logged · Tap any PNR below to view tactile pass"
-                                            },
-                                            fontSize = 11.sp,
-                                            color = SplitMateTheme.TextSecondary
-                                        )
-                                    }
-                                }
+                var isFlightSide by remember(
+                    openedGroup.groupId,
+                    flightPnrExpensesInGroup.size,
+                    trainPnrExpensesInGroup.size
+                ) {
+                    mutableStateOf(flightPnrExpensesInGroup.isNotEmpty() && trainPnrExpensesInGroup.isEmpty())
+                }
 
-                                Surface(
-                                    onClick = onNavigateToPnrSplit,
-                                    shape = SplitMateTheme.RadiusBadge,
-                                    color = Color(0xFF264010)
-                                ) {
-                                    Text(
-                                        text = "+ New PNR →",
-                                        fontFamily = SplitMateTheme.FontRounded,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 11.sp,
-                                        color = Color.White,
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
-                                    )
+                val flipRotationY by animateFloatAsState(
+                    targetValue = if (isFlightSide) 180f else 0f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioLowBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    ),
+                    label = "TravelPassCardFlipY"
+                )
+                val showingFlightFace = flipRotationY >= 90f
+
+                val cardBgColor = if (showingFlightFace) {
+                    if (SplitMateTheme.isDark) Color(0xFF1B1936) else Color(0xFFEEF2FF)
+                } else {
+                    if (SplitMateTheme.isDark) Color(0xFF1F2B16) else Color(0xFFEAF3D5)
+                }
+                val cardBorderColor = if (showingFlightFace) {
+                    if (SplitMateTheme.isDark) Color(0xFF3F3A82) else Color(0xFFC7D2FE)
+                } else {
+                    if (SplitMateTheme.isDark) Color(0xFF3D5428) else Color(0xFFC5DCA0)
+                }
+
+                Surface(
+                    shape = SplitMateTheme.RadiusCard,
+                    color = cardBgColor,
+                    border = BorderStroke(1.dp, cardBorderColor),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            rotationY = flipRotationY
+                            cameraDistance = 16f * density
+                        }
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .graphicsLayer {
+                                // Un-mirror back face past 90 degrees so text & buttons remain crisp and upright
+                                if (showingFlightFace) {
+                                    rotationY = 180f
                                 }
                             }
-
-                            if (trainPnrExpensesInGroup.isNotEmpty()) {
+                    ) {
+                        if (!showingFlightFace) {
+                            // FRONT FACE: Train Pass (10-digit IRCTC PNRs)
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
                                 Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .horizontalScroll(rememberScrollState()),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    trainPnrExpensesInGroup.forEach { (exp, ticket) ->
-                                        val formattedFare = "₹${String.format(Locale.US, "%.0f", exp.totalAmountCents / 100.0)}"
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(38.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(Color(0xFF264010)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Train,
+                                                contentDescription = null,
+                                                tint = Color(0xFFD7E8B6),
+                                                modifier = Modifier.size(19.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column {
+                                            Text(
+                                                text = "Train Pass",
+                                                fontFamily = SplitMateTheme.FontDisplay,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 15.sp,
+                                                color = SplitMateTheme.PrimaryDark
+                                            )
+                                            Text(
+                                                text = if (trainPnrExpensesInGroup.isEmpty()) {
+                                                    "10-digit IRCTC PNR · Split by berth"
+                                                } else {
+                                                    "${trainPnrExpensesInGroup.size} train pass(es) logged"
+                                                },
+                                                fontSize = 11.sp,
+                                                color = SplitMateTheme.TextSecondary
+                                            )
+                                        }
+                                    }
+
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // Button to Flip to Flight Pass
                                         Surface(
-                                            onClick = { onOpenPnrWithTicket(ticket.pnr) },
+                                            onClick = { isFlightSide = true },
                                             shape = SplitMateTheme.RadiusBadge,
-                                            color = SplitMateTheme.SurfaceWhite,
-                                            border = BorderStroke(1.dp, SplitMateTheme.BorderLight)
+                                            color = if (SplitMateTheme.isDark) Color(0xFF24214A) else Color(0xFFEEF2FF),
+                                            border = BorderStroke(1.dp, if (SplitMateTheme.isDark) Color(0xFF4E48A6) else Color(0xFFA5B4FC))
                                         ) {
                                             Row(
-                                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
                                                 verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
                                             ) {
                                                 Icon(
-                                                    imageVector = Icons.Rounded.Train,
-                                                    contentDescription = null,
-                                                    tint = SplitMateTheme.SageText,
+                                                    imageVector = Icons.Rounded.FlightTakeoff,
+                                                    contentDescription = "Flip to Flight Pass",
+                                                    tint = if (SplitMateTheme.isDark) Color(0xFFDCE3FD) else Color(0xFF3730A3),
                                                     modifier = Modifier.size(13.dp)
                                                 )
                                                 Text(
-                                                    text = "PNR ${ticket.pnr} (${ticket.fromStation.ifBlank { "ORG" }}→${ticket.toStation.ifBlank { "DST" }} · $formattedFare) ↗",
+                                                    text = "Flight (${flightPnrExpensesInGroup.size})",
                                                     fontFamily = SplitMateTheme.FontRounded,
-                                                    fontWeight = FontWeight.Bold,
+                                                    fontWeight = FontWeight.ExtraBold,
                                                     fontSize = 11.sp,
-                                                    color = SplitMateTheme.PrimaryDark
+                                                    color = if (SplitMateTheme.isDark) Color(0xFFDCE3FD) else Color(0xFF3730A3)
                                                 )
+                                                Icon(
+                                                    imageVector = Icons.Rounded.SwapHoriz,
+                                                    contentDescription = null,
+                                                    tint = if (SplitMateTheme.isDark) Color(0xFFDCE3FD) else Color(0xFF3730A3),
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                            }
+                                        }
+
+                                        Surface(
+                                            onClick = onNavigateToPnrSplit,
+                                            shape = SplitMateTheme.RadiusBadge,
+                                            color = Color(0xFF264010)
+                                        ) {
+                                            Text(
+                                                text = "+ PNR",
+                                                fontFamily = SplitMateTheme.FontRounded,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 11.sp,
+                                                color = Color.White,
+                                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                if (trainPnrExpensesInGroup.isNotEmpty()) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        trainPnrExpensesInGroup.forEach { (exp, ticket) ->
+                                            val formattedFare = "₹${String.format(Locale.US, "%.0f", exp.totalAmountCents / 100.0)}"
+                                            Surface(
+                                                onClick = { onOpenPnrWithTicket(ticket.pnr) },
+                                                shape = SplitMateTheme.RadiusBadge,
+                                                color = SplitMateTheme.SurfaceWhite,
+                                                border = BorderStroke(1.dp, SplitMateTheme.BorderLight)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Rounded.Train,
+                                                        contentDescription = null,
+                                                        tint = SplitMateTheme.SageText,
+                                                        modifier = Modifier.size(13.dp)
+                                                    )
+                                                    Text(
+                                                        text = "PNR ${ticket.pnr} (${ticket.fromStation.ifBlank { "ORG" }}→${ticket.toStation.ifBlank { "DST" }} · $formattedFare) ↗",
+                                                        fontFamily = SplitMateTheme.FontRounded,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 11.sp,
+                                                        color = SplitMateTheme.PrimaryDark
+                                                    )
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
-                        }
-                    }
-
-                    // 2. Periwinkle-Indigo Flight Boarding Pass Studio (Strictly 6-char Flight PNRs)
-                    Surface(
-                        shape = SplitMateTheme.RadiusCard,
-                        color = if (SplitMateTheme.isDark) Color(0xFF1B1936) else Color(0xFFEEF2FF),
-                        border = BorderStroke(1.dp, if (SplitMateTheme.isDark) Color(0xFF3F3A82) else Color(0xFFC7D2FE)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                        } else {
+                            // BACK FACE: Flight Pass (6-char Airline PNRs)
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(40.dp)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(if (SplitMateTheme.isDark) Color(0xFF282552) else Color(0xFF2B2768)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.FlightTakeoff,
-                                            contentDescription = null,
-                                            tint = if (SplitMateTheme.isDark) Color(0xFFDCE3FD) else Color(0xFFEEF2FF),
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column {
-                                        Text(
-                                            text = "Tactile Flight Boarding Pass Studio",
-                                            fontFamily = SplitMateTheme.FontDisplay,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            fontSize = 15.sp,
-                                            color = if (SplitMateTheme.isDark) Color(0xFFE6EAFF) else Color(0xFF1F1C4D)
-                                        )
-                                        Text(
-                                            text = if (flightPnrExpensesInGroup.isEmpty()) {
-                                                "Upload airline ticket PDF (6-char PNR) & auto-match passengers"
-                                            } else {
-                                                "${flightPnrExpensesInGroup.size} flight ticket(s) logged · Tap any flight PNR below to view boarding pass"
-                                            },
-                                            fontSize = 11.sp,
-                                            color = if (SplitMateTheme.isDark) Color(0xFFB5BEEC) else Color(0xFF433E85)
-                                        )
-                                    }
-                                }
-
-                                Surface(
-                                    onClick = onUploadFlightPdf,
-                                    shape = SplitMateTheme.RadiusBadge,
-                                    color = if (SplitMateTheme.isDark) Color(0xFF282552) else Color(0xFF2B2768),
-                                    border = BorderStroke(1.dp, if (SplitMateTheme.isDark) Color(0xFF5650B8) else Color(0xFF4B459E))
-                                ) {
-                                    Text(
-                                        text = "+ Upload PDF →",
-                                        fontFamily = SplitMateTheme.FontRounded,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 11.sp,
-                                        color = if (SplitMateTheme.isDark) Color(0xFFDCE3FD) else Color(0xFFEEF2FF),
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
-                                    )
-                                }
-                            }
-
-                            if (flightPnrExpensesInGroup.isNotEmpty()) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .horizontalScroll(rememberScrollState()),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    flightPnrExpensesInGroup.forEach { (exp, ticket) ->
-                                        val formattedFare = "₹${String.format(Locale.US, "%.0f", exp.totalAmountCents / 100.0)}"
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(38.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(if (SplitMateTheme.isDark) Color(0xFF282552) else Color(0xFF2B2768)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.FlightTakeoff,
+                                                contentDescription = null,
+                                                tint = if (SplitMateTheme.isDark) Color(0xFFDCE3FD) else Color(0xFFEEF2FF),
+                                                modifier = Modifier.size(19.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column {
+                                            Text(
+                                                text = "Flight Pass",
+                                                fontFamily = SplitMateTheme.FontDisplay,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 15.sp,
+                                                color = if (SplitMateTheme.isDark) Color(0xFFE6EAFF) else Color(0xFF1F1C4D)
+                                            )
+                                            Text(
+                                                text = if (flightPnrExpensesInGroup.isEmpty()) {
+                                                    "6-char airline PNR · Auto-match passengers"
+                                                } else {
+                                                    "${flightPnrExpensesInGroup.size} flight pass(es) logged"
+                                                },
+                                                fontSize = 11.sp,
+                                                color = if (SplitMateTheme.isDark) Color(0xFFB5BEEC) else Color(0xFF433E85)
+                                            )
+                                        }
+                                    }
+
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // Button to Flip to Train Pass
                                         Surface(
-                                            onClick = { onOpenPnrWithTicket(ticket.pnr) },
+                                            onClick = { isFlightSide = false },
                                             shape = SplitMateTheme.RadiusBadge,
-                                            color = if (SplitMateTheme.isDark) Color(0xFF24214A) else Color(0xFFFFFFFF),
-                                            border = BorderStroke(1.dp, if (SplitMateTheme.isDark) Color(0xFF4E48A6) else Color(0xFFA5B4FC))
+                                            color = if (SplitMateTheme.isDark) Color(0xFF1F2B16) else Color(0xFFEAF3D5),
+                                            border = BorderStroke(1.dp, if (SplitMateTheme.isDark) Color(0xFF3D5428) else Color(0xFFC5DCA0))
                                         ) {
                                             Row(
-                                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
                                                 verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
                                             ) {
                                                 Icon(
-                                                    imageVector = Icons.Rounded.FlightTakeoff,
-                                                    contentDescription = null,
-                                                    tint = if (SplitMateTheme.isDark) Color(0xFFA5B4FC) else Color(0xFF3730A3),
+                                                    imageVector = Icons.Rounded.Train,
+                                                    contentDescription = "Flip to Train Pass",
+                                                    tint = SplitMateTheme.SageText,
                                                     modifier = Modifier.size(13.dp)
                                                 )
                                                 Text(
-                                                    text = "FLIGHT ${ticket.pnr} (${ticket.fromStation.ifBlank { "ORG" }}→${ticket.toStation.ifBlank { "DST" }} · $formattedFare) ↗",
+                                                    text = "Train (${trainPnrExpensesInGroup.size})",
                                                     fontFamily = SplitMateTheme.FontRounded,
-                                                    fontWeight = FontWeight.Bold,
+                                                    fontWeight = FontWeight.ExtraBold,
                                                     fontSize = 11.sp,
-                                                    color = if (SplitMateTheme.isDark) Color(0xFFE6EAFF) else Color(0xFF1F1C4D)
+                                                    color = SplitMateTheme.SageText
                                                 )
+                                                Icon(
+                                                    imageVector = Icons.Rounded.SwapHoriz,
+                                                    contentDescription = null,
+                                                    tint = SplitMateTheme.SageText,
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                            }
+                                        }
+
+                                        Surface(
+                                            onClick = onUploadFlightPdf,
+                                            shape = SplitMateTheme.RadiusBadge,
+                                            color = if (SplitMateTheme.isDark) Color(0xFF282552) else Color(0xFF2B2768),
+                                            border = BorderStroke(1.dp, if (SplitMateTheme.isDark) Color(0xFF5650B8) else Color(0xFF4B459E))
+                                        ) {
+                                            Text(
+                                                text = "+ PDF",
+                                                fontFamily = SplitMateTheme.FontRounded,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 11.sp,
+                                                color = if (SplitMateTheme.isDark) Color(0xFFDCE3FD) else Color(0xFFEEF2FF),
+                                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                if (flightPnrExpensesInGroup.isNotEmpty()) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        flightPnrExpensesInGroup.forEach { (exp, ticket) ->
+                                            val formattedFare = "₹${String.format(Locale.US, "%.0f", exp.totalAmountCents / 100.0)}"
+                                            Surface(
+                                                onClick = { onOpenPnrWithTicket(ticket.pnr) },
+                                                shape = SplitMateTheme.RadiusBadge,
+                                                color = if (SplitMateTheme.isDark) Color(0xFF24214A) else Color(0xFFFFFFFF),
+                                                border = BorderStroke(1.dp, if (SplitMateTheme.isDark) Color(0xFF4E48A6) else Color(0xFFA5B4FC))
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Rounded.FlightTakeoff,
+                                                        contentDescription = null,
+                                                        tint = if (SplitMateTheme.isDark) Color(0xFFA5B4FC) else Color(0xFF3730A3),
+                                                        modifier = Modifier.size(13.dp)
+                                                    )
+                                                    Text(
+                                                        text = "FLIGHT ${ticket.pnr} (${ticket.fromStation.ifBlank { "ORG" }}→${ticket.toStation.ifBlank { "DST" }} · $formattedFare) ↗",
+                                                        fontFamily = SplitMateTheme.FontRounded,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 11.sp,
+                                                        color = if (SplitMateTheme.isDark) Color(0xFFE6EAFF) else Color(0xFF1F1C4D)
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -1520,18 +1704,31 @@ fun LedgersDashboardScreen(
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
                                 breakdown.rows.forEach { row ->
+                                    val rowMember = groupMembers.find { it.memberId == row.memberId }
+                                    val rowAvatarSeed = rowMember?.avatarSeed?.ifBlank { row.displayName } ?: row.displayName
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(vertical = 3.dp),
+                                            .padding(vertical = 4.dp),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text(
-                                            text = row.displayName,
-                                            fontSize = 12.sp,
-                                            color = if (row.isIncludedInSplit) SplitMateTheme.TextSecondary else SplitMateTheme.TextSecondary.copy(alpha = 0.5f)
-                                        )
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            AvatarToken(
+                                                initials = rowAvatarSeed,
+                                                bg = if (row.isIncludedInSplit) SplitMateTheme.SageSurface else SplitMateTheme.SurfaceMuted,
+                                                textColor = SplitMateTheme.SageText,
+                                                size = 24
+                                            )
+                                            Text(
+                                                text = row.displayName,
+                                                fontSize = 12.sp,
+                                                color = if (row.isIncludedInSplit) SplitMateTheme.TextSecondary else SplitMateTheme.TextSecondary.copy(alpha = 0.5f)
+                                            )
+                                        }
                                         Text(
                                             text = row.formattedShare,
                                             fontSize = 12.sp,
@@ -1551,17 +1748,42 @@ fun LedgersDashboardScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = if (isFlightCard) "✈ Airline Boarding Pass" else if (parsedTicketInGroup != null) "🚆 IRCTC Train Pass" else "Shared Ledger Entry",
-                                    fontFamily = SplitMateTheme.FontRounded,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (isFlightCard) {
-                                        if (SplitMateTheme.isDark) Color(0xFFA5B4FC) else Color(0xFF3730A3)
-                                    } else {
-                                        SplitMateTheme.TextSecondary
-                                    }
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = when {
+                                            isFlightCard -> Icons.Rounded.FlightTakeoff
+                                            parsedTicketInGroup != null -> Icons.Rounded.Train
+                                            else -> Icons.AutoMirrored.Rounded.ReceiptLong
+                                        },
+                                        contentDescription = null,
+                                        modifier = Modifier.size(13.dp),
+                                        tint = if (isFlightCard) {
+                                            if (SplitMateTheme.isDark) Color(0xFFA5B4FC) else Color(0xFF3730A3)
+                                        } else if (parsedTicketInGroup != null) {
+                                            SplitMateTheme.SageText
+                                        } else {
+                                            SplitMateTheme.TextSecondary
+                                        }
+                                    )
+                                    Text(
+                                        text = when {
+                                            isFlightCard -> "Flight Pass"
+                                            parsedTicketInGroup != null -> "Train Pass"
+                                            else -> "Shared Ledger Entry"
+                                        },
+                                        fontFamily = SplitMateTheme.FontRounded,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (isFlightCard) {
+                                            if (SplitMateTheme.isDark) Color(0xFFA5B4FC) else Color(0xFF3730A3)
+                                        } else {
+                                            SplitMateTheme.TextSecondary
+                                        }
+                                    )
+                                }
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Surface(
                                         onClick = { editingExpense = expense },
@@ -1638,7 +1860,7 @@ fun LedgersDashboardScreen(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp),
+        contentPadding = PaddingValues(top = 8.dp, bottom = 20.dp),
         verticalArrangement = Arrangement.spacedBy(DesignSystemBindings.PixelSectionSpacing)
     ) {
         // 1. Custom Top Bar (Subtitle "Fun & Trip Expenses", Clickable Avatar — NO redundant INR pill)
@@ -2109,14 +2331,37 @@ fun LedgersDashboardScreen(
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
-                                Text(
-                                    text = groupCard.name,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp,
-                                    color = SplitMateTheme.PrimaryDark,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        text = groupCard.name,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp,
+                                        color = SplitMateTheme.PrimaryDark,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
+                                    Surface(
+                                        onClick = {
+                                            editingGroupTarget = uiState.groups.find { it.groupId == groupCard.groupId }
+                                        },
+                                        shape = CircleShape,
+                                        color = SplitMateTheme.SurfaceWhite.copy(alpha = 0.85f),
+                                        border = BorderStroke(1.dp, SplitMateTheme.BorderLight)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Edit,
+                                            contentDescription = "Edit Group Name",
+                                            tint = badgeTextColor,
+                                            modifier = Modifier
+                                                .padding(4.dp)
+                                                .size(12.dp)
+                                        )
+                                    }
+                                }
                                 Text(
                                     text = "${groupCard.memberCount} members · Tap to view expenses",
                                     fontSize = 12.sp,

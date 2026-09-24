@@ -253,12 +253,23 @@ fun EditLoggedExpenseDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "🚆 Attach / Edit Train PNR & Berths",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SplitMateTheme.PrimaryDark
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Train,
+                            contentDescription = null,
+                            tint = SplitMateTheme.PrimaryDark,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Attach / Edit Train PNR & Berths",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SplitMateTheme.PrimaryDark
+                        )
+                    }
                     Switch(
                         checked = includeTravelTicket,
                         onCheckedChange = { includeTravelTicket = it }
@@ -315,9 +326,9 @@ fun EditLoggedExpenseDialog(
                             toStation = parsedTo,
                             departureTime = departureInfo.trim(),
                             coachAndSeats = coachAndSeats.trim(),
-                            cleanTitle = editedTitle.trim().ifBlank { "🚆 Train / PNR Ticket" }
+                            cleanTitle = editedTitle.trim().ifBlank { "Train / PNR Ticket" }
                         )
-                        formatTravelExpenseTitle(editedTitle.trim().ifBlank { "🚆 Train / PNR Ticket" }, parsedTicket)
+                        formatTravelExpenseTitle(editedTitle.trim().ifBlank { "Train / PNR Ticket" }, parsedTicket)
                     } else {
                         editedTitle.trim().ifBlank { "Group Expense" }
                     }
