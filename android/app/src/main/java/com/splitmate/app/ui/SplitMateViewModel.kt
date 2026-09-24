@@ -181,7 +181,7 @@ class SplitMateViewModel(
 
                 ActiveGroupCardUiModel(
                     groupId = group.groupId,
-                    name = group.name,
+                    name = group.name.toSmartTitleCase(),
                     iconName = group.iconName,
                     memberCount = groupMembers.size,
                     memberSeeds = visibleSeeds,
@@ -218,7 +218,11 @@ class SplitMateViewModel(
                 val savedUpi = toMember?.upiId?.trim().orEmpty()
                 val clean10Phone = cleanIndianTenDigitPhone(savedUpi.substringBefore("@"))
                 val hasPhoneLinked = clean10Phone.length == 10
-                val resolvedUpiId = if (hasPhoneLinked) "${clean10Phone}@upi" else ""
+                val resolvedUpiId = when {
+                    savedUpi.contains("@") && savedUpi.substringBefore("@").isNotBlank() && savedUpi.substringAfter("@").isNotBlank() -> savedUpi
+                    hasPhoneLinked -> "${clean10Phone}@upi"
+                    else -> ""
+                }
                 val majorStr = String.format(Locale.US, "%.2f", tr.amountCents / 100.0)
                 SettlementTransferUiModel(
                     transfer = tr,
@@ -715,7 +719,7 @@ class SplitMateViewModel(
         iconName: String,
         memberDrafts: List<NewGroupMemberDraft>
     ) {
-        val cleanGroup = name.trim().ifEmpty { "New Group" }
+        val cleanGroup = name.toSmartTitleCase().ifEmpty { "New Group" }
         val cleanIcon = iconName.trim().ifEmpty { "Flight" }
         val groupId = "g_${System.currentTimeMillis()}"
         val newGroup = ExpenseGroupEntity(
@@ -778,15 +782,15 @@ class SplitMateViewModel(
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .map { NewGroupMemberDraft(name = it) }
-        createNewGroupWithContacts(name = name, iconName = iconName, memberDrafts = drafts)
+        createNewGroupWithContacts(name = name.toSmartTitleCase(), iconName = iconName, memberDrafts = drafts)
     }
 
     /**
      * Renames an existing group (and optionally updates its iconName) and reflects it reactively
-     * across all screens, dropdowns, and Room persistence.
+     * across all screens, dropdowns, and Room persistence. Always normalizes to Title Case.
      */
     fun renameGroup(groupId: String, newName: String, newIconName: String? = null) {
-        val cleanName = newName.trim()
+        val cleanName = newName.toSmartTitleCase()
         if (cleanName.isEmpty()) return
         val existingGroup = _uiState.value.groups.find { it.groupId == groupId } ?: return
         val resolvedIcon = newIconName?.trim()?.ifEmpty { existingGroup.iconName } ?: existingGroup.iconName

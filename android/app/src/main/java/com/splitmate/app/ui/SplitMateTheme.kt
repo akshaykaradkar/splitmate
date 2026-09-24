@@ -155,7 +155,8 @@ private val fontProvider = GoogleFont.Provider(
 
 private val figtreeGoogleFont = GoogleFont("Figtree")
 
-// Bundled TrueType Figtree fonts placed FIRST so they load synchronously on Frame 0 with zero Roboto fallback
+// Bundled TrueType static Figtree fonts (400 Regular, 500 Medium, 600 SemiBold, 700 Bold, 800 ExtraBold)
+// Guarantees 100% deterministic offline Figtree typography on every screen, dialog, and sheet with zero Roboto fallback
 val FigtreeFontFamily = FontFamily(
     androidx.compose.ui.text.font.Font(resId = R.font.figtree_regular, weight = FontWeight.Light),
     androidx.compose.ui.text.font.Font(resId = R.font.figtree_regular, weight = FontWeight.Normal),
@@ -163,13 +164,25 @@ val FigtreeFontFamily = FontFamily(
     androidx.compose.ui.text.font.Font(resId = R.font.figtree_semibold, weight = FontWeight.SemiBold),
     androidx.compose.ui.text.font.Font(resId = R.font.figtree_bold, weight = FontWeight.Bold),
     androidx.compose.ui.text.font.Font(resId = R.font.figtree_extrabold, weight = FontWeight.ExtraBold),
-    androidx.compose.ui.text.font.Font(resId = R.font.figtree_extrabold, weight = FontWeight.Black),
-    Font(googleFont = figtreeGoogleFont, fontProvider = fontProvider, weight = FontWeight.Normal),
-    Font(googleFont = figtreeGoogleFont, fontProvider = fontProvider, weight = FontWeight.Medium),
-    Font(googleFont = figtreeGoogleFont, fontProvider = fontProvider, weight = FontWeight.SemiBold),
-    Font(googleFont = figtreeGoogleFont, fontProvider = fontProvider, weight = FontWeight.Bold),
-    Font(googleFont = figtreeGoogleFont, fontProvider = fontProvider, weight = FontWeight.ExtraBold)
+    androidx.compose.ui.text.font.Font(resId = R.font.figtree_extrabold, weight = FontWeight.Black)
 )
+
+/**
+ * Formats any group title into editorial Title Case regardless of how the user typed it
+ * (e.g., "goa beach trip 2026" -> "Goa Beach Trip 2026", "MUMBAI FLIGHT" -> "Mumbai Flight").
+ */
+fun String.toSmartTitleCase(): String {
+    val trimmed = this.trim()
+    if (trimmed.isEmpty()) return ""
+    return trimmed
+        .split(Regex("\\s+"))
+        .joinToString(" ") { word ->
+            if (word.isEmpty()) ""
+            else word.lowercase(java.util.Locale.US).replaceFirstChar { ch ->
+                if (ch.isLowerCase()) ch.titlecase(java.util.Locale.US) else ch.toString()
+            }
+        }
+}
 
 val PlusJakartaSansFont = FigtreeFontFamily
 val JetBrainsMonoFont = FigtreeFontFamily
@@ -771,9 +784,13 @@ fun SplitMateExpressiveTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = SplitMateTypography,
-        content = content
-    )
+        typography = SplitMateTypography
+    ) {
+        ProvideTextStyle(
+            value = TextStyle(fontFamily = FigtreeFontFamily),
+            content = content
+        )
+    }
 }
 
 val SplitMateBrandFontFamily: FontFamily = FigtreeFontFamily
