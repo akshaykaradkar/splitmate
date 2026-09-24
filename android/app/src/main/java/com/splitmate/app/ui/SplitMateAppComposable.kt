@@ -2567,6 +2567,27 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
         youOweTransfers.sumOf { it.transfer.amountCents }
     }
 
+    val memberMetadataMap = remember(uiState.activeGroupMembers, uiState.members, uiState.currentUserName) {
+        (uiState.activeGroupMembers + uiState.members).associate { m ->
+            val realName = if (m.name.equals("You", ignoreCase = true) && uiState.currentUserName.isNotBlank()) {
+                uiState.currentUserName
+            } else {
+                m.name
+            }
+            m.memberId to Triple(realName, m.avatarSeed, m.isCurrentUser)
+        }
+    }
+
+    val memberSummaries = remember(settlementPlan, memberMetadataMap) {
+        SplitMateMathEngine.computeMemberSettlementSummaries(
+            transfers = settlementPlan.map { it.transfer },
+            memberMetadata = memberMetadataMap
+        )
+    }
+    val memberSummariesById = remember(memberSummaries) {
+        memberSummaries.associateBy { it.memberId }
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -2626,7 +2647,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
             }
         }
 
-        // 1. Summary Overview Banner
+        // 1. Summary Overview Banner ("Your Settlement Summary")
         if (settlementPlan.isNotEmpty()) {
             item {
                 Card(
@@ -2640,57 +2661,310 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(14.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            AvatarToken(
-                                initials = uiState.currentUserSeed,
-                                bg = SplitMateTheme.SurfaceWhite,
-                                textColor = SplitMateTheme.PrimaryDark,
-                                size = 40
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    text = if (totalOwedToYouCents > 0L) {
-                                        "${owedToYouTransfers.size} member(s) owe you"
-                                    } else if (totalYouOweCents > 0L) {
-                                        "You owe ${youOweTransfers.size} member(s)"
-                                    } else {
-                                        "${settlementPlan.size} direct settlement(s)"
-                                    },
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 15.sp,
-                                    color = SplitMateTheme.PrimaryDark
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                AvatarToken(
+                                    initials = uiState.currentUserSeed,
+                                    bg = SplitMateTheme.SurfaceWhite,
+                                    textColor = SplitMateTheme.PrimaryDark,
+                                    size = 40
                                 )
-                                Text(
-                                    text = "Simplified from $rawDebtEdges cross-debts into ${settlementPlan.size} payment(s)",
-                                    fontSize = 11.sp,
-                                    color = SplitMateTheme.TextSecondary
-                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = if (totalOwedToYouCents > 0L && totalYouOweCents > 0L) {
+                                            "You receive & pay across settlements"
+                                        } else if (totalOwedToYouCents > 0L) {
+                                            "${owedToYouTransfers.size} member(s) owe you"
+                                        } else if (totalYouOweCents > 0L) {
+                                            "You owe ${youOweTransfers.size} member(s)"
+                                        } else {
+                                            "${settlementPlan.size} direct settlement(s)"
+                                        },
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 15.sp,
+                                        color = SplitMateTheme.PrimaryDark
+                                    )
+                                    Text(
+                                        text = "Simplified from $rawDebtEdges cross-debts into ${settlementPlan.size} payment(s)",
+                                        fontSize = 11.sp,
+                                        color = SplitMateTheme.TextSecondary
+                                    )
+                                }
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                if (totalOwedToYouCents > 0L) {
+                                    Text(
+                                        text = "RECEIVES +${SplitMateMathEngine.formatCurrencyCents(totalOwedToYouCents)}",
+                                        fontFamily = SplitMateTheme.FontDisplay,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = if (totalYouOweCents > 0L) 13.sp else 16.sp,
+                                        color = SplitMateTheme.SageText
+                                    )
+                                }
+                                if (totalYouOweCents > 0L) {
+                                    Text(
+                                        text = "PAYS -${SplitMateMathEngine.formatCurrencyCents(totalYouOweCents)}",
+                                        fontFamily = SplitMateTheme.FontDisplay,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = if (totalOwedToYouCents > 0L) 13.sp else 16.sp,
+                                        color = SplitMateTheme.TerracottaText
+                                    )
+                                }
                             }
                         }
-                        if (totalOwedToYouCents > 0L) {
-                            Text(
-                                text = "+₹${String.format(Locale.US, "%.2f", totalOwedToYouCents / 100.0)}",
-                                fontFamily = SplitMateTheme.FontDisplay,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 18.sp,
-                                color = SplitMateTheme.SageText
-                            )
-                        } else if (totalYouOweCents > 0L) {
-                            Text(
-                                text = "-₹${String.format(Locale.US, "%.2f", totalYouOweCents / 100.0)}",
-                                fontFamily = SplitMateTheme.FontDisplay,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 18.sp,
-                                color = SplitMateTheme.TerracottaText
-                            )
+
+                        if (owedToYouTransfers.isNotEmpty() || youOweTransfers.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = SplitMateTheme.SurfaceWhite.copy(alpha = 0.78f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)) {
+                                    if (owedToYouTransfers.isNotEmpty()) {
+                                        Text(
+                                            text = "You receive +${SplitMateMathEngine.formatCurrencyCents(totalOwedToYouCents)} · From: " +
+                                                owedToYouTransfers.joinToString(" · ") { "${it.fromName} — ${it.formattedDisplayAmount}" },
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = SplitMateTheme.SageText
+                                        )
+                                    }
+                                    if (youOweTransfers.isNotEmpty()) {
+                                        Text(
+                                            text = "Total to pay ${SplitMateMathEngine.formatCurrencyCents(totalYouOweCents)} · Paying: " +
+                                                youOweTransfers.joinToString(" · ") { "→ ${it.formattedDisplayAmount} to ${it.toName}" },
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = SplitMateTheme.TerracottaText
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 1B. COMPACT MEMBER SETTLEMENT SUMMARY (Total Outgoing & Incoming Grouped by Person)
+            if (memberSummaries.isNotEmpty()) {
+                item(key = "member_settlement_totals_card") {
+                    Card(
+                        shape = SplitMateTheme.RadiusCard,
+                        colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusCard)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "Member Settlement Summary",
+                                        fontFamily = SplitMateTheme.FontDisplay,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = SplitMateTheme.PrimaryDark
+                                    )
+                                    Text(
+                                        text = "Total to pay & total to receive per person",
+                                        fontSize = 11.sp,
+                                        color = SplitMateTheme.TextSecondary
+                                    )
+                                }
+                                Surface(
+                                    shape = SplitMateTheme.RadiusBadge,
+                                    color = SplitMateTheme.SurfaceMuted
+                                ) {
+                                    Text(
+                                        text = "${memberSummaries.size} Active",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = SplitMateTheme.PrimaryDark,
+                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            memberSummaries.forEachIndexed { idx, summary ->
+                                if (idx > 0) {
+                                    HorizontalDivider(
+                                        color = SplitMateTheme.BorderLight,
+                                        modifier = Modifier.padding(vertical = 10.dp)
+                                    )
+                                }
+
+                                val displayMemberTitle = if (summary.isCurrentUser && !summary.memberName.contains("You", ignoreCase = true)) {
+                                    "${summary.memberName} (You)"
+                                } else {
+                                    summary.memberName
+                                }
+
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            AvatarToken(
+                                                initials = summary.avatarSeed,
+                                                bg = if (summary.hasOutgoing) SplitMateTheme.TerracottaSurface else SplitMateTheme.SageSurface,
+                                                textColor = if (summary.hasOutgoing) SplitMateTheme.TerracottaText else SplitMateTheme.SageText,
+                                                size = 34
+                                            )
+                                            Spacer(modifier = Modifier.width(10.dp))
+                                            Column {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(
+                                                        text = displayMemberTitle,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        fontSize = 14.sp,
+                                                        color = SplitMateTheme.PrimaryDark
+                                                    )
+                                                    if (summary.hasMultipleOutgoing) {
+                                                        Spacer(modifier = Modifier.width(6.dp))
+                                                        Surface(
+                                                            shape = SplitMateTheme.RadiusBadge,
+                                                            color = SplitMateTheme.TerracottaSurface
+                                                        ) {
+                                                            Text(
+                                                                text = "${summary.outgoingPayments.size} payments",
+                                                                fontSize = 10.sp,
+                                                                fontWeight = FontWeight.ExtraBold,
+                                                                color = SplitMateTheme.TerracottaText,
+                                                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                }
+
+                                                if (summary.hasOutgoing && !summary.hasMultipleOutgoing) {
+                                                    val singleLeg = summary.outgoingPayments.first()
+                                                    Text(
+                                                        text = "Pays ${singleLeg.formattedAmount} to ${singleLeg.counterpartyName}",
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = SplitMateTheme.TerracottaText
+                                                    )
+                                                } else if (summary.hasMultipleOutgoing) {
+                                                    Text(
+                                                        text = "Total to pay: ${summary.formattedTotalOutgoing}",
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = SplitMateTheme.TerracottaText
+                                                    )
+                                                }
+
+                                                if (summary.hasIncoming) {
+                                                    Text(
+                                                        text = "From: " + summary.incomingPayments.joinToString(" · ") {
+                                                            "${it.counterpartyName} — ${it.formattedAmount}"
+                                                        },
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Medium,
+                                                        color = SplitMateTheme.SageText
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            if (summary.hasIncoming) {
+                                                Text(
+                                                    text = if (summary.hasBothDirections) {
+                                                        "RECEIVES +${summary.formattedTotalIncoming}"
+                                                    } else {
+                                                        "+${summary.formattedTotalIncoming}"
+                                                    },
+                                                    fontFamily = SplitMateTheme.FontDisplay,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    fontSize = 14.sp,
+                                                    color = SplitMateTheme.SageText
+                                                )
+                                            }
+                                            if (summary.hasOutgoing) {
+                                                Text(
+                                                    text = if (summary.hasBothDirections) {
+                                                        "PAYS -${summary.formattedTotalOutgoing}"
+                                                    } else {
+                                                        "-${summary.formattedTotalOutgoing}"
+                                                    },
+                                                    fontFamily = SplitMateTheme.FontDisplay,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    fontSize = 14.sp,
+                                                    color = SplitMateTheme.TerracottaText
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    // Breakdown list ONLY when a member has MORE THAN ONE outgoing payment
+                                    if (summary.hasMultipleOutgoing) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = SplitMateTheme.SurfaceMuted,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                                            ) {
+                                                Text(
+                                                    text = "Breakdown (${summary.outgoingPayments.size} payments · Total to pay ${summary.formattedTotalOutgoing}):",
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = SplitMateTheme.TextSecondary
+                                                )
+                                                summary.outgoingPayments.forEach { leg ->
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Text(
+                                                            text = "→ ${leg.formattedAmount} to ${leg.counterpartyName}",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            color = SplitMateTheme.PrimaryDark
+                                                        )
+                                                        Text(
+                                                            text = "${leg.counterpartyName} — ${leg.formattedAmount}",
+                                                            fontSize = 11.sp,
+                                                            fontFamily = SplitMateTheme.FontDisplay,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = SplitMateTheme.TerracottaText
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -2746,6 +3020,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                         owedToYouTransfers.forEachIndexed { idx, transfer ->
                             val fromRoomMember = uiState.members.find { it.memberId == transfer.fromMemberId }
                             val debtorPhone = fromRoomMember?.upiId?.substringBefore('@')?.replace(Regex("[^0-9]"), "") ?: ""
+                            val payerSummary = memberSummariesById[transfer.fromMemberId]
                             if (idx > 0) {
                                 HorizontalDivider(
                                     color = SplitMateTheme.BorderLight,
@@ -2789,6 +3064,24 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                         fontSize = 16.sp,
                                         color = SplitMateTheme.SageText
                                     )
+                                }
+
+                                if (payerSummary != null && payerSummary.hasMultipleOutgoing) {
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = SplitMateTheme.SurfaceMuted,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = "Total to pay: ${payerSummary.formattedTotalOutgoing} (${payerSummary.outgoingPayments.size} payments: " +
+                                                payerSummary.outgoingPayments.joinToString(", ") { "→ ${it.formattedAmount} to ${it.counterpartyName}" } + ")",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = SplitMateTheme.PrimaryDark,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        )
+                                    }
                                 }
 
                                 Spacer(modifier = Modifier.height(10.dp))
@@ -2901,18 +3194,45 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                         .border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusCard)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "Payments You Need to Make",
-                            fontFamily = SplitMateTheme.FontDisplay,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = SplitMateTheme.PrimaryDark
-                        )
-                        Text(
-                            text = "Pay directly via UPI or mark as settled",
-                            fontSize = 11.sp,
-                            color = SplitMateTheme.TextSecondary
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = "Payments You Need to Make",
+                                    fontFamily = SplitMateTheme.FontDisplay,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = SplitMateTheme.PrimaryDark
+                                )
+                                Text(
+                                    text = if (youOweTransfers.size > 1) {
+                                        "Total to pay: ${SplitMateMathEngine.formatCurrencyCents(totalYouOweCents)} across ${youOweTransfers.size} payments"
+                                    } else {
+                                        "Pay directly via UPI or mark as settled"
+                                    },
+                                    fontSize = 11.sp,
+                                    color = if (youOweTransfers.size > 1) SplitMateTheme.TerracottaText else SplitMateTheme.TextSecondary,
+                                    fontWeight = if (youOweTransfers.size > 1) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                            if (youOweTransfers.size > 1) {
+                                Surface(
+                                    shape = SplitMateTheme.RadiusBadge,
+                                    color = SplitMateTheme.TerracottaSurface
+                                ) {
+                                    Text(
+                                        text = "${youOweTransfers.size} payments",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = SplitMateTheme.TerracottaText,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
                         Spacer(modifier = Modifier.height(12.dp))
 
                         youOweTransfers.forEachIndexed { idx, transfer ->
@@ -3095,6 +3415,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
         peerToPeerByReceiver.forEach { (receiverName, transfersForReceiver) ->
             item(key = "receiver_$receiverName") {
                 val firstTransfer = transfersForReceiver.first()
+                val receiverTotalCents = transfersForReceiver.sumOf { it.transfer.amountCents }
                 Card(
                     shape = SplitMateTheme.RadiusCard,
                     colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
@@ -3103,26 +3424,45 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                         .border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusCard)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            AvatarToken(
-                                initials = firstTransfer.toSeed,
-                                bg = SplitMateTheme.SageSurface,
-                                textColor = SplitMateTheme.SageText,
-                                size = 34
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "Payments to $receiverName",
-                                    fontFamily = SplitMateTheme.FontDisplay,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = SplitMateTheme.PrimaryDark
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                AvatarToken(
+                                    initials = firstTransfer.toSeed,
+                                    bg = SplitMateTheme.SageSurface,
+                                    textColor = SplitMateTheme.SageText,
+                                    size = 34
                                 )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = "Payments to $receiverName",
+                                        fontFamily = SplitMateTheme.FontDisplay,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = SplitMateTheme.PrimaryDark
+                                    )
+                                    Text(
+                                        text = "${transfersForReceiver.size} member(s) settling with $receiverName",
+                                        fontSize = 11.sp,
+                                        color = SplitMateTheme.TextSecondary
+                                    )
+                                }
+                            }
+                            Surface(
+                                shape = SplitMateTheme.RadiusBadge,
+                                color = SplitMateTheme.SageSurface
+                            ) {
                                 Text(
-                                    text = "${transfersForReceiver.size} member(s) settling with $receiverName",
+                                    text = "Receives +${SplitMateMathEngine.formatCurrencyCents(receiverTotalCents)}",
+                                    fontFamily = SplitMateTheme.FontDisplay,
                                     fontSize = 11.sp,
-                                    color = SplitMateTheme.TextSecondary
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = SplitMateTheme.SageText,
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
                                 )
                             }
                         }
@@ -3130,51 +3470,72 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                         Spacer(modifier = Modifier.height(10.dp))
 
                         transfersForReceiver.forEachIndexed { idx, transfer ->
+                            val payerSummary = memberSummariesById[transfer.fromMemberId]
                             if (idx > 0) {
                                 HorizontalDivider(
                                     color = SplitMateTheme.BorderLight,
                                     modifier = Modifier.padding(vertical = 8.dp)
                                 )
                             }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    AvatarToken(
-                                        initials = transfer.fromSeed,
-                                        bg = SplitMateTheme.SurfaceMuted,
-                                        textColor = SplitMateTheme.PrimaryDark,
-                                        size = 30
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column {
-                                        Text(
-                                            text = transfer.fromName,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 14.sp,
-                                            color = SplitMateTheme.PrimaryDark
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        AvatarToken(
+                                            initials = transfer.fromSeed,
+                                            bg = SplitMateTheme.SurfaceMuted,
+                                            textColor = SplitMateTheme.PrimaryDark,
+                                            size = 30
                                         )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column {
+                                            Text(
+                                                text = transfer.fromName,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 14.sp,
+                                                color = SplitMateTheme.PrimaryDark
+                                            )
+                                            Text(
+                                                text = "Pays ${transfer.formattedDisplayAmount} to $receiverName",
+                                                fontSize = 11.sp,
+                                                color = SplitMateTheme.TextSecondary
+                                            )
+                                        }
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = { viewModel.markGreedyTransferSettled(transfer.transfer) },
+                                        shape = SplitMateTheme.RadiusButton,
+                                        modifier = Modifier.height(36.dp)
+                                    ) {
                                         Text(
-                                            text = "Pays ${transfer.formattedDisplayAmount}",
+                                            text = "Mark Paid",
                                             fontSize = 11.sp,
-                                            color = SplitMateTheme.TextSecondary
+                                            fontWeight = FontWeight.Bold,
+                                            color = SplitMateTheme.PrimaryDark
                                         )
                                     }
                                 }
 
-                                OutlinedButton(
-                                    onClick = { viewModel.markGreedyTransferSettled(transfer.transfer) },
-                                    shape = SplitMateTheme.RadiusButton,
-                                    modifier = Modifier.height(36.dp)
-                                ) {
-                                    Text(
-                                        text = "Mark Paid",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = SplitMateTheme.PrimaryDark
-                                    )
+                                if (payerSummary != null && payerSummary.hasMultipleOutgoing) {
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = SplitMateTheme.SurfaceMuted,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = "Total to pay: ${payerSummary.formattedTotalOutgoing} (${payerSummary.outgoingPayments.size} payments: " +
+                                                payerSummary.outgoingPayments.joinToString(", ") { "→ ${it.formattedAmount} to ${it.counterpartyName}" } + ")",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = SplitMateTheme.PrimaryDark,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        )
+                                    }
                                 }
                             }
                         }

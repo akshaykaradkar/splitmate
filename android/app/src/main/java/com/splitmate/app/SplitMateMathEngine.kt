@@ -250,4 +250,121 @@ object SplitMateMathEngine {
         }
         return transfers
     }
+
+    data class MemberPaymentLeg(
+        val counterpartyMemberId: String,
+        val counterpartyName: String,
+        val amountCents: Long,
+        val formattedAmount: String
+    )
+
+    data class MemberSettlementSummary(
+        val memberId: String,
+        val memberName: String,
+        val isCurrentUser: Boolean = false,
+        val avatarSeed: String = memberName,
+        val outgoingPayments: List<MemberPaymentLeg>,
+        val incomingPayments: List<MemberPaymentLeg>,
+        val totalOutgoingCents: Long = outgoingPayments.sumOf { it.amountCents },
+        val totalIncomingCents: Long = incomingPayments.sumOf { it.amountCents },
+        val formattedTotalOutgoing: String,
+        val formattedTotalIncoming: String
+    ) {
+        val hasOutgoing: Boolean get() = totalOutgoingCents > 0L
+        val hasIncoming: Boolean get() = totalIncomingCents > 0L
+        val hasMultipleOutgoing: Boolean get() = outgoingPayments.size > 1
+        val hasMultipleIncoming: Boolean get() = incomingPayments.size > 1
+        val hasBothDirections: Boolean get() = hasOutgoing && hasIncoming
+    }
+
+    fun formatCurrencyCents(cents: Long, currencySymbol: String = "₹"): String {
+        return "$currencySymbol${String.format(java.util.Locale.US, "%,.2f", cents / 100.0)}"
+    }
+
+    /**
+     * Dynamically aggregates unsettled simplified transfers by member without modifying any
+     * underlying debt edges or settlement amounts.
+     *
+     * - `totalOutgoingCents` = sum of unsettled payments where this member is the payer (`fromMemberId`).
+     * - `totalIncomingCents` = sum of unsettled payments where this member is the receiver (`toMemberId`).
+     * - Keeps `incomingPayments` (`RECEIVES +₹X`) and `outgoingPayments` (`PAYS −₹Y`) strictly separate.
+     */
+    fun computeMemberSettlementSummaries(
+        transfers: List<SimplifiedTransfer>,
+        memberMetadata: Map<String, Triple<String, String, Boolean>> = emptyMap(),
+        currencySymbol: String = "₹"
+    ): List<MemberSettlementSummary> {
+        if (transfers.isEmpty()) return emptyList()
+
+        fun resolveName(memberId: String, fallbackName: String): String {
+            val metaName = memberMetadata[memberId]?.first?.trim().orEmpty()
+            return if (metaName.isNotBlank() && !metaName.equals("You", ignoreCase = true)) {
+                metaName
+            } else {
+                fallbackName
+            }
+        }
+
+        val participantIds = linkedSetOf<String>()
+        transfers.forEach { tr ->
+            participantIds.add(tr.fromMemberId)
+            participantIds.add(tr.toMemberId)
+        }
+
+        val summaries = participantIds.mapNotNull { memberId ->
+            val outgoing = transfers
+                .filter { it.fromMemberId == memberId && it.amountCents > 0L }
+                .map { tr ->
+                    MemberPaymentLeg(
+                        counterpartyMemberId = tr.toMemberId,
+                        counterpartyName = resolveName(tr.toMemberId, tr.toName),
+                        amountCents = tr.amountCents,
+                        formattedAmount = formatCurrencyCents(tr.amountCents, currencySymbol)
+                    )
+                }
+
+            val incoming = transfers
+                .filter { it.toMemberId == memberId && it.amountCents > 0L }
+                .map { tr ->
+                    MemberPaymentLeg(
+                        counterpartyMemberId = tr.fromMemberId,
+                        counterpartyName = resolveName(tr.fromMemberId, tr.fromName),
+                        amountCents = tr.amountCents,
+                        formattedAmount = formatCurrencyCents(tr.amountCents, currencySymbol)
+                    )
+                }
+
+            val totalOut = outgoing.sumOf { it.amountCents }
+            val totalIn = incoming.sumOf { it.amountCents }
+            if (totalOut <= 0L && totalIn <= 0L) {
+                null
+            } else {
+                val fallbackName = transfers.firstOrNull { it.fromMemberId == memberId }?.fromName
+                    ?: transfers.firstOrNull { it.toMemberId == memberId }?.toName
+                    ?: memberId
+                val resolvedMemberName = resolveName(memberId, fallbackName)
+                val meta = memberMetadata[memberId]
+                MemberSettlementSummary(
+                    memberId = memberId,
+                    memberName = resolvedMemberName,
+                    isCurrentUser = meta?.third == true,
+                    avatarSeed = meta?.second?.takeIf { it.isNotBlank() } ?: resolvedMemberName,
+                    outgoingPayments = outgoing,
+                    incomingPayments = incoming,
+                    totalOutgoingCents = totalOut,
+                    totalIncomingCents = totalIn,
+                    formattedTotalOutgoing = formatCurrencyCents(totalOut, currencySymbol),
+                    formattedTotalIncoming = formatCurrencyCents(totalIn, currencySymbol)
+                )
+            }
+        }
+
+        return summaries.sortedWith(
+            compareByDescending<MemberSettlementSummary> { it.hasMultipleOutgoing }
+                .thenByDescending { it.totalOutgoingCents }
+                .thenByDescending { it.isCurrentUser }
+                .thenByDescending { it.totalIncomingCents }
+                .thenBy { it.memberName }
+        )
+    }
 }

@@ -103,4 +103,97 @@ class SplitMateDebtSimplificationTest {
         assertEquals(14850L, result.allocations.sumOf { it.finalCents })
         assertEquals(0L, result.driftCents)
     }
+
+    @Test
+    @DisplayName("6. Multi-payment settlement summary verifies Akshay/Gaurav/Gauri/Ninad exact totals without altering simplified transfers")
+    fun testMultiPaymentMemberSettlementSummaryExactVerification() {
+        // Net balances producing the exact simplified transfers:
+        // Akshay: +₹3,630.73 (363073c), Gauri: +₹2,145.28 (214528c),
+        // Gaurav: -₹3,894.66 (-389466c), Ninad: -₹1,881.35 (-188135c)
+        val balances = listOf(
+            SplitMateMathEngine.MemberNetBalance("m_akshay", "Akshay", 363073L),
+            SplitMateMathEngine.MemberNetBalance("m_gaurav", "Gaurav Gadhave", -389466L),
+            SplitMateMathEngine.MemberNetBalance("m_gauri", "Gauri", 214528L),
+            SplitMateMathEngine.MemberNetBalance("m_ninad", "Ninad", -188135L)
+        )
+
+        val transfers = SplitMateMathEngine.simplifyDebtsGreedy(balances)
+        assertEquals(3, transfers.size, "Must produce exactly 3 simplified settlements")
+
+        val gauravToAkshay = transfers.first { it.fromMemberId == "m_gaurav" && it.toMemberId == "m_akshay" }
+        val gauravToGauri = transfers.first { it.fromMemberId == "m_gaurav" && it.toMemberId == "m_gauri" }
+        val ninadToGauri = transfers.first { it.fromMemberId == "m_ninad" && it.toMemberId == "m_gauri" }
+
+        assertEquals(363073L, gauravToAkshay.amountCents)
+        assertEquals(26393L, gauravToGauri.amountCents)
+        assertEquals(188135L, ninadToGauri.amountCents)
+
+        val summaries = SplitMateMathEngine.computeMemberSettlementSummaries(
+            transfers = transfers,
+            memberMetadata = mapOf(
+                "m_akshay" to Triple("Akshay", "Akshay", true),
+                "m_gaurav" to Triple("Gaurav Gadhave", "Gaurav", false),
+                "m_gauri" to Triple("Gauri", "Gauri", false),
+                "m_ninad" to Triple("Ninad", "Ninad", false)
+            )
+        ).associateBy { it.memberId }
+
+        // Gaurav total to pay: ₹3,894.66 (2 payments: -> Akshay ₹3,630.73, -> Gauri ₹263.93)
+        val gauravSummary = summaries.getValue("m_gaurav")
+        assertEquals(389466L, gauravSummary.totalOutgoingCents)
+        assertEquals("₹3,894.66", gauravSummary.formattedTotalOutgoing)
+        assertTrue(gauravSummary.hasMultipleOutgoing)
+        assertEquals(2, gauravSummary.outgoingPayments.size)
+        assertEquals("₹3,630.73", gauravSummary.outgoingPayments.first { it.counterpartyMemberId == "m_akshay" }.formattedAmount)
+        assertEquals("₹263.93", gauravSummary.outgoingPayments.first { it.counterpartyMemberId == "m_gauri" }.formattedAmount)
+
+        // Ninad total to pay: ₹1,881.35 (1 payment: -> Gauri ₹1,881.35, hasMultipleOutgoing == false)
+        val ninadSummary = summaries.getValue("m_ninad")
+        assertEquals(188135L, ninadSummary.totalOutgoingCents)
+        assertEquals("₹1,881.35", ninadSummary.formattedTotalOutgoing)
+        assertEquals(false, ninadSummary.hasMultipleOutgoing)
+        assertEquals(1, ninadSummary.outgoingPayments.size)
+        assertEquals("Gauri", ninadSummary.outgoingPayments.single().counterpartyName)
+
+        // Akshay receives: ₹3,630.73
+        val akshaySummary = summaries.getValue("m_akshay")
+        assertEquals(363073L, akshaySummary.totalIncomingCents)
+        assertEquals("₹3,630.73", akshaySummary.formattedTotalIncoming)
+        assertEquals(0L, akshaySummary.totalOutgoingCents)
+
+        // Gauri receives: ₹2,145.28
+        val gauriSummary = summaries.getValue("m_gauri")
+        assertEquals(214528L, gauriSummary.totalIncomingCents)
+        assertEquals("₹2,145.28", gauriSummary.formattedTotalIncoming)
+        assertEquals(0L, gauriSummary.totalOutgoingCents)
+        assertEquals(2, gauriSummary.incomingPayments.size)
+    }
+
+    @Test
+    @DisplayName("7. Partial settlement of one leg updates only that specific transfer and transitions multi-payment payer to single-payment")
+    fun testPartialSettlementAndDistinctDualDirections() {
+        val remainingTransfersAfterGauravPaysGauri = listOf(
+            SplitMateMathEngine.SimplifiedTransfer("m_gaurav", "Gaurav Gadhave", "m_akshay", "Akshay", 363073L),
+            SplitMateMathEngine.SimplifiedTransfer("m_ninad", "Ninad", "m_gauri", "Gauri", 188135L)
+        )
+
+        val summaries = SplitMateMathEngine.computeMemberSettlementSummaries(remainingTransfersAfterGauravPaysGauri)
+            .associateBy { it.memberId }
+
+        val gauravAfter = summaries.getValue("m_gaurav")
+        assertEquals(363073L, gauravAfter.totalOutgoingCents)
+        assertEquals("₹3,630.73", gauravAfter.formattedTotalOutgoing)
+        assertEquals(false, gauravAfter.hasMultipleOutgoing, "After settling 1 of 2 payments, hasMultipleOutgoing must become false")
+
+        // Also verify that if a member has both incoming and outgoing transfers, they are kept distinct and never combined
+        val dualTransfers = listOf(
+            SplitMateMathEngine.SimplifiedTransfer("m_a", "Member A", "m_b", "Member B", 50000L),
+            SplitMateMathEngine.SimplifiedTransfer("m_b", "Member B", "m_c", "Member C", 20000L)
+        )
+        val dualSummaryB = SplitMateMathEngine.computeMemberSettlementSummaries(dualTransfers)
+            .first { it.memberId == "m_b" }
+        assertTrue(dualSummaryB.hasBothDirections)
+        assertEquals(50000L, dualSummaryB.totalIncomingCents)
+        assertEquals(20000L, dualSummaryB.totalOutgoingCents)
+    }
 }

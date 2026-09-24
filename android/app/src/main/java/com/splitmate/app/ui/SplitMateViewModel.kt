@@ -230,7 +230,7 @@ class SplitMateViewModel(
                     cleanPhone = if (hasPhoneLinked) clean10Phone else "",
                     hasLinkedPhone = hasPhoneLinked,
                     amount = majorStr,
-                    formattedDisplayAmount = "$sym$majorStr",
+                    formattedDisplayAmount = SplitMateMathEngine.formatCurrencyCents(tr.amountCents, sym),
                     isCurrentUserDebtor = (tr.fromMemberId == meMember?.memberId) || (fromMember?.isCurrentUser == true)
                 )
             }
