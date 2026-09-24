@@ -215,11 +215,17 @@ class SplitMateViewModel(
             transfers.map { tr ->
                 val fromMember = groupMembers.find { it.memberId == tr.fromMemberId }
                 val toMember = groupMembers.find { it.memberId == tr.toMemberId }
-                val savedUpi = toMember?.upiId?.trim().orEmpty()
-                val clean10Phone = cleanIndianTenDigitPhone(savedUpi.substringBefore("@"))
+                val savedUpiRaw = toMember?.upiId?.trim().orEmpty()
+                // Support dual format "9876543210|gauri301998@okhdfcbank" or single phone/VPA
+                val parts = savedUpiRaw.split("|").map { it.trim() }.filter { it.isNotEmpty() }
+                val phoneCandidate = parts.firstOrNull { cleanIndianTenDigitPhone(it.substringBefore("@")).length == 10 }.orEmpty()
+                val clean10Phone = cleanIndianTenDigitPhone(phoneCandidate.substringBefore("@"))
                 val hasPhoneLinked = clean10Phone.length == 10
+                val customVpaCandidate = parts.firstOrNull {
+                    it.contains("@") && !it.endsWith("@upi", ignoreCase = true)
+                } ?: parts.firstOrNull { it.contains("@") }.orEmpty()
                 val resolvedUpiId = when {
-                    savedUpi.contains("@") && savedUpi.substringBefore("@").isNotBlank() && savedUpi.substringAfter("@").isNotBlank() -> savedUpi
+                    customVpaCandidate.isNotBlank() -> customVpaCandidate
                     hasPhoneLinked -> "${clean10Phone}@upi"
                     else -> ""
                 }

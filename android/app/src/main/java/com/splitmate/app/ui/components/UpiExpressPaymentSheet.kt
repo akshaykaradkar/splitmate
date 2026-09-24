@@ -1,11 +1,15 @@
 package com.splitmate.app.ui.components
 
-import android.app.Activity
+import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.provider.ContactsContract
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -15,7 +19,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -31,18 +34,23 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.splitmate.app.AvatarToken
+import com.splitmate.app.R
 import com.splitmate.app.SplitMateTheme
 import com.splitmate.app.ui.FigtreeFontFamily
 import com.splitmate.app.ui.SettlementTransferUiModel
@@ -50,81 +58,73 @@ import com.splitmate.app.ui.cleanIndianTenDigitPhone
 import com.splitmate.app.ui.toSmartTitleCase
 import java.util.Locale
 
-data class UpiHandleSuffixOption(
-    val suffix: String,
-    val appBadge: String,
-    val preferredPackage: String? = null
-)
-
-private val CommonIndianUpiSuffixes = listOf(
-    UpiHandleSuffixOption("@ybl", "PhonePe", "com.phonepe.app"),
-    UpiHandleSuffixOption("@paytm", "Paytm", "net.one97.paytm"),
-    UpiHandleSuffixOption("@upi", "BHIM / NPCI", "in.org.npci.upiapp"),
-    UpiHandleSuffixOption("@okaxis", "GPay Axis", "com.google.android.apps.nbu.paisa.user"),
-    UpiHandleSuffixOption("@okicici", "GPay ICICI", "com.google.android.apps.nbu.paisa.user"),
-    UpiHandleSuffixOption("@okhdfcbank", "GPay HDFC", "com.google.android.apps.nbu.paisa.user"),
-    UpiHandleSuffixOption("@oksbi", "GPay SBI", "com.google.android.apps.nbu.paisa.user"),
-    UpiHandleSuffixOption("@ibl", "PhonePe ICICI", "com.phonepe.app"),
-    UpiHandleSuffixOption("@apl", "Amazon Pay", "in.amazon.mShop.android.shopping")
-)
-
-data class UpiExpressAppTarget(
-    val id: String,
-    val label: String,
-    val subtitle: String,
-    val packageName: String?,
-    val defaultPhoneSuffix: String,
-    val accentBg: Color,
-    val accentBorder: Color,
-    val accentText: Color
-)
-
-private val ExpressUpiAppTargets = listOf(
-    UpiExpressAppTarget(
-        id = "phonepe",
-        label = "PhonePe",
-        subtitle = "Auto @ybl · Pre-fills ₹",
-        packageName = "com.phonepe.app",
-        defaultPhoneSuffix = "@ybl",
-        accentBg = Color(0xFFF3E8FF),
-        accentBorder = Color(0xFFD8B4FE),
-        accentText = Color(0xFF581C87)
-    ),
-    UpiExpressAppTarget(
-        id = "gpay",
-        label = "Google Pay",
-        subtitle = "Auto @okaxis · Copies #",
-        packageName = "com.google.android.apps.nbu.paisa.user",
-        defaultPhoneSuffix = "@okaxis",
-        accentBg = Color(0xFFE0F2FE),
-        accentBorder = Color(0xFFBAE6FD),
-        accentText = Color(0xFF075985)
-    ),
-    UpiExpressAppTarget(
-        id = "paytm",
-        label = "Paytm UPI",
-        subtitle = "Auto @paytm · Pre-fills ₹",
-        packageName = "net.one97.paytm",
-        defaultPhoneSuffix = "@paytm",
-        accentBg = Color(0xFFE0E7FF),
-        accentBorder = Color(0xFFC7D2FE),
-        accentText = Color(0xFF1E3A8A)
-    ),
-    UpiExpressAppTarget(
-        id = "bhim",
-        label = "BHIM / Any",
-        subtitle = "Universal @upi chooser",
-        packageName = null,
-        defaultPhoneSuffix = "@upi",
-        accentBg = Color(0xFFD7E8B6),
-        accentBorder = Color(0xFFB7D382),
-        accentText = Color(0xFF2D4810)
-    )
+private val QuickVpaBankSuffixes = listOf(
+    "@okhdfcbank" to "GPay HDFC",
+    "@okaxis" to "GPay Axis",
+    "@okicici" to "GPay ICICI",
+    "@oksbi" to "GPay SBI",
+    "@ybl" to "PhonePe",
+    "@paytm" to "Paytm",
+    "@upi" to "BHIM / NPCI",
+    "@ibl" to "PhonePe ICICI",
+    "@apl" to "Amazon Pay"
 )
 
 /**
- * Builds a clean NPCI P2P `upi://pay` URI without unsigned merchant (`mc`/`sign`/`tr`) flags
- * so Google Pay, PhonePe, Paytm, and BHIM accept the pre-filled amount (`am`) and open MPIN entry directly.
+ * Posts a high-priority Heads-Up Notification (`SplitMate Payment Assist`) that stays visible at the top
+ * of the phone while the user is inside Google Pay / PhonePe / Paytm, showing the exact Rupee amount
+ * (`₹1,417.00`) and confirming that the friend's phone number / UPI ID is copied to clipboard.
+ */
+private fun postPaymentAssistHeadsUpNotification(
+    context: Context,
+    recipientName: String,
+    formattedAmount: String,
+    copiedIdentifier: String,
+    appName: String
+) {
+    try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val hasPerm = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!hasPerm) return
+        }
+        val channelId = "splitmate_upi_payment_assist"
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                channelId,
+                "SplitMate UPI Payment Assist",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Displays exact settlement amount while paying in Google Pay / PhonePe / Paytm"
+                enableVibration(true)
+            }
+            nm.createNotificationChannel(channel)
+        }
+        val notification = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("Pay $recipientName $formattedAmount · SplitMate")
+            .setContentText("Copied $copiedIdentifier! Paste in $appName search bar & type $formattedAmount")
+            .setStyle(
+                NotificationCompat.BigTextStyle().bigText(
+                    "1. Tap the top Search / New Payment bar in $appName\n" +
+                        "2. Paste '$copiedIdentifier' (already on your keyboard strip!)\n" +
+                        "3. Enter $formattedAmount and your UPI PIN"
+                )
+            )
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .build()
+        nm.notify(9401, notification)
+    } catch (_: Exception) {
+    }
+}
+
+/**
+ * Builds a clean NPCI P2P `upi://pay` URI (`mode=00`) for apps that support direct VPA intents
+ * (BHIM, Paytm, PhonePe when a verified VPA like `gauri301998@okhdfcbank` or `9876543210@ybl` is provided).
  */
 fun buildCleanP2pUpiUri(
     payeeVpa: String,
@@ -140,13 +140,11 @@ fun buildCleanP2pUpiUri(
         .appendQueryParameter("am", amountDecimal.trim())
         .appendQueryParameter("cu", "INR")
         .appendQueryParameter("tn", transactionNote.trim().take(48))
+        .appendQueryParameter("mode", "00")
         .build()
 }
 
-/**
- * Parses the NPCI UPI `ActivityResult` response string (`Status=SUCCESS&txnId=...&responseCode=00`).
- */
-private fun isUpiActivityResultSuccess(resultCode: Int, data: Intent?): Boolean {
+private fun isUpiActivityResultSuccess(data: Intent?): Boolean {
     val rawResponse = data?.getStringExtra("response")
         ?: data?.dataString
         ?: ""
@@ -176,52 +174,85 @@ fun UpiExpressPaymentSheet(
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    // Extract initial 10-digit phone or custom VPA prefix
-    val initialPrefix = remember(initialSavedUpiId, transferModel.cleanPhone) {
-        val rawBeforeAt = initialSavedUpiId.substringBefore("@").trim()
-        val cleanPhone = cleanIndianTenDigitPhone(rawBeforeAt.ifBlank { transferModel.cleanPhone })
-        if (cleanPhone.length == 10) cleanPhone else rawBeforeAt
-    }
-    val initialSuffix = remember(initialSavedUpiId) {
-        if (initialSavedUpiId.contains("@")) {
-            "@" + initialSavedUpiId.substringAfter("@").trim()
-        } else {
-            "@ybl"
-        }
+    // Parse dual storage format "9876543210|gauri301998@okhdfcbank" or single phone/VPA
+    val parsedInitial = remember(initialSavedUpiId, transferModel.cleanPhone) {
+        val parts = initialSavedUpiId.split("|").map { it.trim() }.filter { it.isNotEmpty() }
+        val extractedPhone = parts
+            .map { cleanIndianTenDigitPhone(it.substringBefore("@")) }
+            .firstOrNull { it.length == 10 }
+            ?: transferModel.cleanPhone
+        val extractedVpa = parts.firstOrNull { part ->
+            part.contains("@") && !part.endsWith("@upi", ignoreCase = true)
+        } ?: ""
+        extractedPhone to extractedVpa
     }
 
-    var phoneOrPrefixInput by remember(transferModel.toMemberId) { mutableStateOf(initialPrefix) }
-    var selectedSuffix by remember(transferModel.toMemberId) { mutableStateOf(initialSuffix) }
+    var phoneInput by remember(transferModel.toMemberId) { mutableStateOf(parsedInitial.first) }
+    var exactVpaInput by remember(transferModel.toMemberId) { mutableStateOf(parsedInitial.second) }
+    var hasLaunchedExternalApp by remember { mutableStateOf(false) }
     var returnedFromUpiApp by remember { mutableStateOf(false) }
-    var lastLaunchedAppName by remember { mutableStateOf("UPI App") }
+    var lastLaunchedAppName by remember { mutableStateOf("Google Pay") }
 
-    // If user typed a full VPA with '@' in the input box, split it live
-    val effectivePrefix = remember(phoneOrPrefixInput) {
-        if (phoneOrPrefixInput.contains("@")) {
-            phoneOrPrefixInput.substringBefore("@").trim()
-        } else {
-            val maybe10 = cleanIndianTenDigitPhone(phoneOrPrefixInput)
-            if (maybe10.length == 10) maybe10 else phoneOrPrefixInput.trim()
-        }
-    }
-    val effectiveSuffix = remember(phoneOrPrefixInput, selectedSuffix) {
-        if (phoneOrPrefixInput.contains("@") && phoneOrPrefixInput.substringAfter("@").isNotBlank()) {
-            "@" + phoneOrPrefixInput.substringAfter("@").trim()
-        } else {
-            selectedSuffix
-        }
-    }
-    val clean10DigitPhone = remember(effectivePrefix) {
-        val cleaned = cleanIndianTenDigitPhone(effectivePrefix)
+    val clean10Phone = remember(phoneInput) {
+        val cleaned = cleanIndianTenDigitPhone(phoneInput)
         if (cleaned.length == 10) cleaned else ""
     }
-    val resolvedVpa = remember(effectivePrefix, effectiveSuffix) {
-        if (effectivePrefix.isNotBlank()) "$effectivePrefix$effectiveSuffix" else ""
+    val cleanExactVpa = remember(exactVpaInput) {
+        val trimmed = exactVpaInput.trim()
+        if (trimmed.contains("@") && trimmed.substringBefore("@").isNotBlank() && trimmed.substringAfter("@").isNotBlank()) {
+            trimmed
+        } else {
+            ""
+        }
     }
 
-    // Contact Picker to pull 10-digit phone number in 1 tap right from inside the payment sheet
+    // Combined persistence string so Room stores BOTH the 10-digit phone number AND the Gmail/custom VPA
+    fun persistCombinedIdentity(newPhone: String = clean10Phone, newVpa: String = cleanExactVpa) {
+        val combined = when {
+            newPhone.length == 10 && newVpa.isNotBlank() -> "$newPhone|$newVpa"
+            newVpa.isNotBlank() -> newVpa
+            newPhone.length == 10 -> "$newPhone@upi"
+            else -> ""
+        }
+        if (combined.isNotBlank()) {
+            onSaveMemberUpi(combined)
+        }
+    }
+
+    // Detect when the user returns from Google Pay / PhonePe / Paytm back to SplitMate (ON_RESUME)
+    DisposableEffect(lifecycleOwner, hasLaunchedExternalApp) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && hasLaunchedExternalApp) {
+                returnedFromUpiApp = true
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    // Request notification permission on Android 13+ so the floating Heads-Up Payment Assist banner shows while in GPay
+    val notifPermLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { _ -> }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val hasPerm = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!hasPerm) {
+                notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
+    // Contact Picker to pull 10-digit phone number in 1 tap
     val contactPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickContact()
     ) { contactUri: Uri? ->
@@ -246,8 +277,8 @@ fun UpiExpressPaymentSheet(
                                     val rawNum = if (numIdx >= 0) pCursor.getString(numIdx) else ""
                                     val tenDigit = cleanIndianTenDigitPhone(rawNum)
                                     if (tenDigit.isNotEmpty()) {
-                                        phoneOrPrefixInput = tenDigit
-                                        onSaveMemberUpi("$tenDigit$selectedSuffix")
+                                        phoneInput = tenDigit
+                                        persistCombinedIdentity(newPhone = tenDigit)
                                         Toast.makeText(
                                             context,
                                             "Linked +91 $tenDigit for ${transferModel.toName}",
@@ -264,99 +295,148 @@ fun UpiExpressPaymentSheet(
         }
     }
 
-    // ActivityResult launcher to receive automatic NPCI Status=SUCCESS callback after MPIN entry
     val upiResultLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (isUpiActivityResultSuccess(result.resultCode, result.data)) {
+        if (isUpiActivityResultSuccess(result.data)) {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-            if (resolvedVpa.isNotBlank()) {
-                onSaveMemberUpi(resolvedVpa)
-            }
+            persistCombinedIdentity()
             Toast.makeText(
                 context,
-                "Payment of ${transferModel.formattedDisplayAmount} to ${transferModel.toName} verified & settled!",
+                "Payment of ${transferModel.formattedDisplayAmount} to ${transferModel.toName} settled!",
                 Toast.LENGTH_LONG
             ).show()
             onMarkSettled()
             onDismiss()
         } else {
-            // Show 1-tap post-return confirmation bar in case the PSP omitted the result extra
             returnedFromUpiApp = true
         }
     }
 
-    fun launchUpiPayment(targetApp: UpiExpressAppTarget?) {
-        val activePrefix = effectivePrefix.trim()
-        if (activePrefix.isEmpty()) {
+    /**
+     * SMART NATIVE APP LAUNCH (100% Immune to Google Pay's "Cannot pay with this QR" & "Could not load banking name"):
+     * 1. Copies Gauri's 10-digit phone number (`9876543210`) or exact Gmail UPI ID (`gauri301998@okhdfcbank`) to Clipboard.
+     * 2. Posts a High-Priority Heads-Up Notification with the exact Rupee amount (`₹1,417.00`).
+     * 3. Opens Google Pay / PhonePe / Paytm natively via `getLaunchIntentForPackage` so the user taps the top search bar,
+     *    taps the pasted phone/VPA on their keyboard strip, and Google Pay's internal servers resolve her verified banking name!
+     */
+    fun launchSmartNativeUpiApp(packageName: String, appLabel: String, preferPhoneInSearch: Boolean = true) {
+        val searchPayload = when {
+            preferPhoneInSearch && clean10Phone.length == 10 -> clean10Phone
+            cleanExactVpa.isNotBlank() -> cleanExactVpa
+            clean10Phone.length == 10 -> clean10Phone
+            else -> ""
+        }
+        if (searchPayload.isEmpty()) {
             Toast.makeText(
                 context,
-                "Please enter ${transferModel.toName}'s 10-digit phone number or tap Pick Contact first",
-                Toast.LENGTH_SHORT
+                "Enter ${transferModel.toName}'s 10-digit phone number (or UPI ID like gauri301998@okhdfcbank) first",
+                Toast.LENGTH_LONG
             ).show()
             return
         }
 
-        // If the prefix is a 10-digit phone number and the user tapped a specific UPI app tile
-        // (e.g., PhonePe -> @ybl, Paytm -> @paytm), auto-sync the suffix unless user typed an explicit '@'
-        val finalSuffix = if (!phoneOrPrefixInput.contains("@") && clean10DigitPhone.length == 10 && targetApp != null) {
-            // If current suffix is default @upi or matches another app's default, switch to target app's native phone suffix
-            selectedSuffix = targetApp.defaultPhoneSuffix
-            targetApp.defaultPhoneSuffix
+        persistCombinedIdentity()
+        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        clipboard?.setPrimaryClip(ClipData.newPlainText("UPI Recipient", searchPayload))
+
+        postPaymentAssistHeadsUpNotification(
+            context = context,
+            recipientName = transferModel.toName,
+            formattedAmount = transferModel.formattedDisplayAmount,
+            copiedIdentifier = searchPayload,
+            appName = appLabel
+        )
+
+        lastLaunchedAppName = appLabel
+        hasLaunchedExternalApp = true
+
+        val nativeLaunchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
+        if (nativeLaunchIntent != null) {
+            Toast.makeText(
+                context,
+                "Copied $searchPayload! Paste in $appLabel search bar to pay ${transferModel.formattedDisplayAmount} to ${transferModel.toName}",
+                Toast.LENGTH_LONG
+            ).show()
+            context.startActivity(nativeLaunchIntent)
         } else {
-            effectiveSuffix
+            Toast.makeText(
+                context,
+                "$appLabel is not installed. Copied $searchPayload (${transferModel.formattedDisplayAmount}) to clipboard!",
+                Toast.LENGTH_LONG
+            ).show()
+            returnedFromUpiApp = true
+        }
+    }
+
+    /**
+     * DIRECT NPCI `upi://pay` PRE-FILLED AMOUNT INTENT:
+     * Uses the verified VPA (e.g. `gauri301998@okhdfcbank` or `9876543210@ybl` / `9876543210@paytm`)
+     * for apps that accept P2P intent deep-links (BHIM, Paytm, PhonePe).
+     */
+    fun launchPreFilledUpiIntent(targetPackage: String?, appLabel: String, fallbackSuffix: String) {
+        val targetVpa = when {
+            cleanExactVpa.isNotBlank() -> cleanExactVpa
+            clean10Phone.length == 10 -> "$clean10Phone$fallbackSuffix"
+            else -> ""
+        }
+        if (targetVpa.isEmpty()) {
+            Toast.makeText(
+                context,
+                "Enter ${transferModel.toName}'s UPI ID (e.g. gauri301998@okhdfcbank) or 10-digit phone number first",
+                Toast.LENGTH_LONG
+            ).show()
+            return
         }
 
-        val finalVpa = "$activePrefix$finalSuffix"
-        onSaveMemberUpi(finalVpa)
+        persistCombinedIdentity()
+        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
 
-        // Safety Net: Copy the 10-digit phone number (or VPA) to clipboard automatically
+        // Always copy phone/VPA to clipboard as a backup
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        val clipPayload = clean10DigitPhone.ifBlank { finalVpa }
-        clipboard?.setPrimaryClip(ClipData.newPlainText("Recipient UPI Phone", clipPayload))
+        val clipBackup = clean10Phone.ifBlank { targetVpa }
+        clipboard?.setPrimaryClip(ClipData.newPlainText("UPI Recipient", clipBackup))
+
+        postPaymentAssistHeadsUpNotification(
+            context = context,
+            recipientName = transferModel.toName,
+            formattedAmount = transferModel.formattedDisplayAmount,
+            copiedIdentifier = clipBackup,
+            appName = appLabel
+        )
 
         val cleanNote = "SplitMate · ${groupName.toSmartTitleCase()}"
         val upiUri = buildCleanP2pUpiUri(
-            payeeVpa = finalVpa,
+            payeeVpa = targetVpa,
             payeeName = transferModel.toName,
             amountDecimal = transferModel.amount,
             transactionNote = cleanNote
         )
 
-        lastLaunchedAppName = targetApp?.label ?: "UPI App"
-        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        lastLaunchedAppName = appLabel
+        hasLaunchedExternalApp = true
 
         try {
-            if (targetApp?.packageName != null) {
+            if (targetPackage != null) {
                 val targetedIntent = Intent(Intent.ACTION_VIEW, upiUri).apply {
-                    setPackage(targetApp.packageName)
+                    setPackage(targetPackage)
                 }
-                val canResolveTargeted = targetedIntent.resolveActivity(context.packageManager) != null
-                if (canResolveTargeted) {
+                if (targetedIntent.resolveActivity(context.packageManager) != null) {
                     Toast.makeText(
                         context,
-                        "Opening ${targetApp.label} for ${transferModel.formattedDisplayAmount} ($clipPayload copied)",
+                        "Opening $appLabel with ${transferModel.formattedDisplayAmount} pre-filled for $targetVpa",
                         Toast.LENGTH_SHORT
                     ).show()
                     upiResultLauncher.launch(targetedIntent)
                     return
                 }
             }
-            // Fallback to universal UPI chooser
             val genericIntent = Intent(Intent.ACTION_VIEW, upiUri)
-            Toast.makeText(
-                context,
-                "Pre-filling ${transferModel.formattedDisplayAmount} for $finalVpa ($clipPayload copied)",
-                Toast.LENGTH_SHORT
-            ).show()
             upiResultLauncher.launch(Intent.createChooser(genericIntent, "Pay ${transferModel.formattedDisplayAmount} via UPI"))
         } catch (_: Exception) {
             returnedFromUpiApp = true
-            Toast.makeText(
-                context,
-                "No UPI app found on this device. Copied $clipPayload to clipboard.",
-                Toast.LENGTH_LONG
-            ).show()
         }
     }
 
@@ -374,7 +454,7 @@ fun UpiExpressPaymentSheet(
                 .padding(bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // 1. TACTILE RECEIPT STUB HEADER (Avatar + Pre-Filled Exact Amount Badge)
+            // 1. TACTILE RECEIPT STUB HEADER
             Surface(
                 shape = RoundedCornerShape(22.dp),
                 color = SplitMateTheme.SurfaceWhite,
@@ -401,7 +481,7 @@ fun UpiExpressPaymentSheet(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "PAYING TO",
+                                text = "SETTLING WITH",
                                 fontFamily = FigtreeFontFamily,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.ExtraBold,
@@ -432,6 +512,11 @@ fun UpiExpressPaymentSheet(
                     Spacer(modifier = Modifier.width(10.dp))
 
                     Surface(
+                        onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                            clipboard?.setPrimaryClip(ClipData.newPlainText("Amount", transferModel.amount))
+                            Toast.makeText(context, "Copied amount ₹${transferModel.amount}", Toast.LENGTH_SHORT).show()
+                        },
                         shape = RoundedCornerShape(16.dp),
                         color = SplitMateTheme.SageSurface,
                         border = BorderStroke(1.dp, SplitMateTheme.AccentSage)
@@ -441,7 +526,7 @@ fun UpiExpressPaymentSheet(
                             horizontalAlignment = Alignment.End
                         ) {
                             Text(
-                                text = "PRE-FILLED",
+                                text = "EXACT SHARE",
                                 fontFamily = FigtreeFontFamily,
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.ExtraBold,
@@ -460,7 +545,7 @@ fun UpiExpressPaymentSheet(
                 }
             }
 
-            // POST-RETURN AUTO-SETTLE CONFIRMATION BANNER
+            // POST-RETURN AUTO-SETTLE CONFIRMATION CARD (Triggers automatically on ON_RESUME after visiting GPay/PhonePe)
             AnimatedVisibility(
                 visible = returnedFromUpiApp,
                 enter = fadeIn(),
@@ -469,7 +554,7 @@ fun UpiExpressPaymentSheet(
                 Surface(
                     shape = RoundedCornerShape(18.dp),
                     color = SplitMateTheme.SageSurface,
-                    border = BorderStroke(1.5.dp, SplitMateTheme.SageText.copy(alpha = 0.4f)),
+                    border = BorderStroke(1.5.dp, SplitMateTheme.SageText.copy(alpha = 0.45f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
@@ -487,48 +572,41 @@ fun UpiExpressPaymentSheet(
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
-                                text = "Returned from $lastLaunchedAppName · Did you enter your UPI PIN?",
+                                text = "Welcome back from $lastLaunchedAppName! Did your ${transferModel.formattedDisplayAmount} payment complete?",
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 13.sp,
                                 color = SplitMateTheme.PrimaryDark
                             )
                         }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        Button(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                persistCombinedIdentity()
+                                onMarkSettled()
+                                onDismiss()
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = SplitMateTheme.PrimaryDark,
+                                contentColor = SplitMateTheme.ScreenBg
+                            ),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Button(
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    if (resolvedVpa.isNotBlank()) {
-                                        onSaveMemberUpi(resolvedVpa)
-                                    }
-                                    onMarkSettled()
-                                    onDismiss()
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = SplitMateTheme.PrimaryDark,
-                                    contentColor = SplitMateTheme.ScreenBg
-                                ),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Yes, Mark ${transferModel.formattedDisplayAmount} Paid",
-                                    fontFamily = FigtreeFontFamily,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 12.5.sp
-                                )
-                            }
+                            Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "✓ Yes, Mark ${transferModel.formattedDisplayAmount} to ${transferModel.toName} Paid",
+                                fontFamily = FigtreeFontFamily,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 13.sp
+                            )
                         }
                     }
                 }
             }
 
-            // 2. RECIPIENT 10-DIGIT PHONE NUMBER OR UPI HANDLE INPUT + 1-TAP CONTACT PICKER
+            // 2. FIELD A: 10-DIGIT MOBILE NUMBER (For Google Pay / PhonePe Native Search Resolution)
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -536,11 +614,11 @@ fun UpiExpressPaymentSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "1. RECIPIENT 10-DIGIT PHONE OR UPI ID",
+                        text = "1. ${transferModel.toName.uppercase(Locale.US)}'S 10-DIGIT PHONE NUMBER",
                         fontFamily = FigtreeFontFamily,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 0.8.sp,
+                        letterSpacing = 0.7.sp,
                         color = SplitMateTheme.TextSecondary
                     )
                     Surface(
@@ -572,11 +650,17 @@ fun UpiExpressPaymentSheet(
                 }
 
                 OutlinedTextField(
-                    value = phoneOrPrefixInput,
-                    onValueChange = { phoneOrPrefixInput = it },
+                    value = phoneInput,
+                    onValueChange = {
+                        phoneInput = it
+                        val cleaned = cleanIndianTenDigitPhone(it)
+                        if (cleaned.length == 10) {
+                            persistCombinedIdentity(newPhone = cleaned)
+                        }
+                    },
                     placeholder = {
                         Text(
-                            text = "e.g. 9876543210 or priya@okaxis",
+                            text = "10-digit mobile (e.g. 9876543210)",
                             fontFamily = FigtreeFontFamily,
                             fontSize = 14.sp,
                             color = SplitMateTheme.TextSecondary.copy(alpha = 0.6f)
@@ -584,20 +668,87 @@ fun UpiExpressPaymentSheet(
                     },
                     leadingIcon = {
                         Icon(
-                            imageVector = if (clean10DigitPhone.length == 10) Icons.Rounded.PhoneAndroid else Icons.Rounded.AlternateEmail,
+                            imageVector = Icons.Rounded.PhoneAndroid,
                             contentDescription = null,
                             tint = SplitMateTheme.PrimaryDark,
                             modifier = Modifier.size(18.dp)
                         )
                     },
                     trailingIcon = {
-                        if (clean10DigitPhone.length == 10) {
+                        if (clean10Phone.length == 10) {
+                            Surface(
+                                onClick = {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                    clipboard?.setPrimaryClip(ClipData.newPlainText("Phone", clean10Phone))
+                                    Toast.makeText(context, "Copied $clean10Phone", Toast.LENGTH_SHORT).show()
+                                },
+                                shape = CircleShape,
+                                color = SplitMateTheme.SageSurface
+                            ) {
+                                Text(
+                                    text = "📋 Copy #",
+                                    fontFamily = FigtreeFontFamily,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = SplitMateTheme.SageText,
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Phone,
+                        imeAction = ImeAction.Next
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            // 3. FIELD B: EXACT GMAIL / BANK UPI ID (e.g. gauri301998@okhdfcbank)
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "2. EXACT UPI ID (OPTIONAL · e.g. gauri301998@okhdfcbank)",
+                    fontFamily = FigtreeFontFamily,
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 0.7.sp,
+                    color = SplitMateTheme.TextSecondary
+                )
+
+                OutlinedTextField(
+                    value = exactVpaInput,
+                    onValueChange = {
+                        exactVpaInput = it
+                        if (it.contains("@") && it.substringAfter("@").isNotBlank()) {
+                            persistCombinedIdentity(newVpa = it.trim())
+                        }
+                    },
+                    placeholder = {
+                        Text(
+                            text = "e.g. ${transferModel.toName.lowercase(Locale.US).replace(" ", "")}@okhdfcbank",
+                            fontFamily = FigtreeFontFamily,
+                            fontSize = 14.sp,
+                            color = SplitMateTheme.TextSecondary.copy(alpha = 0.6f)
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Rounded.AlternateEmail,
+                            contentDescription = null,
+                            tint = SplitMateTheme.PrimaryDark,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    },
+                    trailingIcon = {
+                        if (cleanExactVpa.isNotBlank()) {
                             Surface(
                                 shape = CircleShape,
                                 color = SplitMateTheme.SageSurface
                             ) {
                                 Text(
-                                    text = "✓ 10-Digit",
+                                    text = "✓ Saved",
                                     fontFamily = FigtreeFontFamily,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.ExtraBold,
@@ -615,76 +766,54 @@ fun UpiExpressPaymentSheet(
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
-            }
 
-            // 3. 1-TAP UPI HANDLE SUFFIX CHIPS (Bridges 10-Digit Phone -> Exact NPCI VPA)
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "2. UPI HANDLE SUFFIX (AUTO-SAVED FOR ${transferModel.toName.uppercase(Locale.US)})",
-                        fontFamily = FigtreeFontFamily,
-                        fontSize = 10.5.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 0.7.sp,
-                        color = SplitMateTheme.TextSecondary
-                    )
-                    if (resolvedVpa.isNotBlank()) {
-                        Text(
-                            text = resolvedVpa,
-                            fontFamily = FigtreeFontFamily,
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = SplitMateTheme.SageText
-                        )
-                    }
-                }
-
+                // Quick suffix helper chips to append @okhdfcbank, @okaxis, @ybl, etc.
                 LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    items(CommonIndianUpiSuffixes) { option ->
-                        val isSelected = effectiveSuffix.equals(option.suffix, ignoreCase = true)
+                    items(QuickVpaBankSuffixes) { (suffix, label) ->
+                        val isCurrentSuffix = exactVpaInput.endsWith(suffix, ignoreCase = true)
                         Surface(
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                selectedSuffix = option.suffix
-                                if (phoneOrPrefixInput.contains("@")) {
-                                    phoneOrPrefixInput = phoneOrPrefixInput.substringBefore("@")
-                                }
-                                if (effectivePrefix.isNotBlank()) {
-                                    onSaveMemberUpi("$effectivePrefix${option.suffix}")
-                                }
+                                val basePrefix = exactVpaInput.substringBefore("@").trim()
+                                    .ifBlank {
+                                        if (suffix == "@ybl" || suffix == "@paytm" || suffix == "@upi" || suffix == "@ibl" || suffix == "@apl") {
+                                            clean10Phone
+                                        } else {
+                                            transferModel.toName.lowercase(Locale.US).replace(Regex("[^a-z0-9]"), "")
+                                        }
+                                    }
+                                val newVpa = "$basePrefix$suffix"
+                                exactVpaInput = newVpa
+                                persistCombinedIdentity(newVpa = newVpa)
                             },
-                            shape = RoundedCornerShape(14.dp),
-                            color = if (isSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.SurfaceWhite,
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isCurrentSuffix) SplitMateTheme.PrimaryDark else SplitMateTheme.SurfaceWhite,
                             border = BorderStroke(
                                 1.dp,
-                                if (isSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.BorderLight
+                                if (isCurrentSuffix) SplitMateTheme.PrimaryDark else SplitMateTheme.BorderLight
                             )
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Text(
-                                    text = option.suffix,
+                                    text = suffix,
                                     fontFamily = FigtreeFontFamily,
-                                    fontSize = 12.5.sp,
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = if (isSelected) SplitMateTheme.ScreenBg else SplitMateTheme.PrimaryDark
+                                    color = if (isCurrentSuffix) SplitMateTheme.ScreenBg else SplitMateTheme.PrimaryDark
                                 )
                                 Text(
-                                    text = "· ${option.appBadge}",
+                                    text = "· $label",
                                     fontFamily = FigtreeFontFamily,
-                                    fontSize = 10.5.sp,
+                                    fontSize = 10.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = if (isSelected) SplitMateTheme.ScreenBg.copy(alpha = 0.8f) else SplitMateTheme.TextSecondary
+                                    color = if (isCurrentSuffix) SplitMateTheme.ScreenBg.copy(alpha = 0.8f) else SplitMateTheme.TextSecondary
                                 )
                             }
                         }
@@ -692,10 +821,75 @@ fun UpiExpressPaymentSheet(
                 }
             }
 
-            // 4. EXPRESS UPI APP DOCK (1-Tap Redirect -> Pre-Filled Amount -> Enter UPI PIN)
+            // 4. GOOGLE PAY SMART NATIVE LAUNCH (Bypasses "Cannot pay with this QR" & resolves Gmail VPA from 10-Digit Phone!)
+            Surface(
+                onClick = {
+                    launchSmartNativeUpiApp(
+                        packageName = "com.google.android.apps.nbu.paisa.user",
+                        appLabel = "Google Pay",
+                        preferPhoneInSearch = clean10Phone.length == 10
+                    )
+                },
+                shape = RoundedCornerShape(20.dp),
+                color = if (SplitMateTheme.isDark) Color(0xFF1E293B) else Color(0xFFEFF6FF),
+                border = BorderStroke(1.5.dp, if (SplitMateTheme.isDark) Color(0xFF38BDF8) else Color(0xFF3B82F6)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFF2563EB),
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Rounded.AccountBalanceWallet,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        Column {
+                            Text(
+                                text = "Open Google Pay (Smart Phone/ID Search)",
+                                fontFamily = FigtreeFontFamily,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 14.5.sp,
+                                color = if (SplitMateTheme.isDark) Color(0xFFE0F2FE) else Color(0xFF1E3A8A)
+                            )
+                            Text(
+                                text = "Auto-copies ${clean10Phone.ifBlank { cleanExactVpa.ifBlank { "Phone / UPI ID" } }} + pins ${transferModel.formattedDisplayAmount} at top · Zero 'QR blocked' errors!",
+                                fontFamily = FigtreeFontFamily,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                lineHeight = 14.5.sp,
+                                color = if (SplitMateTheme.isDark) Color(0xFFBAE6FD) else Color(0xFF1D4ED8)
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = Icons.Rounded.ArrowOutward,
+                        contentDescription = null,
+                        tint = if (SplitMateTheme.isDark) Color(0xFF38BDF8) else Color(0xFF2563EB),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            // 5. PHONEPE / PAYTM / BHIM DIRECT PRE-FILLED INTENT & NATIVE LAUNCH ROW
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "3. TAP YOUR UPI APP (OPENS WITH ${transferModel.formattedDisplayAmount} PRE-FILLED)",
+                    text = "OR PAY VIA PHONEPE / PAYTM / BHIM (${transferModel.formattedDisplayAmount} PRE-FILLED)",
                     fontFamily = FigtreeFontFamily,
                     fontSize = 10.5.sp,
                     fontWeight = FontWeight.ExtraBold,
@@ -707,94 +901,124 @@ fun UpiExpressPaymentSheet(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    ExpressUpiAppTargets.take(2).forEach { appTarget ->
-                        Surface(
-                            onClick = { launchUpiPayment(appTarget) },
-                            shape = RoundedCornerShape(18.dp),
-                            color = if (SplitMateTheme.isDark) SplitMateTheme.SurfaceWhite else appTarget.accentBg,
-                            border = BorderStroke(1.dp, if (SplitMateTheme.isDark) SplitMateTheme.BorderLight else appTarget.accentBorder),
-                            modifier = Modifier.weight(1f)
+                    Surface(
+                        onClick = {
+                            launchPreFilledUpiIntent(
+                                targetPackage = "com.phonepe.app",
+                                appLabel = "PhonePe",
+                                fallbackSuffix = "@ybl"
+                            )
+                        },
+                        shape = RoundedCornerShape(16.dp),
+                        color = SplitMateTheme.SurfaceWhite,
+                        border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.AccountBalanceWallet,
-                                    contentDescription = null,
-                                    tint = if (SplitMateTheme.isDark) SplitMateTheme.PrimaryDark else appTarget.accentText,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Column {
-                                    Text(
-                                        text = appTarget.label,
-                                        fontFamily = FigtreeFontFamily,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 13.5.sp,
-                                        color = if (SplitMateTheme.isDark) SplitMateTheme.PrimaryDark else appTarget.accentText
-                                    )
-                                    Text(
-                                        text = appTarget.subtitle,
-                                        fontFamily = FigtreeFontFamily,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = SplitMateTheme.TextSecondary
-                                    )
-                                }
-                            }
+                            Text(
+                                text = "PhonePe",
+                                fontFamily = FigtreeFontFamily,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 13.5.sp,
+                                color = SplitMateTheme.PrimaryDark
+                            )
+                            Text(
+                                text = cleanExactVpa.ifBlank { if (clean10Phone.length == 10) "$clean10Phone@ybl" else "Pre-fills ₹" },
+                                fontFamily = FigtreeFontFamily,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = SplitMateTheme.TextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
-                }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    ExpressUpiAppTargets.drop(2).forEach { appTarget ->
-                        Surface(
-                            onClick = { launchUpiPayment(appTarget) },
-                            shape = RoundedCornerShape(18.dp),
-                            color = if (SplitMateTheme.isDark) SplitMateTheme.SurfaceWhite else appTarget.accentBg,
-                            border = BorderStroke(1.dp, if (SplitMateTheme.isDark) SplitMateTheme.BorderLight else appTarget.accentBorder),
-                            modifier = Modifier.weight(1f)
+                    Surface(
+                        onClick = {
+                            launchPreFilledUpiIntent(
+                                targetPackage = "net.one97.paytm",
+                                appLabel = "Paytm",
+                                fallbackSuffix = "@paytm"
+                            )
+                        },
+                        shape = RoundedCornerShape(16.dp),
+                        color = SplitMateTheme.SurfaceWhite,
+                        border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Bolt,
-                                    contentDescription = null,
-                                    tint = if (SplitMateTheme.isDark) SplitMateTheme.PrimaryDark else appTarget.accentText,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Column {
-                                    Text(
-                                        text = appTarget.label,
-                                        fontFamily = FigtreeFontFamily,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 13.5.sp,
-                                        color = if (SplitMateTheme.isDark) SplitMateTheme.PrimaryDark else appTarget.accentText
-                                    )
-                                    Text(
-                                        text = appTarget.subtitle,
-                                        fontFamily = FigtreeFontFamily,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = SplitMateTheme.TextSecondary
-                                    )
-                                }
-                            }
+                            Text(
+                                text = "Paytm UPI",
+                                fontFamily = FigtreeFontFamily,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 13.5.sp,
+                                color = SplitMateTheme.PrimaryDark
+                            )
+                            Text(
+                                text = cleanExactVpa.ifBlank { if (clean10Phone.length == 10) "$clean10Phone@paytm" else "Pre-fills ₹" },
+                                fontFamily = FigtreeFontFamily,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = SplitMateTheme.TextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    Surface(
+                        onClick = {
+                            launchPreFilledUpiIntent(
+                                targetPackage = null,
+                                appLabel = "BHIM / UPI",
+                                fallbackSuffix = "@upi"
+                            )
+                        },
+                        shape = RoundedCornerShape(16.dp),
+                        color = SplitMateTheme.SurfaceWhite,
+                        border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                text = "BHIM / Any",
+                                fontFamily = FigtreeFontFamily,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 13.5.sp,
+                                color = SplitMateTheme.PrimaryDark
+                            )
+                            Text(
+                                text = cleanExactVpa.ifBlank { "Pre-filled URI" },
+                                fontFamily = FigtreeFontFamily,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = SplitMateTheme.TextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
                 }
             }
 
-            // 5. PRIMARY UNIVERSAL CTA BUTTON + MANUAL MARK PAID OPTION
+            // 6. ONE-TAP SETTLEMENT BUTTON
             Button(
-                onClick = { launchUpiPayment(null) },
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    persistCombinedIdentity()
+                    onMarkSettled()
+                    onDismiss()
+                },
                 shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = SplitMateTheme.PrimaryDark,
@@ -802,44 +1026,19 @@ fun UpiExpressPaymentSheet(
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp)
+                    .height(50.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Rounded.AccountBalanceWallet,
+                    imageVector = Icons.Rounded.CheckCircle,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Pay ${transferModel.formattedDisplayAmount} via UPI App →",
+                    text = "✓ Mark ${transferModel.formattedDisplayAmount} Paid to ${transferModel.toName}",
                     fontFamily = FigtreeFontFamily,
                     fontWeight = FontWeight.Black,
-                    fontSize = 15.sp
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Already paid in cash or another app? ",
-                    fontFamily = FigtreeFontFamily,
-                    fontSize = 12.sp,
-                    color = SplitMateTheme.TextSecondary
-                )
-                Text(
-                    text = "✓ Mark as Paid",
-                    fontFamily = FigtreeFontFamily,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = SplitMateTheme.SageText,
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onMarkSettled()
-                        onDismiss()
-                    }
+                    fontSize = 14.5.sp
                 )
             }
         }
