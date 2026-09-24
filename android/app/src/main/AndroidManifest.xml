@@ -5,13 +5,24 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- Android 11+ (API 30+) Package Visibility for NPCI UPI Deep-Linking & Installed UPI App Discovery -->
+    <!-- Android 11+ (API 30+) Package Visibility for Native 1-Tap UPI Deep-Linking Schemes -->
     <queries>
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="upi" android:host="pay" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="tez" android:host="upi" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="phonepe" android:host="pay" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="paytmmp" android:host="pay" />
         </intent>
         <package android:name="com.google.android.apps.nbu.paisa.user" /> <!-- Google Pay (GPay) -->
         <package android:name="com.phonepe.app" />                        <!-- PhonePe -->

@@ -12,8 +12,8 @@ android {
         applicationId "com.splitmate.app"
         minSdk 26
         targetSdk 34
-        versionCode 23
-        versionName "1.9.7"
+        versionCode 24
+        versionName "1.9.8"
         resConfigs "en"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -93,6 +93,9 @@ dependencies {
     // Coil + Coil-SVG (Dynamic DiceBear SVG Avatar Decoding & Indefinite Disk Cache)
     implementation 'io.coil-kt:coil-compose:2.6.0'
     implementation 'io.coil-kt:coil-svg:2.6.0'
+
+    // ZXing Core for instant offline UPI QR Code Decoding from Gallery/Screenshots (<10ms)
+    implementation 'com.google.zxing:core:3.5.3'
 
     // Jetpack Security Crypto (AES256-GCM Hardware-Backed Keystore for PNR Vault)
     implementation 'androidx.security:security-crypto:1.1.0-alpha06'
