@@ -63,15 +63,43 @@ object PnrNetworkRepository {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?): Boolean = size > MAX_CACHE_ENTRIES
     }
 
+    private const val MAX_VAULT_ENTRIES = 75
+    private const val KEY_LRU_INDEX = "vault_pnr_lru_index"
+
+    private fun recordAndEvictLruIfNeeded(
+        prefs: android.content.SharedPreferences,
+        editor: android.content.SharedPreferences.Editor,
+        currentPnr: String
+    ) {
+        val existingQueue = prefs.getString(KEY_LRU_INDEX, "").orEmpty()
+            .split(",")
+            .filter { it.isNotBlank() && it != currentPnr }
+            .toMutableList()
+        existingQueue.add(currentPnr)
+        while (existingQueue.size > MAX_VAULT_ENTRIES) {
+            val oldest = existingQueue.removeAt(0)
+            editor.remove("snapshot_json_$oldest")
+                .remove("last_sync_$oldest")
+                .remove("last_failed_sync_$oldest")
+                .remove("flight_result_json_$oldest")
+        }
+        editor.putString(KEY_LRU_INDEX, existingQueue.joinToString(","))
+    }
+
     /**
      * Normalizes either a 10-digit Indian Railways PNR (e.g., `8412659012`)
      * or a 6-character Airline/GDS PNR (e.g., `D9GQ3Z`, `KLMNPQ`).
      */
     fun normalizePnrKey(pnr: String): String {
+        Regex("""\b(\d{10})\b""").find(pnr)?.groupValues?.getOrNull(1)?.let { return it }
+        Regex("""\b([A-Za-z0-9]{6})\b""").find(pnr.trim())?.groupValues?.getOrNull(1)?.uppercase(Locale.US)?.let { token ->
+            if (token.any { it.isLetter() } || pnr.trim().length == 6) return token
+        }
         val raw = pnr.trim().uppercase(Locale.US).replace(Regex("[^A-Z0-9]"), "")
-        val digitsOnly = raw.filter { it.isDigit() }
-        if (digitsOnly.length == 10 && raw.length >= 10) return digitsOnly.take(10)
         if (raw.length == 6 && raw.all { it.isLetterOrDigit() }) return raw
+        val digitsOnly = raw.filter { it.isDigit() }
+        if (digitsOnly.length >= 10) return digitsOnly.takeLast(10)
+        if (raw.length in 5..8 && raw.any { it.isLetter() }) return raw.take(6)
         return digitsOnly.take(10)
     }
 
@@ -124,6 +152,51 @@ object PnrNetworkRepository {
         if (cleanPnr.length != 6 || !result.isValidFlightTicket) return null
         synchronized(lruFlightResultCache) {
             lruFlightResultCache[cleanPnr] = result
+        }
+        if (context != null) {
+            runCatching {
+                val flightObj = JSONObject().apply {
+                    put("pnr", cleanPnr)
+                    put("otaBookingId", result.otaBookingId)
+                    put("airlineCode", result.airlineCode)
+                    put("airlineName", result.airlineName)
+                    put("flightNumber", result.flightNumber)
+                    put("originIata", result.originIata)
+                    put("originCity", result.originCity)
+                    put("originAirportName", result.originAirportName)
+                    put("destinationIata", result.destinationIata)
+                    put("destinationCity", result.destinationCity)
+                    put("destinationAirportName", result.destinationAirportName)
+                    put("travelDate", result.travelDate)
+                    put("bookingDate", result.bookingDate)
+                    put("departureTime", result.departureTime)
+                    put("arrivalTime", result.arrivalTime)
+                    put("durationText", result.durationText)
+                    put("cabinClass", result.cabinClass)
+                    put("fareType", result.fareType)
+                    put("cabinBaggage", result.cabinBaggage)
+                    put("checkInBaggage", result.checkInBaggage)
+                    put("totalFarePaise", result.totalFarePaise)
+                    put("discountSavedPaise", result.discountSavedPaise)
+                    put("paymentMethod", result.paymentMethod)
+                    put("viaAirports", JSONArray().apply { result.viaAirports.forEach { put(it) } })
+                    put("matchedGroupMembers", JSONArray().apply { result.matchedGroupMembers.forEach { put(it) } })
+                    put("passengers", JSONArray().apply {
+                        result.passengers.forEach { pax ->
+                            put(JSONObject().apply {
+                                put("fullName", pax.fullName)
+                                put("seatNumber", pax.seatNumber)
+                                put("eTicketOrPnr", pax.eTicketOrPnr)
+                                put("passengerType", pax.passengerType)
+                            })
+                        }
+                    })
+                }
+                val prefs = EncryptedPrefsProvider.getPnrVaultPrefs(context)
+                val editor = prefs.edit().putString("flight_result_json_$cleanPnr", flightObj.toString())
+                recordAndEvictLruIfNeeded(prefs, editor, cleanPnr)
+                editor.apply()
+            }
         }
         val paxStatuses = if (result.passengers.isNotEmpty()) {
             result.passengers.mapIndexed { idx, pax ->
@@ -188,7 +261,59 @@ object PnrNetworkRepository {
         synchronized(lruFlightResultCache) {
             lruFlightResultCache[cleanPnr]?.let { return it }
         }
-        return null
+        if (context == null) return null
+        return runCatching {
+            val prefs = EncryptedPrefsProvider.getPnrVaultPrefs(context)
+            val rawJson = prefs.getString("flight_result_json_$cleanPnr", null) ?: return@runCatching null
+            val obj = JSONObject(rawJson)
+            val paxArr = obj.optJSONArray("passengers") ?: JSONArray()
+            val passengers = (0 until paxArr.length()).mapNotNull { i ->
+                val pObj = paxArr.optJSONObject(i) ?: return@mapNotNull null
+                UniversalFlightTicketExtractor.ExtractedFlightPassenger(
+                    fullName = pObj.optString("fullName"),
+                    seatNumber = pObj.optString("seatNumber", "-"),
+                    eTicketOrPnr = pObj.optString("eTicketOrPnr", cleanPnr),
+                    passengerType = pObj.optString("passengerType", "ADULT")
+                )
+            }
+            val viaArr = obj.optJSONArray("viaAirports") ?: JSONArray()
+            val viaAirports = (0 until viaArr.length()).map { viaArr.optString(it) }.filter { it.isNotBlank() }
+            val matchedArr = obj.optJSONArray("matchedGroupMembers") ?: JSONArray()
+            val matchedMembers = (0 until matchedArr.length()).map { matchedArr.optString(it) }.filter { it.isNotBlank() }
+            val restored = UniversalFlightTicketExtractor.UniversalFlightTicketResult(
+                pnr = cleanPnr,
+                otaBookingId = obj.optString("otaBookingId"),
+                airlineCode = obj.optString("airlineCode"),
+                airlineName = obj.optString("airlineName"),
+                flightNumber = obj.optString("flightNumber"),
+                originIata = obj.optString("originIata"),
+                originCity = obj.optString("originCity"),
+                originAirportName = obj.optString("originAirportName"),
+                destinationIata = obj.optString("destinationIata"),
+                destinationCity = obj.optString("destinationCity"),
+                destinationAirportName = obj.optString("destinationAirportName"),
+                viaAirports = viaAirports,
+                travelDate = obj.optString("travelDate"),
+                bookingDate = obj.optString("bookingDate"),
+                departureTime = obj.optString("departureTime"),
+                arrivalTime = obj.optString("arrivalTime"),
+                durationText = obj.optString("durationText"),
+                cabinClass = obj.optString("cabinClass", "Economy"),
+                fareType = obj.optString("fareType", "Regular"),
+                cabinBaggage = obj.optString("cabinBaggage"),
+                checkInBaggage = obj.optString("checkInBaggage"),
+                passengers = passengers,
+                matchedGroupMembers = matchedMembers,
+                totalFarePaise = obj.optLong("totalFarePaise", 0L),
+                discountSavedPaise = obj.optLong("discountSavedPaise", 0L),
+                paymentMethod = obj.optString("paymentMethod"),
+                extractionDurationMs = 0L
+            )
+            synchronized(lruFlightResultCache) {
+                lruFlightResultCache[cleanPnr] = restored
+            }
+            restored
+        }.getOrNull()
     }
 
     fun loadPersistedPnrSnapshot(context: Context?, pnr: String): LivePnrStatusSnapshot? = runCatching {
@@ -310,12 +435,13 @@ object PnrNetworkRepository {
                 put("isLiveVerified", snapshot.isLiveVerified)
                 put("isManualEntry", snapshot.isManualEntry)
             }
-            EncryptedPrefsProvider.getPnrVaultPrefs(context)
-                .edit()
+            val prefs = EncryptedPrefsProvider.getPnrVaultPrefs(context)
+            val editor = prefs.edit()
                 .putLong("last_sync_$cleanPnr", now)
                 .remove("last_failed_sync_$cleanPnr")
                 .putString("snapshot_json_$cleanPnr", obj.toString())
-                .apply()
+            recordAndEvictLruIfNeeded(prefs, editor, cleanPnr)
+            editor.apply()
         }
     }
 

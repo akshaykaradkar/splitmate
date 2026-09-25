@@ -473,4 +473,37 @@ class UniversalFlightTicketExtractorTest {
         writeAscii("\nendstream\nendobj\n%%EOF\n")
         return out.toByteArray()
     }
+
+    @Test
+    fun auditFourSmeRootCauseFixes() {
+        // 1. PnrNetworkRepository.normalizePnrKey unstripped word-boundary extraction
+        assertEquals("8412659012", com.splitmate.app.data.PnrNetworkRepository.normalizePnrKey("Train 12951 PNR 8412659012"))
+        assertEquals("FGMKU9", com.splitmate.app.data.PnrNetworkRepository.normalizePnrKey("Booking FGMKU9"))
+        assertEquals("FGMKU9", com.splitmate.app.data.PnrNetworkRepository.normalizePnrKey("FGMKU9"))
+
+        // 2. International E.164 vs Indian 10-digit phone normalization
+        assertEquals("+14155552671", com.splitmate.app.ui.cleanIndianTenDigitPhone("+1 (415) 555-2671"))
+        assertEquals("+971501234567", com.splitmate.app.ui.cleanIndianTenDigitPhone("+971 50 123 4567"))
+        assertEquals("9876543210", com.splitmate.app.ui.cleanIndianTenDigitPhone("+91 98765 43210"))
+        assertEquals("9876543210", com.splitmate.app.ui.cleanIndianTenDigitPhone("09876543210"))
+
+        // 3. Round-trip route chain (BOM -> GOI -> BOM) & 1-to-1 same-first-name passenger matching ("Rohan Gupta" vs "Rohan Sharma")
+        val roundTripText = """
+            Airline PNR: R9T2K4
+            IndiGo 6E 512
+            Route: BOM -> GOI -> BOM
+            Travel Date: 18 Nov 2026
+            09:15 - 10:30
+            Passenger: 1. Mr. Rohan Gupta Seat: 12A
+            Total Fare Paid: INR 8,450
+        """.trimIndent()
+        val res = UniversalFlightTicketExtractor.extractFromText(
+            rawText = roundTripText,
+            groupMemberNames = listOf("Rohan Sharma", "Rohan Gupta", "Akshay")
+        )
+        assertEquals("R9T2K4", res.pnr)
+        assertEquals("BOM", res.originIata)
+        assertEquals("GOI", res.destinationIata)
+        assertEquals(listOf("Rohan Gupta"), res.matchedGroupMembers)
+    }
 }

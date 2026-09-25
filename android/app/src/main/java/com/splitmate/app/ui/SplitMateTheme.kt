@@ -398,7 +398,11 @@ data class DeviceContact(
 )
 
 fun cleanIndianTenDigitPhone(rawNumber: String): String {
-    val digitsOnly = rawNumber.replace(Regex("[^0-9]"), "")
+    val trimmed = rawNumber.trim()
+    val digitsOnly = trimmed.replace(Regex("[^0-9]"), "")
+    if (trimmed.startsWith("+") && !digitsOnly.startsWith("91") && digitsOnly.length in 10..15) {
+        return "+$digitsOnly"
+    }
     return when {
         digitsOnly.length >= 12 && digitsOnly.startsWith("91") -> digitsOnly.substring(2).takeLast(10)
         digitsOnly.length == 11 && digitsOnly.startsWith("0") -> digitsOnly.substring(1)
@@ -408,10 +412,10 @@ fun cleanIndianTenDigitPhone(rawNumber: String): String {
 }
 
 fun formatTenDigitIndianPhone(cleanPhone: String): String {
-    return if (cleanPhone.length == 10) {
-        "+91 ${cleanPhone.substring(0, 5)} ${cleanPhone.substring(5)}"
-    } else {
-        cleanPhone
+    return when {
+        cleanPhone.startsWith("+") -> cleanPhone
+        cleanPhone.length == 10 -> "+91 ${cleanPhone.substring(0, 5)} ${cleanPhone.substring(5)}"
+        else -> cleanPhone
     }
 }
 

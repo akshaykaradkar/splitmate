@@ -326,8 +326,10 @@ object UniversalFlightTicketExtractor {
 
     private val NonNameTrailingStopWords = setOf(
         "ADULT", "ADULTS", "CHILD", "INFANT", "MALE", "FEMALE", "SEAT", "MEAL",
-        "BAGGAGE", "TICKET", "ETICKET", "CONFIRMED", "STATUS", "PNR", "ECONOMY", "BUSINESS", "CARRIER"
-    )
+        "BAGGAGE", "TICKET", "ETICKET", "CONFIRMED", "STATUS", "PNR", "ECONOMY", "BUSINESS", "CARRIER",
+        "SECTOR", "AIRLINE", "FLIGHT", "BOOKING", "TOTAL", "FARE", "FLEXI", "SAVER", "LITE", "REGULAR",
+        "CORPORATE", "SUPER", "XPRESS", "VALUE", "CLASSIC", "PROMO", "COMFORT", "STRETCH"
+    ) + IataAirportRegistry.values.flatMap { it.city.uppercase(Locale.US).split(Regex("""\s+""")) }.filter { it.length >= 3 }
 
     // =========================================================================
     // PRE-COMPILED REGEX CONSTANTS FOR SUB-15MS EXECUTION LATENCY
@@ -363,7 +365,7 @@ object UniversalFlightTicketExtractor {
     private val UniversalFareFamilyRegex = Regex("""\b([A-Z]{2,8}SPECIAL|SUPER\s*6E|FLEXI(?:\s*PLUS)?|SAVER|LITE|PROMO|COMFORT|STRETCH|CORP(?:ORATE)?|VALUE|CLASSIC|REGULAR)\b""", RegexOption.IGNORE_CASE)
     private val CabinBaggageRegex = Regex("""(?:Cabin|Hand)\s*Baggage(?:\s*Allowance)?\s*[:\-]?\s*([^\n]+?)(?=\s*(?:Check-in|Baggage|TRAVELLER|Passenger|Meal|Seat|\n|$))""", RegexOption.IGNORE_CASE)
     private val CheckInBaggageRegex = Regex("""Check-in\s*Baggage(?:\s*Allowance)?\s*[:\-]?\s*([^\n]+?)(?=\s*(?:Cabin|Hand|TRAVELLER|Passenger|Meal|Seat|\n|$))""", RegexOption.IGNORE_CASE)
-    private val HonorificMixedOrUpperRegex = Regex("""\b(Mr|Mrs|Ms|Miss|Mstr|Dr|MR|MRS|MS|MISS|MSTR|DR)\.?\s+([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){0,3})\b""")
+    private val HonorificMixedOrUpperRegex = Regex("""\b(Mr|Mrs|Ms|Miss|Mstr|Dr|MR|MRS|MS|MISS|MSTR|DR)\.?\s+([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){0,4})\b""")
     private val GdsSlashNameRegex = Regex("""\b([A-Z]{2,20})/([A-Z\s]{2,25})\s+(MR|MRS|MS|MISS|MSTR)\b""")
     private val GreetingNameRegex = Regex("""\bHi\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\s*,\s*thank\s+you""", RegexOption.IGNORE_CASE)
     private val ExplicitSeatRegex = Regex("""\bSeat\s*[:\-]?\s*([1-9]\d?\s*[A-K])\b""", RegexOption.IGNORE_CASE)
@@ -1066,6 +1068,11 @@ object UniversalFlightTicketExtractor {
                             }
                         }
                         break
+                    } else if (chainTokens.size >= 3 && chainTokens.first() != chainTokens[1]) {
+                        originIata = chainTokens.first()
+                        destIata = chainTokens[1]
+                        viaList.add(chainTokens.last())
+                        break
                     }
                 }
             }
@@ -1302,6 +1309,10 @@ object UniversalFlightTicketExtractor {
             val candTokens = cand.fullName.lowercase(Locale.US).split(Regex("""\s+""")).filter { it.isNotBlank() }
             val longerMatch = rawCandidates.firstOrNull { other ->
                 if (other === cand) return@firstOrNull false
+                val hasDistinctValidSeats = cand.seatNumber != "-" &&
+                    other.seatNumber != "-" &&
+                    !cand.seatNumber.equals(other.seatNumber, ignoreCase = true)
+                if (hasDistinctValidSeats) return@firstOrNull false
                 val otherTokens = other.fullName.lowercase(Locale.US).split(Regex("""\s+""")).filter { it.isNotBlank() }
                 otherTokens.size > candTokens.size &&
                     candTokens.isNotEmpty() &&
@@ -1324,7 +1335,15 @@ object UniversalFlightTicketExtractor {
         if (resultList.isNotEmpty() && resultList.all { it.seatNumber == "-" }) {
             val seatSectionIdx = flatText.indexOf("Seat", ignoreCase = true)
             if (seatSectionIdx >= 0) {
-                val seatWindow = flatText.substring(seatSectionIdx, (seatSectionIdx + 350).coerceAtMost(flatText.length))
+                val maxEnd = (seatSectionIdx + 900).coerceAtMost(flatText.length)
+                val nextSectionStop = listOf(
+                    "Fare Breakup", "FARE BREAKUP", "Baggage", "BAGGAGE",
+                    "Important Information", "IMPORTANT INFORMATION", "Terms and Conditions"
+                ).mapNotNull { marker ->
+                    val pos = flatText.indexOf(marker, startIndex = seatSectionIdx + 10)
+                    if (pos in (seatSectionIdx + 10)..maxEnd) pos else null
+                }.minOrNull() ?: maxEnd
+                val seatWindow = flatText.substring(seatSectionIdx, nextSectionStop)
                 val globalSeats = StandaloneSeatTokenRegex.findAll(seatWindow)
                     .map { it.groupValues[1].uppercase(Locale.US) }
                     .filter { it !in CarrierCodesLookingLikeSeats }
@@ -1361,7 +1380,8 @@ object UniversalFlightTicketExtractor {
     }
 
     /**
-     * O(1) HashSet token lookup — replaces compiling a Regex per group member inside a loop.
+     * 1-to-1 greedy passenger-to-member assignment with O(1) HashSet fallback so a single
+     * passenger (e.g., "Mr. Rohan Gupta") never auto-selects two "Rohan" members in the same group.
      */
     private fun matchPassengersToGroupMembersFast(
         extractedPassengers: List<ExtractedFlightPassenger>,
@@ -1369,22 +1389,54 @@ object UniversalFlightTicketExtractor {
         groupMemberNames: List<String>
     ): List<String> {
         if (groupMemberNames.isEmpty()) return emptyList()
-        val wordSet = HashSet<String>(128)
+        val matched = ArrayList<String>(groupMemberNames.size)
+        val claimedIndices = HashSet<Int>()
+
+        // 1. Greedy 1-to-1 matching from each extracted passenger to the best-scoring group member
         for (pax in extractedPassengers) {
-            for (m in AlphanumericWordTokenRegex.findAll(pax.fullName)) {
-                wordSet.add(m.value.lowercase(Locale.US))
+            val paxTokens = AlphanumericWordTokenRegex.findAll(pax.fullName)
+                .map { it.value.lowercase(Locale.US) }
+                .toSet()
+            if (paxTokens.isEmpty()) continue
+            var bestIdx = -1
+            var bestScore = 0
+            for (i in groupMemberNames.indices) {
+                if (i in claimedIndices) continue
+                val cleanMember = groupMemberNames[i].trim()
+                if (cleanMember.isEmpty()) continue
+                val memberTokens = cleanMember.lowercase(Locale.US).split(Regex("""\s+""")).filter { it.length >= 2 }
+                if (memberTokens.isEmpty()) continue
+                val firstToken = memberTokens.first()
+                if (firstToken !in paxTokens) continue
+                val overlapCount = memberTokens.count { it in paxTokens }
+                val score = overlapCount * 100 + (if (memberTokens.size == overlapCount) 25 else 0)
+                if (score > bestScore) {
+                    bestScore = score
+                    bestIdx = i
+                }
+            }
+            if (bestIdx >= 0) {
+                claimedIndices.add(bestIdx)
             }
         }
+
+        if (claimedIndices.isNotEmpty()) {
+            return groupMemberNames.mapIndexedNotNull { idx, m ->
+                if (idx in claimedIndices) m.trim() else null
+            }
+        }
+
+        // 2. Fallback to flatText wordSet if extractedPassengers had no direct token hit
+        val wordSet = HashSet<String>(128)
         for (m in AlphanumericWordTokenRegex.findAll(flatText)) {
             wordSet.add(m.value.lowercase(Locale.US))
         }
-
-        val matched = ArrayList<String>(groupMemberNames.size)
+        val matchedFirstTokens = HashSet<String>()
         for (member in groupMemberNames) {
             val cleanMember = member.trim()
             if (cleanMember.isEmpty()) continue
             val primaryFirstToken = cleanMember.substringBefore(' ').trim().lowercase(Locale.US)
-            if (primaryFirstToken.length >= 2 && primaryFirstToken in wordSet) {
+            if (primaryFirstToken.length >= 2 && primaryFirstToken in wordSet && matchedFirstTokens.add(primaryFirstToken)) {
                 matched.add(cleanMember)
             }
         }

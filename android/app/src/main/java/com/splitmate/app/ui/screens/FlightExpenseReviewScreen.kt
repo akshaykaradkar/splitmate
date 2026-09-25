@@ -411,6 +411,9 @@ fun FlightExpenseReviewScreen(
         val matchedGroupId = existingFlightMatchAnyGroup?.first?.groupId
         if (!matchedGroupId.isNullOrBlank() && activeGroup?.groupId != matchedGroupId) {
             viewModel.selectActiveGroup(matchedGroupId)
+            if (uiState.openedGroupDetailId != null) {
+                viewModel.openGroupDetail(matchedGroupId)
+            }
         }
     }
 

@@ -855,18 +855,18 @@ fun PnrExpenseReviewScreen(
                             ) {
                                 OutlinedTextField(
                                     value = manualFromStationInput,
-                                    onValueChange = { manualFromStationInput = it.uppercase(Locale.US).take(5) },
+                                    onValueChange = { manualFromStationInput = it.uppercase(Locale.US).take(24) },
                                     label = { Text("From Station", fontFamily = FigtreeFontFamily) },
-                                    placeholder = { Text("NDLS", fontFamily = FigtreeFontFamily) },
+                                    placeholder = { Text("NDLS / DELHI", fontFamily = FigtreeFontFamily) },
                                     singleLine = true,
                                     colors = TactilePaperPassTokens.tactileTextFieldColors(),
                                     modifier = Modifier.weight(1f)
                                 )
                                 OutlinedTextField(
                                     value = manualToStationInput,
-                                    onValueChange = { manualToStationInput = it.uppercase(Locale.US).take(5) },
+                                    onValueChange = { manualToStationInput = it.uppercase(Locale.US).take(24) },
                                     label = { Text("To Station", fontFamily = FigtreeFontFamily) },
-                                    placeholder = { Text("MMCT", fontFamily = FigtreeFontFamily) },
+                                    placeholder = { Text("MMCT / MUMBAI", fontFamily = FigtreeFontFamily) },
                                     singleLine = true,
                                     colors = TactilePaperPassTokens.tactileTextFieldColors(),
                                     modifier = Modifier.weight(1f)
@@ -1210,19 +1210,23 @@ fun TactilePaperBoardingPass(
                 ) {
                     Column(horizontalAlignment = Alignment.Start) {
                         Text(
-                            text = originCode,
+                            text = originCode.trim().substringBefore(" ").take(5),
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.Black,
                             fontSize = 30.sp,
                             letterSpacing = (-0.5).sp,
-                            color = Color.White
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = originName,
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 12.sp,
-                            color = Color(0xFFD7E8B6)
+                            color = Color(0xFFD7E8B6),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         if (departureTime.isNotBlank() || departureDate.isNotBlank()) {
                             Spacer(modifier = Modifier.height(4.dp))
@@ -1286,19 +1290,23 @@ fun TactilePaperBoardingPass(
 
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
-                            text = destinationCode,
+                            text = destinationCode.trim().substringBefore(" ").take(5),
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.Black,
                             fontSize = 30.sp,
                             letterSpacing = (-0.5).sp,
-                            color = Color.White
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = destinationName,
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 12.sp,
-                            color = Color(0xFFD7E8B6)
+                            color = Color(0xFFD7E8B6),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         if (arrivalTime.isNotBlank() || arrivalDate.isNotBlank()) {
                             Spacer(modifier = Modifier.height(4.dp))

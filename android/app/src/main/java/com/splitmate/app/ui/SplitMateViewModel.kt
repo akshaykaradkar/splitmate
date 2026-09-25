@@ -494,6 +494,10 @@ class SplitMateViewModel(
         }
     }
 
+    private var lastExpenseCommitMs: Long = 0L
+    private var lastExpenseCommitSignature: String = ""
+    private var lastGroupCreateMs: Long = 0L
+
     /**
      * Commits a Quick Equal Expense from QuickExpenseScreen or PnrExpenseReviewScreen:
      * Strictly divides [totalAmountCents] equally among [selectedMemberIds] with Payer-First Largest Remainder (`0.00¢` drift).
@@ -509,6 +513,14 @@ class SplitMateViewModel(
         val groupMembers = state.activeGroupMembers
         if (groupMembers.isEmpty()) return
 
+        val nowMs = System.currentTimeMillis()
+        val commitSig = "${state.activeGroupId}|${title.trim()}|$totalAmountCents|${selectedMemberIds.sorted().joinToString(",")}"
+        if (commitSig == lastExpenseCommitSignature && (nowMs - lastExpenseCommitMs) < 800L) {
+            return
+        }
+        lastExpenseCommitMs = nowMs
+        lastExpenseCommitSignature = commitSig
+
         // Guard against adding the exact same 6-char Flight PNR or 10-digit Train PNR twice to the group ledger
         val bracketPnr = Regex("""\[PNR:([A-Za-z0-9]{6,12})\]""", RegexOption.IGNORE_CASE)
             .find(title)?.groupValues?.getOrNull(1)?.uppercase(Locale.US)
@@ -523,13 +535,14 @@ class SplitMateViewModel(
                     )
             }
             if (existingExp != null) {
-                // Do NOT count as a new expense — update the earlier logged expense in place
+                // Do NOT count as a new expense — update the earlier logged expense in place with pure Long paise
                 editExistingExpense(
                     expenseId = existingExp.expenseId,
                     newTitle = title,
                     newTotalRupees = totalAmountCents / 100.0,
                     newPayerId = payerMemberId ?: existingExp.payerId,
-                    selectedMemberIds = selectedMemberIds
+                    selectedMemberIds = selectedMemberIds,
+                    newTotalCentsOverride = totalAmountCents
                 )
                 _uiState.update { curr ->
                     curr.copy(statusBannerMessage = "PNR $detectedPnr already added — updated earlier expense without duplicating")
@@ -725,9 +738,13 @@ class SplitMateViewModel(
         iconName: String,
         memberDrafts: List<NewGroupMemberDraft>
     ) {
+        val nowMs = System.currentTimeMillis()
+        if ((nowMs - lastGroupCreateMs) < 800L) return
+        lastGroupCreateMs = nowMs
+
         val cleanGroup = name.toSmartTitleCase().ifEmpty { "New Group" }
         val cleanIcon = iconName.trim().ifEmpty { "Flight" }
-        val groupId = "g_${System.currentTimeMillis()}"
+        val groupId = "g_$nowMs"
         val newGroup = ExpenseGroupEntity(
             groupId = groupId,
             name = cleanGroup,
@@ -747,7 +764,7 @@ class SplitMateViewModel(
             val fName = draft.name.trim()
             if (fName.isEmpty()) null else {
                 val cleanPhone = cleanIndianTenDigitPhone(draft.cleanPhone)
-                val autoUpiId = if (cleanPhone.length == 10) "${cleanPhone}@upi" else ""
+                val autoUpiId = if (cleanPhone.length >= 10) "${cleanPhone}@upi" else ""
                 val style = draft.presentationStyle.ifBlank { "Neutral" }
                 GroupMemberEntity(
                     memberId = "${groupId}_f$index",
@@ -868,25 +885,35 @@ class SplitMateViewModel(
         }
     }
 
+    fun canSafelyRemoveMember(memberId: String): Boolean {
+        val state = _uiState.value
+        val hasPayerHistory = state.expenses.any { it.payerId == memberId }
+        val hasSplitHistory = state.splits.any { it.memberId == memberId }
+        val hasSettlementHistory = state.settlements.any { it.fromMemberId == memberId || it.toMemberId == memberId }
+        return !hasPayerHistory && !hasSplitHistory && !hasSettlementHistory
+    }
+
     fun addContactsToGroup(groupId: String, contacts: List<DeviceContact>) {
         if (contacts.isEmpty()) return
         val existingMembers = _uiState.value.members.filter { it.groupId == groupId }
-        val existingPhones = existingMembers.map { cleanIndianTenDigitPhone(it.upiId) }.filter { it.isNotEmpty() }.toSet()
+        val existingPhones = existingMembers.map { cleanIndianTenDigitPhone(it.upiId.substringBefore("@")) }.filter { it.isNotEmpty() }.toSet()
         val existingNames = existingMembers.map { it.name.trim().lowercase() }.toSet()
         val now = System.currentTimeMillis()
+        val seenBatchPhones = HashSet<String>()
+        val seenBatchPhonelessNames = HashSet<String>()
         val newMembers = contacts.mapIndexedNotNull { idx, c ->
             val cleanName = c.name.trim()
             val cleanPhone = cleanIndianTenDigitPhone(c.cleanPhone)
-            if (cleanName.isEmpty()) null
-            else if (cleanPhone.isNotEmpty() && existingPhones.contains(cleanPhone)) null
-            else if (existingNames.contains(cleanName.lowercase())) null
+            val isDuplicatePhone = cleanPhone.isNotEmpty() && (existingPhones.contains(cleanPhone) || !seenBatchPhones.add(cleanPhone))
+            val isDuplicatePhoneLessName = cleanPhone.isEmpty() && (existingNames.contains(cleanName.lowercase()) || !seenBatchPhonelessNames.add(cleanName.lowercase()))
+            if (cleanName.isEmpty() || isDuplicatePhone || isDuplicatePhoneLessName) null
             else {
                 GroupMemberEntity(
                     memberId = "${groupId}_c_${now}_$idx",
                     groupId = groupId,
                     name = cleanName,
                     avatarSeed = "$cleanName|Neutral",
-                    upiId = if (cleanPhone.length == 10) "${cleanPhone}@upi" else "",
+                    upiId = if (cleanPhone.length >= 10) "${cleanPhone}@upi" else "",
                     isCurrentUser = false
                 )
             }
@@ -1001,7 +1028,8 @@ class SplitMateViewModel(
         newTitle: String,
         newTotalRupees: Double,
         newPayerId: String,
-        selectedMemberIds: List<String>? = null
+        selectedMemberIds: List<String>? = null,
+        newTotalCentsOverride: Long? = null
     ) {
         val state = _uiState.value
         val existing = state.expenses.find { it.expenseId == expenseId } ?: return
@@ -1021,7 +1049,7 @@ class SplitMateViewModel(
             }
         }
 
-        val newTotalCents = kotlin.math.round(newTotalRupees * 100.0).toLong().coerceAtLeast(1L)
+        val newTotalCents = (newTotalCentsOverride ?: kotlin.math.round(newTotalRupees * 100.0).toLong()).coerceAtLeast(1L)
 
         val existingSplits = state.splits.filter { it.expenseId == expenseId && it.finalOwedCents > 0L }
         val groupMembers = state.members.filter { it.groupId == existing.groupId }

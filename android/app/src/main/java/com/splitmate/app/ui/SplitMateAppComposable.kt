@@ -281,6 +281,9 @@ fun SplitMateMainDashboardScaffold(
                         if (existingMatch != null) {
                             val (existingExp, matchedGroup) = existingMatch
                             viewModel.selectActiveGroup(existingExp.groupId)
+                            if (uiState.openedGroupDetailId != null) {
+                                viewModel.openGroupDetail(existingExp.groupId)
+                            }
                             Toast.makeText(
                                 context,
                                 "Already added! PNR ${extracted.pnr} (${matchedGroup?.name ?: "Group"}) — showing earlier expense.",
@@ -3503,7 +3506,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                         it.fromMemberId == leg.counterpartyMemberId && it.toMemberId == summary.memberId
                                     }
                                     val fromRoomMember = uiState.members.find { it.memberId == leg.counterpartyMemberId }
-                                    val debtorPhone = fromRoomMember?.upiId?.substringBefore('@')?.replace(Regex("[^0-9]"), "") ?: ""
+                                    val debtorPhone = cleanIndianTenDigitPhone(fromRoomMember?.upiId?.substringBefore('@') ?: "")
 
                                     Surface(
                                         shape = RoundedCornerShape(14.dp),
@@ -3564,18 +3567,27 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                     modifier = Modifier.fillMaxWidth(),
                                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                                 ) {
-                                                    if (summary.isCurrentUser && debtorPhone.length == 10) {
+                                                    if (summary.isCurrentUser && debtorPhone.length >= 10) {
                                                         OutlinedButton(
                                                             onClick = {
+                                                                val waPhone = if (debtorPhone.startsWith("+")) {
+                                                                    debtorPhone.removePrefix("+")
+                                                                } else {
+                                                                    "91$debtorPhone"
+                                                                }
                                                                 val whatsappUri = Uri.parse(
-                                                                    "https://api.whatsapp.com/send?phone=91" +
-                                                                        debtorPhone +
+                                                                    "https://api.whatsapp.com/send?phone=" +
+                                                                        waPhone +
                                                                         "&text=" +
                                                                         Uri.encode(
                                                                             "Hey ${leg.counterpartyName}, friendly reminder for your ₹${matchingTransfer.amount} share on SplitMate."
                                                                         )
                                                                 )
-                                                                context.startActivity(Intent(Intent.ACTION_VIEW, whatsappUri))
+                                                                runCatching {
+                                                                    context.startActivity(Intent(Intent.ACTION_VIEW, whatsappUri))
+                                                                }.onFailure {
+                                                                    Toast.makeText(context, "WhatsApp is not installed on this device", Toast.LENGTH_SHORT).show()
+                                                                }
                                                             },
                                                             shape = SplitMateTheme.RadiusButton,
                                                             colors = ButtonDefaults.outlinedButtonColors(contentColor = SplitMateTheme.PrimaryDark),

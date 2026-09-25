@@ -146,6 +146,7 @@ abstract class SplitMateRoomDatabase : RoomDatabase() {
                     "splitmate_native_room.db"
                 )
                     .addMigrations(MIGRATION_4_5)
+                    .fallbackToDestructiveMigrationFrom(1, 2, 3)
                     .fallbackToDestructiveMigrationOnDowngrade()
                     .build()
                     .also { INSTANCE = it }
