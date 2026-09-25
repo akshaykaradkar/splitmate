@@ -18,9 +18,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -1833,9 +1836,44 @@ fun AnimatedLuxuryAirlineBoardingPass(
         notchYPercent = 0.765f
     )
 
+    var cardTiltDragPx by remember { mutableFloatStateOf(0f) }
+    val cardTiltDeg by animateFloatAsState(
+        targetValue = (cardTiltDragPx * 0.14f).coerceIn(-22f, 22f),
+        animationSpec = spring(dampingRatio = 0.68f, stiffness = 360f),
+        label = "FlightPass3DTiltY"
+    )
+    val foilInfinite = rememberInfiniteTransition(label = "FlightPassFoilShimmer")
+    val ambientFoilPhase by foilInfinite.animateFloat(
+        initialValue = -0.25f,
+        targetValue = 1.25f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 3600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "FlightAmbientFoilSweep"
+    )
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragEnd = { cardTiltDragPx = 0f },
+                    onDragCancel = { cardTiltDragPx = 0f },
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        val nextPx = (cardTiltDragPx + dragAmount).coerceIn(-180f, 180f)
+                        if ((cardTiltDragPx <= 0f && nextPx > 0f) || (cardTiltDragPx >= 0f && nextPx < 0f)) {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        }
+                        cardTiltDragPx = nextPx
+                    }
+                )
+            }
+            .graphicsLayer {
+                rotationY = cardTiltDeg
+                cameraDistance = 15f * density
+            }
             .shadow(
                 elevation = cardElevation,
                 shape = passShape,
@@ -1845,6 +1883,34 @@ fun AnimatedLuxuryAirlineBoardingPass(
             .clip(passShape)
             .background(FlightPassTokens.TicketPaperWhite)
             .border(1.2.dp, FlightPassTokens.TicketPaperEdge, passShape)
+            .drawWithContent {
+                drawContent()
+                val isTilting = kotlin.math.abs(cardTiltDeg) > 0.8f
+                val foilCenterFraction = if (isTilting) {
+                    0.5f + (cardTiltDeg / 28f)
+                } else {
+                    ambientFoilPhase
+                }
+                val glintCenterX = size.width * foilCenterFraction
+                val bandHalfWidth = if (isTilting) 130.dp.toPx() else 95.dp.toPx()
+                val goldAlpha = if (isTilting) 0.38f else 0.18f
+                val whiteAlpha = if (isTilting) 0.65f else 0.32f
+                val holoAlpha = if (isTilting) 0.34f else 0.16f
+                drawRect(
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color(0xFFF59E0B).copy(alpha = goldAlpha),
+                            Color.White.copy(alpha = whiteAlpha),
+                            Color(0xFF6366F1).copy(alpha = holoAlpha),
+                            Color(0xFF10B981).copy(alpha = goldAlpha * 0.7f),
+                            Color.Transparent
+                        ),
+                        start = Offset(glintCenterX - bandHalfWidth, 0f),
+                        end = Offset(glintCenterX + bandHalfWidth, size.height)
+                    )
+                )
+            }
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             // ------------------------------------------------------------------

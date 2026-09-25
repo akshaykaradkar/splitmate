@@ -1292,11 +1292,19 @@ fun LedgersDashboardScreen(
                 ) {
                     mutableStateOf(flightPnrExpensesInGroup.isNotEmpty() && trainPnrExpensesInGroup.isEmpty())
                 }
-                var dragRotationDelta by remember { mutableFloatStateOf(0f) }
+                var rawHorizontalDragPx by remember { mutableFloatStateOf(0f) }
                 val travelPassHaptic = LocalHapticFeedback.current
 
+                // Bidirectional drag progress (0°..175° regardless of whether user swipes ← Left or → Right)
+                val dragProgressDeg = (kotlin.math.abs(rawHorizontalDragPx) * 0.68f).coerceIn(0f, 175f)
+                val targetFlipDeg = if (isFlightSide) {
+                    (180f - dragProgressDeg).coerceIn(0f, 180f)
+                } else {
+                    dragProgressDeg.coerceIn(0f, 180f)
+                }
+
                 val flipRotationY by animateFloatAsState(
-                    targetValue = ((if (isFlightSide) 180f else 0f) + dragRotationDelta).coerceIn(0f, 180f),
+                    targetValue = targetFlipDeg,
                     animationSpec = spring(
                         dampingRatio = 0.74f,
                         stiffness = 340f
@@ -1304,6 +1312,18 @@ fun LedgersDashboardScreen(
                     label = "TravelPassCardFlipY"
                 )
                 val showingFlightFace = flipRotationY >= 90f
+
+                // Ambient slow foil sweep so the Warm Gold + Holographic Foil Glint is visible at rest & intensifies on drag/flip
+                val foilAmbientTransition = rememberInfiniteTransition(label = "TravelPassFoilShimmer")
+                val ambientSweepPhase by foilAmbientTransition.animateFloat(
+                    initialValue = -0.25f,
+                    targetValue = 1.25f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(durationMillis = 3400, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "AmbientFoilSweep"
+                )
 
                 // Fire a crisp mechanical haptic tick right as the cardstock crosses the 90-degree perpendicular plane
                 LaunchedEffect(showingFlightFace) {
@@ -1324,48 +1344,58 @@ fun LedgersDashboardScreen(
                 Surface(
                     shape = SplitMateTheme.RadiusCard,
                     color = cardBgColor,
-                    border = BorderStroke(1.dp, cardBorderColor),
+                    border = BorderStroke(1.2.dp, cardBorderColor),
                     modifier = Modifier
                         .fillMaxWidth()
                         .pointerInput(isFlightSide) {
                             detectHorizontalDragGestures(
                                 onDragEnd = {
-                                    if (kotlin.math.abs(dragRotationDelta) > 42f) {
+                                    if (kotlin.math.abs(rawHorizontalDragPx) * 0.68f > 28f) {
                                         isFlightSide = !isFlightSide
                                     }
-                                    dragRotationDelta = 0f
+                                    rawHorizontalDragPx = 0f
                                 },
-                                onDragCancel = { dragRotationDelta = 0f },
+                                onDragCancel = { rawHorizontalDragPx = 0f },
                                 onHorizontalDrag = { change, dragAmount ->
                                     change.consume()
-                                    val directionSign = if (isFlightSide) 1f else -1f
-                                    dragRotationDelta = (dragRotationDelta + (-dragAmount * 0.48f * directionSign))
-                                        .coerceIn(-160f, 160f)
+                                    rawHorizontalDragPx = (rawHorizontalDragPx + dragAmount).coerceIn(-320f, 320f)
                                 }
                             )
                         }
                         .graphicsLayer {
                             rotationY = flipRotationY
-                            cameraDistance = 16f * density
+                            cameraDistance = 15f * density
                         }
                         .drawWithContent {
                             drawContent()
-                            // Dynamic diagonal specular foil glint as the cardstock turns in virtual light
-                            val glintFraction = (flipRotationY % 180f) / 180f
-                            if (glintFraction in 0.03f..0.97f) {
-                                val glintCenter = size.width * glintFraction
-                                drawRect(
-                                    brush = Brush.linearGradient(
-                                        colors = listOf(
-                                            Color.Transparent,
-                                            Color.White.copy(alpha = 0.17f),
-                                            Color.Transparent
-                                        ),
-                                        start = Offset(glintCenter - 95.dp.toPx(), 0f),
-                                        end = Offset(glintCenter + 95.dp.toPx(), size.height)
-                                    )
-                                )
+                            // High-contrast Warm Gold + Holographic Foil Glint (combines 3D flip angle + ambient sweep)
+                            val activeRotationFraction = (flipRotationY % 180f) / 180f
+                            val isActivelyTurning = activeRotationFraction in 0.02f..0.98f
+                            val effectiveFoilFraction = if (isActivelyTurning) {
+                                activeRotationFraction
+                            } else {
+                                ambientSweepPhase
                             }
+                            val glintCenter = size.width * effectiveFoilFraction
+                            val bandHalfWidth = if (isActivelyTurning) 125.dp.toPx() else 95.dp.toPx()
+                            val goldAlpha = if (isActivelyTurning) 0.42f else 0.22f
+                            val specularWhiteAlpha = if (isActivelyTurning) 0.72f else 0.38f
+                            val holoPeriwinkleAlpha = if (isActivelyTurning) 0.36f else 0.18f
+
+                            drawRect(
+                                brush = Brush.linearGradient(
+                                    colors = listOf(
+                                        Color.Transparent,
+                                        Color(0xFFF59E0B).copy(alpha = goldAlpha),
+                                        Color.White.copy(alpha = specularWhiteAlpha),
+                                        Color(0xFF6366F1).copy(alpha = holoPeriwinkleAlpha),
+                                        Color(0xFF10B981).copy(alpha = goldAlpha * 0.75f),
+                                        Color.Transparent
+                                    ),
+                                    start = Offset(glintCenter - bandHalfWidth, 0f),
+                                    end = Offset(glintCenter + bandHalfWidth, size.height)
+                                )
+                            )
                         }
                 ) {
                     Box(
@@ -3427,7 +3457,10 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                             label = "MaxHeapInspectorPillCorner"
                         )
 
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Box(
                                 modifier = Modifier
                                     .size(42.dp)
@@ -3444,62 +3477,37 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Trip Settlement Summary",
-                                    fontFamily = SplitMateTheme.FontDisplay,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = SplitMateTheme.PrimaryDark
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "Trip Settlement Summary",
+                                        fontFamily = SplitMateTheme.FontDisplay,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = SplitMateTheme.PrimaryDark
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    // Tiny unobtrusive ⓘ icon next to Settle Up — hides the Max-Heap Graph Inspector until tapped
+                                    Surface(
+                                        onClick = { showMaxHeapGraphInspector = !showMaxHeapGraphInspector },
+                                        shape = RoundedCornerShape(inspectorCornerRadius),
+                                        color = if (showMaxHeapGraphInspector) Color(0xFF365314) else SplitMateTheme.SageSurface,
+                                        border = BorderStroke(1.dp, Color(0xFF416913).copy(alpha = 0.45f)),
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Info,
+                                                contentDescription = "Why were debts simplified?",
+                                                tint = if (showMaxHeapGraphInspector) Color(0xFFD7E8B6) else SplitMateTheme.SageText,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
+                                    }
+                                }
                                 Text(
                                     text = "Quick view of who receives and who needs to pay",
                                     fontSize = 11.sp,
                                     color = SplitMateTheme.TextSecondary
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        // Generative Progressive Disclosure Pill (size="xs" 32.dp with GM3 corner morphing)
-                        Surface(
-                            onClick = { showMaxHeapGraphInspector = !showMaxHeapGraphInspector },
-                            shape = RoundedCornerShape(inspectorCornerRadius),
-                            color = if (showMaxHeapGraphInspector) Color(0xFF365314) else SplitMateTheme.SageSurface,
-                            border = BorderStroke(1.dp, Color(0xFF416913).copy(alpha = 0.45f)),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 32.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.AutoGraph,
-                                        contentDescription = null,
-                                        tint = if (showMaxHeapGraphInspector) Color(0xFFD7E8B6) else SplitMateTheme.SageText,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "Compressed $rawPairwiseIouCount raw IOUs → $simplifiedTransferCount transfers",
-                                        fontFamily = SplitMateTheme.FontRounded,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = if (showMaxHeapGraphInspector) Color.White else SplitMateTheme.SageText
-                                    )
-                                }
-                                Text(
-                                    text = if (showMaxHeapGraphInspector) "Hide Graph ▲" else "Inspect Graph ▼",
-                                    fontFamily = SplitMateTheme.FontRounded,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (showMaxHeapGraphInspector) Color(0xFFD7E8B6) else SplitMateTheme.SageText
                                 )
                             }
                         }
