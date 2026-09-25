@@ -937,14 +937,25 @@ fun UpiExpressPaymentSheet(
                                 shape = CircleShape,
                                 color = SplitMateTheme.SageSurface
                             ) {
-                                Text(
-                                    text = "Saved",
-                                    fontFamily = FigtreeFontFamily,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = SplitMateTheme.SageText,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.CheckCircle,
+                                        contentDescription = null,
+                                        tint = SplitMateTheme.SageText,
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = "Saved",
+                                        fontFamily = FigtreeFontFamily,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = SplitMateTheme.SageText
+                                    )
+                                }
                             }
                         }
                     },

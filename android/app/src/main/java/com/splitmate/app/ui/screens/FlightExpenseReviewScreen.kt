@@ -1648,17 +1648,28 @@ fun PnrSyncStatusBanner(
                 color = FlightPassTokens.SkyBlue,
                 border = BorderStroke(1.dp, FlightPassTokens.SkyBlueBorder)
             ) {
-                Text(
-                    text = if (energyState == com.splitmate.app.ui.components.Gm3EnergyState.IDLE) {
-                        rightStatusLabel
-                    } else {
-                        "${energyState.label} · $rightStatusLabel"
-                    },
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = FlightPassTokens.SkyBlueText,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.AutoAwesome,
+                        contentDescription = null,
+                        tint = FlightPassTokens.SkyBlueText,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (energyState == com.splitmate.app.ui.components.Gm3EnergyState.IDLE) {
+                            rightStatusLabel
+                        } else {
+                            "${energyState.label} · $rightStatusLabel"
+                        },
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = FlightPassTokens.SkyBlueText
+                    )
+                }
             }
         }
     }

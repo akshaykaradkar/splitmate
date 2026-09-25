@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Hotel
 import androidx.compose.material.icons.rounded.LocalBar
@@ -236,13 +237,26 @@ fun EditLoggedExpenseDialog(
                                 shape = SplitMateTheme.RadiusBadge,
                                 color = if (isIncluded) SplitMateTheme.SageSurface else SplitMateTheme.SurfaceMuted
                             ) {
-                                Text(
-                                    text = if (mbr.isCurrentUser) "${mbr.name} (You)" else mbr.name,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isIncluded) SplitMateTheme.SageText else SplitMateTheme.TextSecondary,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (isIncluded) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            tint = SplitMateTheme.SageText,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                    }
+                                    Text(
+                                        text = if (mbr.isCurrentUser) "${mbr.name} (You)" else mbr.name,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isIncluded) SplitMateTheme.SageText else SplitMateTheme.TextSecondary
+                                    )
+                                }
                             }
                         }
                     }

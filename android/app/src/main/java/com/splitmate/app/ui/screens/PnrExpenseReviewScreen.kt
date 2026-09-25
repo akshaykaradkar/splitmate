@@ -722,14 +722,25 @@ fun PnrExpenseReviewScreen(
                                 shape = RoundedCornerShape(10.dp),
                                 color = if (isActiveTicket) TactilePaperPassTokens.SageConfirmedBg else Color.Transparent
                             ) {
-                                Text(
-                                    text = "PNR $extractedPnr · ${formatPaiseDisplay(exp.totalAmountCents)} ${if (isActiveTicket) "(Editing below)" else "(Tap to view pass)"}",
-                                    fontFamily = FigtreeFontFamily,
-                                    fontWeight = if (isActiveTicket) FontWeight.Bold else FontWeight.SemiBold,
-                                    fontSize = 12.sp,
-                                    color = if (isActiveTicket) TactilePaperPassTokens.SageConfirmedText else TactilePaperPassTokens.InkSecondary,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.CheckCircle,
+                                        contentDescription = null,
+                                        tint = if (isActiveTicket) TactilePaperPassTokens.SageConfirmedText else TactilePaperPassTokens.InkSecondary,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(
+                                        text = "PNR $extractedPnr · ${formatPaiseDisplay(exp.totalAmountCents)} ${if (isActiveTicket) "(Editing below)" else "(Tap to view pass)"}",
+                                        fontFamily = FigtreeFontFamily,
+                                        fontWeight = if (isActiveTicket) FontWeight.Bold else FontWeight.SemiBold,
+                                        fontSize = 12.sp,
+                                        color = if (isActiveTicket) TactilePaperPassTokens.SageConfirmedText else TactilePaperPassTokens.InkSecondary
+                                    )
+                                }
                             }
                         }
                     }
