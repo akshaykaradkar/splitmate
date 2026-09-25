@@ -283,11 +283,14 @@ fun SplitMateMainDashboardScaffold(
                             viewModel.selectActiveGroup(existingExp.groupId)
                             Toast.makeText(
                                 context,
-                                "PNR ${extracted.pnr} is already added in ${matchedGroup?.name ?: "Group"}! Showing earlier expense.",
+                                "Already added! PNR ${extracted.pnr} (${matchedGroup?.name ?: "Group"}) — showing earlier expense.",
                                 Toast.LENGTH_LONG
                             ).show()
+                            val cachedEarlierFlight = com.splitmate.app.data.PnrNetworkRepository.loadConfirmedFlightTicketResult(context, extracted.pnr)
+                            activeFlightTicketResult = cachedEarlierFlight ?: extracted
+                        } else {
+                            activeFlightTicketResult = extracted
                         }
-                        activeFlightTicketResult = extracted
                     } else {
                         Toast.makeText(
                             context,
@@ -3068,32 +3071,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
         }
     }
 
-    var activeUpiPaymentTransfer by remember { mutableStateOf<SettlementTransferUiModel?>(null) }
-    activeUpiPaymentTransfer?.let { transferModel ->
-        val recipientMember = uiState.members.find { it.memberId == transferModel.toMemberId }
-        val activeGrpName = uiState.groups.find { it.groupId == uiState.activeGroupId }?.name?.toSmartTitleCase() ?: "SplitMate Group"
-        UpiExpressPaymentSheet(
-            transferModel = transferModel,
-            groupName = activeGrpName,
-            initialSavedUpiId = recipientMember?.upiId?.ifBlank { transferModel.upiId } ?: transferModel.upiId,
-            onSaveMemberUpi = { newUpiId ->
-                if (recipientMember != null) {
-                    viewModel.updateFriendUpi(
-                        memberId = recipientMember.memberId,
-                        newName = recipientMember.name,
-                        newUpiId = newUpiId,
-                        newAvatarSeed = recipientMember.avatarSeed
-                    )
-                }
-            },
-            onMarkSettled = {
-                viewModel.markGreedyTransferSettled(transferModel.transfer)
-            },
-            onDismiss = {
-                activeUpiPaymentTransfer = null
-            }
-        )
-    }
+    // Removed unlicensed P2P UPI payment sheet per NPCI/Google Pay security policy to avoid user confusion
 
     var editingMemberInSettle by remember { mutableStateOf<GroupMemberEntity?>(null) }
     editingMemberInSettle?.let { targetMember ->
@@ -3586,33 +3564,6 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                     modifier = Modifier.fillMaxWidth(),
                                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                                 ) {
-                                                    Button(
-                                                        onClick = { activeUpiPaymentTransfer = matchingTransfer },
-                                                        shape = SplitMateTheme.RadiusButton,
-                                                        colors = ButtonDefaults.buttonColors(
-                                                            containerColor = SplitMateTheme.PrimaryDark,
-                                                            contentColor = SplitMateTheme.ScreenBg
-                                                        ),
-                                                        modifier = Modifier
-                                                            .weight(1.25f)
-                                                            .height(36.dp),
-                                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
-                                                    ) {
-                                                        Icon(
-                                                            imageVector = Icons.Rounded.AccountBalanceWallet,
-                                                            contentDescription = null,
-                                                            modifier = Modifier.size(14.dp)
-                                                        )
-                                                        Spacer(modifier = Modifier.width(5.dp))
-                                                        Text(
-                                                            text = "Pay via UPI",
-                                                            fontFamily = SplitMateTheme.FontRounded,
-                                                            fontWeight = FontWeight.Bold,
-                                                            fontSize = 11.sp,
-                                                            maxLines = 1
-                                                        )
-                                                    }
-
                                                     if (summary.isCurrentUser && debtorPhone.length == 10) {
                                                         OutlinedButton(
                                                             onClick = {
@@ -3629,7 +3580,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                             shape = SplitMateTheme.RadiusButton,
                                                             colors = ButtonDefaults.outlinedButtonColors(contentColor = SplitMateTheme.PrimaryDark),
                                                             modifier = Modifier
-                                                                .weight(1.1f)
+                                                                .weight(1f)
                                                                 .height(36.dp),
                                                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                                                         ) {
@@ -3650,17 +3601,17 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                         }
                                                     }
 
-                                                    OutlinedButton(
+                                                    Button(
                                                         onClick = { viewModel.markGreedyTransferSettled(matchingTransfer.transfer) },
                                                         shape = SplitMateTheme.RadiusButton,
-                                                        colors = ButtonDefaults.outlinedButtonColors(
-                                                            containerColor = SplitMateTheme.SurfaceWhite,
-                                                            contentColor = SplitMateTheme.PrimaryDark
+                                                        colors = ButtonDefaults.buttonColors(
+                                                            containerColor = SplitMateTheme.PrimaryDark,
+                                                            contentColor = SplitMateTheme.ScreenBg
                                                         ),
                                                         modifier = Modifier
                                                             .weight(1f)
                                                             .height(36.dp),
-                                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
                                                     ) {
                                                         Icon(
                                                             imageVector = Icons.Rounded.Check,
@@ -3899,7 +3850,6 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                     }
                                                 }
 
-                                                // Always show Pay via UPI (opens Express Payment Sheet with 10-digit phone -> UPI app prefill) + Mark Paid on every outgoing leg
                                                 if (matchingTransfer != null) {
                                                     Spacer(modifier = Modifier.height(8.dp))
                                                     Row(
@@ -3907,37 +3857,11 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                                     ) {
                                                         Button(
-                                                            onClick = { activeUpiPaymentTransfer = matchingTransfer },
+                                                            onClick = { viewModel.markGreedyTransferSettled(matchingTransfer.transfer) },
                                                             shape = SplitMateTheme.RadiusButton,
                                                             colors = ButtonDefaults.buttonColors(
                                                                 containerColor = SplitMateTheme.PrimaryDark,
                                                                 contentColor = SplitMateTheme.ScreenBg
-                                                            ),
-                                                            modifier = Modifier
-                                                                .weight(1.25f)
-                                                                .height(36.dp),
-                                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
-                                                        ) {
-                                                            Icon(
-                                                                imageVector = Icons.Rounded.AccountBalanceWallet,
-                                                                contentDescription = null,
-                                                                modifier = Modifier.size(14.dp)
-                                                            )
-                                                            Spacer(modifier = Modifier.width(5.dp))
-                                                            Text(
-                                                                text = "Pay via UPI",
-                                                                fontFamily = SplitMateTheme.FontRounded,
-                                                                fontWeight = FontWeight.Bold,
-                                                                fontSize = 11.sp
-                                                            )
-                                                        }
-
-                                                        OutlinedButton(
-                                                            onClick = { viewModel.markGreedyTransferSettled(matchingTransfer.transfer) },
-                                                            shape = SplitMateTheme.RadiusButton,
-                                                            colors = ButtonDefaults.outlinedButtonColors(
-                                                                containerColor = SplitMateTheme.SurfaceWhite,
-                                                                contentColor = SplitMateTheme.PrimaryDark
                                                             ),
                                                             modifier = Modifier
                                                                 .weight(1f)

@@ -838,66 +838,6 @@ fun FlightExpenseReviewScreen(
                 contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // 0. ALREADY ADDED DEDUPLICATION BANNER (When Same PDF / Same PNR Is Uploaded Again)
-                if (existingFlightExpenseInGroup != null) {
-                    item {
-                        Surface(
-                            shape = RoundedCornerShape(FlightPassTokens.RadiusCardCorner),
-                            color = FlightPassTokens.SkyBlue,
-                            border = BorderStroke(1.5.dp, FlightPassTokens.SkyBlueBorder),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.CheckCircle,
-                                            contentDescription = null,
-                                            tint = FlightPassTokens.AviationNavy,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Text(
-                                            text = "Already Added · Showing Earlier Expense",
-                                            fontWeight = FontWeight.ExtraBold,
-                                            fontSize = 13.5.sp,
-                                            color = FlightPassTokens.AviationNavy
-                                        )
-                                    }
-                                    Surface(
-                                        onClick = { onConfirmAndAddToLedger(totalAirfareRupees) },
-                                        shape = FlightPassTokens.RadiusPill,
-                                        color = if (SplitMateTheme.isDark) Color(0xFF282552) else FlightPassTokens.AviationNavy
-                                    ) {
-                                        Text(
-                                            text = "Open in Group →",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = Color.White,
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                        )
-                                    }
-                                }
-                                Text(
-                                    text = "PNR $pnrCode is already logged in ${activeGroup?.name ?: "this group"} (${formatFlightPaiseExact(existingFlightExpenseInGroup.totalAmountCents)} paid by $payerMemberName). Uploading this PDF again will NOT count as a new expense — you are viewing the earlier split below.",
-                                    fontSize = 11.5.sp,
-                                    lineHeight = 16.sp,
-                                    color = FlightPassTokens.TextMuted
-                                )
-                            }
-                        }
-                    }
-                }
-
                 // 1. PNR SYNC PILL
                 item {
                     val subtitleInfo = buildString {

@@ -1294,8 +1294,33 @@ object UniversalFlightTicketExtractor {
             }
         }
 
+        // Deduplicate wrapped table repeats where a single passenger appears as both full name
+        // ("Priyanka Jagannath Morye" in Booking Details) and wrapped first-name ("Priyanka" in Fare Breakup)
+        val rawCandidates = passengers.values.toList()
+        val deduplicatedList = ArrayList<ExtractedFlightPassenger>(rawCandidates.size)
+        for (cand in rawCandidates) {
+            val candTokens = cand.fullName.lowercase(Locale.US).split(Regex("""\s+""")).filter { it.isNotBlank() }
+            val longerMatch = rawCandidates.firstOrNull { other ->
+                if (other === cand) return@firstOrNull false
+                val otherTokens = other.fullName.lowercase(Locale.US).split(Regex("""\s+""")).filter { it.isNotBlank() }
+                otherTokens.size > candTokens.size &&
+                    candTokens.isNotEmpty() &&
+                    otherTokens.first() == candTokens.first() &&
+                    otherTokens.containsAll(candTokens)
+            }
+            if (longerMatch != null) {
+                // If the shorter duplicate captured a valid seat that the longer entry missed, transfer it
+                val existingIdx = deduplicatedList.indexOfFirst { it.fullName.equals(longerMatch.fullName, ignoreCase = true) }
+                if (existingIdx >= 0 && deduplicatedList[existingIdx].seatNumber == "-" && cand.seatNumber != "-") {
+                    deduplicatedList[existingIdx] = deduplicatedList[existingIdx].copy(seatNumber = cand.seatNumber)
+                }
+                continue
+            }
+            deduplicatedList.add(cand)
+        }
+
         // If passenger name is in 'Booking Details' / 'Fare Breakup' while 'Seat No' (e.g. 10A) is in 'Itinerary' table
-        val resultList = passengers.values.toMutableList()
+        val resultList = deduplicatedList.toMutableList()
         if (resultList.isNotEmpty() && resultList.all { it.seatNumber == "-" }) {
             val seatSectionIdx = flatText.indexOf("Seat", ignoreCase = true)
             if (seatSectionIdx >= 0) {

@@ -416,31 +416,75 @@ fun formatTenDigitIndianPhone(cleanPhone: String): String {
 }
 
 fun queryAllDeviceContacts(context: Context): List<DeviceContact> {
-    val contactsByPhone = linkedMapOf<String, DeviceContact>()
+    val contactsMap = linkedMapOf<String, DeviceContact>()
+    val seenNames = HashSet<String>()
     try {
-        val projection = arrayOf(
+        // 1. Query all Phone rows across all synced accounts (Google, Device, SIM, WhatsApp, Exchange) without 500-row cap
+        val phoneProjection = arrayOf(
+            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME_PRIMARY,
             ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
             ContactsContract.CommonDataKinds.Phone.NUMBER
         )
         context.contentResolver.query(
             ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-            projection,
-            "${ContactsContract.CommonDataKinds.Phone.HAS_PHONE_NUMBER} = 1",
+            phoneProjection,
             null,
-            "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} ASC"
+            null,
+            "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME_PRIMARY} COLLATE NOCASE ASC"
         )?.use { cursor ->
-            val nameIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
-            val numberIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+            val primaryNameIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME_PRIMARY)
+            val altNameIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+            val numberIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
             while (cursor.moveToNext()) {
-                if (contactsByPhone.size >= 500) break
-                val rawName = if (nameIndex >= 0) cursor.getString(nameIndex).orEmpty().trim() else ""
-                val rawNumber = if (numberIndex >= 0) cursor.getString(numberIndex).orEmpty().trim() else ""
-                val clean10 = cleanIndianTenDigitPhone(rawNumber)
-                if (rawName.isNotEmpty() && clean10.length == 10 && !contactsByPhone.containsKey(clean10)) {
-                    contactsByPhone[clean10] = DeviceContact(
+                val primaryName = if (primaryNameIdx >= 0) cursor.getString(primaryNameIdx).orEmpty().trim() else ""
+                val altName = if (altNameIdx >= 0) cursor.getString(altNameIdx).orEmpty().trim() else ""
+                val rawName = primaryName.ifBlank { altName }
+                val rawNumber = if (numberIdx >= 0) cursor.getString(numberIdx).orEmpty().trim() else ""
+                val cleanPhone = cleanIndianTenDigitPhone(rawNumber).ifBlank {
+                    rawNumber.filter { it.isDigit() }
+                }
+                if (rawName.isNotEmpty() && cleanPhone.isNotEmpty()) {
+                    val dedupKey = "${rawName.lowercase()}|$cleanPhone"
+                    seenNames.add(rawName.lowercase())
+                    if (!contactsMap.containsKey(dedupKey)) {
+                        contactsMap[dedupKey] = DeviceContact(
+                            name = rawName,
+                            cleanPhone = cleanPhone,
+                            formattedPhone = formatTenDigitIndianPhone(cleanPhone)
+                        )
+                    }
+                }
+            }
+        }
+
+        // 2. Also include any Contacts from ContactsContract.Contacts.CONTENT_URI that had no phone row above
+        val contactsProjection = arrayOf(
+            ContactsContract.Contacts._ID,
+            ContactsContract.Contacts.DISPLAY_NAME_PRIMARY,
+            ContactsContract.Contacts.DISPLAY_NAME
+        )
+        context.contentResolver.query(
+            ContactsContract.Contacts.CONTENT_URI,
+            contactsProjection,
+            null,
+            null,
+            "${ContactsContract.Contacts.DISPLAY_NAME_PRIMARY} COLLATE NOCASE ASC"
+        )?.use { cCursor ->
+            val idIdx = cCursor.getColumnIndex(ContactsContract.Contacts._ID)
+            val pNameIdx = cCursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME_PRIMARY)
+            val dNameIdx = cCursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME)
+            while (cCursor.moveToNext()) {
+                val cid = if (idIdx >= 0) cCursor.getString(idIdx).orEmpty().trim() else ""
+                val pName = if (pNameIdx >= 0) cCursor.getString(pNameIdx).orEmpty().trim() else ""
+                val dName = if (dNameIdx >= 0) cCursor.getString(dNameIdx).orEmpty().trim() else ""
+                val rawName = pName.ifBlank { dName }
+                if (rawName.isNotEmpty() && rawName.lowercase() !in seenNames) {
+                    seenNames.add(rawName.lowercase())
+                    val syntheticPhoneKey = "contact_$cid"
+                    contactsMap["${rawName.lowercase()}|$syntheticPhoneKey"] = DeviceContact(
                         name = rawName,
-                        cleanPhone = clean10,
-                        formattedPhone = formatTenDigitIndianPhone(clean10)
+                        cleanPhone = syntheticPhoneKey,
+                        formattedPhone = "Saved in Contacts"
                     )
                 }
             }
@@ -448,7 +492,7 @@ fun queryAllDeviceContacts(context: Context): List<DeviceContact> {
     } catch (_: SecurityException) {
     } catch (_: Exception) {
     }
-    return contactsByPhone.values.toList()
+    return contactsMap.values.sortedBy { it.name.lowercase() }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

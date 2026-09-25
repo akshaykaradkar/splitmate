@@ -100,6 +100,7 @@ class UniversalFlightTicketExtractorTest {
         assertEquals("Mumbai", res.destinationCity)
         assertEquals("14:15", res.departureTime)
         assertEquals("16:55", res.arrivalTime)
+        assertEquals(1, res.passengers.size)
         assertEquals("Priyanka Jagannath Morye", res.passengers.first().fullName)
         assertEquals("10A", res.passengers.first().seatNumber)
         assertEquals(listOf("Priyanka"), res.matchedGroupMembers)
