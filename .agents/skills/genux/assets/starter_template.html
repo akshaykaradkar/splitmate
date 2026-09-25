@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Material GenUX Kit Starter Template</title>
+
+    <!-- ======================================================================= -->
+    <!-- START GBREEZE SETUP                                                     -->
+    <!-- CRITICAL: <script type="importmap"> MUST appear BEFORE any              -->
+    <!-- <script type="module"> in <head>, or Chrome ignores the importmap!      -->
+    <!-- ======================================================================= -->
+
+    <!-- Import gBreeze & dependencies -->
+    <script type="importmap">
+      {
+        "imports": {
+          "@material/web/": "https://unpkg.com/@material/web@nightly/",
+          "tslib": "https://unpkg.com/tslib/tslib.es6.js",
+          "lit": "https://unpkg.com/lit",
+          "lit/": "https://unpkg.com/lit/",
+          "@lit/": "https://unpkg.com/@lit/",
+          "@lit-labs/": "https://unpkg.com/@lit-labs/",
+          "lit-html": "https://unpkg.com/lit-html",
+          "lit-html/": "https://unpkg.com/lit-html/",
+          "lit-element/": "https://unpkg.com/lit-element/",
+          "safevalues/dom": "https://unpkg.com/safevalues/dist/mjs/dom/index.js"
+        }
+      }
+    </script>
+
+    <!-- Import Tailwind -->
+    <script type="module" src="https://unpkg.com/@tailwindcss/browser"></script>
+    <style type="text/tailwindcss">
+      /* Place "md" layer in Tailwind cascade */
+      @layer properties, theme, base, md, components, utilities;
+    </style>
+    <script type="module">
+      // Use gBreeze Tailwind @theme
+      const response = await fetch(
+        "https://unpkg.com/@material/web@nightly/labs/gb/styles/tailwind.css",
+      );
+      const style = document.createElement("style");
+      style.type = "text/tailwindcss";
+      style.textContent = await response.text();
+      document.head.appendChild(style);
+    </script>
+
+    <!-- Import design system (Google Material 3) -->
+    <style>
+      @import "https://static.corp.google.com/material-web/gbreeze/latest/styles/gm3.css";
+      @import "https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,slnt,wdth,wght,GRAD,ROND@6..144,-10..0,25..151,1..1000,0..100,0..100&display=swap";
+      @import "https://fonts.googleapis.com/css2?family=Google+Symbols:opsz,wght,FILL,GRAD,ROND@20..48,100..700,0..1,-50..200,0..100";
+
+      :root {
+        --md-icon-font: "Google Symbols";
+      }
+
+      /* Safeguard: protect icon ligatures from accidental typescale-* font-family overrides */
+      md-gb-icon {
+        font-family: var(--md-icon-font, "Google Symbols") !important;
+      }
+    </style>
+
+    <!-- ======================================================================= -->
+    <!-- END GBREEZE SETUP                                                       -->
+    <!-- ======================================================================= -->
+
+    <!-- Import components (fault-tolerant loader so one missing CDN path never aborts other imports) -->
+    <script src="https://static.corp.google.com/material-web/gbreeze/latest/components/energy/md-gb-energy.js"></script>
+    <script type="module">
+      const modules = [
+        "@material/web/labs/gb/components/appbar/md-gb-app-bar.js",
+        "@material/web/labs/gb/components/badge/md-gb-badge.js",
+        "@material/web/labs/gb/components/button/md-gb-button.js",
+        "@material/web/labs/gb/components/card/md-gb-card.js",
+        "@material/web/labs/gb/components/checkbox/md-gb-checkbox.js",
+        "@material/web/labs/gb/components/chip/md-gb-chip.js",
+        "@material/web/labs/gb/components/divider/md-gb-divider.js",
+        "@material/web/labs/gb/components/fab/md-gb-fab.js",
+        "@material/web/labs/gb/components/focus/focus-ring.js",
+        "@material/web/labs/gb/components/iconbutton/md-gb-icon-button.js",
+        "@material/web/labs/gb/components/list/md-gb-list.js",
+        "@material/web/labs/gb/components/list/md-gb-list-item.js",
+        "@material/web/labs/gb/components/menu/md-gb-menu.js",
+        "@material/web/labs/gb/components/menu/md-gb-menu-item.js",
+        "@material/web/labs/gb/components/radio/md-gb-radio.js",
+        "@material/web/labs/gb/components/ripple/ripple.js",
+        "@material/web/labs/gb/components/splitbutton/md-gb-split-button.js",
+        "@material/web/labs/gb/components/switch/md-gb-switch.js",
+        "@material/web/labs/gb/components/tabs/md-gb-tab.js",
+        "@material/web/labs/gb/components/tabs/md-gb-tabs.js",
+        "@material/web/labs/gb/components/toolbar/md-gb-toolbar.js",
+        "@material/web/labs/gb/styles/icon/md-gb-icon.js",
+        "@material/web/dialog/dialog.js",
+        "@material/web/elevation/elevation.js",
+        "@material/web/focus/md-focus-ring.js",
+        "@material/web/progress/circular-progress.js",
+        "@material/web/progress/linear-progress.js",
+        "@material/web/ripple/ripple.js",
+        "@material/web/select/filled-select.js",
+        "@material/web/select/outlined-select.js",
+        "@material/web/select/select-option.js",
+        "@material/web/slider/slider.js",
+        "@material/web/textfield/filled-text-field.js",
+        "@material/web/textfield/outlined-text-field.js",
+      ];
+      await Promise.allSettled(modules.map((m) => import(m)));
+    </script>
+  </head>
+
+  <body class="bg-surface text-on-surface min-h-screen flex flex-col">
+    <header role="banner">
+      <md-gb-app-bar size="sm" variant="standard">
+        <md-gb-icon-button slot="leading" aria-label="Menu">
+          <md-gb-icon>menu</md-gb-icon>
+        </md-gb-icon-button>
+        Hello Material
+        <md-gb-icon-button slot="trailing" color="standard" type="toggle" aria-label="Spark">
+          <md-gb-icon>spark</md-gb-icon>
+        </md-gb-icon-button>
+      </md-gb-app-bar>
+    </header>
+
+    <main role="main" class="w-full max-w-xl mx-auto p-s200 sm:p-s400 flex flex-col gap-s200">
+      <div class="flex flex-wrap items-center gap-s100">
+        <md-gb-chip type="filter" selected>All Components</md-gb-chip>
+        <md-gb-chip type="assist">Tokens</md-gb-chip>
+      </div>
+
+      <!-- Example of pre-built gBreeze Card, Badge, Button, and List components -->
+      <md-gb-card color="filled">
+        <div class="p-s200 flex flex-col gap-s200">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="typescale-emphasized-title-md">Interactive Counter</h2>
+              <p class="typescale-body-sm text-on-surface-variant">
+                Demonstrating pre-built gBreeze custom elements.
+              </p>
+            </div>
+            <md-gb-badge id="counter-badge">Count: 0</md-gb-badge>
+          </div>
+
+          <div class="flex items-center gap-s100">
+            <md-gb-button id="increment-btn" color="filled">
+              <md-gb-icon>add</md-gb-icon>
+              Increment
+            </md-gb-button>
+            <md-gb-button id="reset-btn" color="outlined">Reset</md-gb-button>
+          </div>
+
+          <md-gb-divider></md-gb-divider>
+
+          <md-gb-list>
+            <md-gb-list-item static>
+              <md-gb-icon slot="leading">palette</md-gb-icon>
+              Material 3 Tonal Tokens
+              <span slot="supporting-text">Using pre-built gBreeze components</span>
+              <md-gb-switch slot="trailing" selected aria-label="Enable tokens"></md-gb-switch>
+            </md-gb-list-item>
+          </md-gb-list>
+        </div>
+      </md-gb-card>
+    </main>
+
+    <script type="module">
+      let count = 0;
+      const incrementBtn = document.getElementById("increment-btn");
+      const resetBtn = document.getElementById("reset-btn");
+      const counterBadge = document.getElementById("counter-badge");
+
+      function updateCounterDisplay() {
+        counterBadge.textContent = `Count: ${count}`;
+      }
+
+      incrementBtn.addEventListener("click", () => {
+        count++;
+        updateCounterDisplay();
+      });
+
+      resetBtn.addEventListener("click", () => {
+        count = 0;
+        updateCounterDisplay();
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,67 @@
+/* Place "md" layer in Tailwind cascade */
+@layer properties, theme, base, md, components, utilities;
+
+/* Import design system (Google Material 3) */
+@import url('https://static.corp.google.com/material-web/gbreeze/latest/styles/gm3.css');
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,slnt,wdth,wght,GRAD,ROND@6..144,-10..0,25..151,1..1000,0..100,0..100&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Google+Symbols&display=swap');
+
+/* Import Tailwind and gBreeze theme */
+@import 'tailwindcss';
+@import '@material/web/labs/gb/styles/tailwind.css';
+
+/* Override Tailwind defaults */
+@layer base {
+  body {
+    font: var(--md-sys-typescale-body-md);
+    letter-spacing: var(--md-sys-typescale-body-md-tracking);
+  }
+
+  h1 {
+    font: var(--md-sys-typescale-display-md);
+    letter-spacing: var(--md-sys-typescale-display-md-tracking);
+  }
+
+  h2 {
+    font: var(--md-sys-typescale-headline-lg);
+    letter-spacing: var(--md-sys-typescale-headline-lg-tracking);
+  }
+
+  h3 {
+    font: var(--md-sys-typescale-headline-md);
+    letter-spacing: var(--md-sys-typescale-headline-md-tracking);
+  }
+
+  h4 {
+    font: var(--md-sys-typescale-headline-sm);
+    letter-spacing: var(--md-sys-typescale-headline-sm-tracking);
+  }
+
+  h5 {
+    font: var(--md-sys-typescale-title-lg);
+    letter-spacing: var(--md-sys-typescale-title-lg-tracking);
+  }
+
+  h6 {
+    font: var(--md-sys-typescale-title-md);
+    letter-spacing: var(--md-sys-typescale-title-md-tracking);
+  }
+}
+
+/* Application styles */
+:root {
+  --md-icon-font: 'Google Symbols';
+}
+
+/* Safeguard: protect icon ligatures from accidental typescale-* font-family overrides */
+md-gb-icon {
+  font-family: var(--md-icon-font, 'Google Symbols') !important;
+}
+
+.light {
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
+}

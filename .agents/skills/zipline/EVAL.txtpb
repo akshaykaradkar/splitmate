@@ -1,0 +1,79 @@
+# proto-file: learning/gemini/agents/evaluation/evalin/proto/eval_suite.proto
+# proto-message: EvalSuite
+# txtpbfmt: wrap_strings_after_newlines
+
+suite_name: "zipline"
+timeout_seconds: 300
+
+cases {
+  name: "create_project_and_upload_plan"
+  prompt: "I have a built web app in my local `dist/` folder that I want to share via Zipline using the UX Design Intelligence uploader tool. I want to upload it to a brand new project called \"Q3 Prototype Demo\" with asset name \"Live App\". Can you show me the exact command I should run to do this? Don't run it yet, just show me what command to execute."
+  expectations: "Agent provides a command using the UX Design Intelligence zipline uploader binary target"
+  expectations: "The command specifies the source directory (e.g. `dist` or `$PWD/dist` or `/google/src/cloud/...`)"
+  expectations: "The command allows the project name and asset display name to contain spaces"
+  expectations: "The agent does not actually execute the command"
+}
+
+cases {
+  name: "update_existing_asset_version"
+  prompt: "We made some visual updates to our prototype in the `build/` folder and need to push a new version using the UX Design Intelligence uploader tool to our existing Zipline asset (ID 87654321-dcba-4321-dcba-0987654321ba) in project 12345678-abcd-1234-abcd-1234567890ab. What is the terminal command to publish this update without creating a duplicate asset? Just give me the command."
+  expectations: "Agent provides the command referencing both the existing project ID and asset ID"
+  expectations: "The command specifies the source folder (e.g. `build` or `$PWD/build`)"
+  expectations: "The command includes a display name, optionally containing spaces"
+}
+
+cases {
+  name: "programmatic_python_deployment"
+  prompt: "I am writing a custom Python release script for our team. Show me how to use the Zipline Python library to programmatically upload a directory to an existing project and print out both the canonical live serving URL and the static version snapshot URL."
+  expectations: "Agent provides valid Python code importing the design intelligence zipline upload library"
+  expectations: "The script calls the upload function with appropriate keyword arguments"
+  expectations: "The script demonstrates how to generate or format both the asset root URL and version snapshot URL"
+  expectations: "Agent notes the required BUILD dependency for the Python library"
+}
+
+cases {
+  name: "troubleshoot_foreign_key_error"
+  prompt: "I tried running a command to create a new Zipline project from my terminal, but it failed with a backend database error saying `violates foreign key constraint \"project_users_user_id_fkey\"`. Why is this happening and how do I fix it?"
+  expectations: "Agent identifies that the user has never logged into the Zipline Web UI before"
+  expectations: "Agent instructs the user to visit go/zipline in their web browser once to initialize their database record"
+  expectations: "Agent confirms that after visiting the UI, command-line project creation will succeed"
+}
+
+cases {
+  name: "troubleshoot_proxy_auth_error"
+  prompt: "When I try to upload my build to Zipline from my command line, the tool hangs or fails with proxy authentication errors. How can I resolve the authentication issue?"
+  expectations: "Agent identifies this as an Üplink proxy authentication issue"
+  expectations: "Agent recommends running the helper login command (`uplink-helper login -noglogin`)"
+}
+
+cases {
+  name: "troubleshoot_naming_spaces_error"
+  prompt: "I want to upload my asset using the UX Design Intelligence uploader tool and set its display name to \"My Cool Demo\". Do I need to manually replace the spaces with underscores in the command?"
+  expectations: "Agent explains that the uploader tool automatically sanitizes spaces in project and asset names by replacing them with underscores"
+  expectations: "Agent confirms that the user can pass names with spaces directly"
+}
+
+cases {
+  name: "troubleshoot_runfiles_sandbox_path_error"
+  prompt: "Can I use a relative path to my local build directory when running the UX Design Intelligence uploader, or does it require an absolute path?"
+  expectations: "Agent confirms that relative paths are supported under blaze run"
+  expectations: "Agent explains that the tool automatically resolves relative paths against the BUILD_WORKING_DIRECTORY where the command was executed"
+}
+
+cases {
+  name: "create_project_standalone"
+  prompt: "I want to create a new Zipline project called 'My New Design Playground' using the UX Design Intelligence uploader tool to organize my future prototypes, but I don't have any files to upload yet. What command should I run?"
+  expectations: "Agent provides a blaze run command for the Zipline uploader"
+  expectations: "The command specifies the project name, optionally with spaces"
+  expectations: "The command does NOT include the --source flag"
+}
+
+cases {
+  name: "extract_urls_from_output"
+  prompt:
+    "My Zipline upload finished with this output: 'Congratulations! Your new version is available here (internal URLs):\n"
+    "* https://serve-dot-zipline.googleplex.com/hosting/abc-123\n"
+    "* https://serve-dot-zipline.googleplex.com/asset/xyz-789'. Can you give me the direct links to view the version snapshot and the live serving URL?"
+  expectations: "Agent extracts the version snapshot URL: https://serve-dot-zipline.googleplex.com/hosting/abc-123"
+  expectations: "Agent extracts the live serving URL: https://serve-dot-zipline.googleplex.com/asset/xyz-789/"
+}

@@ -1,0 +1,255 @@
+/**
+ * Copyright 2026 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+/** Note: AI-generated. Implementation matching GM3 Circular Progress spec */
+
+@layer md.comp.progress {
+  .circular-progress {
+    --size: 40px;
+    --active-indicator-thickness: 4px;
+    --active-indicator-track-space: 4px;
+    --active-indicator-color: var(--md-sys-color-primary);
+    --track-color: var(--md-sys-color-surface-container-highest);
+
+    display: inline-flex;
+    position: relative;
+    line-height: 0;
+    overflow: hidden;
+    height: var(--size);
+    width: var(--size);
+    --progress-start: 0.16;
+    --progress-end: 0.87;
+    --circumference: calc((var(--size) - var(--active-indicator-thickness)) * 3.14159265);
+    --active-circumference: var(--circumference);
+    --track-circumference: var(--circumference);
+  }
+
+  .circular-progress-wavy {
+    --size: 48px;
+  }
+
+  .circular-progress-wrapper {
+    position: relative;
+  }
+
+  .circular-progress-container {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+  }
+
+  .circular-progress-circle-graphic {
+    height: 100%;
+    width: 100%;
+    fill: transparent;
+    overflow: visible !important;
+  }
+
+  .circular-progress-active-indicator, .circular-progress-track {
+    stroke-width: var(--active-indicator-thickness);
+    stroke-linecap: round;
+  }
+
+  .circular-progress-active-indicator {
+    stroke: var(--active-indicator-color);
+  }
+
+  .circular-progress-track {
+    stroke: var(--track-color);
+  }
+
+  /* Hiding / Closed States */
+  .circular-progress.unopened .circular-progress-active-indicator,
+  .circular-progress.complete .circular-progress-track,
+  .circular-progress.closed .circular-progress-active-indicator,
+  .circular-progress.closed .circular-progress-track {
+    stroke-width: 0;
+  }
+  
+  .circular-progress.unopened .circular-progress-track {
+    stroke-dasharray: calc(var(--track-circumference) - var(--active-indicator-thickness) + 1px) calc(var(--active-indicator-thickness) - 1px);
+    stroke-dashoffset: calc(var(--track-circumference) - var(--active-indicator-thickness) + 1px);
+  }
+  
+  .circular-progress.complete .circular-progress-active-indicator {
+    stroke-dasharray: calc(var(--active-circumference) - var(--active-indicator-thickness) + 1px) calc(var(--active-indicator-thickness) - 1px);
+  }
+
+  /* Indeterminate Root Animations */
+  .circular-progress.indeterminate {
+    animation: cpi-rotate 6000ms linear infinite;
+  }
+  @keyframes cpi-rotate {
+    from { transform: rotate(-90deg); }
+    to { transform: rotate(990deg); }
+  }
+
+  .circular-progress.indeterminate .circular-progress-container {
+    animation: cpi-container-rotate 6000ms ease infinite;
+  }
+  @keyframes cpi-container-rotate {
+    0% { transform: rotate(0deg); }
+    8.33% { transform: rotate(90deg); }
+    25% { transform: rotate(90deg); }
+    33.33% { transform: rotate(180deg); }
+    50% { transform: rotate(180deg); }
+    58.33% { transform: rotate(270deg); }
+    75% { transform: rotate(270deg); }
+    83.33% { transform: rotate(360deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  /* Path calculations unified for both variants */
+  .circular-progress-track {
+    transition:
+      stroke-dasharray 0.5s 0ms cubic-bezier(0, 0, 0.2, 1),
+      stroke-dashoffset 0.5s 0ms cubic-bezier(0, 0, 0.2, 1),
+      stroke-width 0.25s 0ms cubic-bezier(0.4, 0, 0.6, 1);
+    cx: calc(var(--size) / 2);
+    cy: calc(var(--size) / 2);
+    r: calc((var(--size) - var(--active-indicator-thickness)) / 2);
+    stroke-dasharray: calc(
+        (1 - var(--progress-value, 0)) *
+          (var(--track-circumference) - var(--active-indicator-track-space) * 2) -
+          var(--active-indicator-thickness)
+      )
+      calc(
+        var(--track-circumference) -
+          (1 - var(--progress-value, 0)) *
+          (var(--track-circumference) - var(--active-indicator-track-space) * 2) +
+          var(--active-indicator-thickness)
+      );
+    stroke-dashoffset: calc(
+      (1 - var(--progress-value, 0)) *
+        (var(--track-circumference) - var(--active-indicator-track-space) * 2) -
+        var(--active-indicator-thickness) +
+        var(--active-indicator-track-space) + var(--active-indicator-thickness)
+    );
+  }
+
+  .circular-progress.indeterminate .circular-progress-track {
+    animation: circular-progress-track-grow 6s ease infinite;
+  }
+
+  .circular-progress-active-indicator {
+    transition:
+      stroke-dasharray 0.5s 0ms cubic-bezier(0, 0, 0.2, 1),
+      stroke-width 0.25s 0ms cubic-bezier(0.4, 0, 0.6, 1);
+    cx: calc(var(--size) / 2);
+    cy: calc(var(--size) / 2);
+    r: calc((var(--size) - var(--active-indicator-thickness)) / 2);
+    stroke-dasharray: calc(
+        var(--progress-value, 0) *
+          (var(--active-circumference) - var(--active-indicator-track-space) * 2) -
+          var(--active-indicator-thickness)
+      )
+      calc(
+        var(--active-circumference) -
+          var(--progress-value, 0) *
+          (var(--active-circumference) - var(--active-indicator-track-space) * 2) +
+          var(--active-indicator-thickness)
+      );
+  }
+
+  .circular-progress.indeterminate .circular-progress-active-indicator {
+    animation: circular-progress-active-grow 6s ease infinite;
+  }
+
+  @keyframes circular-progress-track-grow {
+    from {
+      stroke-dasharray:
+        calc(
+          var(--track-circumference) * 0.84 - var(--active-indicator-track-space) * 2 * 0.84 -
+            var(--active-indicator-thickness)
+        ),
+        calc(
+          var(--track-circumference) -
+            var(--track-circumference) * 0.84 + var(--active-indicator-track-space) * 2 * 0.84 +
+            var(--active-indicator-thickness)
+        );
+      stroke-dashoffset: calc(
+        var(--track-circumference) * 0.84 - var(--active-indicator-track-space) * 2 * 0.84 -
+          var(--active-indicator-thickness) +
+          var(--active-indicator-track-space) +
+          var(--active-indicator-thickness)
+      );
+    }
+    50% {
+      stroke-dasharray:
+        calc(
+          var(--track-circumference) * 0.13 - var(--active-indicator-track-space) * 2 * 0.13 -
+            var(--active-indicator-thickness)
+        ),
+        calc(
+          var(--track-circumference) -
+            var(--track-circumference) * 0.13 + var(--active-indicator-track-space) * 2 * 0.13 +
+            var(--active-indicator-thickness)
+        );
+      stroke-dashoffset: calc(
+        var(--track-circumference) * 0.13 - var(--active-indicator-track-space) * 2 * 0.13 -
+          var(--active-indicator-thickness) +
+          var(--active-indicator-track-space) +
+          var(--active-indicator-thickness)
+      );
+    }
+    to {
+      stroke-dasharray:
+        calc(
+          var(--track-circumference) * 0.84 - var(--active-indicator-track-space) * 2 * 0.84 -
+            var(--active-indicator-thickness)
+        ),
+        calc(
+          var(--track-circumference) -
+            var(--track-circumference) * 0.84 + var(--active-indicator-track-space) * 2 * 0.84 +
+            var(--active-indicator-thickness)
+        );
+      stroke-dashoffset: calc(
+        var(--track-circumference) * 0.84 - var(--active-indicator-track-space) * 2 * 0.84 -
+          var(--active-indicator-thickness) +
+          var(--active-indicator-track-space) +
+          var(--active-indicator-thickness)
+      );
+    }
+  }
+
+  @keyframes circular-progress-active-grow {
+    from {
+      stroke-dasharray:
+        calc(
+          var(--active-circumference) * var(--progress-start) - var(--active-indicator-track-space) * 2 *
+            var(--progress-start) - var(--active-indicator-thickness)
+        ),
+        calc(
+          var(--active-circumference) -
+            var(--active-circumference) * var(--progress-start) + var(--active-indicator-track-space) * 2 *
+            var(--progress-start) + var(--active-indicator-thickness)
+        );
+    }
+    50% {
+      stroke-dasharray:
+        calc(
+          var(--active-circumference) * var(--progress-end) - var(--active-indicator-track-space) * 2 *
+            var(--progress-end) - var(--active-indicator-thickness)
+        ),
+        calc(
+          var(--active-circumference) -
+            var(--active-circumference) * var(--progress-end) + var(--active-indicator-track-space) * 2 *
+            var(--progress-end) + var(--active-indicator-thickness)
+        );
+    }
+    to {
+      stroke-dasharray:
+        calc(
+          var(--active-circumference) * var(--progress-start) - var(--active-indicator-track-space) * 2 *
+            var(--progress-start) - var(--active-indicator-thickness)
+        ),
+        calc(
+          var(--active-circumference) -
+            var(--active-circumference) * var(--progress-start) + var(--active-indicator-track-space) * 2 *
+            var(--progress-start) + var(--active-indicator-thickness)
+        );
+    }
+  }
+}

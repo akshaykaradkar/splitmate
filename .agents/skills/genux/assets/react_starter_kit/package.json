@@ -1,0 +1,37 @@
+{
+  "name": "material-genux-kit",
+  "private": true,
+  "version": "0.6.0",
+  "type": "module",
+  "scripts": {
+    "dev": "npm run build:storybook && npm run dev:app",
+    "dev:app": "vite",
+    "dev:storybook": "storybook dev -c storybook -p 6006",
+    "build": "npm run build:storybook && npm run build:app",
+    "build:app": "tsc && vite build",
+    "build:storybook": "storybook build -c storybook"
+  },
+  "dependencies": {
+    "@lit/react": "^1.0.8",
+    "@material/material-color-utilities": "^0.4.0",
+    "@material/web": "nightly",
+    "@tailwindcss/vite": "^4.2.0",
+    "lit": "^3.3.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tailwindcss": "^4.2.0"
+  },
+  "devDependencies": {
+    "@storybook/addon-a11y": "^10.2.12",
+    "@storybook/addon-docs": "^10.2.12",
+    "@storybook/react-vite": "^10.2.12",
+    "@types/node": "^24.10.13",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "sirv": "^3.0.1",
+    "storybook": "^10.2.12",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.1"
+  }
+}

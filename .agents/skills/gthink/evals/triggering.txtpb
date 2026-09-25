@@ -1,0 +1,197 @@
+# proto-file: learning/gemini/agents/evaluation/evalin/proto/eval_suite.proto
+# proto-message: EvalSuite
+# txtpbfmt: wrap_strings_after_newlines
+
+# Routing coverage for gthink. gthink is installed in the shared catalog, so
+# the dominant regression risk is no longer answer quality (covered by
+# ../EVAL.txtpb) but MISROUTING: failing to fire on deep-research intents, and
+# firing on cheap single-corpus lookups that belong to other skills.
+#
+# HOW TO RUN -- the --skills flag is REQUIRED, not optional:
+#
+#   evalin run \
+#     learning/gemini/agents/skills/communication/gthink/evals/triggering.txtpb \
+#     --skills learning/gemini/agents/skills/communication/gthink
+#
+# Without --skills, evalin mounts only the skills named in each case's own
+# expected_skills (orchestrator._apply_case_skills). The should_not_trigger_*
+# cases declare `expected_skills: ""`, so nothing is mounted for them, gthink
+# is not even readable, and every one of them passes VACUOUSLY. Verified
+# empirically: bare run reports `Skills Triggered: None` / PASS, while the
+# same case with --skills reports gthink / FAIL.
+#
+# Known limitation: the triggering scorer only fails on unexpected skills when
+# `expected` is EMPTY (scorers/triggering.py). A case that expects skill A and
+# also reads gthink still passes, so head-to-head contention with
+# project-updates cannot be graded here. Measure that in production via
+# devtools_research_data.jetski_skills_recall (unneeded_activations,
+# misinvocation).
+#
+# Cases are cheap: ~25-35s and ~60k input tokens each, capped at 5 turns by
+# TRIGGERING_MAX_INVOCATIONS.
+#
+# TIMEOUT: `TRIGGERING_TIMEOUT_SECONDS` (60s) looks like it bounds these cases
+# but is dead code. core/loader.py defaults an unset suite timeout to
+# DEFAULT_CASE_TIMEOUT_SECONDS (300s) and copies it into every case, and the
+# triggering override in core/orchestrator.py is guarded by
+# `if not case.timeout_seconds:`, which by then is never zero. A hung case was
+# observed running 306s. Hence the explicit value below: slowest observed case
+# is 75.5s, so 120s leaves headroom while failing fast on a hang.
+
+suite_name: "gthink_triggering"
+eval_mode: EVAL_MODE_TRIGGERING
+timeout_seconds: 120
+
+# ==============================================================================
+# Positive cases: multi-corpus synthesis intents that gthink owns.
+# One per capability cluster named in the skill description.
+# ==============================================================================
+
+cases {
+  name: "should_trigger_team_weekly_summary"
+  prompt: "Summarize what my team shipped last week and call out key risks and next steps."
+  expected_skills: "learning/gemini/agents/skills/communication/gthink"
+  tags: "positive"
+}
+
+cases {
+  name: "should_trigger_status_report_and_snippets"
+  prompt:
+    "Write a weekly progress report and status update for my team covering"
+    " highlights, lowlights, and what everyone shipped this week."
+  expected_skills: "learning/gemini/agents/skills/communication/gthink"
+  tags: "positive"
+}
+
+cases {
+  name: "should_trigger_roadmap_gap_analysis"
+  prompt:
+    "Compare our roadmap commitments against what actually landed this quarter"
+    " and tell me where the gaps are."
+  expected_skills: "learning/gemini/agents/skills/communication/gthink"
+  tags: "positive"
+}
+
+cases {
+  name: "should_trigger_architectural_evolution_across_cls"
+  prompt:
+    "Trace how the retry and backoff design evolved across the CLs in this"
+    " area over the last quarter, and explain why each change was made."
+  expected_skills: "learning/gemini/agents/skills/communication/gthink"
+  tags: "positive"
+}
+
+cases {
+  name: "should_trigger_infra_blocker_audit"
+  prompt:
+    "Audit what is currently blocking our evaluation infrastructure and"
+    " synthesize the themes across bugs, CLs, and recent discussions."
+  expected_skills: "learning/gemini/agents/skills/communication/gthink"
+  tags: "positive"
+}
+
+cases {
+  name: "should_trigger_p0_bug_root_cause_synthesis"
+  prompt:
+    "What are the recurring root causes behind our P0 and P1 bugs this"
+    " quarter?"
+  expected_skills: "learning/gemini/agents/skills/communication/gthink"
+  tags: "positive"
+}
+
+cases {
+  name: "should_trigger_grad_check_in"
+  prompt: "Prepare my quarterly GRAD check-in notes."
+  expected_skills: "learning/gemini/agents/skills/communication/gthink"
+  tags: "positive"
+}
+
+cases {
+  name: "should_trigger_peer_bonus_nomination"
+  prompt:
+    "Draft a peer bonus nomination for alex based on what we actually worked"
+    " on together this quarter."
+  expected_skills: "learning/gemini/agents/skills/communication/gthink"
+  tags: "positive"
+}
+
+cases {
+  name: "should_trigger_project_onboarding_guide"
+  prompt:
+    "I just joined this project. Put together an onboarding guide covering"
+    " the architecture, the key documents, and who owns what."
+  expected_skills: "learning/gemini/agents/skills/communication/gthink"
+  tags: "positive"
+}
+
+# ==============================================================================
+# Over-triggering guards: cheap, single-corpus, single-tool requests that other
+# skills own. gthink must stay silent. REQUIRES --skills (see header).
+# ==============================================================================
+
+cases {
+  name: "should_not_trigger_single_bug_lookup"
+  prompt: "What is the status and assignee of b/138465867?"
+  expected_skills: ""
+  tags: "overtrigger"
+}
+
+cases {
+  name: "should_not_trigger_symbol_search"
+  prompt: "Where is the class ContinuousQueryCoordinator defined?"
+  expected_skills: ""
+  tags: "overtrigger"
+}
+
+cases {
+  name: "should_not_trigger_go_link_resolution"
+  prompt: "What target URL does the go shortlink go/jetski-docs resolve to?"
+  expected_skills: ""
+  tags: "overtrigger"
+}
+
+# Strict guard, and the one KNOWN-FLAKY case in this suite. Measured with
+# --num-runs=7 after the description was tightened: 6/7 pass, 1/7 fails with
+# gthink triggering -- a residual ~14% over-trigger rate on a bare cl/
+# reference. Before the tightening it fired every time observed. Triggering is
+# driven by the frontmatter description alone (the body is not read until the
+# skill loads), and that description must keep mentioning CLs for the
+# architectural-evolution cases, so the residual is not closable by wording
+# alone. Do not gate CI on this case at --num-runs=1.
+#
+# `expected_skills: ""` is the correct form here: naming `critique` as the
+# expectation was tried and failed 7/7, because critique does not reliably
+# self-trigger on a bare cl/ reference either.
+cases {
+  name: "should_not_trigger_single_cl_diff"
+  prompt: "Show me the diff of cl/683419523."
+  expected_skills: ""
+  tags: "overtrigger"
+  tags: "flaky"
+}
+
+cases {
+  name: "should_not_trigger_local_code_edit"
+  prompt:
+    "Fix the typo in the docstring of the parse_config function in"
+    " my_module.py."
+  expected_skills: ""
+  tags: "overtrigger"
+}
+
+cases {
+  name: "should_not_trigger_build_and_test"
+  prompt: "Run blaze test //example/service:sanity_test and fix any failures."
+  expected_skills: ""
+  tags: "overtrigger"
+}
+
+cases {
+  name: "should_not_trigger_single_doc_read"
+  prompt:
+    "Read the Google Doc at https://docs.google.com/document/d/"
+    "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit and give me the"
+    " summary."
+  expected_skills: ""
+  tags: "overtrigger"
+}

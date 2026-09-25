@@ -278,7 +278,11 @@ object SplitMateMathEngine {
     }
 
     fun formatCurrencyCents(cents: Long, currencySymbol: String = "₹"): String {
-        return "$currencySymbol${String.format(java.util.Locale.US, "%,.2f", cents / 100.0)}"
+        return com.splitmate.app.ui.formatIndianRupeesFromCents(
+            cents = cents,
+            includePlusSign = false,
+            currencySymbol = currencySymbol
+        )
     }
 
     /**

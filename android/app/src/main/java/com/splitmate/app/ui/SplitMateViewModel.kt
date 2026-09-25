@@ -134,10 +134,9 @@ class SplitMateViewModel(
             "${sym}0.00"
         } else {
             val netCents = computeOverallUserBalanceCents(state)
-            val absMajor = String.format(Locale.US, "%.2f", kotlin.math.abs(netCents) / 100.0)
             when {
-                netCents > 0L -> "+$sym$absMajor"
-                netCents < 0L -> "-$sym$absMajor"
+                netCents > 0L -> formatIndianRupeesFromCents(netCents, includePlusSign = true, currencySymbol = sym)
+                netCents < 0L -> formatIndianRupeesFromCents(netCents, includePlusSign = false, currencySymbol = sym)
                 else -> "${sym}0.00"
             }
         }
@@ -163,17 +162,19 @@ class SplitMateViewModel(
                         SplitMateMathEngine.MemberNetBalance(m.memberId, m.name, balances[m.memberId] ?: 0L)
                     }
                 )
-                val absStr = String.format(Locale.US, "%.2f", kotlin.math.abs(myNetCents) / 100.0)
+                val formattedAbs = formatIndianRupeesFromCents(kotlin.math.abs(myNetCents), includePlusSign = false, currencySymbol = sym)
                 val badgeText = when {
-                    myNetCents > 0L -> "YOU GET BACK $sym$absStr"
-                    myNetCents < 0L -> "YOU OWE $sym$absStr"
+                    myNetCents > 0L -> "YOU GET BACK $formattedAbs"
+                    myNetCents < 0L -> "YOU OWE $formattedAbs"
                     else -> "All settled up"
                 }
-                val pillText = if (simplified.isEmpty()) {
-                    "All settled up"
-                } else {
-                    "${simplified.size} simplified settlements"
+                val memberNoun = if (groupMembers.size == 1) "member" else "members"
+                val activityDetail = when {
+                    groupExpenses.isEmpty() -> "No expenses yet"
+                    simplified.isEmpty() -> "Last active today"
+                    else -> "${simplified.size} open ${if (simplified.size == 1) "settlement" else "settlements"}"
                 }
+                val pillText = "${groupMembers.size} $memberNoun · $activityDetail"
                 val visibleSeeds = groupMembers.take(4).map { m ->
                     if (m.isCurrentUser && state.currentUserSeed.isNotBlank()) state.currentUserSeed else m.avatarSeed
                 }

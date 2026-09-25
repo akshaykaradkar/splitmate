@@ -41,6 +41,8 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.splitmate.app.SplitMateMathEngine
 import com.splitmate.app.SplitMateTheme
 import com.splitmate.app.data.GroupMemberEntity
@@ -242,6 +244,135 @@ private fun buildBoardingPassTearAndStampPcm(sampleRate: Int = 24000): ShortArra
         pcm[i] = (clamped * Short.MAX_VALUE).toInt().toShort()
     }
     return pcm
+}
+
+internal fun playBoardingPassTearAndStampOneShot(isSensorySoundEnabled: Boolean = true) {
+    if (!isSensorySoundEnabled) return
+    kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch {
+        runCatching {
+            val sampleRate = 24000
+            val pcmData = buildBoardingPassTearAndStampPcm(sampleRate)
+            val byteCount = pcmData.size * 2
+            val audioTrack = AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setSampleRate(sampleRate)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                        .build()
+                )
+                .setBufferSizeInBytes(byteCount)
+                .setTransferMode(AudioTrack.MODE_STATIC)
+                .build()
+            audioTrack.write(pcmData, 0, pcmData.size)
+            audioTrack.play()
+            delay(320L)
+            audioTrack.stop()
+            audioTrack.release()
+        }
+    }
+}
+
+@Composable
+internal fun BoardingPassCommitStampOverlay(
+    tearProgress: Float,
+    stampScale: Float,
+    stampAlpha: Float,
+    accentColor: Color,
+    stampSubLabel: String
+) {
+    if (tearProgress <= 0.01f && stampAlpha <= 0.01f) return
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF1E1B18).copy(alpha = (tearProgress * 0.18f).coerceAtMost(0.22f))),
+        contentAlignment = Alignment.Center
+    ) {
+        // Stage 1 (0..125ms): Progressive Perforation Tear Sweep Line across the pass
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(80.dp)
+                .padding(horizontal = 24.dp)
+        ) {
+            val sweepX = size.width * tearProgress.coerceIn(0f, 1f)
+            val centerY = size.height * 0.5f
+            drawLine(
+                color = accentColor.copy(alpha = 0.85f),
+                start = Offset(0f, centerY),
+                end = Offset(sweepX, centerY),
+                strokeWidth = 3.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 10f), 0f)
+            )
+            if (tearProgress in 0.05f..0.98f) {
+                drawCircle(
+                    color = Color(0xFFD7E8B6),
+                    radius = 7.dp.toPx(),
+                    center = Offset(sweepX, centerY)
+                )
+            }
+        }
+
+        // Stage 2 (125..310ms): Mechanical Gate-Stamp Impact ([ LOGGED · 0.00¢ DRIFT ])
+        if (stampAlpha > 0.01f) {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = Color(0xFFFFFCF7).copy(alpha = 0.96f * stampAlpha),
+                border = BorderStroke(3.dp, accentColor.copy(alpha = stampAlpha)),
+                shadowElevation = 10.dp,
+                modifier = Modifier
+                    .graphicsLayer {
+                        scaleX = stampScale
+                        scaleY = stampScale
+                        alpha = stampAlpha
+                        rotationZ = -8.5f
+                    }
+            ) {
+                Box(
+                    modifier = Modifier
+                        .padding(5.dp)
+                        .border(1.dp, accentColor.copy(alpha = 0.65f * stampAlpha), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 20.dp, vertical = 12.dp)
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Verified,
+                                contentDescription = null,
+                                tint = accentColor,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "LOGGED · 0.00¢ DRIFT",
+                                fontFamily = SplitMateTheme.FontDisplay,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 15.sp,
+                                letterSpacing = 1.1.sp,
+                                color = accentColor
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = stampSubLabel,
+                            fontFamily = SplitMateTheme.FontRounded,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = Color(0xFF4A443E)
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 private fun formatFlightPaiseExact(paise: Long): String {
@@ -619,6 +750,12 @@ fun FlightExpenseReviewScreen(
         ledgerSplitMembers.filter { it.isSelected && !it.isPayer }.map { it.name.substringBefore(" (") }
     }
 
+    val commitScope = rememberCoroutineScope()
+    val commitTearProgress = remember { Animatable(0f) }
+    val commitStampScale = remember { Animatable(1.75f) }
+    val commitStampAlpha = remember { Animatable(0f) }
+    var isCommittingBoardingPass by remember { mutableStateOf(false) }
+
     // Enforce Tabular Numerals (tnum) and SplitMate Brand Typography (Plus Jakarta Sans / Figtree)
     val tabularTextStyle = LocalTextStyle.current.copy(
         fontFamily = SplitMateTheme.FontRounded,
@@ -765,8 +902,10 @@ fun FlightExpenseReviewScreen(
                         val formattedButtonTotal = NumberFormat.getNumberInstance(Locale("en", "IN")).format(totalAirfareRupees)
                         Button(
                             onClick = {
-                                if (selectedMemberIds.isEmpty() || totalAirfarePaise <= 0L) return@Button
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                if (selectedMemberIds.isEmpty() || totalAirfarePaise <= 0L || isCommittingBoardingPass) return@Button
+                                isCommittingBoardingPass = true
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                playBoardingPassTearAndStampOneShot(isAudioSensoryEnabled)
                                 val parsedTicket = extractedTicket.toParsedTravelTicket().copy(
                                     coachAndSeats = "${extractedTicket.cabinClass.ifBlank { "Economy" }} · ${selectedMemberIds.size} Pax"
                                 )
@@ -774,25 +913,35 @@ fun FlightExpenseReviewScreen(
                                     baseCategory = "${extractedTicket.airlineName.ifBlank { "Flight" }} ${extractedTicket.flightNumber} (${extractedTicket.originIata} → ${extractedTicket.destinationIata})",
                                     ticket = parsedTicket
                                 )
-                                if (existingFlightExpenseInGroup != null) {
-                                    viewModel.editExistingExpense(
-                                        expenseId = existingFlightExpenseInGroup.expenseId,
-                                        newTitle = formattedTitle,
-                                        newTotalRupees = totalAirfarePaise / 100.0,
-                                        newPayerId = selectedPayerId,
-                                        selectedMemberIds = selectedMemberIds.toList()
+                                commitScope.launch {
+                                    commitTearProgress.animateTo(1f, tween(125, easing = FastOutLinearInEasing))
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    launch { commitStampAlpha.animateTo(1f, tween(60)) }
+                                    commitStampScale.animateTo(
+                                        targetValue = 1f,
+                                        animationSpec = spring(dampingRatio = 0.52f, stiffness = 680f)
                                     )
-                                } else {
-                                    viewModel.commitQuickEqualExpense(
-                                        title = formattedTitle,
-                                        totalAmountCents = totalAirfarePaise,
-                                        selectedMemberIds = selectedMemberIds.toList(),
-                                        payerMemberId = selectedPayerId
-                                    )
+                                    delay(95L)
+                                    if (existingFlightExpenseInGroup != null) {
+                                        viewModel.editExistingExpense(
+                                            expenseId = existingFlightExpenseInGroup.expenseId,
+                                            newTitle = formattedTitle,
+                                            newTotalRupees = totalAirfarePaise / 100.0,
+                                            newPayerId = selectedPayerId,
+                                            selectedMemberIds = selectedMemberIds.toList()
+                                        )
+                                    } else {
+                                        viewModel.commitQuickEqualExpense(
+                                            title = formattedTitle,
+                                            totalAmountCents = totalAirfarePaise,
+                                            selectedMemberIds = selectedMemberIds.toList(),
+                                            payerMemberId = selectedPayerId
+                                        )
+                                    }
+                                    onConfirmAndAddToLedger(totalAirfareRupees)
                                 }
-                                onConfirmAndAddToLedger(totalAirfareRupees)
                             },
-                            enabled = selectedMemberIds.isNotEmpty() && totalAirfarePaise > 0L,
+                            enabled = selectedMemberIds.isNotEmpty() && totalAirfarePaise > 0L && !isCommittingBoardingPass,
                             shape = FlightPassTokens.RadiusPill,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = if (SplitMateTheme.isDark) Color(0xFF282552) else FlightPassTokens.AviationNavy,
@@ -800,7 +949,7 @@ fun FlightExpenseReviewScreen(
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(60.dp)
+                                .height(56.dp)
                                 .shadow(12.dp, FlightPassTokens.RadiusPill, spotColor = Color(0x332B2768)),
                             contentPadding = PaddingValues(horizontal = 20.dp)
                         ) {
@@ -833,7 +982,8 @@ fun FlightExpenseReviewScreen(
                 }
             }
         ) { innerPadding ->
-            LazyColumn(
+            Box(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
@@ -1155,7 +1305,7 @@ fun FlightExpenseReviewScreen(
                                         else if (member.isSelected) FlightPassTokens.BorderSubtle
                                         else FlightPassTokens.BorderSubtle.copy(alpha = 0.5f)
                                     ),
-                                    shadowElevation = if (member.isSelected) 1.dp else 0.dp,
+                                    shadowElevation = 0.dp,
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Row(
@@ -1316,6 +1466,15 @@ fun FlightExpenseReviewScreen(
                     }
                 }
             }
+
+            BoardingPassCommitStampOverlay(
+                tearProgress = commitTearProgress.value,
+                stampScale = commitStampScale.value,
+                stampAlpha = commitStampAlpha.value,
+                accentColor = FlightPassTokens.AviationNavy,
+                stampSubLabel = "${extractedTicket.originIata} → ${extractedTicket.destinationIata} · PNR $pnrCode"
+            )
+            }
         }
     }
 }
@@ -1396,11 +1555,15 @@ fun PnrSyncStatusBanner(
     subtitleText: String = "Direct PDF Sync · Offline Vault",
     rightStatusLabel: String = "Offline Locked"
 ) {
-    Surface(
+    var energyState by remember(pnr) {
+        mutableStateOf(com.splitmate.app.ui.components.Gm3EnergyState.ANTICIPATING)
+    }
+
+    com.splitmate.app.ui.components.Gm3AuroraEnergySurface(
+        state = energyState,
+        onStateAutoTransition = { nextState -> energyState = nextState },
+        palette = com.splitmate.app.ui.components.Gm3EnergyAccentPalette.AVIATION_PERIWINKLE,
         shape = FlightPassTokens.RadiusInner,
-        color = FlightPassTokens.TicketPaperWhite,
-        border = BorderStroke(1.dp, FlightPassTokens.BorderSubtle),
-        shadowElevation = 2.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -1467,11 +1630,33 @@ fun PnrSyncStatusBanner(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            Text(
-                text = rightStatusLabel,
-                fontSize = 11.sp,
-                color = FlightPassTokens.TextMuted
-            )
+            Surface(
+                onClick = {
+                    energyState = when (energyState) {
+                        com.splitmate.app.ui.components.Gm3EnergyState.IDLE ->
+                            com.splitmate.app.ui.components.Gm3EnergyState.PROCESSING
+                        com.splitmate.app.ui.components.Gm3EnergyState.PROCESSING ->
+                            com.splitmate.app.ui.components.Gm3EnergyState.RESPONDING
+                        else ->
+                            com.splitmate.app.ui.components.Gm3EnergyState.IDLE
+                    }
+                },
+                shape = FlightPassTokens.RadiusPill,
+                color = FlightPassTokens.SkyBlue,
+                border = BorderStroke(1.dp, FlightPassTokens.SkyBlueBorder)
+            ) {
+                Text(
+                    text = if (energyState == com.splitmate.app.ui.components.Gm3EnergyState.IDLE) {
+                        "✨ $rightStatusLabel"
+                    } else {
+                        "✨ ${energyState.label} · $rightStatusLabel"
+                    },
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = FlightPassTokens.SkyBlueText,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                )
+            }
         }
     }
 }

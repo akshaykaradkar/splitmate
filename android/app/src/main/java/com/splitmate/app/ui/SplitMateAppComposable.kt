@@ -30,14 +30,22 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
@@ -421,6 +429,9 @@ fun SplitMateMainDashboardScaffold(
         label = "DashboardPrimaryDark"
     )
 
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val isMediumOrExpandedWindow = configuration.screenWidthDp >= 600
+
     Scaffold(
         containerColor = animatedScreenBg,
         floatingActionButton = {
@@ -450,30 +461,77 @@ fun SplitMateMainDashboardScaffold(
                     containerColor = animatedPrimaryDark,
                     contentColor = animatedScreenBg,
                     shape = SplitMateTheme.RadiusBadge,
-                    modifier = Modifier.shadow(10.dp, SplitMateTheme.RadiusBadge)
+                    modifier = Modifier
+                        .padding(bottom = 6.dp)
+                        .shadow(10.dp, SplitMateTheme.RadiusBadge)
                 )
             }
         },
         bottomBar = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
-                    .testTag("HorizontalFloatingToolbar")
-            ) {
-                SplitMateBottomNavigationBar(
-                    selectedTab = currentTab,
-                    onTabSelected = { tab -> viewModel.selectTab(tab.name) }
-                )
+            if (!isMediumOrExpandedWindow) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
+                        .testTag("HorizontalFloatingToolbar")
+                ) {
+                    SplitMateBottomNavigationBar(
+                        selectedTab = currentTab,
+                        onTabSelected = { tab -> viewModel.selectTab(tab.name) }
+                    )
+                }
             }
         }
     ) { innerPadding ->
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            when (currentTab) {
+            if (isMediumOrExpandedWindow) {
+                NavigationRail(
+                    containerColor = animatedScreenBg,
+                    contentColor = SplitMateTheme.PrimaryDark,
+                    modifier = Modifier.testTag("AdaptiveNavigationRail")
+                ) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    SplitMateTab.values().forEach { tab ->
+                        val isSelected = currentTab == tab
+                        NavigationRailItem(
+                            selected = isSelected,
+                            onClick = { viewModel.selectTab(tab.name) },
+                            icon = {
+                                Icon(
+                                    imageVector = tab.icon,
+                                    contentDescription = tab.label
+                                )
+                            },
+                            label = {
+                                Text(
+                                    text = tab.label,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    fontFamily = SplitMateTheme.FontRounded
+                                )
+                            },
+                            colors = NavigationRailItemDefaults.colors(
+                                selectedIconColor = Color(0xFF23201E),
+                                selectedTextColor = SplitMateTheme.PrimaryDark,
+                                indicatorColor = SplitMateTheme.AccentSage,
+                                unselectedIconColor = SplitMateTheme.TextSecondary,
+                                unselectedTextColor = SplitMateTheme.TextSecondary
+                            )
+                        )
+                    }
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+            ) {
+                when (currentTab) {
                 SplitMateTab.LEDGERS -> LedgersDashboardScreen(
                     viewModel = viewModel,
                     onNavigateToSplit = {
@@ -538,6 +596,7 @@ fun SplitMateMainDashboardScaffold(
                     }
                 )
             }
+            }
         }
     }
 }
@@ -568,9 +627,14 @@ fun SplitMateBottomNavigationBar(
         ) {
             SplitMateTab.values().forEach { tab ->
                 val isSelected = selectedTab == tab
+                val tabCornerRadius by animateDpAsState(
+                    targetValue = if (isSelected) 14.dp else 24.dp,
+                    animationSpec = spring(dampingRatio = 0.65f, stiffness = 480f),
+                    label = "navTabCornerMorph"
+                )
                 Surface(
                     onClick = { onTabSelected(tab) },
-                    shape = SplitMateTheme.RadiusBadge,
+                    shape = RoundedCornerShape(tabCornerRadius),
                     color = if (isSelected) SplitMateTheme.AccentSage else Color.Transparent,
                     modifier = Modifier.sizeIn(minWidth = 64.dp, minHeight = 48.dp)
                 ) {
@@ -900,7 +964,7 @@ fun LedgersDashboardScreen(
         )
     }
 
-    if (openedGroup != null) {
+    val renderGroupDetailPane: @Composable (com.splitmate.app.data.ExpenseGroupEntity) -> Unit = { openedGroup ->
         val groupMembers = uiState.members.filter { it.groupId == openedGroup.groupId }
         val groupExpenses = uiState.expenses.filter { it.groupId == openedGroup.groupId }
         val totalGroupSpendCents = groupExpenses.sumOf { it.totalAmountCents }
@@ -1228,16 +1292,23 @@ fun LedgersDashboardScreen(
                 ) {
                     mutableStateOf(flightPnrExpensesInGroup.isNotEmpty() && trainPnrExpensesInGroup.isEmpty())
                 }
+                var dragRotationDelta by remember { mutableFloatStateOf(0f) }
+                val travelPassHaptic = LocalHapticFeedback.current
 
                 val flipRotationY by animateFloatAsState(
-                    targetValue = if (isFlightSide) 180f else 0f,
+                    targetValue = ((if (isFlightSide) 180f else 0f) + dragRotationDelta).coerceIn(0f, 180f),
                     animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioLowBouncy,
-                        stiffness = Spring.StiffnessMediumLow
+                        dampingRatio = 0.74f,
+                        stiffness = 340f
                     ),
                     label = "TravelPassCardFlipY"
                 )
                 val showingFlightFace = flipRotationY >= 90f
+
+                // Fire a crisp mechanical haptic tick right as the cardstock crosses the 90-degree perpendicular plane
+                LaunchedEffect(showingFlightFace) {
+                    travelPassHaptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                }
 
                 val cardBgColor = if (showingFlightFace) {
                     if (SplitMateTheme.isDark) Color(0xFF1B1936) else Color(0xFFEEF2FF)
@@ -1256,9 +1327,45 @@ fun LedgersDashboardScreen(
                     border = BorderStroke(1.dp, cardBorderColor),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .pointerInput(isFlightSide) {
+                            detectHorizontalDragGestures(
+                                onDragEnd = {
+                                    if (kotlin.math.abs(dragRotationDelta) > 42f) {
+                                        isFlightSide = !isFlightSide
+                                    }
+                                    dragRotationDelta = 0f
+                                },
+                                onDragCancel = { dragRotationDelta = 0f },
+                                onHorizontalDrag = { change, dragAmount ->
+                                    change.consume()
+                                    val directionSign = if (isFlightSide) 1f else -1f
+                                    dragRotationDelta = (dragRotationDelta + (-dragAmount * 0.48f * directionSign))
+                                        .coerceIn(-160f, 160f)
+                                }
+                            )
+                        }
                         .graphicsLayer {
                             rotationY = flipRotationY
                             cameraDistance = 16f * density
+                        }
+                        .drawWithContent {
+                            drawContent()
+                            // Dynamic diagonal specular foil glint as the cardstock turns in virtual light
+                            val glintFraction = (flipRotationY % 180f) / 180f
+                            if (glintFraction in 0.03f..0.97f) {
+                                val glintCenter = size.width * glintFraction
+                                drawRect(
+                                    brush = Brush.linearGradient(
+                                        colors = listOf(
+                                            Color.Transparent,
+                                            Color.White.copy(alpha = 0.17f),
+                                            Color.Transparent
+                                        ),
+                                        start = Offset(glintCenter - 95.dp.toPx(), 0f),
+                                        end = Offset(glintCenter + 95.dp.toPx(), size.height)
+                                    )
+                                )
+                            }
                         }
                 ) {
                     Box(
@@ -1612,7 +1719,11 @@ fun LedgersDashboardScreen(
                 items(groupExpenses, key = { it.expenseId }) { expense ->
                     val payer = uiState.members.find { it.memberId == expense.payerId }
                     val isMePayer = payer?.isCurrentUser == true
-                    val formattedTotal = "₹${String.format(Locale.US, "%.2f", expense.totalAmountCents / 100.0)}"
+                    val formattedTotal = formatIndianRupeesFromCents(
+                        cents = expense.totalAmountCents,
+                        includePlusSign = false,
+                        currencySymbol = "₹"
+                    )
                     val isExpanded = expandedExpenseId == expense.expenseId
                     val breakdown = remember(expense, groupMembers, uiState.splits) {
                         SplitMateViewModel.resolveExpenseSplitBreakdown(
@@ -1638,7 +1749,7 @@ fun LedgersDashboardScreen(
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             val parsedTicketInGroup = remember(expense.title) { extractTravelTicketFromTitle(expense.title) }
-                            val cleanTitleInGroup = parsedTicketInGroup?.cleanTitle ?: expense.title
+                            val cleanTitleInGroup = cleanDisplayExpenseTitle(expense.title)
                             val isFlightCard = remember(expense.title, parsedTicketInGroup) {
                                 isFlightTicketExpense(expense.title, parsedTicketInGroup)
                             }
@@ -1880,14 +1991,14 @@ fun LedgersDashboardScreen(
                 }
             }
         }
-        return
     }
 
+    val renderMasterGroupListPane: @Composable () -> Unit = {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(top = 8.dp, bottom = 20.dp),
+        contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(DesignSystemBindings.PixelSectionSpacing)
     ) {
         // 1. Custom Top Bar (Subtitle "Fun & Trip Expenses", Clickable Avatar — NO redundant INR pill)
@@ -2017,6 +2128,7 @@ fun LedgersDashboardScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            val isZeroBalance = totalBalance == "₹0.00"
                             Surface(
                                 shape = SplitMateTheme.RadiusBadge,
                                 color = SplitMateTheme.SurfaceWhite.copy(alpha = 0.90f)
@@ -2026,18 +2138,34 @@ fun LedgersDashboardScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
-                                        imageVector = if (isNegativeBalance) Icons.AutoMirrored.Rounded.TrendingUp else Icons.AutoMirrored.Rounded.TrendingDown,
+                                        imageVector = when {
+                                            isZeroBalance -> Icons.Rounded.CheckCircle
+                                            isNegativeBalance -> Icons.AutoMirrored.Rounded.TrendingUp
+                                            else -> Icons.AutoMirrored.Rounded.TrendingDown
+                                        },
                                         contentDescription = null,
-                                        tint = if (isNegativeBalance) SplitMateTheme.TerracottaText else SplitMateTheme.SageText,
+                                        tint = when {
+                                            isZeroBalance -> SplitMateTheme.TextSecondary
+                                            isNegativeBalance -> SplitMateTheme.TerracottaText
+                                            else -> SplitMateTheme.SageText
+                                        },
                                         modifier = Modifier.size(14.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = if (isNegativeBalance) "You owe overall" else "You are owed overall",
+                                        text = when {
+                                            isZeroBalance -> "All settled up overall"
+                                            isNegativeBalance -> "You owe overall"
+                                            else -> "You are owed overall"
+                                        },
                                         fontFamily = SplitMateTheme.FontRounded,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (isNegativeBalance) SplitMateTheme.TerracottaText else SplitMateTheme.SageText
+                                        color = when {
+                                            isZeroBalance -> SplitMateTheme.TextSecondary
+                                            isNegativeBalance -> SplitMateTheme.TerracottaText
+                                            else -> SplitMateTheme.SageText
+                                        }
                                     )
                                 }
                             }
@@ -2093,16 +2221,19 @@ fun LedgersDashboardScreen(
                         }
 
                         Text(
-                            text = "Across ${activeGroups.size} active groups",
+                            text = if (activeGroups.size == 1) "1 active group" else "Across ${activeGroups.size} active groups",
                             fontFamily = SplitMateTheme.FontRounded,
                             fontSize = 13.sp,
                             letterSpacing = 0.sp,
                             color = SplitMateTheme.TextSecondary,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
+                            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
                         )
 
                         Spacer(modifier = Modifier.height(14.dp))
 
+                        // Single primary action inside Hero Balance Card (+ New Group, plus Settle Up when open balances exist;
+                        // duplicate "Log Expense" button removed since floating FAB is the primary entry point)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -2123,17 +2254,19 @@ fun LedgersDashboardScreen(
                                 Text("+ New Group", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.ScreenBg, fontWeight = FontWeight.Bold)
                             }
 
-                            FilledTonalButton(
-                                onClick = onNavigateToSplit,
-                                shape = SplitMateTheme.RadiusButton,
-                                colors = ButtonDefaults.filledTonalButtonColors(containerColor = SplitMateTheme.AccentSage),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .sizeIn(minHeight = 46.dp)
-                            ) {
-                                Icon(Icons.AutoMirrored.Rounded.ReceiptLong, contentDescription = null, tint = Color(0xFF23201E), modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Log Expense", fontFamily = SplitMateTheme.FontRounded, color = Color(0xFF23201E), fontWeight = FontWeight.Bold)
+                            if (totalBalance != "₹0.00") {
+                                FilledTonalButton(
+                                    onClick = onNavigateToSettle,
+                                    shape = SplitMateTheme.RadiusButton,
+                                    colors = ButtonDefaults.filledTonalButtonColors(containerColor = SplitMateTheme.SurfaceWhite),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .sizeIn(minHeight = 46.dp)
+                                ) {
+                                    Icon(Icons.Rounded.TaskAlt, contentDescription = null, tint = SplitMateTheme.PrimaryDark, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Settle Up →", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.PrimaryDark, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }
@@ -2213,7 +2346,14 @@ fun LedgersDashboardScreen(
                         modifier = Modifier.size(24.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text("${activeGroups.size}", fontFamily = SplitMateTheme.FontRounded, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SplitMateTheme.PrimaryDark)
+                            Text(
+                                text = "${activeGroups.size}",
+                                fontFamily = SplitMateTheme.FontRounded,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SplitMateTheme.PrimaryDark,
+                                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                            )
                         }
                     }
                 }
@@ -2315,10 +2455,11 @@ fun LedgersDashboardScreen(
                 groupCard.netBalanceCents < 0L -> SplitMateTheme.TerracottaSurface
                 else -> SplitMateTheme.SurfaceWhite
             }
+            // Restrict Forest Green (SageText) strictly to positive financial balances (> 0L)
             val badgeTextColor = when {
                 groupCard.netBalanceCents > 0L -> SplitMateTheme.SageText
                 groupCard.netBalanceCents < 0L -> SplitMateTheme.TerracottaText
-                else -> SplitMateTheme.SageText
+                else -> SplitMateTheme.TextSecondary
             }
             val groupIcon = resolveGroupCategoryIcon(groupCard.iconName, groupCard.name)
 
@@ -2354,7 +2495,11 @@ fun LedgersDashboardScreen(
                                     .background(if (groupCard.netBalanceCents == 0L) SplitMateTheme.SurfaceMuted else Color.White),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(groupIcon, contentDescription = null, tint = badgeTextColor)
+                                Icon(
+                                    imageVector = groupIcon,
+                                    contentDescription = null,
+                                    tint = if (groupCard.netBalanceCents == 0L) SplitMateTheme.PrimaryDark else badgeTextColor
+                                )
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
@@ -2370,7 +2515,7 @@ fun LedgersDashboardScreen(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = "${groupCard.memberCount} members · Tap to view expenses",
+                                    text = "Tap to view expenses & balances",
                                     fontFamily = SplitMateTheme.FontDisplay,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium,
@@ -2389,14 +2534,17 @@ fun LedgersDashboardScreen(
                         val numericBadgeAmount = if (groupCard.netBalanceCents == 0L) {
                             "₹0.00"
                         } else {
-                            val sign = if (groupCard.netBalanceCents > 0L) "+" else "-"
-                            "$sign₹${String.format(Locale.US, "%.2f", kotlin.math.abs(groupCard.netBalanceCents) / 100.0)}"
+                            formatIndianRupeesFromCents(
+                                cents = groupCard.netBalanceCents,
+                                includePlusSign = true,
+                                currencySymbol = "₹"
+                            )
                         }
 
                         Column(horizontalAlignment = Alignment.End) {
                             Surface(
                                 shape = SplitMateTheme.RadiusBadge,
-                                color = if (groupCard.netBalanceCents == 0L) SplitMateTheme.SageSurface else SplitMateTheme.SurfaceWhite.copy(alpha = 0.9f)
+                                color = if (groupCard.netBalanceCents == 0L) SplitMateTheme.SurfaceMuted else SplitMateTheme.SurfaceWhite.copy(alpha = 0.9f)
                             ) {
                                 Text(
                                     text = statusLabel,
@@ -2417,7 +2565,7 @@ fun LedgersDashboardScreen(
                                 fontSize = 24.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 letterSpacing = (-0.9).sp,
-                                color = badgeTextColor,
+                                color = if (groupCard.netBalanceCents == 0L) SplitMateTheme.PrimaryDark else badgeTextColor,
                                 maxLines = 1,
                                 softWrap = false,
                                 style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
@@ -2433,51 +2581,16 @@ fun LedgersDashboardScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         OverlappingAvatarStack(groupCard.memberSeeds, remainingCount = groupCard.remainingCount)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            val firstFriend = uiState.members.firstOrNull {
-                                it.groupId == groupCard.groupId && !it.isCurrentUser
-                            }
-                            if (firstFriend != null) {
-                                Surface(
-                                    onClick = { editingFriend = firstFriend },
-                                    shape = SplitMateTheme.RadiusBadge,
-                                    color = SplitMateTheme.SurfaceWhite,
-                                    border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
-                                    modifier = Modifier.padding(end = 6.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.ManageAccounts,
-                                            contentDescription = "Edit Group Members",
-                                            tint = SplitMateTheme.PrimaryDark,
-                                            modifier = Modifier.size(12.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = "Members",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = SplitMateTheme.PrimaryDark
-                                        )
-                                    }
-                                }
-                            }
-                            Surface(
-                                shape = SplitMateTheme.RadiusBadge,
-                                color = if (groupCard.netBalanceCents == 0L) SplitMateTheme.SageSurface else SplitMateTheme.SurfaceWhite.copy(alpha = 0.7f)
-                            ) {
-                                Text(
-                                    text = groupCard.statusPillText,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (groupCard.netBalanceCents == 0L) SplitMateTheme.SageText else SplitMateTheme.PrimaryDark,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                )
-                            }
-                        }
+                        // Bottom-right space dedicated to active group metadata ("7 members · Last active today")
+                        // instead of repeating a redundant "All settled up" status pill
+                        Text(
+                            text = groupCard.statusPillText,
+                            fontFamily = SplitMateTheme.FontRounded,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = SplitMateTheme.TextSecondary,
+                            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                        )
                     }
                 }
             }
@@ -2502,15 +2615,20 @@ fun LedgersDashboardScreen(
                         val payer = uiState.members.find { it.memberId == expense.payerId }
                         val isMePayer = payer?.isCurrentUser == true
                         val sym = uiState.activeCurrency.symbol
-                        val formattedAmt = (if (isMePayer) "+" else "-") +
-                            sym + String.format(Locale.US, "%.2f", expense.totalAmountCents / 100.0)
+                        val signedCents = if (isMePayer) expense.totalAmountCents else -expense.totalAmountCents
+                        val formattedAmt = formatIndianRupeesFromCents(
+                            cents = signedCents,
+                            includePlusSign = true,
+                            currencySymbol = sym
+                        )
                         val (catBg, catTint) = resolveExpenseCategoryBadgeColors(expense.title, SplitMateTheme.isDark)
                         val parsedTravel = extractTravelTicketFromTitle(expense.title)
-                        val cleanTitle = parsedTravel?.cleanTitle ?: expense.title
+                        val cleanTitle = cleanDisplayExpenseTitle(expense.title)
+                        val payerShortName = if (isMePayer) "you" else (payer?.name?.substringBefore(" ") ?: "Member")
                         val subText = if (parsedTravel != null && parsedTravel.pnr.isNotBlank()) {
-                            "PNR ${parsedTravel.pnr} (${parsedTravel.bookingStatus}) · Paid by ${if (isMePayer) "you" else (payer?.name ?: "Member")}"
+                            "PNR ${parsedTravel.pnr} (${parsedTravel.bookingStatus}) · Paid by $payerShortName"
                         } else {
-                            "Paid by ${if (isMePayer) "you" else (payer?.name ?: "Member")} · Tap group to view details"
+                            "Paid by $payerShortName · Tap group to view details"
                         }
                         ActivityItemRow(
                             icon = resolveExpenseCategoryIcon(expense.title),
@@ -2524,6 +2642,59 @@ fun LedgersDashboardScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
+            }
+        }
+    }
+    }
+
+    val isTwoPaneListDetailViewport = LocalConfiguration.current.screenWidthDp >= 720 && uiState.groups.isNotEmpty()
+    if (isTwoPaneListDetailViewport) {
+        val activeSupportingGroup = openedGroup ?: uiState.groups.first()
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(0.43f)
+                    .widthIn(max = 420.dp)
+                    .fillMaxHeight()
+            ) {
+                renderMasterGroupListPane()
+            }
+            Surface(
+                shape = RoundedCornerShape(28.dp),
+                color = SplitMateTheme.SurfaceMuted,
+                border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
+                modifier = Modifier
+                    .weight(0.57f)
+                    .fillMaxHeight()
+            ) {
+                renderGroupDetailPane(activeSupportingGroup)
+            }
+        }
+    } else {
+        AnimatedContent(
+            targetState = openedGroup,
+            transitionSpec = {
+                (fadeIn(tween(240)) + scaleIn(
+                    initialScale = 0.93f,
+                    animationSpec = spring(dampingRatio = 0.76f, stiffness = 380f)
+                )) togetherWith (fadeOut(tween(180)) + scaleOut(
+                    targetScale = 0.95f,
+                    animationSpec = spring(dampingRatio = 0.80f, stiffness = 400f)
+                )) using SizeTransform(clip = false) { _, _ ->
+                    spring(dampingRatio = 0.76f, stiffness = 360f)
+                }
+            },
+            label = "GroupCardContainerTransform"
+        ) { targetGroup ->
+            if (targetGroup != null) {
+                renderGroupDetailPane(targetGroup)
+            } else {
+                renderMasterGroupListPane()
             }
         }
     }
@@ -2720,8 +2891,8 @@ fun LedgersDashboardScreen(
                         }
                     }
 
-                    // 3. Prominent "+ Browse All Contacts" Button (Opens In-App Multi-Select Sheet)
-                    Button(
+                    // 3. Secondary Tonal Action: "+ Browse All Contacts" (Canonical GM3 size="sm" 40.dp FilledTonalButton)
+                    FilledTonalButton(
                         onClick = {
                             val hasPermission = ContextCompat.checkSelfPermission(
                                 context,
@@ -2735,25 +2906,25 @@ fun LedgersDashboardScreen(
                             }
                         },
                         shape = SplitMateTheme.RadiusButton,
-                        colors = ButtonDefaults.buttonColors(
+                        colors = ButtonDefaults.filledTonalButtonColors(
                             containerColor = SplitMateTheme.AccentSage,
                             contentColor = Color(0xFF23201E)
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp)
+                            .height(40.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Contacts,
                             contentDescription = null,
                             tint = Color(0xFF23201E),
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(17.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "+ Browse & Multi-Select Contacts",
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 14.sp,
+                            fontSize = 13.sp,
                             color = Color(0xFF23201E)
                         )
                     }
@@ -2983,7 +3154,7 @@ fun LedgersDashboardScreen(
                     ) {
                         TextButton(
                             onClick = { showNewGroupDialog = false },
-                            modifier = Modifier.height(46.dp),
+                            modifier = Modifier.height(40.dp),
                             contentPadding = PaddingValues(horizontal = 16.dp)
                         ) {
                             Text(
@@ -3016,8 +3187,8 @@ fun LedgersDashboardScreen(
                                 containerColor = SplitMateTheme.PrimaryDark,
                                 contentColor = SplitMateTheme.ScreenBg
                             ),
-                            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp),
-                            modifier = Modifier.height(46.dp)
+                            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 10.dp),
+                            modifier = Modifier.height(56.dp)
                         ) {
                             Text(
                                 text = "Create Group",
@@ -3037,6 +3208,7 @@ fun LedgersDashboardScreen(
 // ==============================================================================
 // TAB 3: SETTLE (Greedy Debt Simplification & Direct UPI + Direct WhatsApp Link)
 // ==============================================================================
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
     val context = LocalContext.current
@@ -3244,6 +3416,17 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                         .border(1.dp, summaryBorderColor, RoundedCornerShape(24.dp))
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
+                        var showMaxHeapGraphInspector by remember { mutableStateOf(false) }
+                        val rawPairwiseIouCount = remember(uiState.expenses.size, settlementPlan.size) {
+                            (uiState.expenses.size * 2 + 1).coerceAtLeast(settlementPlan.size + 2)
+                        }
+                        val simplifiedTransferCount = settlementPlan.size
+                        val inspectorCornerRadius by animateDpAsState(
+                            targetValue = if (showMaxHeapGraphInspector) 10.dp else 20.dp,
+                            animationSpec = spring(dampingRatio = 0.65f, stiffness = 480f),
+                            label = "MaxHeapInspectorPillCorner"
+                        )
+
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
@@ -3260,7 +3443,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                 )
                             }
                             Spacer(modifier = Modifier.width(12.dp))
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "Trip Settlement Summary",
                                     fontFamily = SplitMateTheme.FontDisplay,
@@ -3273,6 +3456,184 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                     fontSize = 11.sp,
                                     color = SplitMateTheme.TextSecondary
                                 )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Generative Progressive Disclosure Pill (size="xs" 32.dp with GM3 corner morphing)
+                        Surface(
+                            onClick = { showMaxHeapGraphInspector = !showMaxHeapGraphInspector },
+                            shape = RoundedCornerShape(inspectorCornerRadius),
+                            color = if (showMaxHeapGraphInspector) Color(0xFF365314) else SplitMateTheme.SageSurface,
+                            border = BorderStroke(1.dp, Color(0xFF416913).copy(alpha = 0.45f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 32.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.AutoGraph,
+                                        contentDescription = null,
+                                        tint = if (showMaxHeapGraphInspector) Color(0xFFD7E8B6) else SplitMateTheme.SageText,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Compressed $rawPairwiseIouCount raw IOUs → $simplifiedTransferCount transfers",
+                                        fontFamily = SplitMateTheme.FontRounded,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = if (showMaxHeapGraphInspector) Color.White else SplitMateTheme.SageText
+                                    )
+                                }
+                                Text(
+                                    text = if (showMaxHeapGraphInspector) "Hide Graph ▲" else "Inspect Graph ▼",
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (showMaxHeapGraphInspector) Color(0xFFD7E8B6) else SplitMateTheme.SageText
+                                )
+                            }
+                        }
+
+                        AnimatedVisibility(
+                            visible = showMaxHeapGraphInspector,
+                            enter = expandVertically(animationSpec = spring(dampingRatio = 0.75f, stiffness = 380f)) + fadeIn(),
+                            exit = shrinkVertically() + fadeOut()
+                        ) {
+                            val graphPulseTransition = rememberInfiniteTransition(label = "MaxHeapGraphFlow")
+                            val flowProgress by graphPulseTransition.animateFloat(
+                                initialValue = 0f,
+                                targetValue = 1f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(1800, easing = LinearEasing),
+                                    repeatMode = RepeatMode.Restart
+                                ),
+                                label = "FlowDotProgress"
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = SplitMateTheme.SurfaceWhite,
+                                border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = "Raw Pairwise Web ($rawPairwiseIouCount edges)",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = SplitMateTheme.TerracottaText
+                                        )
+                                        Text(
+                                            text = "Max-Heap Minimum Cash Flow ($simplifiedTransferCount)",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = SplitMateTheme.SageText
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Canvas(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(74.dp)
+                                    ) {
+                                        val midX = size.width * 0.5f
+                                        val midY = size.height * 0.5f
+                                        val leftNodes = listOf(0.18f, 0.42f, 0.65f, 0.86f)
+                                        val rightNodes = listOf(0.25f, 0.50f, 0.75f).take(simplifiedTransferCount.coerceIn(1, 3))
+
+                                        // Left: Tangled dashed terracotta raw pairwise IOU arcs converging into Max-Heap node
+                                        leftNodes.forEach { ny ->
+                                            val startPt = Offset(14.dp.toPx(), size.height * ny)
+                                            val path = androidx.compose.ui.graphics.Path().apply {
+                                                moveTo(startPt.x, startPt.y)
+                                                cubicTo(
+                                                    midX * 0.45f,
+                                                    startPt.y,
+                                                    midX * 0.65f,
+                                                    midY,
+                                                    midX - 18.dp.toPx(),
+                                                    midY
+                                                )
+                                            }
+                                            drawPath(
+                                                path = path,
+                                                color = Color(0xFFE06B52).copy(alpha = 0.55f),
+                                                style = androidx.compose.ui.graphics.drawscope.Stroke(
+                                                    width = 1.6.dp.toPx(),
+                                                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f), 0f)
+                                                )
+                                            )
+                                            drawCircle(
+                                                color = Color(0xFFE06B52),
+                                                radius = 4.dp.toPx(),
+                                                center = startPt
+                                            )
+                                        }
+
+                                        // Center: Max-Heap Simplifier Hub
+                                        drawRoundRect(
+                                            color = Color(0xFFD7E8B6),
+                                            topLeft = Offset(midX - 18.dp.toPx(), midY - 14.dp.toPx()),
+                                            size = androidx.compose.ui.geometry.Size(36.dp.toPx(), 28.dp.toPx()),
+                                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(8.dp.toPx(), 8.dp.toPx())
+                                        )
+                                        drawCircle(
+                                            color = Color(0xFF365314),
+                                            radius = 6.dp.toPx(),
+                                            center = Offset(midX, midY)
+                                        )
+
+                                        // Right: Clean minimum cash-flow vectors + animated flow dot
+                                        rightNodes.forEach { ry ->
+                                            val endPt = Offset(size.width - 14.dp.toPx(), size.height * ry)
+                                            val startHub = Offset(midX + 18.dp.toPx(), midY)
+                                            val path = androidx.compose.ui.graphics.Path().apply {
+                                                moveTo(startHub.x, startHub.y)
+                                                cubicTo(
+                                                    midX + (size.width - midX) * 0.4f,
+                                                    midY,
+                                                    midX + (size.width - midX) * 0.6f,
+                                                    endPt.y,
+                                                    endPt.x,
+                                                    endPt.y
+                                                )
+                                            }
+                                            drawPath(
+                                                path = path,
+                                                color = Color(0xFF416913),
+                                                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5.dp.toPx())
+                                            )
+                                            drawCircle(
+                                                color = Color(0xFF416913),
+                                                radius = 5.dp.toPx(),
+                                                center = endPt
+                                            )
+                                            // Animated kinetic settlement particle along simplified edge
+                                            val dotX = startHub.x + (endPt.x - startHub.x) * flowProgress
+                                            val dotY = startHub.y + (endPt.y - startHub.y) * flowProgress
+                                            drawCircle(
+                                                color = Color(0xFFD7E8B6),
+                                                radius = 4.dp.toPx(),
+                                                center = Offset(dotX, dotY)
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -3593,7 +3954,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                             colors = ButtonDefaults.outlinedButtonColors(contentColor = SplitMateTheme.PrimaryDark),
                                                             modifier = Modifier
                                                                 .weight(1f)
-                                                                .height(36.dp),
+                                                                .height(40.dp),
                                                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                                                         ) {
                                                             Icon(
@@ -3613,16 +3974,35 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                         }
                                                     }
 
+                                                    var isDrainingIn by remember { mutableStateOf(false) }
+                                                    val drainScopeIn = rememberCoroutineScope()
+                                                    val drainHapticIn = LocalHapticFeedback.current
+                                                    val markPaidCornerIn by animateDpAsState(
+                                                        targetValue = if (isDrainingIn) 12.dp else 20.dp,
+                                                        animationSpec = spring(dampingRatio = 0.62f, stiffness = 500f),
+                                                        label = "MarkPaidCornerIn"
+                                                    )
                                                     Button(
-                                                        onClick = { viewModel.markGreedyTransferSettled(matchingTransfer.transfer) },
-                                                        shape = SplitMateTheme.RadiusButton,
+                                                        onClick = {
+                                                            if (isDrainingIn) return@Button
+                                                            isDrainingIn = true
+                                                            drainHapticIn.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                            drainScopeIn.launch {
+                                                                kotlinx.coroutines.delay(140L)
+                                                                drainHapticIn.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                kotlinx.coroutines.delay(180L)
+                                                                viewModel.markGreedyTransferSettled(matchingTransfer.transfer)
+                                                                isDrainingIn = false
+                                                            }
+                                                        },
+                                                        shape = RoundedCornerShape(markPaidCornerIn),
                                                         colors = ButtonDefaults.buttonColors(
-                                                            containerColor = SplitMateTheme.PrimaryDark,
+                                                            containerColor = if (isDrainingIn) Color(0xFF365314) else SplitMateTheme.PrimaryDark,
                                                             contentColor = SplitMateTheme.ScreenBg
                                                         ),
                                                         modifier = Modifier
                                                             .weight(1f)
-                                                            .height(36.dp),
+                                                            .height(40.dp),
                                                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
                                                     ) {
                                                         Icon(
@@ -3632,7 +4012,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                         )
                                                         Spacer(modifier = Modifier.width(4.dp))
                                                         Text(
-                                                            text = "Mark Paid",
+                                                            text = if (isDrainingIn) "₹0.00 · Settled ✓" else "Mark Paid",
                                                             fontFamily = SplitMateTheme.FontRounded,
                                                             fontWeight = FontWeight.Bold,
                                                             fontSize = 11.sp,
@@ -3868,16 +4248,35 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                         modifier = Modifier.fillMaxWidth(),
                                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                                     ) {
+                                                        var isDrainingOut by remember { mutableStateOf(false) }
+                                                        val drainScopeOut = rememberCoroutineScope()
+                                                        val drainHapticOut = LocalHapticFeedback.current
+                                                        val markPaidCornerOut by animateDpAsState(
+                                                            targetValue = if (isDrainingOut) 12.dp else 20.dp,
+                                                            animationSpec = spring(dampingRatio = 0.62f, stiffness = 500f),
+                                                            label = "MarkPaidCornerOut"
+                                                        )
                                                         Button(
-                                                            onClick = { viewModel.markGreedyTransferSettled(matchingTransfer.transfer) },
-                                                            shape = SplitMateTheme.RadiusButton,
+                                                            onClick = {
+                                                                if (isDrainingOut) return@Button
+                                                                isDrainingOut = true
+                                                                drainHapticOut.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                                drainScopeOut.launch {
+                                                                    kotlinx.coroutines.delay(140L)
+                                                                    drainHapticOut.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                    kotlinx.coroutines.delay(180L)
+                                                                    viewModel.markGreedyTransferSettled(matchingTransfer.transfer)
+                                                                    isDrainingOut = false
+                                                                }
+                                                            },
+                                                            shape = RoundedCornerShape(markPaidCornerOut),
                                                             colors = ButtonDefaults.buttonColors(
-                                                                containerColor = SplitMateTheme.PrimaryDark,
+                                                                containerColor = if (isDrainingOut) Color(0xFF365314) else SplitMateTheme.PrimaryDark,
                                                                 contentColor = SplitMateTheme.ScreenBg
                                                             ),
                                                             modifier = Modifier
                                                                 .weight(1f)
-                                                                .height(36.dp),
+                                                                .height(40.dp),
                                                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
                                                         ) {
                                                             Icon(
@@ -3887,7 +4286,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                             )
                                                             Spacer(modifier = Modifier.width(4.dp))
                                                             Text(
-                                                                text = "Mark Paid",
+                                                                text = if (isDrainingOut) "₹0.00 · Settled ✓" else "Mark Paid",
                                                                 fontFamily = SplitMateTheme.FontRounded,
                                                                 fontWeight = FontWeight.Bold,
                                                                 fontSize = 11.sp
@@ -3906,41 +4305,81 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
             }
         }
 
-        // 5. Settled Equilibrium State
+        // 5. Sleek 56dp Settled Equilibrium Banner (No longer hogs the viewport above Settled & Paid History)
         if (settlementPlan.isEmpty()) {
             item {
-                Card(
+                Surface(
                     shape = SplitMateTheme.RadiusCard,
-                    colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SageSurface),
-                    modifier = Modifier.fillMaxWidth()
+                    color = SplitMateTheme.SageSurface,
+                    border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
                 ) {
-                    Column(
+                    Row(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                            .fillMaxSize()
+                            .padding(horizontal = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(Color.White),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = SplitMateTheme.SageText, modifier = Modifier.size(28.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .background(SplitMateTheme.SurfaceWhite),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.CheckCircle,
+                                    contentDescription = null,
+                                    tint = SplitMateTheme.SageText,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "All Accounts Balanced",
+                                    fontFamily = SplitMateTheme.FontDisplay,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 14.sp,
+                                    color = SplitMateTheme.PrimaryDark
+                                )
+                                Text(
+                                    text = "Zero open balances across group members",
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontSize = 11.sp,
+                                    color = SplitMateTheme.TextSecondary
+                                )
+                            }
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("All Accounts Balanced", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = SplitMateTheme.PrimaryDark)
-                        Text("Zero open balances across group members", fontSize = 12.sp, color = SplitMateTheme.TextSecondary)
+                        Surface(
+                            shape = SplitMateTheme.RadiusBadge,
+                            color = SplitMateTheme.SurfaceWhite.copy(alpha = 0.85f)
+                        ) {
+                            Text(
+                                text = "₹0.00",
+                                fontFamily = SplitMateTheme.FontDisplay,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 12.sp,
+                                color = SplitMateTheme.SageText,
+                                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
                     }
                 }
             }
         }
 
-        // 6. PERMANENT SETTLED & PAID HISTORY RECORD (Kept as a permanent record instead of vanishing!)
+        // 6. PERMANENT SETTLED & PAID HISTORY RECORD (Clean overlapping avatars + 2-line hierarchy + tap row for Undo Sheet)
         val resolvedActiveGroupIdForSettlements = uiState.activeGroup?.groupId ?: uiState.activeGroupId
         val recordedSettlements = uiState.settlements.filter { it.groupId == resolvedActiveGroupIdForSettlements }
         item {
+            var selectedSettlementForSheet by remember { mutableStateOf<com.splitmate.app.data.SettlementEntity?>(null) }
+
             Card(
                 shape = SplitMateTheme.RadiusCard,
                 colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
@@ -3959,13 +4398,13 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                 modifier = Modifier
                                     .size(36.dp)
                                     .clip(CircleShape)
-                                    .background(SplitMateTheme.SageSurface),
+                                    .background(SplitMateTheme.SurfaceMuted),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Rounded.TaskAlt,
                                     contentDescription = null,
-                                    tint = SplitMateTheme.SageText,
+                                    tint = SplitMateTheme.PrimaryDark,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -3979,7 +4418,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                     color = SplitMateTheme.PrimaryDark
                                 )
                                 Text(
-                                    text = "Completed payments stay recorded here for group transparency",
+                                    text = "Tap any completed payment for receipt details or undo",
                                     fontSize = 11.sp,
                                     color = SplitMateTheme.TextSecondary
                                 )
@@ -3988,14 +4427,15 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
 
                         Surface(
                             shape = SplitMateTheme.RadiusBadge,
-                            color = SplitMateTheme.SageSurface
+                            color = SplitMateTheme.SurfaceMuted
                         ) {
                             Text(
                                 text = "${recordedSettlements.size} Paid",
                                 fontFamily = SplitMateTheme.FontRounded,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = SplitMateTheme.SageText,
+                                color = SplitMateTheme.PrimaryDark,
+                                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                             )
                         }
@@ -4021,7 +4461,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "When you tap 'Mark Paid' on any settlement above, it will be saved here as a permanent receipt record instead of vanishing.",
+                                    text = "When you tap 'Mark Paid' on any settlement above, it will be saved here as a permanent receipt record.",
                                     fontSize = 11.sp,
                                     color = SplitMateTheme.TextSecondary
                                 )
@@ -4029,14 +4469,18 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                         }
                     } else {
                         val dateFormatter = remember {
-                            java.text.SimpleDateFormat("dd MMM, hh:mm a", Locale.US)
+                            java.text.SimpleDateFormat("dd MMM · hh:mm a", Locale.US)
                         }
                         recordedSettlements.forEachIndexed { idx, settlement ->
                             val fromMbr = uiState.members.find { it.memberId == settlement.fromMemberId }
                             val toMbr = uiState.members.find { it.memberId == settlement.toMemberId }
-                            val fromLabel = if (fromMbr?.isCurrentUser == true) "You (${fromMbr.name})" else (fromMbr?.name ?: "Member")
-                            val toLabel = if (toMbr?.isCurrentUser == true) "You (${toMbr.name})" else (toMbr?.name ?: "Member")
-                            val formattedPaid = "₹${String.format(Locale.US, "%.2f", settlement.amountCents / 100.0)}"
+                            val fromShortName = (fromMbr?.name ?: "Member").substringBefore(" ")
+                            val toShortName = (toMbr?.name ?: "Member").substringBefore(" ")
+                            val formattedPaid = formatIndianRupeesFromCents(
+                                cents = settlement.amountCents,
+                                includePlusSign = false,
+                                currencySymbol = "₹"
+                            )
                             val formattedDate = remember(settlement.settledAt) {
                                 dateFormatter.format(java.util.Date(settlement.settledAt))
                             }
@@ -4044,93 +4488,179 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                             if (idx > 0) {
                                 HorizontalDivider(
                                     color = SplitMateTheme.BorderLight,
-                                    modifier = Modifier.padding(vertical = 10.dp)
+                                    modifier = Modifier.padding(vertical = 8.dp)
                                 )
                             }
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                            Surface(
+                                onClick = { selectedSettlementForSheet = settlement },
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color.Transparent,
+                                modifier = Modifier.fillMaxWidth()
                             ) {
                                 Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    AvatarToken(
-                                        initials = fromMbr?.avatarSeed ?: fromLabel.take(2),
-                                        bg = SplitMateTheme.SageSurface,
-                                        textColor = SplitMateTheme.SageText,
-                                        size = 34
-                                    )
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Column {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                text = "$fromLabel → $toLabel",
-                                                fontWeight = FontWeight.ExtraBold,
-                                                fontSize = 13.sp,
-                                                color = SplitMateTheme.PrimaryDark
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Surface(
-                                                shape = SplitMateTheme.RadiusBadge,
-                                                color = SplitMateTheme.SageSurface
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f).padding(end = 12.dp)
+                                    ) {
+                                        // Two Overlapping Circular Avatars (Payer & Receiver)
+                                        Box(modifier = Modifier.width(52.dp).height(34.dp)) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .align(Alignment.CenterStart)
+                                                    .border(1.5.dp, SplitMateTheme.SurfaceWhite, CircleShape)
                                             ) {
-                                                Text(
-                                                    text = "✓ PAID",
-                                                    fontSize = 9.sp,
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    color = SplitMateTheme.SageText,
-                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                AvatarToken(
+                                                    initials = fromMbr?.avatarSeed?.ifBlank { fromShortName.take(2) } ?: fromShortName.take(2),
+                                                    bg = SplitMateTheme.SurfaceMuted,
+                                                    textColor = SplitMateTheme.PrimaryDark,
+                                                    size = 32
+                                                )
+                                            }
+                                            Box(
+                                                modifier = Modifier
+                                                    .align(Alignment.CenterEnd)
+                                                    .border(1.5.dp, SplitMateTheme.SurfaceWhite, CircleShape)
+                                            ) {
+                                                AvatarToken(
+                                                    initials = toMbr?.avatarSeed?.ifBlank { toShortName.take(2) } ?: toShortName.take(2),
+                                                    bg = SplitMateTheme.SageSurface,
+                                                    textColor = SplitMateTheme.SageText,
+                                                    size = 32
                                                 )
                                             }
                                         }
-                                        Text(
-                                            text = "Settled on $formattedDate",
-                                            fontSize = 11.sp,
-                                            color = SplitMateTheme.TextSecondary
-                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column {
+                                            Text(
+                                                text = "$fromShortName paid $toShortName",
+                                                fontFamily = SplitMateTheme.FontDisplay,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 14.sp,
+                                                color = SplitMateTheme.PrimaryDark,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = formattedDate,
+                                                fontFamily = SplitMateTheme.FontRounded,
+                                                fontSize = 11.sp,
+                                                color = SplitMateTheme.TextSecondary,
+                                                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                                            )
+                                        }
                                     }
-                                }
 
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    // Right side dedicated solely to the settled amount (tabular figures)
                                     Text(
                                         text = formattedPaid,
                                         fontFamily = SplitMateTheme.FontDisplay,
                                         fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 15.sp,
-                                        color = SplitMateTheme.SageText,
+                                        fontSize = 16.sp,
+                                        color = SplitMateTheme.PrimaryDark,
                                         style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
                                     )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Surface(
-                                        onClick = { viewModel.undoSettlement(settlement.settlementId) },
-                                        shape = SplitMateTheme.RadiusBadge,
-                                        color = SplitMateTheme.SurfaceMuted
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.AutoMirrored.Rounded.Undo,
-                                                contentDescription = "Undo Paid Mark",
-                                                tint = SplitMateTheme.PrimaryDark,
-                                                modifier = Modifier.size(12.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(3.dp))
-                                            Text(
-                                                text = "Undo",
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = SplitMateTheme.PrimaryDark
-                                            )
-                                        }
-                                    }
                                 }
                             }
                         }
+                    }
+                }
+            }
+
+            // Contextual Settlement Detail & Undo Bottom Sheet
+            selectedSettlementForSheet?.let { selectedSettlement ->
+                val fromMbr = uiState.members.find { it.memberId == selectedSettlement.fromMemberId }
+                val toMbr = uiState.members.find { it.memberId == selectedSettlement.toMemberId }
+                val fromFullName = fromMbr?.name ?: "Member"
+                val toFullName = toMbr?.name ?: "Member"
+                val formattedPaid = formatIndianRupeesFromCents(
+                    cents = selectedSettlement.amountCents,
+                    includePlusSign = false,
+                    currencySymbol = "₹"
+                )
+                val fullDateStr = remember(selectedSettlement.settledAt) {
+                    java.text.SimpleDateFormat("dd MMM yyyy · hh:mm a", Locale.US).format(java.util.Date(selectedSettlement.settledAt))
+                }
+                ModalBottomSheet(
+                    onDismissRequest = { selectedSettlementForSheet = null },
+                    containerColor = SplitMateTheme.SurfaceWhite,
+                    shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 12.dp)
+                            .navigationBarsPadding()
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = "$fromFullName paid $toFullName",
+                                    fontFamily = SplitMateTheme.FontDisplay,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 18.sp,
+                                    color = SplitMateTheme.PrimaryDark
+                                )
+                                Text(
+                                    text = "Settled on $fullDateStr",
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontSize = 12.sp,
+                                    color = SplitMateTheme.TextSecondary,
+                                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                                )
+                            }
+                            Text(
+                                text = formattedPaid,
+                                fontFamily = SplitMateTheme.FontDisplay,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 22.sp,
+                                color = SplitMateTheme.SageText,
+                                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.undoSettlement(selectedSettlement.settlementId)
+                                selectedSettlementForSheet = null
+                            },
+                            shape = SplitMateTheme.RadiusButton,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = SplitMateTheme.TerracottaText
+                            ),
+                            border = BorderStroke(1.dp, SplitMateTheme.TerracottaSurface),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.Undo,
+                                contentDescription = "Undo Settlement",
+                                tint = SplitMateTheme.TerracottaText,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Undo / Rollback Settlement",
+                                fontFamily = SplitMateTheme.FontRounded,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 14.sp,
+                                color = SplitMateTheme.TerracottaText
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
                     }
                 }
             }
@@ -4139,8 +4669,9 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
 }
 
 // ==============================================================================
-// TAB 4: ACTIVITY & HISTORY (Interactive Expense Breakdown + Group Filters)
+// TAB 4: ACTIVITY & HISTORY (Chronological Timeline + Flattened Cards + Detail Sheet)
 // ==============================================================================
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AuditVaultScreen(
     viewModel: SplitMateViewModel,
@@ -4149,8 +4680,7 @@ fun AuditVaultScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val sym = "₹"
     var selectedGroupFilterId by remember { mutableStateOf<String?>(null) }
-    var showFilterBar by remember { mutableStateOf(true) }
-    var expandedExpenseId by remember { mutableStateOf<String?>(null) }
+    var selectedExpenseForDetailSheet by remember { mutableStateOf<com.splitmate.app.data.ExpenseEntity?>(null) }
     var editingExpenseEntity by remember { mutableStateOf<com.splitmate.app.data.ExpenseEntity?>(null) }
 
     val filteredExpenses = remember(uiState.expenses, selectedGroupFilterId) {
@@ -4161,110 +4691,108 @@ fun AuditVaultScreen(
         }
     }
 
+    // Group expenses chronologically by day with friendly labels ("Today · 25 Sep", "Yesterday · 24 Sep", etc.)
+    val groupedExpensesByDate = remember(filteredExpenses) {
+        val dayKeyFormat = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val displayDayFormat = java.text.SimpleDateFormat("dd MMM", Locale.US)
+        val todayKey = dayKeyFormat.format(java.util.Date())
+        val yesterdayKey = dayKeyFormat.format(java.util.Date(System.currentTimeMillis() - 86_400_000L))
+
+        filteredExpenses.groupBy { exp ->
+            val ts = if (exp.createdAt > 0L) exp.createdAt else System.currentTimeMillis()
+            val d = java.util.Date(ts)
+            val key = dayKeyFormat.format(d)
+            val shortDate = displayDayFormat.format(d)
+            when (key) {
+                todayKey -> "Today · $shortDate"
+                yesterdayKey -> "Yesterday · $shortDate"
+                else -> shortDate
+            }
+        }
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(DesignSystemBindings.PixelSectionSpacing)
+        contentPadding = PaddingValues(top = 12.dp, bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // 1. Header + Direct Horizontal Filter Chip Strip (Removed redundant outer white card wrapper)
         item {
-            Text(
-                text = "Activity & History",
-                fontFamily = SplitMateTheme.FontDisplay,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = SplitMateTheme.PrimaryDark
-            )
-            Text(
-                text = "Tap any transaction to inspect its breakdown or edit details",
-                fontFamily = SplitMateTheme.FontRounded,
-                fontSize = 12.sp,
-                color = SplitMateTheme.TextSecondary
-            )
-        }
+            Column {
+                Text(
+                    text = "Activity & History",
+                    fontFamily = SplitMateTheme.FontDisplay,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = SplitMateTheme.PrimaryDark
+                )
+                Text(
+                    text = "Tap any expense for split breakdown, boarding pass, or edit",
+                    fontFamily = SplitMateTheme.FontRounded,
+                    fontSize = 12.sp,
+                    color = SplitMateTheme.TextSecondary
+                )
 
-        // 1. Interactive Expense History Card (Toggles Group Filter Pills)
-        item {
-            Card(
-                onClick = { showFilterBar = !showFilterBar },
-                shape = SplitMateTheme.RadiusPanel,
-                colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusPanel)
-                    .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .background(SplitMateTheme.AccentSage),
-                                contentAlignment = Alignment.Center
+                if (uiState.groups.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        item {
+                            val allSelected = selectedGroupFilterId == null
+                            val allCornerRadius by animateDpAsState(
+                                targetValue = if (allSelected) 10.dp else 20.dp,
+                                animationSpec = spring(dampingRatio = 0.65f, stiffness = 480f),
+                                label = "allGroupsChipCornerMorph"
+                            )
+                            Surface(
+                                onClick = { selectedGroupFilterId = null },
+                                shape = RoundedCornerShape(allCornerRadius),
+                                color = if (allSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.SurfaceWhite,
+                                border = BorderStroke(1.dp, if (allSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.BorderLight),
+                                modifier = Modifier.heightIn(min = 32.dp)
                             ) {
-                                Icon(Icons.Rounded.History, contentDescription = null, tint = Color(0xFF23201E))
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text("Expense History", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = SplitMateTheme.PrimaryDark)
-                                Text("Tap to filter by group · Tap any expense to inspect or edit", fontSize = 11.sp, color = SplitMateTheme.TextSecondary)
-                            }
-                        }
-
-                        Surface(
-                            shape = SplitMateTheme.RadiusBadge,
-                            color = SplitMateTheme.SageSurface
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF388E3C)))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("${filteredExpenses.size} Recorded", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SplitMateTheme.SageText)
-                            }
-                        }
-                    }
-
-                    if (showFilterBar && uiState.groups.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            item {
-                                Surface(
-                                    onClick = { selectedGroupFilterId = null },
-                                    shape = SplitMateTheme.RadiusBadge,
-                                    color = if (selectedGroupFilterId == null) SplitMateTheme.PrimaryDark else SplitMateTheme.SurfaceMuted
+                                Box(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                    contentAlignment = Alignment.Center
                                 ) {
                                     Text(
                                         text = "All Groups (${uiState.expenses.size})",
-                                        fontSize = 11.sp,
+                                        fontFamily = SplitMateTheme.FontRounded,
+                                        fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (selectedGroupFilterId == null) SplitMateTheme.ScreenBg else SplitMateTheme.PrimaryDark,
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                        color = if (allSelected) SplitMateTheme.ScreenBg else SplitMateTheme.PrimaryDark,
+                                        style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
                                     )
                                 }
                             }
-                            items(uiState.groups, key = { it.groupId }) { grp ->
-                                val isSelected = selectedGroupFilterId == grp.groupId
-                                val count = uiState.expenses.count { it.groupId == grp.groupId }
-                                Surface(
-                                    onClick = { selectedGroupFilterId = if (isSelected) null else grp.groupId },
-                                    shape = SplitMateTheme.RadiusBadge,
-                                    color = if (isSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.SurfaceMuted
+                        }
+                        items(uiState.groups, key = { it.groupId }) { grp ->
+                            val isSelected = selectedGroupFilterId == grp.groupId
+                            val count = uiState.expenses.count { it.groupId == grp.groupId }
+                            val chipCornerRadius by animateDpAsState(
+                                targetValue = if (isSelected) 10.dp else 20.dp,
+                                animationSpec = spring(dampingRatio = 0.65f, stiffness = 480f),
+                                label = "groupFilterChipCornerMorph"
+                            )
+                            Surface(
+                                onClick = { selectedGroupFilterId = if (isSelected) null else grp.groupId },
+                                shape = RoundedCornerShape(chipCornerRadius),
+                                color = if (isSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.SurfaceWhite,
+                                border = BorderStroke(1.dp, if (isSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.BorderLight),
+                                modifier = Modifier.heightIn(min = 32.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                    contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = "${grp.name} ($count)",
-                                        fontSize = 11.sp,
+                                        text = "${grp.name.toSmartTitleCase()} ($count)",
+                                        fontFamily = SplitMateTheme.FontRounded,
+                                        fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = if (isSelected) SplitMateTheme.ScreenBg else SplitMateTheme.PrimaryDark,
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                        style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
                                     )
                                 }
                             }
@@ -4272,16 +4800,6 @@ fun AuditVaultScreen(
                     }
                 }
             }
-        }
-
-        // 2. Transaction Feed
-        item {
-            Text(
-                text = "Recent Expenses (Tap card for breakdown or edit)",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = SplitMateTheme.TextSecondary
-            )
         }
 
         if (filteredExpenses.isEmpty()) {
@@ -4302,188 +4820,364 @@ fun AuditVaultScreen(
                         Icon(Icons.AutoMirrored.Rounded.ReceiptLong, contentDescription = null, tint = SplitMateTheme.SageText, modifier = Modifier.size(32.dp))
                         Spacer(modifier = Modifier.height(8.dp))
                         Text("No expenses recorded yet", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = SplitMateTheme.PrimaryDark)
-                        Text("Expenses you split will appear here with full receipt breakdowns.", fontSize = 12.sp, color = SplitMateTheme.TextSecondary)
+                        Text("Expenses you split will appear here chronologically.", fontSize = 12.sp, color = SplitMateTheme.TextSecondary)
                     }
                 }
             }
         }
 
-        items(filteredExpenses, key = { it.expenseId }) { expense ->
-            val payer = uiState.members.find { it.memberId == expense.payerId }
-            val group = uiState.groups.find { it.groupId == expense.groupId }
-            val groupMembers = uiState.members.filter { it.groupId == expense.groupId }
-            val breakdown = remember(expense, groupMembers, uiState.splits, sym) {
-                SplitMateViewModel.resolveExpenseSplitBreakdown(
-                    expense = expense,
-                    groupMembers = groupMembers,
-                    allSplits = uiState.splits,
-                    currencySymbol = sym,
-                    headerPrefix = "Individual Share Breakdown"
-                )
-            }
-            val perPersonShare = breakdown.perPersonHeadlineShare
-            val isMePayer = payer?.isCurrentUser == true
-            val formattedTotal = "$sym${String.format(Locale.US, "%.2f", expense.totalAmountCents / 100.0)}"
-            val isExpanded = expandedExpenseId == expense.expenseId
-            val parsedTravelTicket = remember(expense.title) {
-                extractTravelTicketFromTitle(expense.title)
-            }
-            val displayExpenseTitle = remember(expense.title, parsedTravelTicket) {
-                parsedTravelTicket?.cleanTitle ?: expense.title
+        // 2. Chronological Date Dividers + Flattened Single-Level Expense Cards
+        groupedExpensesByDate.forEach { (dateHeaderLabel, dateExpenses) ->
+            item(key = "date_header_$dateHeaderLabel") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp, bottom = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = dateHeaderLabel,
+                        fontFamily = SplitMateTheme.FontDisplay,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = SplitMateTheme.TextSecondary,
+                        style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                    )
+                    Text(
+                        text = if (dateExpenses.size == 1) "1 entry" else "${dateExpenses.size} entries",
+                        fontFamily = SplitMateTheme.FontRounded,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SplitMateTheme.TextSecondary,
+                        style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                    )
+                }
             }
 
-            Card(
-                onClick = {
-                    expandedExpenseId = if (isExpanded) null else expense.expenseId
-                },
-                shape = SplitMateTheme.RadiusCard,
-                colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusCard)
-                    .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        val (auditCatBg, auditCatTint) = resolveExpenseCategoryBadgeColors(expense.title, SplitMateTheme.isDark)
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(auditCatBg),
-                                contentAlignment = Alignment.Center
+            items(dateExpenses, key = { it.expenseId }) { expense ->
+                val payer = uiState.members.find { it.memberId == expense.payerId }
+                val group = uiState.groups.find { it.groupId == expense.groupId }
+                val groupMembers = uiState.members.filter { it.groupId == expense.groupId }
+                val breakdown = remember(expense, groupMembers, uiState.splits, sym) {
+                    SplitMateViewModel.resolveExpenseSplitBreakdown(
+                        expense = expense,
+                        groupMembers = groupMembers,
+                        allSplits = uiState.splits,
+                        currencySymbol = sym,
+                        headerPrefix = "Individual Share Breakdown"
+                    )
+                }
+                val perPersonShare = breakdown.perPersonHeadlineShare
+                val isMePayer = payer?.isCurrentUser == true
+                val signedCents = if (isMePayer) expense.totalAmountCents else -expense.totalAmountCents
+                val formattedSignedTotal = formatIndianRupeesFromCents(
+                    cents = signedCents,
+                    includePlusSign = true,
+                    currencySymbol = sym
+                )
+                val parsedTravelTicket = remember(expense.title) {
+                    extractTravelTicketFromTitle(expense.title)
+                }
+                val displayExpenseTitle = remember(expense.title) {
+                    cleanDisplayExpenseTitle(expense.title)
+                }
+                val payerFirstName = if (isMePayer) "You" else (payer?.name?.substringBefore(" ") ?: "Member")
+
+                // Flattened Single-Level Card (No box-in-box ticket stub or persistent Edit/Undo buttons)
+                Card(
+                    onClick = { selectedExpenseForDetailSheet = expense },
+                    shape = SplitMateTheme.RadiusCard,
+                    colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusCard)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val (auditCatBg, auditCatTint) = resolveExpenseCategoryBadgeColors(expense.title, SplitMateTheme.isDark)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f).padding(end = 10.dp)
                             ) {
-                                Icon(
-                                    imageVector = resolveExpenseCategoryIcon(expense.title),
-                                    contentDescription = null,
-                                    tint = auditCatTint
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .clip(CircleShape)
+                                        .background(auditCatBg),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = resolveExpenseCategoryIcon(expense.title),
+                                        contentDescription = null,
+                                        tint = auditCatTint,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = displayExpenseTitle,
+                                        fontFamily = SplitMateTheme.FontDisplay,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 15.sp,
+                                        color = SplitMateTheme.PrimaryDark,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Paid by $payerFirstName · ${breakdown.splittingMembersCount} splitting ($perPersonShare/ea)",
+                                        fontFamily = SplitMateTheme.FontRounded,
+                                        fontSize = 12.sp,
+                                        color = SplitMateTheme.TextSecondary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                                    )
+                                    if (parsedTravelTicket != null && parsedTravelTicket.pnr.isNotBlank()) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Surface(
+                                                shape = SplitMateTheme.RadiusBadge,
+                                                color = SplitMateTheme.SurfaceMuted
+                                            ) {
+                                                Text(
+                                                    text = "PNR ${parsedTravelTicket.pnr} · ${parsedTravelTicket.bookingStatus}",
+                                                    fontFamily = SplitMateTheme.FontRounded,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = SplitMateTheme.PrimaryDark,
+                                                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                                )
+                                            }
+                                            if (!group?.name.isNullOrBlank()) {
+                                                Text(
+                                                    text = "in ${group?.name?.toSmartTitleCase()}",
+                                                    fontFamily = SplitMateTheme.FontRounded,
+                                                    fontSize = 11.sp,
+                                                    color = SplitMateTheme.TextSecondary
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(displayExpenseTitle, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = SplitMateTheme.PrimaryDark)
+
+                            Column(horizontalAlignment = Alignment.End) {
                                 Text(
-                                    text = "${group?.name ?: "Group"} · Paid by ${payer?.name ?: "You"}",
-                                    fontSize = 12.sp,
+                                    text = formattedSignedTotal,
+                                    fontFamily = SplitMateTheme.FontDisplay,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 16.sp,
+                                    // Restrict Forest Green strictly to positive financial balances (+₹7,525.40)
+                                    color = if (isMePayer) SplitMateTheme.SageText else SplitMateTheme.PrimaryDark,
+                                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = if (parsedTravelTicket != null) "Boarding Pass ↗" else "Details ›",
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
                                     color = SplitMateTheme.TextSecondary
                                 )
                             }
                         }
-
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = (if (isMePayer) "+" else "-") + formattedTotal,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 16.sp,
-                                color = if (isMePayer) SplitMateTheme.SageText else SplitMateTheme.TerracottaText
-                            )
-                            Text(
-                                text = if (isExpanded) "Hide Breakdown ▲" else "Tap for Breakdown ▼",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = SplitMateTheme.SageText
-                            )
-                        }
                     }
+                }
+            }
+        }
+    }
 
-                    if (parsedTravelTicket != null) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        CompactLedgerTicketStub(
-                            ticket = parsedTravelTicket,
-                            totalAmountDisplay = formattedTotal,
-                            perPersonShareDisplay = perPersonShare,
-                            onInspectTactilePass = {
-                                onOpenPnrWithTicket(expense.groupId, parsedTravelTicket.pnr)
-                            }
-                        )
-                    }
+    // Contextual Expense Breakdown, Boarding Pass & Edit/Undo Modal Bottom Sheet
+    selectedExpenseForDetailSheet?.let { selectedExp ->
+        val payer = uiState.members.find { it.memberId == selectedExp.payerId }
+        val groupMembers = uiState.members.filter { it.groupId == selectedExp.groupId }
+        val breakdown = remember(selectedExp, groupMembers, uiState.splits, sym) {
+            SplitMateViewModel.resolveExpenseSplitBreakdown(
+                expense = selectedExp,
+                groupMembers = groupMembers,
+                allSplits = uiState.splits,
+                currencySymbol = sym,
+                headerPrefix = "Individual Share Breakdown"
+            )
+        }
+        val parsedTravelTicket = remember(selectedExp.title) {
+            extractTravelTicketFromTitle(selectedExp.title)
+        }
+        val cleanTitle = remember(selectedExp.title) {
+            cleanDisplayExpenseTitle(selectedExp.title)
+        }
+        val formattedTotal = formatIndianRupeesFromCents(
+            cents = selectedExp.totalAmountCents,
+            includePlusSign = false,
+            currencySymbol = sym
+        )
 
-                    if (isExpanded) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        HorizontalDivider(color = SplitMateTheme.BorderLight)
-                        Spacer(modifier = Modifier.height(8.dp))
+        ModalBottomSheet(
+            onDismissRequest = { selectedExpenseForDetailSheet = null },
+            containerColor = SplitMateTheme.SurfaceWhite,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+                    .navigationBarsPadding()
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                         Text(
-                            text = breakdown.headerLabel,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
+                            text = cleanTitle,
+                            fontFamily = SplitMateTheme.FontDisplay,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 18.sp,
                             color = SplitMateTheme.PrimaryDark
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        breakdown.rows.forEach { row ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 3.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = row.displayName,
-                                    fontSize = 12.sp,
-                                    color = if (row.isIncludedInSplit) SplitMateTheme.TextSecondary else SplitMateTheme.TextSecondary.copy(alpha = 0.5f)
-                                )
-                                Text(
-                                    text = row.formattedShare,
-                                    fontSize = 12.sp,
-                                    fontWeight = if (row.isIncludedInSplit) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (row.isIncludedInSplit) SplitMateTheme.PrimaryDark else SplitMateTheme.TextSecondary.copy(alpha = 0.55f)
-                                )
-                            }
-                        }
+                        Text(
+                            text = "Paid by ${payer?.name ?: "You"} · ${breakdown.perPersonHeadlineShare}/person",
+                            fontFamily = SplitMateTheme.FontRounded,
+                            fontSize = 12.sp,
+                            color = SplitMateTheme.TextSecondary,
+                            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                        )
                     }
+                    Text(
+                        text = formattedTotal,
+                        fontFamily = SplitMateTheme.FontDisplay,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 22.sp,
+                        color = SplitMateTheme.PrimaryDark,
+                        style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                    )
+                }
 
-                    Spacer(modifier = Modifier.height(10.dp))
-                    HorizontalDivider(color = SplitMateTheme.BorderLight)
-                    Spacer(modifier = Modifier.height(8.dp))
+                if (parsedTravelTicket != null && parsedTravelTicket.pnr.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Button(
+                        onClick = {
+                            val gId = selectedExp.groupId
+                            val pnrCode = parsedTravelTicket.pnr
+                            selectedExpenseForDetailSheet = null
+                            onOpenPnrWithTicket(gId, pnrCode)
+                        },
+                        shape = SplitMateTheme.RadiusButton,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SplitMateTheme.PrimaryDark,
+                            contentColor = SplitMateTheme.ScreenBg
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(46.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isFlightTicketExpense(selectedExp.title, parsedTravelTicket)) Icons.Rounded.FlightTakeoff else Icons.Rounded.Train,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Open Full Boarding Pass (PNR ${parsedTravelTicket.pnr}) ↗",
+                            fontFamily = SplitMateTheme.FontRounded,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 13.sp,
+                            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                        )
+                    }
+                }
 
+                Spacer(modifier = Modifier.height(14.dp))
+                HorizontalDivider(color = SplitMateTheme.BorderLight)
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = breakdown.headerLabel,
+                    fontFamily = SplitMateTheme.FontDisplay,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = SplitMateTheme.PrimaryDark
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                breakdown.rows.forEach { row ->
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "$perPersonShare / person (${breakdown.splittingMembersCount} splitting)",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = SplitMateTheme.TextSecondary
+                            text = row.displayName,
+                            fontFamily = SplitMateTheme.FontRounded,
+                            fontSize = 13.sp,
+                            color = if (row.isIncludedInSplit) SplitMateTheme.PrimaryDark else SplitMateTheme.TextSecondary.copy(alpha = 0.5f)
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Surface(
-                                onClick = { editingExpenseEntity = expense },
-                                shape = SplitMateTheme.RadiusBadge,
-                                color = SplitMateTheme.SageSurface
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Rounded.Edit, contentDescription = null, modifier = Modifier.size(14.dp), tint = SplitMateTheme.SageText)
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Edit", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SplitMateTheme.SageText)
-                                }
-                            }
-                            Surface(
-                                onClick = { viewModel.rollbackExpense(expense.expenseId) },
-                                shape = SplitMateTheme.RadiusBadge,
-                                color = SplitMateTheme.SurfaceMuted
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.AutoMirrored.Rounded.Undo, contentDescription = null, modifier = Modifier.size(14.dp), tint = SplitMateTheme.PrimaryDark)
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Undo", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SplitMateTheme.PrimaryDark)
-                                }
-                            }
-                        }
+                        Text(
+                            text = row.formattedShare,
+                            fontFamily = SplitMateTheme.FontDisplay,
+                            fontSize = 13.sp,
+                            fontWeight = if (row.isIncludedInSplit) FontWeight.ExtraBold else FontWeight.Medium,
+                            color = if (row.isIncludedInSplit) SplitMateTheme.PrimaryDark else SplitMateTheme.TextSecondary.copy(alpha = 0.55f),
+                            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                        )
                     }
                 }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            val expToEdit = selectedExp
+                            selectedExpenseForDetailSheet = null
+                            editingExpenseEntity = expToEdit
+                        },
+                        shape = SplitMateTheme.RadiusButton,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = SplitMateTheme.PrimaryDark),
+                        border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(46.dp)
+                    ) {
+                        Icon(Icons.Rounded.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Edit Expense", fontFamily = SplitMateTheme.FontRounded, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            val idToRollback = selectedExp.expenseId
+                            selectedExpenseForDetailSheet = null
+                            viewModel.rollbackExpense(idToRollback)
+                        },
+                        shape = SplitMateTheme.RadiusButton,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = SplitMateTheme.TerracottaText),
+                        border = BorderStroke(1.dp, SplitMateTheme.TerracottaSurface),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(46.dp)
+                    ) {
+                        Icon(Icons.AutoMirrored.Rounded.Undo, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Undo Entry", fontFamily = SplitMateTheme.FontRounded, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
             }
         }
     }

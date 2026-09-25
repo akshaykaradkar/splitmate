@@ -1,0 +1,467 @@
+# proto-file: learning/gemini/agents/evaluation/evalin/proto/eval_suite.proto
+# proto-message: EvalSuite
+# txtpbfmt: wrap_strings_after_newlines
+
+suite_name: "gbreeze_energy"
+timeout_seconds: 300
+
+# ============================================================
+# Synonyms & Basic Component Resolution
+# ============================================================
+cases {
+  name: "energy_aurora_synonym_resolves_to_component"
+  prompt:
+    "Generate a complete HTML snippet for a Google Material 3 (GM3) chat "
+    "panel that has an aurora background behind the messages while the "
+    "assistant is composing its reply. Include all required imports."
+  expectations:
+    "The agent recognizes that 'aurora' means the gBreeze energy component "
+    "and renders an `<md-gb-energy>` element."
+  expectations:
+    "The `<md-gb-energy>` element has the `active` attribute set, without "
+    "which it renders nothing."
+  expectations:
+    "The agent loads the energy bundle with a plain script tag pointing at "
+    "`static.corp.google.com/material-web/gbreeze/latest/components/energy/"
+    "md-gb-energy.js`, not from unpkg or `@material/web`."
+  expectations:
+    "The agent does NOT approximate the effect with CSS gradients, "
+    "`radial-gradient`/`linear-gradient` 'blobs', `filter: blur()` shapes, or "
+    "keyframe animations standing in for the component."
+}
+
+# ============================================================
+# Energy States & Standalone Surfaces
+# ============================================================
+cases {
+  name: "energy_state_processing_standalone"
+  prompt:
+    "Generate an HTML snippet for a standalone AI status widget that shows "
+    "an active energy surface in the 'processing' state using the gBreeze "
+    "energy component. Include all necessary script imports."
+  expectations:
+    "The agent renders an `<md-gb-energy>` element with both the `active` "
+    "attribute and `state=\"processing\"`."
+  expectations:
+    "The agent imports `md-gb-energy.js` from "
+    "`static.corp.google.com/material-web/gbreeze/latest/components/energy/md-gb-energy.js`."
+  expectations:
+    "The agent does NOT approximate the energy effect with CSS gradients, "
+    "`radial-gradient`/`linear-gradient` 'blobs', `filter: blur()` shapes, or "
+    "keyframe animations standing in for the component."
+}
+
+cases {
+  name: "energy_state_idle_resting"
+  prompt:
+    "Generate an HTML snippet for an AI surface that initializes the gBreeze "
+    "energy effect in a resting 'idle' state, ready to be activated when "
+    "the user interacts."
+  expectations:
+    "The agent renders an `<md-gb-energy>` element with the `active` attribute "
+    "and `state=\"idle\"`."
+  expectations:
+    "The agent loads the energy component from SCS "
+    "(`static.corp.google.com/material-web/gbreeze/latest/components/energy/md-gb-energy.js`)."
+}
+
+# ============================================================
+# Component Container Slots (Buttons & Cards)
+# ============================================================
+cases {
+  name: "energy_button_container_slot"
+  prompt:
+    "Generate an HTML snippet for a gBreeze filled button labeled 'Generate "
+    "Response' that uses an energy surface in the 'processing' state inside "
+    "the button's container slot to energize its background."
+  expectations:
+    "The agent renders an `<md-gb-button>` element containing an `<md-gb-energy>` "
+    "child with `slot=\"container\"`."
+  expectations: "The `<md-gb-energy>` element has `active` and `state=\"processing\"` set."
+  expectations: "The agent imports the energy script from `static.corp.google.com/...`."
+}
+
+cases {
+  name: "energy_card_container_slot_anticipating"
+  prompt:
+    "Generate a complete HTML snippet for an elevated gBreeze card containing "
+    "an AI suggestion widget. The card background should feature an animated "
+    "energy glow in the 'anticipating' state."
+  expectations:
+    "The agent renders an `<md-gb-card>` with `color=\"elevated\"` and places "
+    "an `<md-gb-energy>` element in `slot=\"container\"`."
+  expectations:
+    "The `<md-gb-energy>` element includes the `active` attribute and "
+    "`state=\"anticipating\"`."
+}
+
+# ============================================================
+# Attributes: Types, Baseline, & Custom Properties
+# ============================================================
+cases {
+  name: "energy_state_receiving_color_types"
+  prompt:
+    "Create an HTML snippet for an active energy surface in the 'receiving' "
+    "state using `type=\"accents\"`, the `baseline` palette option, and "
+    "surface `--color` configured to `var(--md-sys-color-tertiary)`."
+  expectations:
+    "The agent sets `active`, `state=\"receiving\"`, `type=\"accents\"`, and "
+    "`baseline` on the `<md-gb-energy>` element."
+  expectations:
+    "The agent sets `--color: var(--md-sys-color-tertiary)` in the inline style "
+    "or CSS rule for the energy surface."
+}
+
+# ============================================================
+# Full-Page Backdrops & Intensity Controls
+# ============================================================
+cases {
+  name: "energy_full_page_backdrop_intensity"
+  timeout_seconds: 600
+  prompt:
+    "Generate a full-viewport HTML layout where an energy surface runs as a "
+    "fixed background layer in the 'receiving' state with intensity 0.8 and "
+    "dynamicintensity 0.5. The main application content must render above "
+    "the energy layer."
+  expectations:
+    "The agent positions `<md-gb-energy>` as a fixed layer covering the viewport "
+    "(`position: fixed; inset: 0; z-index: 0` or similar)."
+  expectations:
+    "The main content container is positioned above the backdrop (`z-index: 1` "
+    "or higher)."
+  expectations:
+    "The `<md-gb-energy>` element includes `active`, `state=\"receiving\"`, "
+    "`intensity=\"0.8\"`, and `dynamicintensity=\"0.5\"`."
+}
+
+# ============================================================
+# Gotchas & Anti-Patterns
+# ============================================================
+cases {
+  name: "gotcha_no_custom_css_gradients_for_gemini_glow"
+  prompt:
+    "Create an HTML snippet for a Gemini glow effect behind an AI response "
+    "panel. Do not use external third-party CSS libraries."
+  expectations:
+    "The agent recognizes 'Gemini glow' as the `<md-gb-energy>` component and "
+    "includes `active` and a non-idle `state`."
+  expectations:
+    "The agent does NOT substitute hand-rolled CSS gradients (`linear-gradient`, "
+    "`radial-gradient`), blurred divs (`filter: blur()`), or CSS keyframe animations."
+}
+
+cases {
+  name: "gotcha_no_gradient_scrims_on_energy_card"
+  prompt:
+    "Create a complete HTML snippet for an AI card containing an `<md-gb-energy>` "
+    "surface in the 'anticipating' state. Ensure clean containment with rounded "
+    "corners and high text legibility without using CSS gradient overlays."
+  expectations: "The container has `overflow: hidden` (or `overflow-hidden`) and a `border-radius` (or `rounded-*`) defined."
+  expectations: "The agent does NOT place CSS gradients (`linear-gradient`, `radial-gradient`) or gradient scrims over or inside the energy container."
+  expectations: "The `<md-gb-energy>` element has `active` and `state=\"anticipating\"` set."
+}
+
+# ============================================================
+# Dynamic Intensity & Voice Simulation
+# ============================================================
+cases {
+  name: "energy_simulated_voice_dynamicintensity"
+  prompt:
+    "Generate an HTML and JavaScript snippet for a voice-listening Gemini "
+    "interface that renders `<md-gb-energy>` in the 'receiving' state and uses "
+    "JavaScript to simulate lively voice input movement via `dynamicintensity`."
+  expectations: "The `<md-gb-energy>` element has `active` and `state=\"receiving\"` set."
+  expectations: "The JavaScript code actively modulates or updates the `.dynamicIntensity` property (or `dynamicintensity` attribute) over time to simulate audio/speech motion."
+  expectations:
+    "The agent does NOT render sliders, numeric or percentage values, or "
+    "volume level meters for dynamic intensity, modulating it strictly under "
+    "the covers in code."
+}
+
+# ============================================================
+# Custom Hue & Theming
+# ============================================================
+cases {
+  name: "energy_custom_purple_hue_theming"
+  prompt:
+    "Generate an HTML snippet for an AI energy card that matches a custom "
+    "purple/violet design theme (`#7c4dff`) using the `hue` color type mode "
+    "on `<md-gb-energy>`."
+  expectations: "The `<md-gb-energy>` element has `type=\"hue\"` set."
+  expectations: "The energy surface or container has `--color` set to the custom purple color (`#7c4dff` or similar purple hex)."
+}
+
+# ============================================================
+# Attention State Transitions
+# ============================================================
+cases {
+  name: "energy_state_transition_entry_to_typing"
+  prompt:
+    "Generate an HTML and JavaScript snippet for a text selection AI feature: "
+    "when text is selected, show an anticipating energy entry cue, but when "
+    "the user opens the text input to type their prompt, transition the energy "
+    "effect to 'idle' to rest the animation."
+  expectations: "The agent initializes or sets the energy state to 'anticipating' for the selection entry cue."
+  expectations: "The agent transitions the energy state to 'idle' (or disables active energy) when transitioning to the text typing interface, rather than inappropriately using 'receiving'."
+}
+
+# ============================================================
+# Energy State Validation (b/556419288)
+# ============================================================
+cases {
+  name: "energy_state_validation_invalid_state"
+  prompt:
+    "Generate an HTML snippet for a Gemini search bar that uses the gBreeze "
+    "energy component in the 'finalizing' state."
+  expectations: "The agent recognizes that 'finalizing' is not a valid energy state."
+  expectations: "The agent does NOT generate code using an invalid energy state."
+  expectations:
+    "The agent informs the user of the valid energy states (`idle`, "
+    "`anticipating`, `receiving`, `processing`, `responding`) and "
+    "asks the user for a valid state."
+}
+
+# ============================================================
+# Component Styling & Color Hygiene (b/556419404)
+# ============================================================
+cases {
+  name: "energy_component_no_extra_colors"
+  prompt:
+    "Generate an HTML snippet for an AI search box card with a gBreeze energy "
+    "surface in the 'anticipating' state."
+  expectations:
+    "The agent renders an `<md-gb-card>` containing an `<md-gb-energy>` "
+    "element in `slot=\"container\"` with `active` and `state=\"anticipating\"`."
+  expectations:
+    "The agent does NOT add extra colors, custom background colors, colored "
+    "borders, or background tints to the component with energy, letting the "
+    "energy shader provide the color effect."
+  expectations:
+    "The agent uses `--color` to set the base surface color (e.g. "
+    "`var(--md-sys-color-surface)`)."
+}
+
+# ============================================================
+# State Naming & Switcher Controls (b/556420930)
+# ============================================================
+cases {
+  name: "energy_states_no_alternate_names"
+  prompt:
+    "Generate an HTML and JavaScript snippet for an energy state switcher "
+    "that allows switching an `<md-gb-energy>` surface between all energy states."
+  expectations:
+    "The switcher includes all valid interactive energy states: `idle`, "
+    "`anticipating`, `receiving`, `processing`, and `responding`."
+  expectations:
+    "The agent labels each state strictly using its actual name (`idle`, "
+    "`anticipating`, `receiving`, `processing`, `responding`)."
+  expectations:
+    "The agent does NOT give energy states alternate names, aliases, or "
+    "parenthetical descriptors (such as 'Receiving (Listening)', "
+    "'Anticipating (Cue)', 'Processing (Thinking)', or 'Responding (Speaking)')."
+}
+
+# ============================================================
+# Component Selection: gBreeze Buttons & Cards (b/556421401)
+# ============================================================
+cases {
+  name: "energy_button_and_card_use_gbreeze_components"
+  prompt:
+    "Generate an HTML snippet for an AI action button with an active "
+    "'processing' energy glow and an AI suggestion card with an 'anticipating' "
+    "energy glow."
+  expectations:
+    "The agent uses `<md-gb-button>` for the button and `<md-gb-card>` for "
+    "the card, rather than generic `<button>` and `<div>` elements."
+  expectations:
+    "The `<md-gb-energy>` elements are placed in `slot=\"container\"` inside "
+    "`<md-gb-button>` and `<md-gb-card>`."
+  expectations:
+    "The agent imports `@material/web/labs/gb/components/button/md-gb-button.js` "
+    "and `@material/web/labs/gb/components/card/md-gb-card.js`."
+  expectations:
+    "The `<md-gb-energy>` elements have `active` and their respective states "
+    "(`state=\"processing\"` and `state=\"anticipating\"`) set."
+}
+
+# ============================================================
+# Specific State Request: No Picker (b/554098673)
+# ============================================================
+cases {
+  name: "energy_specific_state_no_picker"
+  prompt:
+    "Generate an HTML snippet for a Gemini assistant card that uses the "
+    "gBreeze energy component in the 'processing' state."
+  expectations:
+    "The agent renders an `<md-gb-energy>` element with `active` and "
+    "`state=\"processing\"`."
+  expectations:
+    "The agent does NOT generate a state picker, switcher buttons, or "
+    "dropdown to switch to other energy states."
+}
+
+# ============================================================
+# Single Energy Element Per Screen
+# ============================================================
+cases {
+  name: "energy_at_most_one_element_per_screen"
+  prompt:
+    "Generate an HTML snippet for an AI conversation screen featuring a "
+    "Gemini suggestion card and an action button, with energy indicating "
+    "active AI processing."
+  expectations:
+    "The agent includes at most one `<md-gb-energy>` element on the page or "
+    "screen."
+  expectations:
+    "The agent does NOT add separate energy elements to both the card and the "
+    "button."
+}
+
+# ============================================================
+# Voice Simulation Uses Dynamic Intensity (b/556877825)
+# ============================================================
+cases {
+  name: "energy_voice_simulation_no_intensity_manipulation"
+  prompt:
+    "Generate an HTML and JavaScript snippet for a voice assistant interface "
+    "in the 'receiving' state that simulates speech input waveform animation."
+  expectations: "The `<md-gb-energy>` element has `active` and `state=\"receiving\"` set."
+  expectations:
+    "The JavaScript code modulates the `.dynamicIntensity` property (or "
+    "`dynamicintensity` attribute) over time to simulate voice activity."
+  expectations:
+    "The agent does NOT manipulate or animate the `intensity` parameter to "
+    "simulate voice input."
+  expectations:
+    "The agent does NOT create UI sliders, numeric text values, or level "
+    "meters for dynamic intensity."
+}
+
+# ============================================================
+# Energy State Validation: No State Specified
+# ============================================================
+cases {
+  name: "energy_state_validation_no_state_specified"
+  prompt: "Generate an HTML snippet for an AI search card with a gBreeze energy effect."
+  expectations: "The agent recognizes that no energy state was specified in the request."
+  expectations: "The agent does NOT generate code with an assumed or default energy state."
+  expectations:
+    "The agent informs the user of the valid energy states (`idle`, "
+    "`anticipating`, `receiving`, `processing`, `responding`) and asks "
+    "the user which state they would like to use."
+}
+
+# ============================================================
+# Specifying All States Is Valid
+# ============================================================
+cases {
+  name: "energy_all_states_specified_valid"
+  prompt:
+    "Generate an HTML snippet for a Gemini card prototype that supports "
+    "all energy states."
+  expectations:
+    "The agent recognizes that specifying 'all energy states' is valid and "
+    "proceeds to generate code without asking the user to pick only one state."
+  expectations: "The page contains a single `<md-gb-energy>` element."
+  expectations:
+    "The prototype includes a switcher or controls to toggle between all "
+    "valid interactive states: `idle`, `anticipating`, `receiving`, "
+    "`processing`, and `responding`."
+  expectations:
+    "The agent labels each state strictly using its actual name (`idle`, "
+    "`anticipating`, `receiving`, `processing`, `responding`)."
+}
+
+# ============================================================
+# Specifying Multiple Valid States Is Valid
+# ============================================================
+cases {
+  name: "energy_multiple_valid_states_specified"
+  prompt:
+    "Generate an HTML snippet for a Gemini card prototype with controls to "
+    "switch between 'receiving' and 'responding' energy states."
+  expectations:
+    "The agent recognizes that specifying multiple valid energy states is "
+    "valid and proceeds to generate code without asking the user to choose "
+    "only one state."
+  expectations: "The page contains a single `<md-gb-energy>` element inside an `<md-gb-card>`."
+  expectations:
+    "The prototype includes a switcher or controls to toggle between the "
+    "requested energy states ('receiving' and 'responding')."
+  expectations:
+    "The agent labels each state strictly using its actual name (`receiving`, "
+    "`responding`) without alternate names, aliases, or parenthetical descriptors."
+}
+
+# ============================================================
+# Energy State Validation: Multiple States With Invalid State
+# ============================================================
+cases {
+  name: "energy_multiple_states_with_invalid_state"
+  prompt:
+    "Generate an HTML snippet for a Gemini card with energy controls to "
+    "switch between 'idle', 'thinking', and 'responding' states."
+  expectations:
+    "The agent recognizes that 'thinking' is not a valid energy state, even "
+    "though 'idle' and 'responding' are valid states."
+  expectations:
+    "The agent does NOT generate code using an invalid energy state, and does "
+    "NOT silently drop or guess a substitute for the invalid state."
+  expectations:
+    "The agent informs the user of the valid energy states (`idle`, "
+    "`anticipating`, `receiving`, `processing`, `responding`) and asks "
+    "the user for clarification or a valid state."
+}
+
+# ============================================================
+# Dynamic Intensity Operates Under the Covers (No Sliders/Meters)
+# ============================================================
+cases {
+  name: "energy_dynamicintensity_no_sliders_or_numeric_controls"
+  prompt:
+    "Generate an HTML and JavaScript snippet for a voice-activated Gemini "
+    "assistant card using `<md-gb-energy>` in the 'receiving' state. Simulate "
+    "natural speech cadence with intermittent pauses by adjusting dynamic "
+    "intensity."
+  expectations: "The `<md-gb-energy>` element has `active` and `state=\"receiving\"` set."
+  expectations:
+    "The JavaScript code modulates `.dynamicIntensity` (or `dynamicintensity`) "
+    "to simulate speech, alternating between speaking phrases and pauses."
+  expectations:
+    "The agent does NOT render sliders (`<input type=\"range\">`), numeric or "
+    "percentage text readouts, or audio meter bars in the UI for dynamic intensity."
+}
+
+# ============================================================
+# Round 3 Hardening: Non-Interactive Status Pills & Anticipating Auto-Settlement
+# ============================================================
+cases {
+  name: "energy_readonly_status_pill_not_button"
+  prompt:
+    "Generate an HTML snippet for a non-interactive AI status indicator pill "
+    "inside a Gemini chat response that displays a rocket_launch icon and the "
+    "status label 'Processing' over an active 'processing' energy glow."
+  expectations:
+    "The agent renders the non-interactive status pill using `<md-gb-card>` or "
+    "a non-interactive `role=\"status\"` pill container with `<md-gb-energy>` "
+    "in `state=\"processing\"`."
+  expectations:
+    "The agent does NOT wrap the read-only status indicator in `<md-gb-button>` "
+    "or a clickable `<button>` element."
+}
+
+cases {
+  name: "energy_anticipating_auto_settles_to_idle"
+  prompt:
+    "Generate an HTML and JavaScript snippet for an AI prompt card that shows "
+    "an entry cue in the 'anticipating' energy state when mounted and settles "
+    "naturally into its resting state."
+  expectations:
+    "The `<md-gb-energy>` element initializes with `active` and "
+    "`state=\"anticipating\"`."
+  expectations:
+    "The JavaScript code schedules a `setTimeout` (~1800ms) that transitions "
+    "the energy `state` from `'anticipating'` to `'idle'` so the entry cue "
+    "does not loop indefinitely."
+}
+

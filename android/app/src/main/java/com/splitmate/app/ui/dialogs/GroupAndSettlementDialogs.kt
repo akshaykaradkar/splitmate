@@ -440,6 +440,7 @@ fun ActivityItemRow(
         colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
         modifier = Modifier
             .fillMaxWidth()
+            .border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusCard)
             .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
     ) {
         Row(
@@ -449,7 +450,7 @@ fun ActivityItemRow(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f).padding(end = 10.dp)) {
                 Box(
                     modifier = Modifier
                         .size(40.dp)
@@ -461,15 +462,32 @@ fun ActivityItemRow(
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
-                    Text(title, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = SplitMateTheme.PrimaryDark)
-                    Text(subtitle, fontSize = 12.sp, color = SplitMateTheme.TextSecondary)
+                    Text(
+                        text = title,
+                        fontFamily = SplitMateTheme.FontDisplay,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = SplitMateTheme.PrimaryDark,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = subtitle,
+                        fontFamily = SplitMateTheme.FontRounded,
+                        fontSize = 12.sp,
+                        color = SplitMateTheme.TextSecondary,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
                 }
             }
 
             Text(
                 text = amount,
+                fontFamily = SplitMateTheme.FontDisplay,
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 15.sp,
+                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
                 color = if (isPositive) SplitMateTheme.SageText else SplitMateTheme.TerracottaText
             )
         }

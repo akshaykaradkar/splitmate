@@ -356,6 +356,10 @@ fun PnrExpenseReviewScreen(
         }
     }
 
+    val pnrTearProgress = remember { androidx.compose.animation.core.Animatable(0f) }
+    val pnrStampScale = remember { androidx.compose.animation.core.Animatable(1.75f) }
+    val pnrStampAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
+
     // Format helper for Rupee strings
     fun formatPaiseDisplay(paise: Long): String {
         val rupees = paise / 100
@@ -568,10 +572,14 @@ fun PnrExpenseReviewScreen(
                             .navigationBarsPadding()
                             .padding(horizontal = 20.dp, vertical = 14.dp)
                     ) {
+                        val commitScope = rememberCoroutineScope()
+                        val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
                         Button(
                             onClick = {
-                                if (!canConfirmExpense) return@Button
+                                if (!canConfirmExpense || isSubmitting) return@Button
                                 isSubmitting = true
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                playBoardingPassTearAndStampOneShot(true)
                                 val fromCode = manualFromStationInput.ifBlank { snapshot.fromStation }.ifBlank { "ORG" }.uppercase(Locale.US)
                                 val toCode = manualToStationInput.ifBlank { snapshot.toStation }.ifBlank { "DST" }.uppercase(Locale.US)
                                 val chartText = if (snapshot.chartPrepared) "Chart Prepared" else "Chart Not Prepared"
@@ -588,25 +596,35 @@ fun PnrExpenseReviewScreen(
                                         chartStatus = chartText
                                     )
                                 )
-                                if (selectedExistingExpense != null) {
-                                    viewModel.editExistingExpense(
-                                        expenseId = selectedExistingExpense.expenseId,
-                                        newTitle = formattedTitle,
-                                        newTotalRupees = effectiveTotalPaise / 100.0,
-                                        newPayerId = selectedPayerId,
-                                        selectedMemberIds = selectedMemberIds.toList()
+                                commitScope.launch {
+                                    pnrTearProgress.animateTo(1f, androidx.compose.animation.core.tween(125, easing = androidx.compose.animation.core.FastOutLinearInEasing))
+                                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                    launch { pnrStampAlpha.animateTo(1f, androidx.compose.animation.core.tween(60)) }
+                                    pnrStampScale.animateTo(
+                                        targetValue = 1f,
+                                        animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.52f, stiffness = 680f)
                                     )
-                                } else {
-                                    viewModel.commitQuickEqualExpense(
-                                        title = formattedTitle,
-                                        totalAmountCents = effectiveTotalPaise,
-                                        selectedMemberIds = selectedMemberIds.toList(),
-                                        payerMemberId = selectedPayerId
-                                    )
+                                    kotlinx.coroutines.delay(95L)
+                                    if (selectedExistingExpense != null) {
+                                        viewModel.editExistingExpense(
+                                            expenseId = selectedExistingExpense.expenseId,
+                                            newTitle = formattedTitle,
+                                            newTotalRupees = effectiveTotalPaise / 100.0,
+                                            newPayerId = selectedPayerId,
+                                            selectedMemberIds = selectedMemberIds.toList()
+                                        )
+                                    } else {
+                                        viewModel.commitQuickEqualExpense(
+                                            title = formattedTitle,
+                                            totalAmountCents = effectiveTotalPaise,
+                                            selectedMemberIds = selectedMemberIds.toList(),
+                                            payerMemberId = selectedPayerId
+                                        )
+                                    }
+                                    onExpenseAdded()
                                 }
-                                onExpenseAdded()
                             },
-                            enabled = canConfirmExpense,
+                            enabled = canConfirmExpense && !isSubmitting,
                             shape = RoundedCornerShape(16.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = TactilePaperPassTokens.ForestTop,
@@ -616,7 +634,7 @@ fun PnrExpenseReviewScreen(
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(54.dp)
+                                .height(56.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.CheckCircle,
@@ -641,13 +659,14 @@ fun PnrExpenseReviewScreen(
             }
         }
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // 1. PNR SEARCH / LOOKUP BAR (Starts empty, auto-fetches on 10 digits or button tap)
             PnrSearchLookupCard(
@@ -945,6 +964,15 @@ fun PnrExpenseReviewScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
         }
+
+        BoardingPassCommitStampOverlay(
+            tearProgress = pnrTearProgress.value,
+            stampScale = pnrStampScale.value,
+            stampAlpha = pnrStampAlpha.value,
+            accentColor = TactilePaperPassTokens.ForestTop,
+            stampSubLabel = "IRCTC PNR ${liveSnapshot?.pnr ?: pnrInput} · Verified Split"
+        )
+        }
     }
 }
 
@@ -958,11 +986,24 @@ fun PnrSearchLookupCard(
     isFetching: Boolean = false,
     onFetchClick: () -> Unit
 ) {
-    Surface(
+    var energyState by remember {
+        mutableStateOf(com.splitmate.app.ui.components.Gm3EnergyState.ANTICIPATING)
+    }
+    LaunchedEffect(isFetching) {
+        energyState = if (isFetching) {
+            com.splitmate.app.ui.components.Gm3EnergyState.PROCESSING
+        } else if (energyState == com.splitmate.app.ui.components.Gm3EnergyState.PROCESSING) {
+            com.splitmate.app.ui.components.Gm3EnergyState.RESPONDING
+        } else {
+            energyState
+        }
+    }
+
+    com.splitmate.app.ui.components.Gm3AuroraEnergySurface(
+        state = energyState,
+        onStateAutoTransition = { nextState -> energyState = nextState },
+        palette = com.splitmate.app.ui.components.Gm3EnergyAccentPalette.BUCKWHEAT_SAGE,
         shape = RoundedCornerShape(18.dp),
-        color = TactilePaperPassTokens.PaperSurface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, TactilePaperPassTokens.HairlineBorder),
-        shadowElevation = 2.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -1576,7 +1617,7 @@ private fun MemberSplitSelectionCard(
         shape = RoundedCornerShape(22.dp),
         color = TactilePaperPassTokens.PaperSurface,
         border = androidx.compose.foundation.BorderStroke(1.dp, TactilePaperPassTokens.HairlineBorder),
-        shadowElevation = 3.dp,
+        shadowElevation = 0.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(

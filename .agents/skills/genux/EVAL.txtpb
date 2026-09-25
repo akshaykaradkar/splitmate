@@ -1,0 +1,133 @@
+# proto-file: learning/gemini/agents/evaluation/evalin/proto/eval_suite.proto
+# proto-message: EvalSuite
+# txtpbfmt: wrap_strings_after_newlines
+
+suite_name: "genux"
+timeout_seconds: 300
+
+cases {
+  name: "genux_entrypoint_routing"
+  prompt:
+    "I want to build a new Generative UX web prototype for an AI assistant app. "
+    "What GenUX Kit skills and components should I use?"
+  expectations:
+    "The agent identifies the `genux` skill router and outlines the workflow using "
+    "`gbreeze` for UI components/Tailwind, `gbreeze-energy` for AI shader surfaces, "
+    "`zipline` for sharing prototypes, and `bugaboo` for feedback and issue reporting."
+}
+
+cases {
+  name: "genux_dialect_routing"
+  prompt: "I want to build a quick Material Design UI without setting up a local build environment or installing npm packages. How should I get started?"
+  expectations: "The agent recommends the standalone single-file HTML starter template (`starter_template.html`) using CDN imports without requiring npm or a build step."
+}
+
+cases {
+  name: "two_pane_dashboard_vanilla"
+  prompt:
+    "Build a two-pane Material 3 dashboard as a single HTML file using semantic HTML landmarks, Material tokens, and pre-built gBreeze components (including an app bar, cards, list items, and buttons). "
+    "Save the file to /tmp/genux_outputs/dashboard.html and only confirm the path."
+  setup {
+    commands: "mkdir -p /tmp/genux_outputs"
+  }
+  script_validators: "test -s /tmp/genux_outputs/dashboard.html"
+  script_validators: "! grep -qE '(class|style)=\"[^\"]*#[0-9a-fA-F]{3,8}' /tmp/genux_outputs/dashboard.html"
+  script_validators: "grep -qE '<(header|nav|main|section)' /tmp/genux_outputs/dashboard.html"
+  script_validators: "! grep -qE 'text-(sm|lg|xl)|font-sans|leading-|tracking-' /tmp/genux_outputs/dashboard.html"
+  script_validators: "grep -qi '<md-gb-card' /tmp/genux_outputs/dashboard.html"
+  script_validators: "grep -qiE '<md-gb-(button|icon-button|app-bar|list)' /tmp/genux_outputs/dashboard.html"
+  script_validators: "! grep -qE 'typescale-[a-z-]+-(small|medium|large)\\b' /tmp/genux_outputs/dashboard.html"
+  script_validators: "! grep -qE '<md-gb-icon[^>]*class=\"[^\"]*typescale-' /tmp/genux_outputs/dashboard.html"
+  script_validators: "! grep -qE '<button\\b' /tmp/genux_outputs/dashboard.html"
+}
+
+cases {
+  name: "component_adherence_workspace_suite"
+  prompt:
+    "Build a Material Design 3 workspace management dashboard as a single HTML file (/tmp/genux_outputs/workspace_dashboard.html) "
+    "featuring: (1) a top app bar with a search text field and a notifications icon button with an unread count badge, "
+    "(2) a filter bar with 3 filter chips, (3) a grid of 3 metric cards, (4) a team settings list with 3 list items containing toggle switches, "
+    "and (5) a floating action button to create a new project. Save to /tmp/genux_outputs/workspace_dashboard.html and only confirm the file path."
+  setup {
+    commands: "mkdir -p /tmp/genux_outputs"
+  }
+  script_validators: "test -s /tmp/genux_outputs/workspace_dashboard.html"
+  script_validators: "grep -qi '<md-gb-app-bar' /tmp/genux_outputs/workspace_dashboard.html"
+  script_validators: "grep -qiE '<md-(outlined|filled)-text-field' /tmp/genux_outputs/workspace_dashboard.html"
+  script_validators: "grep -qi '<md-gb-icon-button' /tmp/genux_outputs/workspace_dashboard.html"
+  script_validators: "grep -qi '<md-gb-badge' /tmp/genux_outputs/workspace_dashboard.html"
+  script_validators: "grep -qiE '<md-(gb-chip|filter-chip|assist-chip)' /tmp/genux_outputs/workspace_dashboard.html"
+  script_validators: "grep -qi '<md-gb-card' /tmp/genux_outputs/workspace_dashboard.html"
+  script_validators: "grep -qi '<md-gb-list' /tmp/genux_outputs/workspace_dashboard.html"
+  script_validators: "grep -qi '<md-gb-list-item' /tmp/genux_outputs/workspace_dashboard.html"
+  script_validators: "grep -qi '<md-gb-switch' /tmp/genux_outputs/workspace_dashboard.html"
+  script_validators: "grep -qi '<md-gb-fab' /tmp/genux_outputs/workspace_dashboard.html"
+  script_validators: "! grep -qiE 'typescale-(display|headline|title|body|label)-(small|medium|large)' /tmp/genux_outputs/workspace_dashboard.html"
+  script_validators: "! grep -qiE '(<md-gb-icon[^>]*class=\"[^\"]*typescale-|class=\"[^\"]*md-icon[^\"]*typescale-|class=\"[^\"]*typescale-[^\"]*md-icon)' /tmp/genux_outputs/workspace_dashboard.html"
+  script_validators: "! grep -qiE '<md-gb-icon-button[^>]*(class=\"[^\"]*\\b(w-|h-)|style=\"[^\"]*(width|height))' /tmp/genux_outputs/workspace_dashboard.html"
+  script_validators: "! grep -qiE '<md-gb-(card|chip)[^>]*class=\"[^\"]*\\b(p-|bg-|rounded-|border-)' /tmp/genux_outputs/workspace_dashboard.html"
+}
+
+cases {
+  name: "round3_keep_multi_button_and_typography_hygiene"
+  prompt:
+    "Build a single-file GM3 Keep Note AI prototype saved to /tmp/genux_outputs/keep_note.html. "
+    "Include an emphasized card title ('Grocery List'), a delete icon action in the header, "
+    "and a bottom action bar with a primary 'Save to Keep' button, a secondary 'Discard' pill button, "
+    "and a large circular Microphone icon button. Only confirm the saved file path."
+  setup {
+    commands: "mkdir -p /tmp/genux_outputs"
+  }
+  script_validators: "test -s /tmp/genux_outputs/keep_note.html"
+  script_validators: "! grep -qE '<button\\b' /tmp/genux_outputs/keep_note.html"
+  script_validators: "grep -qE '<md-gb-button[^>]*color=\"(elevated|tonal|outlined|text)\"' /tmp/genux_outputs/keep_note.html"
+  script_validators: "grep -qE '<md-gb-icon-button' /tmp/genux_outputs/keep_note.html"
+  script_validators: "grep -qE 'typescale-emphasized-' /tmp/genux_outputs/keep_note.html"
+  script_validators: "! grep -qE 'typescale-[a-z-]+-(small|medium|large)\\b' /tmp/genux_outputs/keep_note.html"
+  script_validators: "! grep -qE '<md-gb-icon[^>]*class=\"[^\"]*typescale-' /tmp/genux_outputs/keep_note.html"
+  expectations:
+    "The agent uses `<md-gb-button>` and `<md-gb-icon-button>` for all interactive actions "
+    "(zero raw `<button>` elements), limiting `color=\"filled\"` to 'Save to Keep', using "
+    "non-filled variants (`elevated`, `tonal`, `outlined`, `standard`) for 'Discard', the Mic button, "
+    "and the header delete button, and sizing 56px action bar buttons via `size=\"md\"` (`56px`) "
+    "rather than forcing `h-14` or `w-16 h-16` on the custom element host."
+  expectations:
+    "The agent uses abbreviated `-sm`, `-md`, `-lg` typescale suffixes, uses "
+    "`typescale-emphasized-*` for the emphasized title, and does NOT apply `typescale-*` "
+    "classes to `<md-gb-icon>`."
+}
+
+cases {
+  name: "genux_triggering_roster"
+  eval_mode: EVAL_MODE_TRIGGERING
+  prompt: "Help me design and build a complete Material prototype for an agent application."
+  expected_skills: "ux/gdp/ai/plugins/material_genux_kit/skills/genux"
+}
+
+cases {
+  name: "gbreeze_triggering_roster"
+  eval_mode: EVAL_MODE_TRIGGERING
+  prompt: "I need to inspect the API properties, attributes, and events of the gBreeze Material web components."
+  expected_skills: "ux/gdp/ai/skills/gbreeze"
+}
+
+cases {
+  name: "gbreeze_energy_triggering_roster"
+  eval_mode: EVAL_MODE_TRIGGERING
+  prompt: "Add an Aurora energy effect to the surface behind the chat messages."
+  expected_skills: "ux/gdp/ai/plugins/material_genux_kit/skills/gbreeze_energy"
+}
+
+cases {
+  name: "zipline_triggering_roster"
+  eval_mode: EVAL_MODE_TRIGGERING
+  prompt: "Deploy and share my built prototype on Zipline for team review."
+  expected_skills: "ux/gdp/ai/plugins/material_genux_kit/skills/zipline"
+}
+
+cases {
+  name: "bugaboo_triggering_roster"
+  eval_mode: EVAL_MODE_TRIGGERING
+  prompt: "Report a bug with this generated prototype, file feedback, and capture a workspace snapshot with Bugaboo."
+  expected_skills: "prototypes/projects/gdp/bugaboo"
+}

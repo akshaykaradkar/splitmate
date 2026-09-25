@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
@@ -187,7 +188,7 @@ fun QuickExpenseScreen(
     }
 
     var amountDigits by remember { mutableStateOf("0") }
-    var expenseCategoryTitle by remember { mutableStateOf("") }
+    var expenseCategoryTitle by remember { mutableStateOf("Dinner & Food") }
     var showEditTitleDialog by remember { mutableStateOf(false) }
     var pendingCommitAfterCategorySelection by remember { mutableStateOf(false) }
     var showGroupDropdown by remember { mutableStateOf(false) }
@@ -720,7 +721,7 @@ fun QuickExpenseScreen(
                             shape = QuickExpenseThemeTokens.RadiusPill,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(50.dp)
+                                .height(56.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.ElectricBolt,
@@ -743,19 +744,75 @@ fun QuickExpenseScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                    .padding(horizontal = 16.dp, vertical = 2.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 // ==================================================================
-                // 1. TOP SECTION: Elevated Category Pill + Tightly Coupled DisplayLarge Amount
+                // 1. TOP CONTEXT SECTION: Stepped M3 surface-container-low Tonal Pane
                 // ==================================================================
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                var isRemainderEquallySplit by remember(totalAmountPaise, selectedMemberIds) {
+                    mutableStateOf(false)
+                }
+                var mathEnergyState by remember {
+                    mutableStateOf(com.splitmate.app.ui.components.Gm3EnergyState.IDLE)
+                }
+                val calcEnergyScope = rememberCoroutineScope()
+                val keystrokeDynamicIntensity = remember { androidx.compose.animation.core.Animatable(0f) }
+                val remainderCoinFlightProgress = remember { androidx.compose.animation.core.Animatable(0f) }
+                val avatarCatchPulseScale = remember { androidx.compose.animation.core.Animatable(1f) }
+
+                fun triggerKeystrokeEnergyPulse(updatedDigits: String) {
+                    mathEnergyState = com.splitmate.app.ui.components.Gm3EnergyState.RECEIVING
+                    calcEnergyScope.launch {
+                        val peak = (0.32f + (updatedDigits.length * 0.05f)).coerceAtMost(0.60f)
+                        keystrokeDynamicIntensity.snapTo(peak)
+                        keystrokeDynamicIntensity.animateTo(
+                            targetValue = 0f,
+                            animationSpec = androidx.compose.animation.core.tween(950, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                        )
+                        if (mathEnergyState == com.splitmate.app.ui.components.Gm3EnergyState.RECEIVING) {
+                            mathEnergyState = com.splitmate.app.ui.components.Gm3EnergyState.IDLE
+                        }
+                    }
+                }
+
+                fun triggerRemainderCoinFlight() {
+                    if (isRemainderEquallySplit) return
+                    calcEnergyScope.launch {
+                        remainderCoinFlightProgress.snapTo(0.02f)
+                        remainderCoinFlightProgress.animateTo(
+                            targetValue = 1f,
+                            animationSpec = androidx.compose.animation.core.tween(420, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                        )
+                        isRemainderEquallySplit = true
+                        mathEnergyState = com.splitmate.app.ui.components.Gm3EnergyState.RESPONDING
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        remainderCoinFlightProgress.snapTo(0f)
+                        avatarCatchPulseScale.snapTo(1.16f)
+                        avatarCatchPulseScale.animateTo(
+                            targetValue = 1f,
+                            animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.52f, stiffness = 520f)
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = keypadBg,
+                    border = BorderStroke(1.dp, keypadBorder),
+                    shadowElevation = 0.dp,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 2.dp, bottom = 4.dp)
+                        .padding(top = 2.dp)
                 ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Unified Single Category Chip Strip (Tapping Train / PNR directly opens PNR flow; no redundant banner)
                     val quickCategoryPills = remember {
                         listOf(
                             Triple("Train / PNR", "Train / PNR Ticket", Icons.Rounded.Train),
@@ -768,30 +825,34 @@ fun QuickExpenseScreen(
                     }
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 6.dp)
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         items(quickCategoryPills) { (chipLabel, fullCategory, chipIcon) ->
                             val isChosen = expenseCategoryTitle.startsWith(fullCategory, ignoreCase = true) ||
                                 (fullCategory == "Train / PNR Ticket" && (expenseCategoryTitle.contains("PNR:") || expenseCategoryTitle.contains("Train", ignoreCase = true)))
                             val selectedBg = if (isDark) Color(0xFFD7E8B6) else Color(0xFF23201E)
                             val selectedFg = if (isDark) Color(0xFF181512) else Color.White
+                            val chipCorner by androidx.compose.animation.core.animateDpAsState(
+                                targetValue = if (isChosen) 10.dp else 20.dp,
+                                animationSpec = spring(dampingRatio = 0.65f, stiffness = 480f),
+                                label = "GM3CategoryChipCorner"
+                            )
                             Surface(
                                 onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     if (fullCategory == "Train / PNR Ticket") {
-                                        expenseCategoryTitle = fullCategory
-                                        showEditTitleDialog = true
+                                        onOpenPnrDirectSplit()
                                     } else {
                                         expenseCategoryTitle = fullCategory
                                     }
                                 },
-                                shape = QuickExpenseThemeTokens.RadiusPill,
+                                shape = RoundedCornerShape(chipCorner),
                                 color = if (isChosen) selectedBg else QuickExpenseThemeTokens.SageSurface,
-                                border = BorderStroke(1.dp, if (isChosen) selectedBg else QuickExpenseThemeTokens.AccentSage)
+                                border = BorderStroke(1.dp, if (isChosen) selectedBg else QuickExpenseThemeTokens.AccentSage),
+                                modifier = Modifier.heightIn(min = 32.dp)
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
@@ -811,334 +872,533 @@ fun QuickExpenseScreen(
                                 }
                             }
                         }
-                    }
 
-                    Surface(
-                        onClick = { showEditTitleDialog = true },
-                        shape = QuickExpenseThemeTokens.RadiusPill,
-                        color = surfaceColor,
-                        shadowElevation = 2.dp,
-                        border = BorderStroke(
-                            1.dp,
-                            if (expenseCategoryTitle.isBlank()) QuickExpenseThemeTokens.TerracottaText else if (isDark) Color(0xFF4A332C) else Color(0xFFFFD9CE)
-                        ),
-                        modifier = Modifier.padding(bottom = 6.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .background(
-                                    Brush.horizontalGradient(
-                                        colors = if (isDark) {
-                                            listOf(Color(0xFF28201D), Color(0xFF33241F))
-                                        } else {
-                                            listOf(Color(0xFFFFF7F3), Color(0xFFFDECE5))
-                                        }
+                        // Inline Custom Title / Note Chip (replaces the separate terracotta banner)
+                        item {
+                            val isCustomNote = quickCategoryPills.none { (_, fullCat, _) ->
+                                expenseCategoryTitle.equals(fullCat, ignoreCase = true)
+                            } && expenseCategoryTitle.isNotBlank()
+                            val selectedBg = if (isDark) Color(0xFFD7E8B6) else Color(0xFF23201E)
+                            val selectedFg = if (isDark) Color(0xFF181512) else Color.White
+                            val customChipCorner by androidx.compose.animation.core.animateDpAsState(
+                                targetValue = if (isCustomNote) 10.dp else 20.dp,
+                                animationSpec = spring(dampingRatio = 0.65f, stiffness = 480f),
+                                label = "GM3CustomChipCorner"
+                            )
+                            Surface(
+                                onClick = { showEditTitleDialog = true },
+                                shape = RoundedCornerShape(customChipCorner),
+                                color = if (isCustomNote) selectedBg else surfaceColor,
+                                border = BorderStroke(1.dp, if (isCustomNote) selectedBg else keypadBorder),
+                                modifier = Modifier.heightIn(min = 32.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Edit,
+                                        contentDescription = "Custom Note",
+                                        tint = if (isCustomNote) selectedFg else textSecondary,
+                                        modifier = Modifier.size(13.dp)
                                     )
-                                )
-                                .padding(horizontal = 14.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = if (expenseCategoryTitle.isBlank()) Icons.Rounded.Category else resolveGroupCategoryIcon("", expenseCategoryTitle),
-                                contentDescription = null,
-                                tint = if (expenseCategoryTitle.isBlank()) QuickExpenseThemeTokens.TerracottaText else textPrimary,
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = expenseCategoryTitle.ifBlank { "Select Expense Type / Add PNR *" },
-                                fontFamily = SplitMateBrandFontFamily,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                color = if (expenseCategoryTitle.isBlank()) QuickExpenseThemeTokens.TerracottaText else textPrimary
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Icon(
-                                imageVector = Icons.Rounded.Edit,
-                                contentDescription = "Edit Category",
-                                tint = textSecondary,
-                                modifier = Modifier.size(14.dp)
-                            )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (isCustomNote) expenseCategoryTitle.take(16) else "+ Custom Note",
+                                        fontFamily = SplitMateBrandFontFamily,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isCustomNote) selectedFg else textPrimary
+                                    )
+                                }
+                            }
                         }
                     }
 
-                    // DisplayLarge Amount closely beneath category chip (Tabular Figures + -1.5.sp tracking)
-                    Text(
-                        text = formattedDisplay,
-                        fontFamily = SplitMateDisplayFontFamily,
-                        fontSize = 48.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = textPrimary,
-                        letterSpacing = (-1.5).sp,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 52.sp,
-                        style = TextStyle(fontFeatureSettings = "tnum")
-                    )
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // Real-time Exact Split / Unassigned Badge
-                    Surface(
-                        shape = QuickExpenseThemeTokens.RadiusPill,
-                        color = if (memberCount > 0) QuickExpenseThemeTokens.SageSurface else QuickExpenseThemeTokens.TerracottaSurface,
-                        border = BorderStroke(
-                            1.dp,
-                            if (memberCount > 0) QuickExpenseThemeTokens.AccentSage else Color(0xFFFFCCBA)
-                        ),
-                        shadowElevation = 1.dp
-                    ) {
+                    // Compact Circular Avatars + Short Names for "Paid by" (Eliminates horizontal pill waste)
+                    if (participants.size > 1) {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = if (memberCount > 0) Icons.Rounded.CheckCircle else Icons.Rounded.ErrorOutline,
-                                contentDescription = null,
-                                tint = if (memberCount > 0) QuickExpenseThemeTokens.SageText else QuickExpenseThemeTokens.TerracottaText,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (memberCount > 0) {
-                                    "$currencySymbol ${formatPaiseForSplitBadge(perPersonPaise)} / person · $memberCount splitting" +
-                                        if (payerExtraPaise > 0L) " · +${currencySymbol}${formatPaiseForSplitBadge(payerExtraPaise)} Largest Remainder" else " · Exact Split"
-                                } else {
-                                    "Select at least 1 person to split"
-                                },
-                                fontFamily = SplitMateBrandFontFamily,
+                                text = "Paid by",
+                                fontFamily = SplitMateDisplayFontFamily,
                                 fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (memberCount > 0) QuickExpenseThemeTokens.SageText else QuickExpenseThemeTokens.TerracottaText
+                                fontWeight = FontWeight.ExtraBold,
+                                color = textSecondary,
+                                modifier = Modifier.padding(end = 8.dp)
                             )
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                items(participants, key = { "payer_${it.id}" }) { person ->
+                                    val isPayer = person.id == selectedPayerId
+                                    val shortFirstName = person.name.removeSuffix(" (You)").substringBefore(" ").ifBlank { person.name }
+                                    val payerAvatarUrl = remember(person.avatarSeed) {
+                                        buildDiceBearOpenPeepsUrl(person.avatarSeed)
+                                    }
+                                    Surface(
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            selectedPayerId = person.id
+                                        },
+                                        shape = QuickExpenseThemeTokens.RadiusPill,
+                                        color = if (isPayer) QuickExpenseThemeTokens.SageSurface else surfaceColor,
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (isPayer) QuickExpenseThemeTokens.SageBorder else keypadBorder
+                                        )
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(start = 4.dp, end = 9.dp, top = 3.dp, bottom = 3.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(22.dp)
+                                                    .clip(CircleShape)
+                                                    .background(person.avatarBg)
+                                                    .border(
+                                                        width = if (isPayer) 1.5.dp else 0.5.dp,
+                                                        color = if (isPayer) QuickExpenseThemeTokens.SageBorder else surfaceColor,
+                                                        shape = CircleShape
+                                                    ),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = person.initials,
+                                                    fontFamily = SplitMateDisplayFontFamily,
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = person.avatarFg
+                                                )
+                                                AsyncImage(
+                                                    model = ImageRequest.Builder(context)
+                                                        .data(payerAvatarUrl)
+                                                        .decoderFactory(SvgDecoder.Factory())
+                                                        .crossfade(true)
+                                                        .build(),
+                                                    contentDescription = shortFirstName,
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .clip(CircleShape)
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(5.dp))
+                                            Text(
+                                                text = if (person.name.contains("(You)")) "$shortFirstName (You)" else shortFirstName,
+                                                fontFamily = SplitMateBrandFontFamily,
+                                                fontSize = 11.sp,
+                                                fontWeight = if (isPayer) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                                color = if (isPayer) QuickExpenseThemeTokens.SageText else textPrimary,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // "Who's in on this?" Section with Direct +UPI Badge on Avatars Missing Linked UPI
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Who's in on this?",
+                                fontFamily = SplitMateDisplayFontFamily,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = textPrimary
+                            )
+
+                            Surface(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    selectedMemberIds = if (selectedMemberIds.size == participants.size) {
+                                        setOf(participants.first().id)
+                                    } else {
+                                        participants.map { it.id }.toSet()
+                                    }
+                                },
+                                shape = QuickExpenseThemeTokens.RadiusPill,
+                                color = QuickExpenseThemeTokens.SageSurface,
+                                border = BorderStroke(1.dp, QuickExpenseThemeTokens.AccentSage.copy(alpha = 0.8f))
+                            ) {
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = if (selectedMemberIds.size == participants.size) "Clear" else "Select All (${participants.size})",
+                                        fontFamily = SplitMateBrandFontFamily,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = QuickExpenseThemeTokens.SageText,
+                                        style = TextStyle(fontFeatureSettings = "tnum")
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            contentPadding = PaddingValues(horizontal = 2.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(participants, key = { it.id }) { person ->
+                                val isSelected = selectedMemberIds.contains(person.id)
+                                val matchingRoomMember = activeMembers.find { it.memberId == person.id }
+                                val isMissingUpi = matchingRoomMember != null &&
+                                    !matchingRoomMember.isCurrentUser &&
+                                    person.upiId.isBlank()
+                                val shortName = person.name.removeSuffix(" (You)").substringBefore(" ").ifBlank { person.name }
+                                val avatarUrl = remember(person.avatarSeed) {
+                                    buildDiceBearOpenPeepsUrl(person.avatarSeed)
+                                }
+
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier
+                                        .clip(QuickExpenseThemeTokens.RadiusCard)
+                                        .combinedClickable(
+                                            onClick = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                selectedMemberIds = if (isSelected) {
+                                                    selectedMemberIds - person.id
+                                                } else {
+                                                    selectedMemberIds + person.id
+                                                }
+                                            },
+                                            onLongClick = {
+                                                if (matchingRoomMember != null && !matchingRoomMember.isCurrentUser) {
+                                                    editingFriend = matchingRoomMember
+                                                }
+                                            }
+                                        )
+                                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                                ) {
+                                    val isRemainderRecipient = isSelected && person.id == selectedMemberIds.firstOrNull() && remainderPaise > 0L
+                                    Box(
+                                        modifier = Modifier
+                                            .size(50.dp)
+                                            .graphicsLayer {
+                                                if (isRemainderRecipient) {
+                                                    scaleX = avatarCatchPulseScale.value
+                                                    scaleY = avatarCatchPulseScale.value
+                                                }
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .clip(CircleShape)
+                                                .background(
+                                                    if (isSelected) person.avatarBg else person.avatarBg.copy(alpha = 0.45f)
+                                                )
+                                                .border(
+                                                    width = if (isSelected) 2.5.dp else 1.5.dp,
+                                                    color = if (isSelected) QuickExpenseThemeTokens.SageBorder else surfaceColor,
+                                                    shape = CircleShape
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = person.initials,
+                                                fontFamily = SplitMateDisplayFontFamily,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = if (isSelected) person.avatarFg else person.avatarFg.copy(alpha = 0.45f)
+                                            )
+                                            AsyncImage(
+                                                model = ImageRequest.Builder(context)
+                                                    .data(avatarUrl)
+                                                    .decoderFactory(SvgDecoder.Factory())
+                                                    .crossfade(true)
+                                                    .build(),
+                                                contentDescription = person.name,
+                                                contentScale = ContentScale.Crop,
+                                                alpha = if (isSelected) 1f else 0.45f,
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .clip(CircleShape)
+                                            )
+                                        }
+
+                                        if (isSelected) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .align(Alignment.BottomEnd)
+                                                    .size(17.dp)
+                                                    .clip(CircleShape)
+                                                    .background(QuickExpenseThemeTokens.SageBorder)
+                                                    .border(1.5.dp, surfaceColor, CircleShape),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Check,
+                                                    contentDescription = "Selected",
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(10.dp)
+                                                )
+                                            }
+                                        }
+
+                                        if (isRemainderRecipient && isRemainderEquallySplit) {
+                                            Surface(
+                                                shape = QuickExpenseThemeTokens.RadiusPill,
+                                                color = Color(0xFFD7E8B6),
+                                                border = BorderStroke(1.dp, Color(0xFF365314)),
+                                                modifier = Modifier.align(Alignment.TopStart)
+                                            ) {
+                                                Text(
+                                                    text = "+${payerExtraPaise}p",
+                                                    fontFamily = SplitMateBrandFontFamily,
+                                                    fontSize = 8.5.sp,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = Color(0xFF365314),
+                                                    modifier = Modifier.padding(horizontal = 4.5.dp, vertical = 1.dp)
+                                                )
+                                            }
+                                        }
+
+                                        // Direct +UPI Badge on avatar when member lacks a linked UPI ID/phone
+                                        if (isMissingUpi) {
+                                            Surface(
+                                                onClick = { editingFriend = matchingRoomMember },
+                                                shape = QuickExpenseThemeTokens.RadiusPill,
+                                                color = QuickExpenseThemeTokens.TerracottaSurface,
+                                                border = BorderStroke(1.dp, QuickExpenseThemeTokens.TerracottaText.copy(alpha = 0.45f)),
+                                                modifier = Modifier.align(Alignment.TopEnd)
+                                            ) {
+                                                Text(
+                                                    text = "+UPI",
+                                                    fontFamily = SplitMateBrandFontFamily,
+                                                    fontSize = 8.sp,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = QuickExpenseThemeTokens.TerracottaText,
+                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(3.dp))
+
+                                    Text(
+                                        text = if (person.name.contains("(You)")) "$shortName (You)" else shortName,
+                                        fontFamily = SplitMateBrandFontFamily,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) textPrimary else textSecondary.copy(alpha = 0.7f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
                         }
                     }
                 }
+                }
 
                 // ==================================================================
-                // 2. MID SECTION: Compact Avatar Strip Directly Above Keypad
-                // Clear Button vertically aligned on the exact same row as "Who's in on this?"
+                // 2. BOTTOM UNIFIED CLUSTER: Hero ₹ 0 Amount Display + Split Pill + Tactile Calculator Keypad
+                // Grouping the amount display and numeric keypad together so the user's thumb & eye stay coupled
                 // ==================================================================
-                Column(
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = surfaceColor,
+                    border = BorderStroke(1.dp, keypadBorder),
+                    shadowElevation = 0.dp,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 2.dp)
+                        .padding(bottom = 4.dp)
                 ) {
-                    if (participants.size > 1) {
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 4.dp)
-                        ) {
-                            item {
-                                Text(
-                                    text = "Paid by:",
-                                    fontFamily = SplitMateBrandFontFamily,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = textSecondary
-                                )
-                            }
-                            items(participants, key = { "payer_${it.id}" }) { person ->
-                                val isPayer = person.id == selectedPayerId
-                                Surface(
-                                    onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        selectedPayerId = person.id
-                                    },
-                                    shape = QuickExpenseThemeTokens.RadiusPill,
-                                    color = if (isPayer) QuickExpenseThemeTokens.SageSurface else surfaceColor,
-                                    border = BorderStroke(
-                                        1.dp,
-                                        if (isPayer) QuickExpenseThemeTokens.SageBorder else keypadBorder
-                                    )
-                                ) {
-                                    Text(
-                                        text = if (isPayer) "✓ ${person.name}" else person.name,
-                                        fontFamily = SplitMateBrandFontFamily,
-                                        fontSize = 11.sp,
-                                        fontWeight = if (isPayer) FontWeight.ExtraBold else FontWeight.Medium,
-                                        color = if (isPayer) QuickExpenseThemeTokens.SageText else textSecondary,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp)
                     ) {
-                        Text(
-                            text = "Who's in on this?",
-                            fontFamily = SplitMateDisplayFontFamily,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = textPrimary
-                        )
-
-                        Surface(
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                selectedMemberIds = if (selectedMemberIds.size == participants.size) {
-                                    setOf(participants.first().id)
-                                } else {
-                                    participants.map { it.id }.toSet()
-                                }
-                            },
-                            shape = QuickExpenseThemeTokens.RadiusPill,
-                            color = QuickExpenseThemeTokens.SageSurface,
-                            border = BorderStroke(1.dp, QuickExpenseThemeTokens.AccentSage.copy(alpha = 0.8f))
+                        // Hero Tabular Amount Display wrapped in Gm3AuroraEnergySurface (1.2s pulse on math reconciliation + keystroke dynamicIntensity)
+                        com.splitmate.app.ui.components.Gm3AuroraEnergySurface(
+                            state = mathEnergyState,
+                            onStateAutoTransition = { nextState -> mathEnergyState = nextState },
+                            palette = com.splitmate.app.ui.components.Gm3EnergyAccentPalette.BUCKWHEAT_SAGE,
+                            dynamicIntensity = keystrokeDynamicIntensity.value,
+                            shape = RoundedCornerShape(18.dp),
+                            borderWidth = if (mathEnergyState != com.splitmate.app.ui.components.Gm3EnergyState.IDLE) 1.dp else 0.dp,
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
-                            ) {
-                                Text(
-                                    text = if (selectedMemberIds.size == participants.size) "Clear" else "Select All (${participants.size})",
-                                    fontFamily = SplitMateBrandFontFamily,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = QuickExpenseThemeTokens.SageText
-                                )
-                            }
-                        }
-                    }
-
-                    Text(
-                        text = "Tap to toggle · Long-press friend to link Contact UPI",
-                        fontFamily = SplitMateBrandFontFamily,
-                        fontSize = 11.sp,
-                        color = textSecondary
-                    )
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        contentPadding = PaddingValues(horizontal = 2.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        items(participants, key = { it.id }) { person ->
-                            val isSelected = selectedMemberIds.contains(person.id)
-                            val matchingRoomMember = activeMembers.find { it.memberId == person.id }
-                            val avatarUrl = remember(person.avatarSeed) {
-                                buildDiceBearOpenPeepsUrl(person.avatarSeed)
-                            }
-
                             Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
                                 modifier = Modifier
-                                    .clip(QuickExpenseThemeTokens.RadiusCard)
-                                    .combinedClickable(
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = expenseCategoryTitle.ifBlank { "Dinner & Food" },
+                                            fontFamily = SplitMateBrandFontFamily,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = textSecondary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = formattedDisplay,
+                                            fontFamily = SplitMateDisplayFontFamily,
+                                            fontSize = 42.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = textPrimary,
+                                            letterSpacing = (-1.5).sp,
+                                            lineHeight = 46.sp,
+                                            style = TextStyle(fontFeatureSettings = "tnum")
+                                        )
+                                    }
+
+                                    // Real-time Exact Split / Per-Person Share Pill (tapping triggers 1.2s 0.00c Drift verification pulse)
+                                    Surface(
                                         onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            selectedMemberIds = if (isSelected) {
-                                                selectedMemberIds - person.id
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            if (remainderPaise > 0L && !isRemainderEquallySplit) {
+                                                triggerRemainderCoinFlight()
                                             } else {
-                                                selectedMemberIds + person.id
+                                                isRemainderEquallySplit = true
+                                                mathEnergyState = com.splitmate.app.ui.components.Gm3EnergyState.RESPONDING
                                             }
                                         },
-                                        onLongClick = {
-                                            if (matchingRoomMember != null && !matchingRoomMember.isCurrentUser) {
-                                                editingFriend = matchingRoomMember
-                                            }
-                                        }
-                                    )
-                                    .padding(horizontal = 4.dp, vertical = 2.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(54.dp)
-                                        .shadow(
-                                            elevation = if (isSelected) 5.dp else 1.dp,
-                                            shape = CircleShape
+                                        shape = QuickExpenseThemeTokens.RadiusPill,
+                                        color = if (memberCount > 0) QuickExpenseThemeTokens.SageSurface else QuickExpenseThemeTokens.TerracottaSurface,
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (memberCount > 0) QuickExpenseThemeTokens.AccentSage else Color(0xFFFFCCBA)
                                         )
-                                        .clip(CircleShape)
-                                        .background(
-                                            if (isSelected) person.avatarBg else person.avatarBg.copy(alpha = 0.45f)
-                                        )
-                                        .border(
-                                            width = if (isSelected) 3.dp else 1.5.dp,
-                                            color = if (isSelected) QuickExpenseThemeTokens.SageBorder else surfaceColor,
-                                            shape = CircleShape
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = person.initials,
-                                        fontFamily = SplitMateDisplayFontFamily,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = if (isSelected) person.avatarFg else person.avatarFg.copy(alpha = 0.45f)
-                                    )
-                                    AsyncImage(
-                                        model = ImageRequest.Builder(context)
-                                            .data(avatarUrl)
-                                            .decoderFactory(SvgDecoder.Factory())
-                                            .crossfade(true)
-                                            .build(),
-                                        contentDescription = person.name,
-                                        contentScale = ContentScale.Crop,
-                                        alpha = if (isSelected) 1f else 0.45f,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .clip(CircleShape)
-                                    )
-
-                                    if (isSelected) {
-                                        Box(
-                                            modifier = Modifier
-                                                .align(Alignment.BottomEnd)
-                                                .size(18.dp)
-                                                .clip(CircleShape)
-                                                .background(QuickExpenseThemeTokens.SageBorder)
-                                                .border(1.5.dp, surfaceColor, CircleShape),
-                                            contentAlignment = Alignment.Center
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Rounded.Check,
-                                                contentDescription = "Selected",
-                                                tint = Color.White,
-                                                modifier = Modifier.size(11.dp)
+                                                imageVector = if (memberCount > 0) Icons.Rounded.CheckCircle else Icons.Rounded.ErrorOutline,
+                                                contentDescription = null,
+                                                tint = if (memberCount > 0) QuickExpenseThemeTokens.SageText else QuickExpenseThemeTokens.TerracottaText,
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = if (memberCount > 0) {
+                                                    "$currencySymbol${formatPaiseForSplitBadge(perPersonPaise)}/ea · 0.00¢ Drift"
+                                                } else {
+                                                    "Pick ≥1"
+                                                },
+                                                fontFamily = SplitMateBrandFontFamily,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = if (memberCount > 0) QuickExpenseThemeTokens.SageText else QuickExpenseThemeTokens.TerracottaText,
+                                                style = TextStyle(fontFeatureSettings = "tnum")
                                             )
                                         }
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.height(4.dp))
+                                // High-contrast Peach Remainder Banner when remainderPaise > 0L & not yet reconciled
+                                if (remainderPaise > 0L && (!isRemainderEquallySplit || remainderCoinFlightProgress.value > 0f)) {
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Box(modifier = Modifier.fillMaxWidth()) {
+                                        Surface(
+                                            onClick = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                triggerRemainderCoinFlight()
+                                            },
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = Color(0xFFFED8C8).copy(alpha = (1f - remainderCoinFlightProgress.value * 0.7f).coerceIn(0.2f, 1f)),
+                                            border = BorderStroke(1.dp, Color(0xFFE06B52)),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = "Remainder +${payerExtraPaise}p held on Payer",
+                                                    fontFamily = SplitMateBrandFontFamily,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFF7C2D12)
+                                                )
+                                                Surface(
+                                                    shape = QuickExpenseThemeTokens.RadiusPill,
+                                                    color = Color(0xFFE06B52)
+                                                ) {
+                                                    Text(
+                                                        text = "Split Remainder Equally →",
+                                                        fontFamily = SplitMateBrandFontFamily,
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        color = Color.White,
+                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
 
-                                Text(
-                                    text = person.name,
-                                    fontFamily = SplitMateBrandFontFamily,
-                                    fontSize = 11.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSelected) textPrimary else textSecondary.copy(alpha = 0.7f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                                        // Flying +1p Largest-Remainder Coin Pill arcing upward toward recipient avatar
+                                        if (remainderCoinFlightProgress.value > 0.01f) {
+                                            val t = remainderCoinFlightProgress.value
+                                            Surface(
+                                                shape = QuickExpenseThemeTokens.RadiusPill,
+                                                color = Color(0xFFD7E8B6),
+                                                border = BorderStroke(1.5.dp, Color(0xFF365314)),
+                                                shadowElevation = 6.dp,
+                                                modifier = Modifier
+                                                    .align(Alignment.CenterStart)
+                                                    .graphicsLayer {
+                                                        translationX = (1f - t) * 180.dp.toPx() + 16.dp.toPx()
+                                                        translationY = -t * 145.dp.toPx() - kotlin.math.sin(t * Math.PI.toFloat()) * 32.dp.toPx()
+                                                        scaleX = 1f + kotlin.math.sin(t * Math.PI.toFloat()) * 0.28f
+                                                        scaleY = 1f + kotlin.math.sin(t * Math.PI.toFloat()) * 0.28f
+                                                    }
+                                            ) {
+                                                Text(
+                                                    text = "+${payerExtraPaise}p → Payer",
+                                                    fontFamily = SplitMateBrandFontFamily,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = Color(0xFF365314),
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
-                    }
-                }
 
-                // ==================================================================
-                // 3. BOTTOM SECTION: Tactile M3 Squarcles Keypad + 2-Row Log & Split FAB
-                // (4 rows * 54dp + 3 gaps * 8dp = 240dp; Right Column = 54dp Note + 54dp C + 116dp 2-Row FAB)
-                // ==================================================================
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 6.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                         // Left: 3x4 Keypad Column Grid (4 rows * 54dp + 3 gaps * 8dp = 240dp)
                         Column(
                             modifier = Modifier.weight(3f),
@@ -1150,7 +1410,10 @@ fun QuickExpenseScreen(
                                 keypadBorder = keypadBorder,
                                 textPrimary = textPrimary,
                                 onKeyPress = { key ->
-                                    appendDigit(key, amountDigits) { amountDigits = it }
+                                    appendDigit(key, amountDigits) {
+                                        amountDigits = it
+                                        triggerKeystrokeEnergyPulse(it)
+                                    }
                                 }
                             )
 
@@ -1160,7 +1423,10 @@ fun QuickExpenseScreen(
                                 keypadBorder = keypadBorder,
                                 textPrimary = textPrimary,
                                 onKeyPress = { key ->
-                                    appendDigit(key, amountDigits) { amountDigits = it }
+                                    appendDigit(key, amountDigits) {
+                                        amountDigits = it
+                                        triggerKeystrokeEnergyPulse(it)
+                                    }
                                 }
                             )
 
@@ -1170,7 +1436,10 @@ fun QuickExpenseScreen(
                                 keypadBorder = keypadBorder,
                                 textPrimary = textPrimary,
                                 onKeyPress = { key ->
-                                    appendDigit(key, amountDigits) { amountDigits = it }
+                                    appendDigit(key, amountDigits) {
+                                        amountDigits = it
+                                        triggerKeystrokeEnergyPulse(it)
+                                    }
                                 }
                             )
 
@@ -1191,6 +1460,7 @@ fun QuickExpenseScreen(
                                         com.splitmate.app.ui.performCrispTactileHaptic(context, keypadView, heavy = false)
                                         if (!amountDigits.contains(".") && amountDigits.length < 9) {
                                             amountDigits = if (amountDigits.isEmpty()) "0." else "$amountDigits."
+                                            triggerKeystrokeEnergyPulse(amountDigits)
                                         }
                                     }
                                 )
@@ -1205,7 +1475,10 @@ fun QuickExpenseScreen(
                                         .height(54.dp),
                                     onClick = {
                                         com.splitmate.app.ui.performCrispTactileHaptic(context, keypadView, heavy = false)
-                                        appendDigit("0", amountDigits) { amountDigits = it }
+                                        appendDigit("0", amountDigits) {
+                                            amountDigits = it
+                                            triggerKeystrokeEnergyPulse(it)
+                                        }
                                     }
                                 )
 
@@ -1224,6 +1497,7 @@ fun QuickExpenseScreen(
                                         if (amountDigits.isNotEmpty()) {
                                             val next = amountDigits.dropLast(1)
                                             amountDigits = next.ifEmpty { "0" }
+                                            triggerKeystrokeEnergyPulse(amountDigits)
                                         }
                                     }
                                 )
@@ -1244,7 +1518,7 @@ fun QuickExpenseScreen(
                                 },
                                 shape = QuickExpenseThemeTokens.RadiusKeySquircle,
                                 color = QuickExpenseThemeTokens.SageSurface,
-                                shadowElevation = 2.dp,
+                                shadowElevation = 0.dp,
                                 border = BorderStroke(1.dp, QuickExpenseThemeTokens.AccentSage),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1369,6 +1643,7 @@ fun QuickExpenseScreen(
                         }
                     }
                 }
+                }
             }
         }
     }
@@ -1435,13 +1710,21 @@ fun TactileSquircleKey(
         ),
         label = "KeyScale"
     )
+    val morphCorner by androidx.compose.animation.core.animateDpAsState(
+        targetValue = if (isPressed) 12.dp else 24.dp,
+        animationSpec = spring(
+            dampingRatio = 0.62f,
+            stiffness = 520f
+        ),
+        label = "GM3KeyCornerMorph"
+    )
 
     Surface(
         onClick = onClick,
         interactionSource = interactionSource,
-        shape = QuickExpenseThemeTokens.RadiusKeySquircle,
+        shape = RoundedCornerShape(morphCorner),
         color = if (isPressed) keypadBorder else keypadBg,
-        shadowElevation = if (isPressed) 1.dp else 3.dp,
+        shadowElevation = 0.dp,
         border = BorderStroke(1.dp, keypadBorder),
         modifier = modifier
             .scale(scale)
@@ -1508,7 +1791,7 @@ private fun parseAmountInputToPaise(input: String): Long {
 private fun formatPaiseWithInputDisplay(paise: Long, rawInput: String, currencySymbol: String): String {
     if (paise == 0L && !rawInput.contains(".")) return "$currencySymbol 0"
     val whole = paise / 100L
-    val formattedWhole = NumberFormat.getNumberInstance(Locale("en", "IN")).format(whole)
+    val formattedWhole = com.splitmate.app.ui.formatIndianIntegerGrouping(whole)
     return if (rawInput.contains(".")) {
         val decPart = rawInput.substringAfter(".").take(2)
         "$currencySymbol $formattedWhole.$decPart"
@@ -1525,7 +1808,7 @@ private fun formatPaiseWithInputDisplay(paise: Long, rawInput: String, currencyS
 private fun formatPaiseForSplitBadge(paise: Long): String {
     val whole = paise / 100L
     val rem = kotlin.math.abs(paise % 100L)
-    val formattedWhole = NumberFormat.getNumberInstance(Locale("en", "IN")).format(whole)
+    val formattedWhole = com.splitmate.app.ui.formatIndianIntegerGrouping(whole)
     return if (rem == 0L) formattedWhole else "$formattedWhole.${String.format(Locale.US, "%02d", rem)}"
 }
 

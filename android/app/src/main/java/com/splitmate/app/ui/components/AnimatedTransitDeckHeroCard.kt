@@ -562,7 +562,7 @@ private fun TrainPassCard(
                             )
                             Spacer(modifier = Modifier.width(5.dp))
                             Text(
-                                text = if (trainCountLogged > 0) "$trainCountLogged PNRs Synced" else "Offline PNR Vault Ready",
+                                text = if (trainCountLogged > 0) "$trainCountLogged ${if (trainCountLogged == 1) "Trip" else "Trips"} Active" else "Live Berth & Fare Split",
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White.copy(alpha = 0.90f)
@@ -593,10 +593,10 @@ private fun TrainPassCard(
                     )
                 }
 
-                // BOTTOM ACTION ROW: Primary Enter PNR + Secondary Switch Button
+                // BOTTOM ACTION ROW: Single Primary Enter PNR Action (deck switching handled by top tab peek)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.Start,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Surface(
@@ -635,33 +635,6 @@ private fun TrainPassCard(
                                     )
                                 }
                             }
-                        }
-                    }
-
-                    Surface(
-                        onClick = onSwitchToFlightClick,
-                        shape = AnimatedTransitDeckTokens.RadiusPill,
-                        color = Color.White.copy(alpha = 0.16f),
-                        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.22f)),
-                        modifier = Modifier.height(34.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.FlightTakeoff,
-                                contentDescription = null,
-                                tint = Color.White.copy(alpha = 0.92f),
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Spacer(modifier = Modifier.width(5.dp))
-                            Text(
-                                text = "Flight Pass ↗",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White.copy(alpha = 0.92f)
-                            )
                         }
                     }
                 }
@@ -899,7 +872,7 @@ private fun FlightPassCard(
                             )
                             Spacer(modifier = Modifier.width(5.dp))
                             Text(
-                                text = if (flightCountActive > 0) "$flightCountActive Flights Logged" else "PDF AI Parser Ready",
+                                text = if (flightCountActive > 0) "$flightCountActive ${if (flightCountActive == 1) "Flight" else "Flights"} Active" else "Instant Seat & Fare Split",
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White.copy(alpha = 0.90f)
@@ -930,10 +903,10 @@ private fun FlightPassCard(
                     )
                 }
 
-                // BOTTOM ACTION ROW: Primary Upload PDF + Secondary Switch Button
+                // BOTTOM ACTION ROW: Single Primary Upload PDF Action (deck switching handled by top tab peek)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.Start,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Surface(
@@ -972,33 +945,6 @@ private fun FlightPassCard(
                                     )
                                 }
                             }
-                        }
-                    }
-
-                    Surface(
-                        onClick = onSwitchToTrainClick,
-                        shape = AnimatedTransitDeckTokens.RadiusPill,
-                        color = Color.White.copy(alpha = 0.16f),
-                        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.22f)),
-                        modifier = Modifier.height(34.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.DirectionsRailway,
-                                contentDescription = null,
-                                tint = Color.White.copy(alpha = 0.92f),
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Spacer(modifier = Modifier.width(5.dp))
-                            Text(
-                                text = "Train Pass ↗",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White.copy(alpha = 0.92f)
-                            )
                         }
                     }
                 }

@@ -284,12 +284,14 @@ fun extractTravelTicketFromTitle(title: String): ParsedTravelTicket? {
         ?.trim()
         .orEmpty()
 
+    val strippedVehiclePrefix = rawFirstSegment
+        .replace(Regex("""^(Train/Flight|Flight/Train)\s+""", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("""^Train\s+(?=\d{5}\b)""", RegexOption.IGNORE_CASE), "")
+        .replace(" Express", " Exp")
+        .trim()
+
     val normalizedCleanTitle = when {
-        isFlight && rawFirstSegment.startsWith("Train/Flight ", ignoreCase = true) ->
-            "Flight " + rawFirstSegment.substringAfter(" ").trim()
-        isFlight && rawFirstSegment.startsWith("Train ", ignoreCase = true) ->
-            "Flight " + rawFirstSegment.substringAfter(" ").trim()
-        rawFirstSegment.isNotBlank() -> rawFirstSegment
+        strippedVehiclePrefix.isNotBlank() -> strippedVehiclePrefix
         isFlight -> "Flight Ticket"
         else -> "Train Ticket"
     }
@@ -308,3 +310,66 @@ fun extractTravelTicketFromTitle(title: String): ParsedTravelTicket? {
     )
     return if (parsed.hasTicketMetadata) parsed else null
 }
+
+/**
+ * Strips database concatenation prefixes like "Train/Flight " and normalizes display titles
+ * e.g. "Train/Flight 11058 Amritsar - Mumbai CSMT Express (3E)" -> "11058 Amritsar - Mumbai CSMT Exp (3E)"
+ */
+fun cleanDisplayExpenseTitle(rawTitle: String): String {
+    val parsedTicket = extractTravelTicketFromTitle(rawTitle)
+    val base = parsedTicket?.cleanTitle?.takeIf { it.isNotBlank() } ?: rawTitle.substringBefore("[PNR:").trim()
+    return base
+        .replace("🚆", "")
+        .replace("✈️", "")
+        .replace("✈", "")
+        .replace(Regex("""^(Train/Flight|Flight/Train)\s+""", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("""^Train\s+(?=\d{5}\b)""", RegexOption.IGNORE_CASE), "")
+        .replace(" Express", " Exp")
+        .replace(Regex("""\s+"""), " ")
+        .trim()
+}
+
+/**
+ * Formats integer paise/cents using standard Indian numbering system (en-IN) -> ₹10,391.00
+ */
+fun formatIndianRupeesFromCents(
+    cents: Long,
+    includePlusSign: Boolean = false,
+    currencySymbol: String = "₹",
+    trimZeroDecimals: Boolean = false
+): String {
+    val sign = when {
+        cents < 0L -> "-"
+        cents > 0L && includePlusSign -> "+"
+        else -> ""
+    }
+    val absCents = kotlin.math.abs(cents)
+    val rupees = absCents / 100L
+    val paise = (absCents % 100L).toInt()
+    val formattedRupees = formatIndianIntegerGrouping(rupees)
+    return if (trimZeroDecimals && paise == 0) {
+        "$sign$currencySymbol$formattedRupees"
+    } else {
+        String.format(java.util.Locale.US, "%s%s%s.%02d", sign, currencySymbol, formattedRupees, paise)
+    }
+}
+
+fun formatIndianIntegerGrouping(number: Long): String {
+    val absNum = kotlin.math.abs(number)
+    val prefix = if (number < 0) "-" else ""
+    if (absNum < 1000L) return "$prefix$absNum"
+    val lastThree = (absNum % 1000L).toString().padStart(3, '0')
+    var remaining = absNum / 1000L
+    val groups = mutableListOf<String>()
+    while (remaining > 0L) {
+        if (remaining >= 100L) {
+            groups.add(0, (remaining % 100L).toString().padStart(2, '0'))
+            remaining /= 100L
+        } else {
+            groups.add(0, remaining.toString())
+            remaining = 0L
+        }
+    }
+    return "$prefix${groups.joinToString(",")},$lastThree"
+}
+
