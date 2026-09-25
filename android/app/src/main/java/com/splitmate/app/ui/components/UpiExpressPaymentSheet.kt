@@ -779,7 +779,7 @@ fun UpiExpressPaymentSheet(
                             Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "✓ Yes, Mark ${transferModel.formattedDisplayAmount} Paid",
+                                text = "Yes, Mark ${transferModel.formattedDisplayAmount} Paid",
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 13.sp
@@ -938,7 +938,7 @@ fun UpiExpressPaymentSheet(
                                 color = SplitMateTheme.SageSurface
                             ) {
                                 Text(
-                                    text = "✓ Saved",
+                                    text = "Saved",
                                     fontFamily = FigtreeFontFamily,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.ExtraBold,

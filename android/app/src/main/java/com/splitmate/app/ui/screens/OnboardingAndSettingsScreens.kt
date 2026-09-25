@@ -826,7 +826,7 @@ fun UserSettingsScreen(
                                 },
                                 onClick = {
                                     val summaryText = onExportLedgerText().ifBlank {
-                                        "📊 SplitMate Trip Summary (${editedName.ifBlank { userName }})\nActive Groups: $activeGroupsCount\nUPI Handle: ${editedUpiId.ifBlank { "Not configured" }}"
+                                        "SplitMate Trip Summary (${editedName.ifBlank { userName }})\nActive Groups: $activeGroupsCount\nUPI Handle: ${editedUpiId.ifBlank { "Not configured" }}"
                                     }
                                     runCatching {
                                         val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {

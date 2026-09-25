@@ -242,7 +242,7 @@ object PnrNetworkRepository {
                 if (result.cabinBaggage.isNotBlank()) "Cabin: ${result.cabinBaggage}" else "",
                 if (result.checkInBaggage.isNotBlank()) "Check-in: ${result.checkInBaggage}" else ""
             ).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "Confirmed Flight Ticket · Offline Ready" },
-            liveTrainLocationRadar = "✈️ ${result.airlineName} ${result.flightNumber} · ${result.originCity.ifBlank { result.originIata }} ➔ ${result.destinationCity.ifBlank { result.destinationIata }}",
+            liveTrainLocationRadar = "${result.airlineName} ${result.flightNumber} · ${result.originCity.ifBlank { result.originIata }} -> ${result.destinationCity.ifBlank { result.destinationIata }}",
             confirmationProbability = "100% Confirmed · Saved in Offline PNR Vault",
             sourceLabel = "Confirmed Offline Vault (Flight PDF · 0 Internet Used)",
             isLiveVerified = true,

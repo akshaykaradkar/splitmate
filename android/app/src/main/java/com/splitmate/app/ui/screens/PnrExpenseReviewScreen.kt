@@ -723,7 +723,7 @@ fun PnrExpenseReviewScreen(
                                 color = if (isActiveTicket) TactilePaperPassTokens.SageConfirmedBg else Color.Transparent
                             ) {
                                 Text(
-                                    text = "✓ PNR $extractedPnr · ${formatPaiseDisplay(exp.totalAmountCents)} ${if (isActiveTicket) "(Editing below)" else "(Tap to view pass)"}",
+                                    text = "PNR $extractedPnr · ${formatPaiseDisplay(exp.totalAmountCents)} ${if (isActiveTicket) "(Editing below)" else "(Tap to view pass)"}",
                                     fontFamily = FigtreeFontFamily,
                                     fontWeight = if (isActiveTicket) FontWeight.Bold else FontWeight.SemiBold,
                                     fontSize = 12.sp,
@@ -1148,77 +1148,13 @@ fun TactilePaperBoardingPass(
     val isChartPrepared = chartStatus.lowercase(Locale.US).let {
         it.contains("prepared") && !it.contains("not")
     }
-    val haptic = LocalHapticFeedback.current
-    var trainTiltDragPx by remember { mutableFloatStateOf(0f) }
-    val trainTiltDeg by animateFloatAsState(
-        targetValue = (trainTiltDragPx * 0.14f).coerceIn(-22f, 22f),
-        animationSpec = spring(dampingRatio = 0.68f, stiffness = 360f),
-        label = "TrainPass3DTiltY"
-    )
-    val trainFoilInfinite = rememberInfiniteTransition(label = "TrainPassFoilShimmer")
-    val trainAmbientFoilPhase by trainFoilInfinite.animateFloat(
-        initialValue = -0.25f,
-        targetValue = 1.25f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 3600, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "TrainAmbientFoilSweep"
-    )
 
     Surface(
         shape = ticketShape,
         color = TactilePaperPassTokens.PaperSurface,
         border = androidx.compose.foundation.BorderStroke(1.dp, TactilePaperPassTokens.HairlineBorder),
         shadowElevation = 10.dp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .pointerInput(Unit) {
-                detectHorizontalDragGestures(
-                    onDragEnd = { trainTiltDragPx = 0f },
-                    onDragCancel = { trainTiltDragPx = 0f },
-                    onHorizontalDrag = { change, dragAmount ->
-                        change.consume()
-                        val nextPx = (trainTiltDragPx + dragAmount).coerceIn(-180f, 180f)
-                        if ((trainTiltDragPx <= 0f && nextPx > 0f) || (trainTiltDragPx >= 0f && nextPx < 0f)) {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        }
-                        trainTiltDragPx = nextPx
-                    }
-                )
-            }
-            .graphicsLayer {
-                rotationY = trainTiltDeg
-                cameraDistance = 15f * density
-            }
-            .drawWithContent {
-                drawContent()
-                val isTilting = kotlin.math.abs(trainTiltDeg) > 0.8f
-                val foilCenterFraction = if (isTilting) {
-                    0.5f + (trainTiltDeg / 28f)
-                } else {
-                    trainAmbientFoilPhase
-                }
-                val glintCenterX = size.width * foilCenterFraction
-                val bandHalfWidth = if (isTilting) 130.dp.toPx() else 95.dp.toPx()
-                val goldAlpha = if (isTilting) 0.40f else 0.20f
-                val whiteAlpha = if (isTilting) 0.66f else 0.34f
-                val holoAlpha = if (isTilting) 0.34f else 0.17f
-                drawRect(
-                    brush = Brush.linearGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color(0xFFF59E0B).copy(alpha = goldAlpha),
-                            Color.White.copy(alpha = whiteAlpha),
-                            Color(0xFF6366F1).copy(alpha = holoAlpha),
-                            Color(0xFF10B981).copy(alpha = goldAlpha * 0.75f),
-                            Color.Transparent
-                        ),
-                        start = Offset(glintCenterX - bandHalfWidth, 0f),
-                        end = Offset(glintCenterX + bandHalfWidth, size.height)
-                    )
-                )
-            }
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
 

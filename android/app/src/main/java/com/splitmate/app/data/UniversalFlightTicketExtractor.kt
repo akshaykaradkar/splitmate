@@ -171,7 +171,7 @@ object UniversalFlightTicketExtractor {
                 "$originCity ➔ $destinationCity"
             } else ""
             val pnrPart = if (pnr.isNotBlank()) "PNR: $pnr" else ""
-            return listOf("✈️ $carrierAndNo".trim(), routePart, pnrPart)
+            return listOf(carrierAndNo.trim(), routePart, pnrPart)
                 .filter { it.isNotBlank() }
                 .joinToString(" • ")
         }

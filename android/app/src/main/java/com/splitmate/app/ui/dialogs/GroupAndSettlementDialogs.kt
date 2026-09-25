@@ -237,7 +237,7 @@ fun EditLoggedExpenseDialog(
                                 color = if (isIncluded) SplitMateTheme.SageSurface else SplitMateTheme.SurfaceMuted
                             ) {
                                 Text(
-                                    text = (if (isIncluded) "✓ " else "") + (if (mbr.isCurrentUser) "${mbr.name} (You)" else mbr.name),
+                                    text = if (mbr.isCurrentUser) "${mbr.name} (You)" else mbr.name,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (isIncluded) SplitMateTheme.SageText else SplitMateTheme.TextSecondary,

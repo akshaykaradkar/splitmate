@@ -224,7 +224,7 @@ fun SplitMateApp(viewModel: SplitMateViewModel) {
                 },
                 onExportLedgerText = {
                     buildString {
-                        appendLine("📊 SplitMate Trip & Ledger Summary")
+                        appendLine("SplitMate Trip & Ledger Summary")
                         appendLine("User: ${uiState.currentUserName} (${uiState.userUpiId.ifBlank { "UPI not set" }})")
                         appendLine("Overall Net Position: $totalBalance")
                         appendLine("Active Groups (${uiState.groups.size}):")
@@ -1313,18 +1313,6 @@ fun LedgersDashboardScreen(
                 )
                 val showingFlightFace = flipRotationY >= 90f
 
-                // Ambient slow foil sweep so the Warm Gold + Holographic Foil Glint is visible at rest & intensifies on drag/flip
-                val foilAmbientTransition = rememberInfiniteTransition(label = "TravelPassFoilShimmer")
-                val ambientSweepPhase by foilAmbientTransition.animateFloat(
-                    initialValue = -0.25f,
-                    targetValue = 1.25f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(durationMillis = 3400, easing = FastOutSlowInEasing),
-                        repeatMode = RepeatMode.Reverse
-                    ),
-                    label = "AmbientFoilSweep"
-                )
-
                 // Fire a crisp mechanical haptic tick right as the cardstock crosses the 90-degree perpendicular plane
                 LaunchedEffect(showingFlightFace) {
                     travelPassHaptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -1365,37 +1353,6 @@ fun LedgersDashboardScreen(
                         .graphicsLayer {
                             rotationY = flipRotationY
                             cameraDistance = 15f * density
-                        }
-                        .drawWithContent {
-                            drawContent()
-                            // High-contrast Warm Gold + Holographic Foil Glint (combines 3D flip angle + ambient sweep)
-                            val activeRotationFraction = (flipRotationY % 180f) / 180f
-                            val isActivelyTurning = activeRotationFraction in 0.02f..0.98f
-                            val effectiveFoilFraction = if (isActivelyTurning) {
-                                activeRotationFraction
-                            } else {
-                                ambientSweepPhase
-                            }
-                            val glintCenter = size.width * effectiveFoilFraction
-                            val bandHalfWidth = if (isActivelyTurning) 125.dp.toPx() else 95.dp.toPx()
-                            val goldAlpha = if (isActivelyTurning) 0.42f else 0.22f
-                            val specularWhiteAlpha = if (isActivelyTurning) 0.72f else 0.38f
-                            val holoPeriwinkleAlpha = if (isActivelyTurning) 0.36f else 0.18f
-
-                            drawRect(
-                                brush = Brush.linearGradient(
-                                    colors = listOf(
-                                        Color.Transparent,
-                                        Color(0xFFF59E0B).copy(alpha = goldAlpha),
-                                        Color.White.copy(alpha = specularWhiteAlpha),
-                                        Color(0xFF6366F1).copy(alpha = holoPeriwinkleAlpha),
-                                        Color(0xFF10B981).copy(alpha = goldAlpha * 0.75f),
-                                        Color.Transparent
-                                    ),
-                                    start = Offset(glintCenter - bandHalfWidth, 0f),
-                                    end = Offset(glintCenter + bandHalfWidth, size.height)
-                                )
-                            )
                         }
                 ) {
                     Box(
@@ -4020,7 +3977,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                         )
                                                         Spacer(modifier = Modifier.width(4.dp))
                                                         Text(
-                                                            text = if (isDrainingIn) "₹0.00 · Settled ✓" else "Mark Paid",
+                                                            text = if (isDrainingIn) "₹0.00 · Settled" else "Mark Paid",
                                                             fontFamily = SplitMateTheme.FontRounded,
                                                             fontWeight = FontWeight.Bold,
                                                             fontSize = 11.sp,
@@ -4294,7 +4251,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                             )
                                                             Spacer(modifier = Modifier.width(4.dp))
                                                             Text(
-                                                                text = if (isDrainingOut) "₹0.00 · Settled ✓" else "Mark Paid",
+                                                                text = if (isDrainingOut) "₹0.00 · Settled" else "Mark Paid",
                                                                 fontFamily = SplitMateTheme.FontRounded,
                                                                 fontWeight = FontWeight.Bold,
                                                                 fontSize = 11.sp
