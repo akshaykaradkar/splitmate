@@ -346,7 +346,7 @@ object UniversalFlightTicketExtractor {
     private val AirlineKeysPattern = IataAirlineRegistry.keys.joinToString("|")
     private val FlightNoRegex = Regex("""\b($AirlineKeysPattern)\s*[-]?\s*(\d{2,4})\b""")
     private val BookingIdRegex = Regex("""(?:Booking\s*ID|Reference\s*ID|Order\s*ID|Invoice\s*No)\s*[:\-]?\s*([A-Z0-9\-]{10,28})""", RegexOption.IGNORE_CASE)
-    private val DirectPnrRegex = Regex("""\b(?:Airline\s+PNR|PNR|Booking\s+Ref(?:erence)?\b|Record\s+Locator\b)(?:\s*\/\s*(?:Airline\s+)?PNR)?\s*[:\-]\s*\n?\s*([A-Z0-9]{6})\b""", RegexOption.IGNORE_CASE)
+    private val DirectPnrRegex = Regex("""\b(?:Airline\s+PNR|Reservation\s+No\.?\s*\(?PNR\)?|PNR|Booking\s+Ref(?:erence)?\b|Record\s+Locator\b)(?:\s*\/\s*(?:Airline\s+)?PNR)?\)?\s*[:\-]\s*\n?\s*([A-Z0-9]{6})\b""", RegexOption.IGNORE_CASE)
     private val SixCharTokenRegex = Regex("""\b([A-Z0-9]{6})\b""")
     private val RouteChainRegex = Regex("""\b([A-Z]{3})(?:\s*(?:->|→|➔|-|–|—|\s+to\s+)\s*([A-Z]{3}))+\b""")
     private val RouteDelimiterSplitRegex = Regex("""\s*(?:->|→|➔|-|–|—|\s+to\s+)\s*""")
@@ -355,6 +355,7 @@ object UniversalFlightTicketExtractor {
     private val CityHeaderRegex = Regex("""^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*[-–]\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)$""")
     private val BookingDateRegex = Regex("""(?:Booked\s*on|Booking\s*Date|Date\s*of\s*Booking|Issued\s*on)\s*[:\-]?\s*(\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}|\d{1,2}[-/][A-Za-z0-9]{2,3}[-/]\d{2,4})""", RegexOption.IGNORE_CASE)
     private val FullTravelDateRegex = Regex("""\b((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,?\s+\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})\b""", RegexOption.IGNORE_CASE)
+    private val NumericTravelDateRegex = Regex("""\b(\d{2}[-/]\d{2}[-/]\d{4}(?:\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*)?)\b""", RegexOption.IGNORE_CASE)
     private val ShortTravelDateRegex = Regex("""\b((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,?\s+(?:\d{1,2}\s+[A-Za-z]{3,9}|[A-Za-z]{3,9}\s+\d{1,2}))\b""", RegexOption.IGNORE_CASE)
     private val Time24hRegex = Regex("""\b([01]\d|2[0-3]):([0-5]\d)(?:\s*hrs)?\b""", RegexOption.IGNORE_CASE)
     private val Time12hRegex = Regex("""\b(0?[1-9]|1[0-2]):([0-5]\d)\s*(AM|PM)\b""", RegexOption.IGNORE_CASE)
@@ -632,9 +633,13 @@ object UniversalFlightTicketExtractor {
                             }
                         } else {
                             val baseTarget = tokens[2].toIntOrNull(16) ?: continue
+                            // Skip Identity-UCS <0000> <FFFF> <0000> range (used by mPDF 8.0.5) so 0x00 is never mapped to '\u0000'
+                            if (startCode == 0 && endCode >= 0xFFF0 && baseTarget == 0) continue
                             for (code in startCode..endCode) {
                                 val targetScalar = baseTarget + (code - startCode)
-                                mapping[code] = String(Character.toChars(targetScalar))
+                                if (targetScalar > 0) {
+                                    mapping[code] = String(Character.toChars(targetScalar))
+                                }
                             }
                         }
                     }
@@ -728,7 +733,7 @@ object UniversalFlightTicketExtractor {
                         }
                     }
                     tm.groups[3] != null -> {
-                        val rawLiteral = unescapePdfLiteralString(literalGroup)
+                        val rawLiteral = unescapePdfLiteralString(literalGroup).replace("\u0000", "")
                         val glyphs = currentCompiledCmap?.glyphs
                         if (glyphs != null && glyphs.isNotEmpty()) {
                             for (ch in rawLiteral) {
@@ -740,7 +745,7 @@ object UniversalFlightTicketExtractor {
                     }
                     fullMatch == "ET" -> {
                         if (currentLine.isNotEmpty()) {
-                            val cleaned = currentLine.toString().trim()
+                            val cleaned = currentLine.toString().replace("\u0000", "").trim()
                             if (cleaned.isNotEmpty()) {
                                 outLines.add(cleaned)
                             }
@@ -855,6 +860,7 @@ object UniversalFlightTicketExtractor {
         startNs: Long
     ): UniversalFlightTicketResult {
         val normalizedLines = rawText
+            .replace("\u0000", "")
             .replace("\r\n", "\n")
             .lineSequence()
             .map { it.replace(Regex("""\s+"""), " ").trim() }
@@ -996,9 +1002,9 @@ object UniversalFlightTicketExtractor {
 
         val scores = HashMap<String, Int>()
         for ((lineIdx, line) in lines.withIndex()) {
-            val prevLine = if (lineIdx > 0) lines[lineIdx - 1] else ""
-            val nextLine = if (lineIdx + 1 < lines.size) lines[lineIdx + 1] else ""
-            val contextWindow = "$prevLine $line $nextLine".uppercase(Locale.US)
+            val winStart = (lineIdx - 3).coerceAtLeast(0)
+            val winEnd = (lineIdx + 3).coerceAtMost(lines.lastIndex)
+            val contextWindow = lines.subList(winStart, winEnd + 1).joinToString(" ").uppercase(Locale.US)
             for (m in SixCharTokenRegex.findAll(line)) {
                 val token = m.groupValues[1]
                 if (token in ExcludedSixCharTokens) continue
@@ -1142,6 +1148,7 @@ object UniversalFlightTicketExtractor {
         val bookingDate = BookingDateRegex.find(flatText)?.groupValues?.get(1)?.trim().orEmpty()
 
         val travelDate = FullTravelDateRegex.find(flatText)?.groupValues?.get(1)?.trim()
+            ?: NumericTravelDateRegex.find(compactText)?.groupValues?.get(1)?.trim()
             ?: ShortTravelDateRegex.find(flatText)?.groupValues?.get(1)?.trim().orEmpty()
 
         val all24hTimes = ArrayList<String>()
@@ -1287,7 +1294,26 @@ object UniversalFlightTicketExtractor {
             }
         }
 
-        return passengers.values.toList()
+        // If passenger name is in 'Booking Details' / 'Fare Breakup' while 'Seat No' (e.g. 10A) is in 'Itinerary' table
+        val resultList = passengers.values.toMutableList()
+        if (resultList.isNotEmpty() && resultList.all { it.seatNumber == "-" }) {
+            val seatSectionIdx = flatText.indexOf("Seat", ignoreCase = true)
+            if (seatSectionIdx >= 0) {
+                val seatWindow = flatText.substring(seatSectionIdx, (seatSectionIdx + 350).coerceAtMost(flatText.length))
+                val globalSeats = StandaloneSeatTokenRegex.findAll(seatWindow)
+                    .map { it.groupValues[1].uppercase(Locale.US) }
+                    .filter { it !in CarrierCodesLookingLikeSeats }
+                    .distinct()
+                    .toList()
+                for (i in resultList.indices) {
+                    if (i < globalSeats.size) {
+                        resultList[i] = resultList[i].copy(seatNumber = globalSeats[i])
+                    }
+                }
+            }
+        }
+
+        return resultList
     }
 
     private fun extractSafeSeatFromWindow(window: String): String {
@@ -1393,9 +1419,9 @@ object UniversalFlightTicketExtractor {
             val wideBefore = upperCompact.substring(wideStart, currentMatchStart)
 
             var score = 10
-            if (localBefore.contains("TOTAL AMOUNT") || localBefore.contains("GRAND TOTAL") || localBefore.contains("NET PAYABLE")) {
+            if (localBefore.contains("TOTAL AMOUNT") || localBefore.contains("GRAND TOTAL") || localBefore.contains("NET PAYABLE") || localBefore.contains("FINAL COST") || localBefore.contains("TOTAL FARE")) {
                 score += 180
-            } else if (wideBefore.contains("TOTAL AMOUNT") || wideBefore.contains("GRAND TOTAL") || wideBefore.contains("NET PAYABLE")) {
+            } else if (wideBefore.contains("TOTAL AMOUNT") || wideBefore.contains("GRAND TOTAL") || wideBefore.contains("NET PAYABLE") || wideBefore.contains("FINAL COST")) {
                 score += 95
             }
             if (localBefore.contains("PAID BY") || localBefore.contains("TOTAL PAID") || localBefore.contains("AMOUNT PAID")) {

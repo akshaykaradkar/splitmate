@@ -70,6 +70,44 @@ class UniversalFlightTicketExtractorTest {
     }
 
     @Test
+    fun `auditRealQuest2TravelFgmku9PdfBytes - verifies mPDF 8_0_5 UTF-16BE Identity-H ticket FGMKU9_Q2T03221729_pdf`() {
+        val candidates = listOf(
+            File("/usr/local/google/home/karadkar/splitmate/Debug/FGMKU9_Q2T03221729.pdf"),
+            File("../Debug/FGMKU9_Q2T03221729.pdf"),
+            File("../../Debug/FGMKU9_Q2T03221729.pdf")
+        )
+        val pdfFile = candidates.firstOrNull { it.exists() }
+        assertTrue(pdfFile != null && pdfFile.exists(), "Expected Debug/FGMKU9_Q2T03221729.pdf to exist on disk")
+
+        val groupMembers = listOf("Akshay", "Priyanka", "Gauri")
+        val res = UniversalFlightTicketExtractor.extractFromPdfFile(pdfFile!!, groupMembers)
+
+        println("=== FGMKU9_Q2T03221729.pdf EXTRACTION AUDIT ===")
+        println("PNR: ${res.pnr} | Flight: ${res.flightNumber} | Airline: ${res.airlineName}")
+        println("Route: ${res.originIata} (${res.originCity}) -> ${res.destinationIata} (${res.destinationCity})")
+        println("Travel Date: ${res.travelDate} | Dep: ${res.departureTime} | Arr: ${res.arrivalTime}")
+        println("Passengers: ${res.passengers}")
+        println("Fare: ${res.totalFarePaise} paise (₹${res.totalFareRupeesFormatted})")
+
+        assertTrue(res.isValidFlightTicket)
+        assertEquals("FGMKU9", res.pnr)
+        assertEquals("AI", res.airlineCode)
+        assertEquals("Air India", res.airlineName)
+        assertEquals("AI 2682", res.flightNumber)
+        assertEquals("IXC", res.originIata)
+        assertEquals("Chandigarh", res.originCity)
+        assertEquals("BOM", res.destinationIata)
+        assertEquals("Mumbai", res.destinationCity)
+        assertEquals("14:15", res.departureTime)
+        assertEquals("16:55", res.arrivalTime)
+        assertEquals("Priyanka Jagannath Morye", res.passengers.first().fullName)
+        assertEquals("10A", res.passengers.first().seatNumber)
+        assertEquals(listOf("Priyanka"), res.matchedGroupMembers)
+        assertEquals(10391_00L, res.totalFarePaise)
+        assertEquals("10391", res.totalFareRupeesFormatted)
+    }
+
+    @Test
     fun `auditAllFiveRealBinaryPdfSamplesInDebugFolder - tests 5 distinct 2026 binary PDFs with custom ToUnicode CMaps and ObjStm`() {
         val debugDir = listOf(
             File("/usr/local/google/home/karadkar/splitmate/Debug"),

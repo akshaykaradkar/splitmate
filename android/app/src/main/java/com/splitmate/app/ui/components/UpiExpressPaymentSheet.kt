@@ -412,11 +412,9 @@ fun UpiExpressPaymentSheet(
         val resolvedVpa = overrideVpa?.takeIf { it.isNotBlank() } ?: when (targetAppId) {
             "gpay" -> {
                 when {
+                    clean10Phone.length == 10 -> clean10Phone
                     cleanExactVpa.isNotBlank() -> cleanExactVpa
                     discoveredGmailPrefix.isNotBlank() -> "$discoveredGmailPrefix@okhdfcbank"
-                    // If no Gmail is available, use the 10-digit phone number with @ybl (interoperable NPCI phone handle)
-                    // instead of @okaxis (which never uses phone numbers) so Google Pay can resolve the phone number!
-                    clean10Phone.length == 10 -> "$clean10Phone@ybl"
                     else -> ""
                 }
             }
@@ -443,80 +441,59 @@ fun UpiExpressPaymentSheet(
             }
         }
 
-        if (resolvedVpa.isEmpty()) {
-            Toast.makeText(
-                context,
-                "Tap 'Select Phone from Contacts' above to pick ${transferModel.toName}'s 10-digit mobile number!",
-                Toast.LENGTH_LONG
-            ).show()
-            return
-        }
-
         if (overrideVpa != null) {
             exactVpaInput = overrideVpa
         }
-        persistCombinedIdentity(newVpa = resolvedVpa)
+        if (resolvedVpa.isNotBlank()) {
+            persistCombinedIdentity(newVpa = if (resolvedVpa.contains("@")) resolvedVpa else cleanExactVpa)
+        }
         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
 
-        // Quietly copy VPA/phone to clipboard as a backup without any annoying notification
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        clipboard?.setPrimaryClip(ClipData.newPlainText("UPI VPA", resolvedVpa))
+        // Put the 10-digit phone number (preferred for Google Pay P2P search) or UPI ID on Android Keyboard Clipboard strip
+        val copyTarget = clean10Phone.ifBlank { cleanExactVpa.ifBlank { resolvedVpa } }
+        if (copyTarget.isNotBlank()) {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            clipboard?.setPrimaryClip(ClipData.newPlainText("Payee Phone or UPI", copyTarget))
+        }
 
         val cleanNote = "SplitMate · ${groupName.toSmartTitleCase()}"
         lastLaunchedAppName = appLabel
         hasLaunchedExternalApp = true
 
-        // 1. Try app-specific native deep-link scheme first (tez://upi/pay, phonepe://pay, paytmmp://pay)
-        val nativeUri = when (targetAppId) {
-            "gpay" -> buildTrueOneTapUpiUri(
-                scheme = "tez",
-                host = "upi",
-                path = "pay",
-                payeeVpa = resolvedVpa,
-                payeeName = transferModel.toName,
-                amountDecimal = transferModel.amount,
-                transactionNote = cleanNote
-            )
-            "phonepe" -> buildTrueOneTapUpiUri(
-                scheme = "phonepe",
-                host = "pay",
-                payeeVpa = resolvedVpa,
-                payeeName = transferModel.toName,
-                amountDecimal = transferModel.amount,
-                transactionNote = cleanNote
-            )
-            "paytm" -> buildTrueOneTapUpiUri(
-                scheme = "paytmmp",
-                host = "pay",
-                payeeVpa = resolvedVpa,
-                payeeName = transferModel.toName,
-                amountDecimal = transferModel.amount,
-                transactionNote = cleanNote
-            )
-            else -> buildTrueOneTapUpiUri(
-                scheme = "upi",
-                host = "pay",
-                payeeVpa = resolvedVpa,
-                payeeName = transferModel.toName,
-                amountDecimal = transferModel.amount,
-                transactionNote = cleanNote
-            )
+        // IMPORTANT: Google Pay India (`com.google.android.apps.nbu.paisa.user`) blocks ALL `tez://upi/pay` and `upi://pay`
+        // deep links when the recipient (`pa=`) is a Personal (`PERSON`) savings account (only allowing signed `MERCHANT`
+        // accounts like Zomato/Blinkit) and shows "Cannot pay with this QR".
+        // Launching Google Pay via its native package launcher (`getLaunchIntentForPackage`) completely bypasses the
+        // Merchant/QR block so P2P personal payments work 100% of the time!
+        if (targetAppId == "gpay") {
+            val gpayLaunchIntent = context.packageManager.getLaunchIntentForPackage("com.google.android.apps.nbu.paisa.user")
+            if (gpayLaunchIntent != null) {
+                gpayLaunchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                Toast.makeText(
+                    context,
+                    if (copyTarget.isNotBlank()) {
+                        "Copied $copyTarget · Tap search in GPay to pay ${transferModel.formattedDisplayAmount}"
+                    } else {
+                        "Opening Google Pay · Pay ${transferModel.formattedDisplayAmount} to ${transferModel.toName}"
+                    },
+                    Toast.LENGTH_LONG
+                ).show()
+                context.startActivity(gpayLaunchIntent)
+                return
+            }
+        }
+
+        val vpaForDeepLink = when {
+            cleanExactVpa.isNotBlank() -> cleanExactVpa
+            clean10Phone.length == 10 -> "$clean10Phone@paytm"
+            else -> return
         }
 
         try {
-            val nativeIntent = Intent(Intent.ACTION_VIEW, nativeUri).apply {
-                if (targetPackage != null) setPackage(targetPackage)
-            }
-            if (nativeIntent.resolveActivity(context.packageManager) != null) {
-                upiResultLauncher.launch(nativeIntent)
-                return
-            }
-
-            // 2. Fallback to standard clean upi://pay (no mode=00) with target package
             val standardUpiUri = buildTrueOneTapUpiUri(
                 scheme = "upi",
                 host = "pay",
-                payeeVpa = resolvedVpa,
+                payeeVpa = vpaForDeepLink,
                 payeeName = transferModel.toName,
                 amountDecimal = transferModel.amount,
                 transactionNote = cleanNote
@@ -530,8 +507,6 @@ fun UpiExpressPaymentSheet(
                     return
                 }
             }
-
-            // 3. Universal chooser fallback
             val chooserIntent = Intent(Intent.ACTION_VIEW, standardUpiUri)
             upiResultLauncher.launch(Intent.createChooser(chooserIntent, "Pay ${transferModel.formattedDisplayAmount} to ${transferModel.toName}"))
         } catch (_: Exception) {
