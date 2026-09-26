@@ -65,7 +65,12 @@ import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import com.splitmate.app.data.ExpenseGroupEntity
 import com.splitmate.app.data.GroupMemberEntity
+import com.splitmate.app.data.PhoneIdentityValidator
 import com.splitmate.app.ui.ContactPickerBottomSheet
 import com.splitmate.app.ui.DesignSystemBindings
 import com.splitmate.app.ui.GroupCategoryIcons
@@ -133,11 +138,15 @@ object SplitMateTheme {
 // ==============================================================================
 // 2. ROOT NAVIGATION HOST & SCAFFOLD
 // ==============================================================================
-enum class SplitMateTab(val label: String, val icon: ImageVector) {
-    LEDGERS("Ledgers", Icons.Rounded.AccountBalanceWallet),
-    SPLIT("Split", Icons.AutoMirrored.Rounded.ReceiptLong),
-    SETTLE("Settle", Icons.Rounded.SwapHoriz),
-    AUDIT("Audit", Icons.Rounded.HistoryEdu)
+enum class SplitMateTab(
+    val label: String,
+    val icon: ImageVector,
+    val showInPrimaryNav: Boolean = true
+) {
+    LEDGERS("Ledgers", Icons.Rounded.AccountBalanceWallet, showInPrimaryNav = true),
+    SPLIT("Split", Icons.AutoMirrored.Rounded.ReceiptLong, showInPrimaryNav = false),
+    SETTLE("Settle", Icons.Rounded.SwapHoriz, showInPrimaryNav = true),
+    AUDIT("Audit", Icons.Rounded.HistoryEdu, showInPrimaryNav = true)
 }
 
 @Composable
@@ -180,15 +189,9 @@ fun SplitMateApp(viewModel: SplitMateViewModel) {
         startDestination = startRoute
     ) {
         composable("onboarding") {
-            OnboardingSetupScreen(
-                onCompleteProfile = { name, currency, avatarSeed ->
-                    viewModel.completeOnboarding(
-                        name = name,
-                        countryName = currency.country,
-                        currencyCode = "INR",
-                        currencySymbol = "₹",
-                        avatarSeed = avatarSeed
-                    )
+            SplitMateCloudOtpOnboardingScreen(
+                viewModel = viewModel,
+                onCompleteToDashboard = {
                     navController.navigate("dashboard") {
                         popUpTo("onboarding") { inclusive = true }
                     }
@@ -206,6 +209,7 @@ fun SplitMateApp(viewModel: SplitMateViewModel) {
         composable("settings") {
             UserSettingsScreen(
                 userName = uiState.currentUserName.ifBlank { "Explorer" },
+                userPhone = uiState.userPhone,
                 avatarSeed = uiState.currentUserSeed,
                 upiId = uiState.userUpiId,
                 defaultCurrencyCode = "INR (₹)",
@@ -215,10 +219,12 @@ fun SplitMateApp(viewModel: SplitMateViewModel) {
                 allCurrencies = uiState.currencyRates,
                 onSyncLiveRates = {},
                 onBackClick = { navController.popBackStack() },
-                onUpdateUpiId = { newUpi -> viewModel.updateUserProfile(uiState.currentUserName, uiState.currentUserSeed, newUpi) },
+                onUpdateUpiId = { newUpi -> 
+                    viewModel.updateUserProfile(uiState.currentUserName, uiState.userPhone, uiState.currentUserSeed, newUpi) 
+                },
                 onUpdateCurrencyCode = {},
-                onUpdateUserProfile = { newName, newSeed ->
-                    viewModel.updateUserProfile(newName, newSeed, uiState.userUpiId)
+                onUpdateUserProfile = { newName, newPhone, newSeed ->
+                    viewModel.updateUserProfile(newName, newPhone, newSeed, uiState.userUpiId)
                 },
                 onThemeToggle = { isDark ->
                     prefs.edit().putBoolean("is_dark_theme", isDark).apply()
@@ -239,6 +245,795 @@ fun SplitMateApp(viewModel: SplitMateViewModel) {
                 },
                 onClearVaultClick = { viewModel.clearLocalVault() }
             )
+        }
+    }
+}
+
+@Composable
+fun SplitMateCloudOtpOnboardingScreen(
+    viewModel: SplitMateViewModel,
+    onCompleteToDashboard: () -> Unit
+) {
+    val context = LocalContext.current
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    var onboardingName by rememberSaveable { mutableStateOf(uiState.currentUserName.takeIf { it != "Explorer" }.orEmpty()) }
+    var onboardingPhone by rememberSaveable { mutableStateOf(uiState.userPhone) }
+    var onboardingUpi by rememberSaveable { mutableStateOf(uiState.userUpiId) }
+    var selectedAvatarStyleId by rememberSaveable { mutableStateOf(uiState.avatarStyleId.ifBlank { "open-peeps" }) }
+    var selectedColorPresetId by rememberSaveable { mutableStateOf(uiState.avatarColorPresetId.ifBlank { "Buckwheat" }) }
+    var enteredOtpCode by rememberSaveable { mutableStateOf("") }
+    var optionalPin4 by rememberSaveable { mutableStateOf("") }
+    var otpFeedbackMessage by remember { mutableStateOf<String?>(null) }
+    var showForgotPinResetNotice by remember { mutableStateOf(false) }
+
+    val normalizedPhone10 = remember(onboardingPhone) {
+        PhoneIdentityValidator.normalizeIndianPhone10(onboardingPhone)
+    }
+    val isValidPhone10 = remember(normalizedPhone10) {
+        PhoneIdentityValidator.isValidIndianMobile10(normalizedPhone10)
+    }
+
+    LaunchedEffect(normalizedPhone10, isValidPhone10) {
+        if (isValidPhone10) {
+            viewModel.lookupCloudProfileForPhone(normalizedPhone10) { record ->
+                if (record != null) {
+                    if (onboardingName.isBlank() && record.name.isNotBlank() && record.name != "Explorer") {
+                        onboardingName = record.name
+                    }
+                    if (onboardingUpi.isBlank() && record.upiVpa.isNotBlank()) {
+                        onboardingUpi = record.upiVpa
+                    }
+                    if (record.avatarStyle.isNotBlank()) {
+                        selectedAvatarStyleId = record.avatarStyle
+                    }
+                    if (record.avatarColorPreset.isNotBlank()) {
+                        selectedColorPresetId = record.avatarColorPreset
+                    }
+                }
+            }
+        }
+    }
+
+    Scaffold(
+        containerColor = SplitMateTheme.ScreenBg
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            // Brand Pill
+            Surface(
+                shape = SplitMateTheme.RadiusBadge,
+                color = Color(0xFFD7E8B6),
+                border = BorderStroke(1.dp, Color(0xFF416913).copy(alpha = 0.35f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.CloudDone,
+                        contentDescription = null,
+                        tint = Color(0xFF365314),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "Zero-Config Cloud Sync & Phone Identity",
+                        fontFamily = SplitMateTheme.FontRounded,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF365314)
+                    )
+                }
+            }
+
+            Text(
+                text = "Welcome to SplitMate",
+                fontFamily = SplitMateTheme.FontDisplay,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = SplitMateTheme.PrimaryDark,
+                textAlign = TextAlign.Center
+            )
+
+            // 1. Hybrid 5-Character Open-Peeps Hero Stage (~48 KB Local Assets + Live DiceBear 9.x Center Avatar)
+            OpenPeepsHeroStage(
+                name = onboardingName.ifBlank { "You" },
+                phone = onboardingPhone,
+                selectedStyleId = selectedAvatarStyleId,
+                selectedColorPresetId = selectedColorPresetId
+            )
+
+            // 2. DiceBear 9.x Avatar Style Strip (7 Styles)
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "Character Art Style",
+                    fontFamily = SplitMateTheme.FontRounded,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SplitMateTheme.PrimaryDark
+                )
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(SplitMateDiceBearStyles, key = { it.id }) { styleSpec ->
+                        val isSelected = selectedAvatarStyleId == styleSpec.id
+                        Surface(
+                            onClick = { selectedAvatarStyleId = styleSpec.id },
+                            shape = SplitMateTheme.RadiusBadge,
+                            color = if (isSelected) Color(0xFF365314) else SplitMateTheme.SurfaceWhite,
+                            border = BorderStroke(
+                                width = if (isSelected) 1.5.dp else 1.dp,
+                                color = if (isSelected) Color(0xFF416913) else SplitMateTheme.BorderLight
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                SplitMateCharacterAvatar(
+                                    name = onboardingName.ifBlank { "You" },
+                                    phone = onboardingPhone,
+                                    size = 26.dp,
+                                    styleId = styleSpec.id,
+                                    colorPresetId = selectedColorPresetId,
+                                    highlighted = isSelected
+                                )
+                                Column {
+                                    Text(
+                                        text = styleSpec.label,
+                                        fontFamily = SplitMateTheme.FontRounded,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = if (isSelected) Color(0xFFFAF6F0) else SplitMateTheme.PrimaryDark
+                                    )
+                                    Text(
+                                        text = styleSpec.subtitle,
+                                        fontFamily = SplitMateTheme.FontRounded,
+                                        fontSize = 10.sp,
+                                        color = if (isSelected) Color(0xFFD7E8B6) else SplitMateTheme.TextSecondary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. Avatar Color Preset Strip (5 Buckwheat & Expressive Presets)
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "Backdrop Palette Preset",
+                    fontFamily = SplitMateTheme.FontRounded,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SplitMateTheme.PrimaryDark
+                )
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(SplitMateAvatarColorPresets, key = { it.id }) { preset ->
+                        val isSelected = selectedColorPresetId == preset.id
+                        Surface(
+                            onClick = { selectedColorPresetId = preset.id },
+                            shape = SplitMateTheme.RadiusBadge,
+                            color = if (isSelected) preset.primaryBgColor else SplitMateTheme.SurfaceWhite,
+                            border = BorderStroke(
+                                width = if (isSelected) 2.dp else 1.dp,
+                                color = if (isSelected) preset.accentRingColor else SplitMateTheme.BorderLight
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(14.dp)
+                                        .clip(CircleShape)
+                                        .background(preset.primaryBgColor)
+                                        .border(1.5.dp, preset.accentRingColor, CircleShape)
+                                )
+                                Text(
+                                    text = preset.label,
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                    color = Color(0xFF23201E)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 4. Profile & +91 Mobile Identity Card
+            Card(
+                shape = SplitMateTheme.RadiusCard,
+                colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusCard)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedTextField(
+                        value = onboardingName,
+                        onValueChange = { onboardingName = it },
+                        label = { Text("Your Name", fontFamily = SplitMateTheme.FontRounded) },
+                        placeholder = { Text("e.g. Akshay Karadkar") },
+                        leadingIcon = {
+                            Icon(Icons.Rounded.Person, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
+                        },
+                        singleLine = true,
+                        shape = SplitMateTheme.RadiusInput,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = onboardingPhone,
+                        onValueChange = { onboardingPhone = it },
+                        label = { Text("10-Digit Indian Mobile (+91)", fontFamily = SplitMateTheme.FontRounded) },
+                        placeholder = { Text("e.g. 9876543210") },
+                        leadingIcon = {
+                            Icon(Icons.Rounded.PhoneIphone, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
+                        },
+                        trailingIcon = {
+                            if (isValidPhone10) {
+                                Icon(
+                                    imageVector = Icons.Rounded.CheckCircle,
+                                    contentDescription = "Valid 10-digit mobile",
+                                    tint = Color(0xFF416913)
+                                )
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        singleLine = true,
+                        shape = SplitMateTheme.RadiusInput,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = onboardingUpi,
+                        onValueChange = { onboardingUpi = it },
+                        label = { Text("UPI ID (Optional - Auto-linked if blank)", fontFamily = SplitMateTheme.FontRounded) },
+                        placeholder = { Text(if (isValidPhone10) "$normalizedPhone10@upi" else "yourname@okaxis") },
+                        leadingIcon = {
+                            Icon(Icons.Rounded.AccountBalanceWallet, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
+                        },
+                        singleLine = true,
+                        shape = SplitMateTheme.RadiusInput,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // Send 6-Digit OTP Button
+                    FilledTonalButton(
+                        onClick = {
+                            val res = viewModel.requestPhoneOtp(context, onboardingPhone)
+                            if (res != null) {
+                                otpFeedbackMessage = "6-digit OTP generated for +91 ${res.phone10}"
+                            } else {
+                                otpFeedbackMessage = "Please enter a valid 10-digit Indian mobile number (starts with 6-9)."
+                            }
+                        },
+                        enabled = isValidPhone10,
+                        shape = SplitMateTheme.RadiusButton,
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = Color(0xFFD7E8B6),
+                            contentColor = Color(0xFF365314)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(46.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Sms,
+                            contentDescription = null,
+                            tint = Color(0xFF365314),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (uiState.pendingOtpCodeForBanner != null) "Resend 6-Digit OTP" else "Send 6-Digit OTP",
+                            fontFamily = SplitMateTheme.FontRounded,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 14.sp,
+                            color = Color(0xFF365314)
+                        )
+                    }
+
+                    // 5. In-App Simulated SMS OTP Banner (#D7E8B6 Sage surface, #365314 text) + 1-Tap Auto-Fill OTP
+                    val activeOtpBannerCode = uiState.pendingOtpCodeForBanner
+                    if (!activeOtpBannerCode.isNullOrBlank()) {
+                        Surface(
+                            shape = SplitMateTheme.RadiusPanel,
+                            color = Color(0xFFD7E8B6),
+                            border = BorderStroke(1.5.dp, Color(0xFF416913)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.MarkChatRead,
+                                        contentDescription = null,
+                                        tint = Color(0xFF365314),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = "SMS OTP for +91 ${uiState.pendingOtpPhone10}: $activeOtpBannerCode",
+                                            fontFamily = SplitMateTheme.FontDisplay,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 13.sp,
+                                            color = Color(0xFF365314)
+                                        )
+                                        Text(
+                                            text = "Tap Auto-Fill to verify & restore cloud groups",
+                                            fontFamily = SplitMateTheme.FontRounded,
+                                            fontSize = 11.sp,
+                                            color = Color(0xFF365314).copy(alpha = 0.85f)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Surface(
+                                    onClick = { enteredOtpCode = activeOtpBannerCode },
+                                    shape = SplitMateTheme.RadiusBadge,
+                                    color = Color(0xFF365314)
+                                ) {
+                                    Text(
+                                        text = "Auto-Fill OTP",
+                                        fontFamily = SplitMateTheme.FontRounded,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 11.sp,
+                                        color = Color(0xFFFAF6F0),
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    val discoveredProfile = uiState.discoveredCloudProfile?.takeIf { it.phone10 == normalizedPhone10 }
+                    val hasRemotePin = discoveredProfile?.pinHash?.isNotBlank() == true
+
+                    // 5b. Returning User Fast 4-Digit Recovery PIN Unlock (if cloud profile already has a PIN)
+                    if (isValidPhone10 && hasRemotePin && uiState.pendingOtpCodeForBanner == null && enteredOtpCode.isEmpty()) {
+                        Surface(
+                            shape = SplitMateTheme.RadiusPanel,
+                            color = Color(0xFFF4EFE6),
+                            border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "Welcome back, ${discoveredProfile?.name ?: "Explorer"}! Enter your 4-digit Recovery PIN to restore your cloud ledgers (or tap Send 6-Digit OTP above).",
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SplitMateTheme.PrimaryDark
+                                )
+                                OutlinedTextField(
+                                    value = optionalPin4,
+                                    onValueChange = { optionalPin4 = it.filter { ch -> ch.isDigit() }.take(4) },
+                                    label = { Text("4-Digit Recovery PIN", fontFamily = SplitMateTheme.FontRounded) },
+                                    placeholder = { Text("Enter 4-digit PIN") },
+                                    leadingIcon = {
+                                        Icon(Icons.Rounded.Pin, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
+                                    },
+                                    visualTransformation = PasswordVisualTransformation(),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                                    singleLine = true,
+                                    shape = SplitMateTheme.RadiusInput,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Button(
+                                    onClick = {
+                                        viewModel.verifyPinAndRestoreCloud(
+                                            context = context,
+                                            rawPhone = onboardingPhone,
+                                            enteredPin4 = optionalPin4,
+                                            fallbackUserName = onboardingName,
+                                            fallbackUpiId = onboardingUpi,
+                                            avatarStyleId = selectedAvatarStyleId,
+                                            avatarColorPresetId = selectedColorPresetId
+                                        ) { ok, msg ->
+                                            otpFeedbackMessage = msg
+                                            if (ok) {
+                                                onCompleteToDashboard()
+                                            }
+                                        }
+                                    },
+                                    enabled = optionalPin4.length == 4 && !uiState.isCloudSyncing,
+                                    shape = SplitMateTheme.RadiusButton,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF365314),
+                                        contentColor = Color(0xFFFAF6F0)
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.LockOpen,
+                                        contentDescription = null,
+                                        tint = Color(0xFFFAF6F0),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (uiState.isCloudSyncing) "Restoring Cloud Ledgers..." else "Unlock with 4-Digit PIN & Restore",
+                                        fontFamily = SplitMateTheme.FontRounded,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 14.sp,
+                                        color = Color(0xFFFAF6F0)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // 6. 6-Digit OTP Input + Optional 4-Digit Recovery PIN
+                    if (uiState.pendingOtpCodeForBanner != null || enteredOtpCode.isNotEmpty()) {
+                        OutlinedTextField(
+                            value = enteredOtpCode,
+                            onValueChange = { enteredOtpCode = it.filter { ch -> ch.isDigit() }.take(6) },
+                            label = { Text("Enter 6-Digit OTP", fontFamily = SplitMateTheme.FontRounded) },
+                            placeholder = { Text("6-digit verification code") },
+                            leadingIcon = {
+                                Icon(Icons.Rounded.LockClock, contentDescription = null, tint = Color(0xFF416913))
+                            },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                            singleLine = true,
+                            shape = SplitMateTheme.RadiusInput,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        OutlinedTextField(
+                            value = optionalPin4,
+                            onValueChange = { optionalPin4 = it.filter { ch -> ch.isDigit() }.take(4) },
+                            label = { Text("Optional 4-Digit Recovery PIN (Protects Cloud Sync)", fontFamily = SplitMateTheme.FontRounded) },
+                            placeholder = { Text("4-digit PIN (optional)") },
+                            leadingIcon = {
+                                Icon(Icons.Rounded.Pin, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
+                            },
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                            singleLine = true,
+                            shape = SplitMateTheme.RadiusInput,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (showForgotPinResetNotice) {
+                                    "Enter a new 4-digit PIN above — verifying OTP will reset your PIN."
+                                } else {
+                                    "Forgot PIN? Re-verify with OTP to overwrite PIN"
+                                },
+                                fontFamily = SplitMateTheme.FontRounded,
+                                fontSize = 11.sp,
+                                color = SplitMateTheme.TextSecondary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(
+                                onClick = {
+                                    showForgotPinResetNotice = true
+                                    if (uiState.isPhoneVerified && isValidPhone10 && optionalPin4.length == 4) {
+                                        viewModel.resetPinAfterOtpVerified(normalizedPhone10, optionalPin4)
+                                        otpFeedbackMessage = "Recovery PIN updated for +91 $normalizedPhone10"
+                                    }
+                                }
+                            ) {
+                                Text(
+                                    text = "Reset PIN",
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color(0xFF416913)
+                                )
+                            }
+                        }
+
+                        Button(
+                            onClick = {
+                                val resolvedName = onboardingName.trim().ifBlank {
+                                    discoveredProfile?.name?.takeIf { it.isNotBlank() } ?: "Explorer"
+                                }
+                                val resolvedUpi = onboardingUpi.trim().ifBlank {
+                                    discoveredProfile?.upiVpa?.takeIf { it.isNotBlank() } ?: "$normalizedPhone10@upi"
+                                }
+                                viewModel.verifyPhoneOtpAndSyncCloud(
+                                    context = context,
+                                    rawPhone = onboardingPhone,
+                                    enteredOtp = enteredOtpCode,
+                                    userName = resolvedName,
+                                    upiId = resolvedUpi,
+                                    avatarStyleId = selectedAvatarStyleId,
+                                    avatarColorPresetId = selectedColorPresetId,
+                                    optionalPin4 = optionalPin4
+                                ) { ok, msg ->
+                                    otpFeedbackMessage = msg
+                                    if (ok) {
+                                        onCompleteToDashboard()
+                                    }
+                                }
+                            },
+                            enabled = enteredOtpCode.length == 6 && !uiState.isCloudSyncing,
+                            shape = SplitMateTheme.RadiusButton,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF365314),
+                                contentColor = Color(0xFFFAF6F0)
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(54.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.VerifiedUser,
+                                contentDescription = null,
+                                tint = Color(0xFFFAF6F0),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (uiState.isCloudSyncing) "Syncing Cloud Ledgers..." else "Verify OTP & Sync Cloud",
+                                fontFamily = SplitMateTheme.FontRounded,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 15.sp,
+                                color = Color(0xFFFAF6F0)
+                            )
+                        }
+                    }
+
+                    otpFeedbackMessage?.let { feedback ->
+                        Text(
+                            text = feedback,
+                            fontFamily = SplitMateTheme.FontRounded,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (
+                                feedback.contains("Invalid", ignoreCase = true) ||
+                                feedback.contains("Incorrect", ignoreCase = true) ||
+                                feedback.contains("Please", ignoreCase = true) ||
+                                feedback.contains("No 4-digit", ignoreCase = true)
+                            ) {
+                                Color(0xFFE06B52)
+                            } else {
+                                Color(0xFF416913)
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Secondary Offline / Quick Start Action
+            OutlinedButton(
+                onClick = {
+                    val resolvedName = onboardingName.trim().ifBlank { "Explorer" }
+                    val styledSeed = "$resolvedName|$selectedAvatarStyleId|$selectedColorPresetId"
+                    viewModel.completeOnboarding(
+                        name = resolvedName,
+                        countryName = "India",
+                        currencyCode = "INR",
+                        currencySymbol = "₹",
+                        avatarSeed = styledSeed,
+                        userPhone = normalizedPhone10
+                    )
+                    onCompleteToDashboard()
+                },
+                shape = SplitMateTheme.RadiusBadge,
+                border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+            ) {
+                Text(
+                    text = "Continue to SplitMate",
+                    fontFamily = SplitMateTheme.FontRounded,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SplitMateTheme.PrimaryDark
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Icon(
+                    imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                    contentDescription = null,
+                    tint = SplitMateTheme.PrimaryDark,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun PendingGroupInviteCard(
+    group: ExpenseGroupEntity,
+    memberCount: Int,
+    userPhone: String,
+    onAcceptClick: () -> Unit,
+    onDeclineClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val groupIcon = resolveGroupCategoryIcon(group.iconName, group.name)
+    val cleanPhoneDisplay = PhoneIdentityValidator.normalizeIndianPhone10(userPhone).ifBlank { userPhone }
+
+    Card(
+        shape = SplitMateTheme.RadiusCard,
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFAF6F0)),
+        modifier = modifier
+            .fillMaxWidth()
+            .border(1.5.dp, Color(0xFF416913), SplitMateTheme.RadiusCard)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFD7E8B6)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = groupIcon,
+                            contentDescription = null,
+                            tint = Color(0xFF365314),
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Surface(
+                                shape = SplitMateTheme.RadiusBadge,
+                                color = Color(0xFFDCE3FD)
+                            ) {
+                                Text(
+                                    text = "GROUP INVITE",
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color(0xFF23201E),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                )
+                            }
+                            Text(
+                                text = "$memberCount members",
+                                fontFamily = SplitMateTheme.FontRounded,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = SplitMateTheme.TextSecondary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = group.name.toSmartTitleCase(),
+                            fontFamily = SplitMateTheme.FontDisplay,
+                            fontSize = 19.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF23201E)
+                        )
+                        Text(
+                            text = "You were invited via +91 $cleanPhoneDisplay",
+                            fontFamily = SplitMateTheme.FontRounded,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF416913)
+                        )
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Button(
+                    onClick = onAcceptClick,
+                    shape = SplitMateTheme.RadiusButton,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF416913),
+                        contentColor = Color(0xFFFAF6F0)
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.CheckCircle,
+                        contentDescription = null,
+                        tint = Color(0xFFFAF6F0),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Accept & Join",
+                        fontFamily = SplitMateTheme.FontRounded,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 13.sp,
+                        color = Color(0xFFFAF6F0)
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = onDeclineClick,
+                    shape = SplitMateTheme.RadiusButton,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = Color(0xFFFED8C8),
+                        contentColor = Color(0xFFE06B52)
+                    ),
+                    border = BorderStroke(1.dp, Color(0xFFE06B52)),
+                    modifier = Modifier
+                        .weight(0.75f)
+                        .height(44.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = null,
+                        tint = Color(0xFFE06B52),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Decline",
+                        fontFamily = SplitMateTheme.FontRounded,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 13.sp,
+                        color = Color(0xFFE06B52)
+                    )
+                }
+            }
         }
     }
 }
@@ -479,7 +1274,7 @@ fun SplitMateMainDashboardScaffold(
         bottomBar = {
             if (!isMediumOrExpandedWindow) {
                 AnimatedVisibility(
-                    visible = !isImmersiveTripHubOpen,
+                    visible = !isImmersiveTripHubOpen && currentTab != SplitMateTab.SPLIT,
                     enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                     exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
                 ) {
@@ -503,14 +1298,14 @@ fun SplitMateMainDashboardScaffold(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            if (isMediumOrExpandedWindow) {
+            if (isMediumOrExpandedWindow && currentTab != SplitMateTab.SPLIT) {
                 NavigationRail(
                     containerColor = animatedScreenBg,
                     contentColor = SplitMateTheme.PrimaryDark,
                     modifier = Modifier.testTag("AdaptiveNavigationRail")
                 ) {
                     Spacer(modifier = Modifier.height(12.dp))
-                    SplitMateTab.values().forEach { tab ->
+                    SplitMateTab.values().filter { it.showInPrimaryNav }.forEach { tab ->
                         val isSelected = currentTab == tab
                         NavigationRailItem(
                             selected = isSelected,
@@ -642,7 +1437,7 @@ fun SplitMateBottomNavigationBar(
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            SplitMateTab.values().forEach { tab ->
+            SplitMateTab.values().filter { it.showInPrimaryNav }.forEach { tab ->
                 val isSelected = selectedTab == tab
                 val tabCornerRadius by animateDpAsState(
                     targetValue = if (isSelected) 14.dp else 24.dp,
@@ -1304,6 +2099,7 @@ fun LedgersDashboardScreen(
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Column {
+                                            val isDeclinedMbr = mbr.inviteStatus.equals("DECLINED", ignoreCase = true)
                                             Text(
                                                 text = if (mbr.isCurrentUser) "${mbr.name} (You)" else mbr.name,
                                                 fontSize = 12.sp,
@@ -1312,14 +2108,95 @@ fun LedgersDashboardScreen(
                                             )
                                             val phone = mbr.upiId.substringBefore("@").replace(Regex("[^0-9]"), "")
                                             Text(
-                                                text = if (phone.length == 10) "+91 $phone" else if (mbr.isCurrentUser) "Group Admin" else "Tap to link phone",
+                                                text = when {
+                                                    isDeclinedMbr -> "Declined Invite"
+                                                    phone.length == 10 -> "+91 $phone"
+                                                    mbr.isCurrentUser -> "Group Admin"
+                                                    else -> "Tap to link phone"
+                                                },
                                                 fontSize = 10.sp,
-                                                color = if (phone.length == 10 || mbr.isCurrentUser) SplitMateTheme.SageText else SplitMateTheme.TerracottaText
+                                                color = if (!isDeclinedMbr && (phone.length == 10 || mbr.isCurrentUser)) SplitMateTheme.SageText else SplitMateTheme.TerracottaText
                                             )
                                         }
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+            }
+
+            // Declined Member Share Reassignment Banner (Classic Ledger Parity with Trip Hub v2.0)
+            val classicGroupExpenseIds = groupExpenses.map { it.expenseId }.toSet()
+            val declinedMembersWithShares = groupMembers
+                .filter { it.inviteStatus.equals("DECLINED", ignoreCase = true) }
+                .mapNotNull { declinedMbr ->
+                    val owedCents = uiState.splits.sumOf { split ->
+                        if (split.expenseId in classicGroupExpenseIds && split.memberId == declinedMbr.memberId) {
+                            split.finalOwedCents
+                        } else {
+                            0L
+                        }
+                    }
+                    if (owedCents > 0L) declinedMbr to owedCents else null
+                }
+            items(declinedMembersWithShares, key = { "classic_declined_${it.first.memberId}" }) { (declinedMember, owedCents) ->
+                Surface(
+                    shape = SplitMateTheme.RadiusCard,
+                    color = SplitMateTheme.TerracottaSurface,
+                    border = BorderStroke(1.dp, SplitMateTheme.TerracottaText.copy(alpha = 0.35f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.PersonOff,
+                                contentDescription = "Declined Member",
+                                tint = SplitMateTheme.TerracottaText,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "${declinedMember.name} declined this group invite",
+                                fontFamily = SplitMateTheme.FontDisplay,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 13.sp,
+                                color = SplitMateTheme.TerracottaText
+                            )
+                        }
+                        Text(
+                            text = "Still assigned ₹${String.format(Locale.US, "%,.2f", owedCents / 100.0)} across group expenses.",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = SplitMateTheme.PrimaryDark
+                        )
+                        Button(
+                            onClick = {
+                                viewModel.reassignDeclinedMemberSharesEqually(
+                                    context = context,
+                                    groupId = openedGroup.groupId,
+                                    declinedMemberId = declinedMember.memberId
+                                )
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = SplitMateTheme.PrimaryDark,
+                                contentColor = SplitMateTheme.ScreenBg
+                            ),
+                            shape = SplitMateTheme.RadiusButton,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .defaultMinSize(minHeight = 44.dp)
+                        ) {
+                            Text(
+                                text = "Reassign ${declinedMember.name}'s Share Equally",
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 12.sp
+                            )
                         }
                     }
                 }
@@ -2075,6 +2952,23 @@ fun LedgersDashboardScreen(
         }
     }
 
+    val joinedGroupIds = remember(uiState.activeJoinedGroups) {
+        uiState.activeJoinedGroups.map { it.groupId }.toSet()
+    }
+    val displayedActiveGroups = remember(activeGroups, joinedGroupIds) {
+        if (joinedGroupIds.isEmpty() && uiState.pendingInviteGroups.isEmpty() && uiState.declinedInviteGroups.isEmpty()) {
+            activeGroups
+        } else {
+            activeGroups.filter { it.groupId in joinedGroupIds }
+        }
+    }
+    var upgradePhoneInput by rememberSaveable(uiState.userPhone) { mutableStateOf(uiState.userPhone) }
+    var upgradeOtpInput by rememberSaveable { mutableStateOf("") }
+    var upgradeOptionalPin4 by rememberSaveable { mutableStateOf("") }
+    var showUpgradeOtpExpanded by rememberSaveable { mutableStateOf(false) }
+    var upgradeFeedbackMsg by remember { mutableStateOf<String?>(null) }
+    var isDeclinedDrawerExpanded by rememberSaveable { mutableStateOf(false) }
+
     val renderMasterGroupListPane: @Composable () -> Unit = {
     LazyColumn(
         modifier = Modifier
@@ -2083,7 +2977,7 @@ fun LedgersDashboardScreen(
         contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(DesignSystemBindings.PixelSectionSpacing)
     ) {
-        // 1. Custom Top Bar (Subtitle "Fun & Trip Expenses", Clickable Avatar — NO redundant INR pill)
+        // 1. Custom Top Bar (Subtitle "Fun & Trip Expenses", Sync Cloud button, Clickable Avatar)
         item {
             Row(
                 modifier = Modifier
@@ -2132,6 +3026,34 @@ fun LedgersDashboardScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    // 1-Tap Cloud Sync Pill Button
+                    Surface(
+                        onClick = { viewModel.syncAllGroupsWithCloud(context) },
+                        shape = CircleShape,
+                        color = SplitMateTheme.SurfaceWhite,
+                        border = BorderStroke(1.dp, SplitMateTheme.BorderLight)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.CloudSync,
+                                contentDescription = "Sync Cloud",
+                                tint = Color(0xFF416913),
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (uiState.isCloudSyncing) "Syncing" else "Sync Cloud",
+                                fontFamily = SplitMateTheme.FontRounded,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = SplitMateTheme.PrimaryDark
+                            )
+                        }
+                    }
+
                     // 1-Tap Warm Espresso Night (#181512) Theme Toggle (Global across all tabs & Settings)
                     Surface(
                         onClick = {
@@ -2173,14 +3095,253 @@ fun LedgersDashboardScreen(
                             .clip(CircleShape)
                             .clickable(onClick = onAvatarSettingsClick)
                     ) {
-                        AvatarToken(
-                            initials = uiState.currentUserSeed,
-                            bg = SplitMateTheme.AccentSage,
-                            textColor = Color(0xFF23201E),
-                            size = 38
+                        SplitMateCharacterAvatar(
+                            name = uiState.currentUserName.ifBlank { "You" },
+                            phone = uiState.userPhone,
+                            size = 38.dp,
+                            styleId = uiState.avatarStyleId,
+                            colorPresetId = uiState.avatarColorPresetId,
+                            highlighted = uiState.isPhoneVerified
                         )
                     }
                 }
+            }
+        }
+
+        // 1.2. Upgraded v2.0.0 User Phone Verification & Cloud Sync Banner
+        val normalizedUserPhone10 = PhoneIdentityValidator.normalizeIndianPhone10(uiState.userPhone)
+        if (!uiState.isPhoneVerified && (normalizedUserPhone10.length == 10 || uiState.userPhone.isBlank())) {
+            item(key = "upgrade_phone_otp_banner") {
+                Card(
+                    shape = SplitMateTheme.RadiusCard,
+                    colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, Color(0xFF416913).copy(alpha = 0.45f), SplitMateTheme.RadiusCard)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFD7E8B6)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.VerifiedUser,
+                                        contentDescription = null,
+                                        tint = Color(0xFF365314),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = "Verify Phone for Cloud Sync",
+                                        fontFamily = SplitMateTheme.FontDisplay,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = SplitMateTheme.PrimaryDark
+                                    )
+                                    Text(
+                                        text = if (normalizedUserPhone10.length == 10) {
+                                            "Verify +91 $normalizedUserPhone10 via 6-digit OTP to auto-discover shared trips"
+                                        } else {
+                                            "Link your 10-digit mobile number to sync groups across phones"
+                                        },
+                                        fontFamily = SplitMateTheme.FontRounded,
+                                        fontSize = 11.sp,
+                                        color = SplitMateTheme.TextSecondary
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                onClick = {
+                                    showUpgradeOtpExpanded = true
+                                    val targetPhone = upgradePhoneInput.ifBlank { uiState.userPhone }
+                                    if (PhoneIdentityValidator.isValidIndianMobile10(PhoneIdentityValidator.normalizeIndianPhone10(targetPhone))) {
+                                        viewModel.requestPhoneOtp(context, targetPhone)
+                                    }
+                                },
+                                shape = SplitMateTheme.RadiusBadge,
+                                color = Color(0xFF416913)
+                            ) {
+                                Text(
+                                    text = "Verify Phone via OTP",
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 11.sp,
+                                    color = Color(0xFFFAF6F0),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+
+                        if (showUpgradeOtpExpanded || uiState.pendingOtpCodeForBanner != null) {
+                            OutlinedTextField(
+                                value = upgradePhoneInput,
+                                onValueChange = { upgradePhoneInput = it },
+                                label = { Text("10-Digit Mobile (+91)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                singleLine = true,
+                                shape = SplitMateTheme.RadiusInput,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            FilledTonalButton(
+                                onClick = {
+                                    val res = viewModel.requestPhoneOtp(context, upgradePhoneInput)
+                                    upgradeFeedbackMsg = if (res != null) {
+                                        "OTP sent for +91 ${res.phone10}"
+                                    } else {
+                                        "Enter a valid 10-digit Indian mobile number"
+                                    }
+                                },
+                                shape = SplitMateTheme.RadiusButton,
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = Color(0xFFD7E8B6),
+                                    contentColor = Color(0xFF365314)
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Rounded.Sms, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Send 6-Digit OTP", fontWeight = FontWeight.ExtraBold)
+                            }
+
+                            val bannerCode = uiState.pendingOtpCodeForBanner
+                            if (!bannerCode.isNullOrBlank()) {
+                                Surface(
+                                    shape = SplitMateTheme.RadiusPanel,
+                                    color = Color(0xFFD7E8B6),
+                                    border = BorderStroke(1.dp, Color(0xFF416913)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "SMS OTP for +91 ${uiState.pendingOtpPhone10}: $bannerCode",
+                                            fontFamily = SplitMateTheme.FontDisplay,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 12.sp,
+                                            color = Color(0xFF365314),
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Surface(
+                                            onClick = { upgradeOtpInput = bannerCode },
+                                            shape = SplitMateTheme.RadiusBadge,
+                                            color = Color(0xFF365314)
+                                        ) {
+                                            Text(
+                                                text = "Auto-Fill OTP",
+                                                fontFamily = SplitMateTheme.FontRounded,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 11.sp,
+                                                color = Color(0xFFFAF6F0),
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            OutlinedTextField(
+                                value = upgradeOtpInput,
+                                onValueChange = { upgradeOtpInput = it.filter { ch -> ch.isDigit() }.take(6) },
+                                label = { Text("6-Digit OTP") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                                singleLine = true,
+                                shape = SplitMateTheme.RadiusInput,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            OutlinedTextField(
+                                value = upgradeOptionalPin4,
+                                onValueChange = { upgradeOptionalPin4 = it.filter { ch -> ch.isDigit() }.take(4) },
+                                label = { Text("Optional 4-Digit Recovery PIN (Protects Cloud Sync)") },
+                                visualTransformation = PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                                singleLine = true,
+                                shape = SplitMateTheme.RadiusInput,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Button(
+                                onClick = {
+                                    val clean10 = PhoneIdentityValidator.normalizeIndianPhone10(upgradePhoneInput)
+                                    viewModel.verifyPhoneOtpAndSyncCloud(
+                                        context = context,
+                                        rawPhone = upgradePhoneInput,
+                                        enteredOtp = upgradeOtpInput,
+                                        userName = uiState.currentUserName.ifBlank { "Akshay" },
+                                        upiId = uiState.userUpiId.ifBlank { "$clean10@upi" },
+                                        avatarStyleId = uiState.avatarStyleId,
+                                        avatarColorPresetId = uiState.avatarColorPresetId,
+                                        optionalPin4 = upgradeOptionalPin4
+                                    ) { ok, msg ->
+                                        upgradeFeedbackMsg = msg
+                                        if (ok) {
+                                            showUpgradeOtpExpanded = false
+                                        }
+                                    }
+                                },
+                                enabled = upgradeOtpInput.length == 6 && !uiState.isCloudSyncing,
+                                shape = SplitMateTheme.RadiusButton,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF416913),
+                                    contentColor = Color(0xFFFAF6F0)
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Rounded.CloudDone, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Verify OTP & Sync Cloud", fontWeight = FontWeight.ExtraBold)
+                            }
+
+                            upgradeFeedbackMsg?.let { msg ->
+                                Text(
+                                    text = msg,
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF416913)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 1.5. Pending Group Invites (Prominent Buckwheat PendingGroupInviteCard)
+        if (uiState.pendingInviteGroups.isNotEmpty()) {
+            items(uiState.pendingInviteGroups, key = { "pending_${it.groupId}" }) { pendingGroup ->
+                val groupMemberCount = uiState.members.count { it.groupId == pendingGroup.groupId }.coerceAtLeast(1)
+                PendingGroupInviteCard(
+                    group = pendingGroup,
+                    memberCount = groupMemberCount,
+                    userPhone = uiState.userPhone.ifBlank { uiState.pendingOtpPhone10 },
+                    onAcceptClick = { viewModel.acceptGroupInvite(context, pendingGroup.groupId) },
+                    onDeclineClick = { viewModel.declineGroupInvite(context, pendingGroup.groupId) }
+                )
             }
         }
 
@@ -2303,7 +3464,7 @@ fun LedgersDashboardScreen(
                         }
 
                         Text(
-                            text = if (activeGroups.size == 1) "1 active group" else "Across ${activeGroups.size} active groups",
+                            text = if (displayedActiveGroups.size == 1) "1 active group" else "Across ${displayedActiveGroups.size} active groups",
                             fontFamily = SplitMateTheme.FontRounded,
                             fontSize = 13.sp,
                             letterSpacing = 0.sp,
@@ -2358,18 +3519,20 @@ fun LedgersDashboardScreen(
 
         // 2.5. STANDALONE HERO FEATURE ELEMENT: Interactive Stacked Transit Pass Deck (Train PNR + Flight PDF)
         item {
-            val hasGroups = activeGroups.isNotEmpty()
+            val hasGroups = displayedActiveGroups.isNotEmpty()
             val totalLoggedTrainPnrs = remember(uiState.expenses) {
                 uiState.expenses.count {
-                    it.title.contains("PNR:", ignoreCase = true) &&
-                        !it.title.contains("Flight", ignoreCase = true) &&
-                        !it.title.contains("Airfare", ignoreCase = true)
+                    it.expenseCategory.equals("TRAIN", ignoreCase = true) ||
+                        (it.title.contains("PNR:", ignoreCase = true) &&
+                            !it.title.contains("Flight", ignoreCase = true) &&
+                            !it.title.contains("Airfare", ignoreCase = true))
                 }
             }
             val totalLoggedFlightPnrs = remember(uiState.expenses) {
                 uiState.expenses.count {
-                    it.title.contains("PNR:", ignoreCase = true) &&
-                        (it.title.contains("Flight", ignoreCase = true) || it.title.contains("Airfare", ignoreCase = true))
+                    it.expenseCategory.equals("FLIGHT", ignoreCase = true) ||
+                        (it.title.contains("PNR:", ignoreCase = true) &&
+                            (it.title.contains("Flight", ignoreCase = true) || it.title.contains("Airfare", ignoreCase = true)))
                 }
             }
 
@@ -2429,7 +3592,7 @@ fun LedgersDashboardScreen(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
-                                text = "${activeGroups.size}",
+                                text = "${displayedActiveGroups.size}",
                                 fontFamily = SplitMateTheme.FontRounded,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
@@ -2459,10 +3622,10 @@ fun LedgersDashboardScreen(
             }
         }
 
-        // 4. Illustrated M3 Empty State Card when activeGroups is empty
+        // 4. Illustrated M3 Empty State Card when displayedActiveGroups is empty
         item {
             AnimatedVisibility(
-                visible = activeGroups.isEmpty(),
+                visible = displayedActiveGroups.isEmpty(),
                 enter = fadeIn() + expandVertically(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy)),
                 exit = fadeOut() + shrinkVertically()
             ) {
@@ -2531,7 +3694,7 @@ fun LedgersDashboardScreen(
         }
 
         // 5. Dynamic Group Cards (24dp radius, 8-Icon Category support, 14dp compact padding)
-        items(activeGroups, key = { it.groupId }) { groupCard ->
+        items(displayedActiveGroups, key = { it.groupId }) { groupCard ->
             val cardSurfaceColor = when {
                 groupCard.netBalanceCents > 0L -> SplitMateTheme.SageSurface
                 groupCard.netBalanceCents < 0L -> SplitMateTheme.TerracottaSurface
@@ -2663,8 +3826,6 @@ fun LedgersDashboardScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         OverlappingAvatarStack(groupCard.memberSeeds, remainingCount = groupCard.remainingCount)
-                        // Bottom-right space dedicated to active group metadata ("7 members · Last active today")
-                        // instead of repeating a redundant "All settled up" status pill
                         Text(
                             text = groupCard.statusPillText,
                             fontFamily = SplitMateTheme.FontRounded,
@@ -2722,6 +3883,124 @@ fun LedgersDashboardScreen(
                             isPositive = isMePayer
                         )
                         Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+            }
+        }
+
+        // 7. Collapsible "Declined Invites (Restore)" Drawer at Bottom of Ledgers Tab
+        if (uiState.declinedInviteGroups.isNotEmpty()) {
+            item(key = "declined_invites_drawer") {
+                Card(
+                    shape = SplitMateTheme.RadiusCard,
+                    colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusCard)
+                        .animateContentSize()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { isDeclinedDrawerExpanded = !isDeclinedDrawerExpanded },
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Archive,
+                                    contentDescription = null,
+                                    tint = Color(0xFFE06B52),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = "Declined Invites (${uiState.declinedInviteGroups.size})",
+                                    fontFamily = SplitMateTheme.FontDisplay,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = SplitMateTheme.PrimaryDark
+                                )
+                            }
+                            Icon(
+                                imageVector = if (isDeclinedDrawerExpanded) {
+                                    Icons.Rounded.KeyboardArrowUp
+                                } else {
+                                    Icons.Rounded.KeyboardArrowDown
+                                },
+                                contentDescription = "Toggle Declined Invites",
+                                tint = SplitMateTheme.TextSecondary
+                            )
+                        }
+
+                        if (isDeclinedDrawerExpanded) {
+                            uiState.declinedInviteGroups.forEach { declinedGroup ->
+                                Surface(
+                                    shape = SplitMateTheme.RadiusPanel,
+                                    color = Color(0xFFFED8C8).copy(alpha = 0.45f),
+                                    border = BorderStroke(1.dp, Color(0xFFE06B52).copy(alpha = 0.45f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = declinedGroup.name.toSmartTitleCase(),
+                                                fontFamily = SplitMateTheme.FontDisplay,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = SplitMateTheme.PrimaryDark
+                                            )
+                                            Text(
+                                                text = "Declined group invite · Hidden from active balances",
+                                                fontFamily = SplitMateTheme.FontRounded,
+                                                fontSize = 11.sp,
+                                                color = SplitMateTheme.TextSecondary
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Surface(
+                                            onClick = {
+                                                viewModel.restoreDeclinedGroupInvite(context, declinedGroup.groupId)
+                                            },
+                                            shape = SplitMateTheme.RadiusBadge,
+                                            color = Color(0xFF416913)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Restore,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFFFAF6F0),
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                                Text(
+                                                    text = "Restore & Join",
+                                                    fontFamily = SplitMateTheme.FontRounded,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    fontSize = 11.sp,
+                                                    color = Color(0xFFFAF6F0)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

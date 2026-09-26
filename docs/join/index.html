@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Join Trip on SplitMate</title>
+  <style>
+    :root {
+      --bg: #FAF6F0;
+      --card: #FFFFFF;
+      --text-main: #23201E;
+      --text-muted: #6E675F;
+      --brand-olive: #416913;
+      --brand-sage: #D7E8B6;
+      --border: #EDE7DF;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #181512;
+        --card: #24201C;
+        --text-main: #FAF6F0;
+        --text-muted: #B5ACA2;
+        --border: #38312B;
+        --brand-olive: #D7E8B6;
+        --brand-sage: #233216;
+      }
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text-main);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    .container {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 32px 24px;
+      max-width: 400px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .icon-container {
+      width: 64px;
+      height: 64px;
+      border-radius: 16px;
+      background-color: var(--brand-sage);
+      color: var(--brand-olive);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+    }
+    .icon-container svg {
+      width: 32px;
+      height: 32px;
+    }
+    h1 {
+      font-size: 24px;
+      margin: 0 0 8px;
+      font-weight: 800;
+    }
+    p {
+      font-size: 15px;
+      color: var(--text-muted);
+      margin: 0 0 32px;
+      line-height: 1.5;
+    }
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 16px;
+      border-radius: 16px;
+      font-size: 16px;
+      font-weight: bold;
+      text-decoration: none;
+      box-sizing: border-box;
+      margin-bottom: 12px;
+      transition: opacity 0.2s;
+    }
+    .btn:active {
+      opacity: 0.8;
+    }
+    .btn-primary {
+      background-color: var(--brand-olive);
+      color: var(--card);
+    }
+    .btn-secondary {
+      background-color: transparent;
+      color: var(--text-main);
+      border: 1px solid var(--border);
+    }
+    .disclaimer {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 24px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="icon-container">
+      <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15v-2H9v-2h2v-2H9V9h2V7h2v2h2v2h-2v2h2v2h-2v2h-2z"/></svg>
+    </div>
+    
+    <h1>You've been invited!</h1>
+    <p>Join this trip on SplitMate to automatically sync expenses, settle up, and split fairly.</p>
+
+    <!-- The href will be updated by JS -->
+    <a id="btn-open-app" href="#" class="btn btn-primary">Open in SplitMate App</a>
+    
+    <a id="btn-download" href="https://github.com/akshaykaradkar/splitmate/releases/latest/download/splitmate-2.0.0.apk" class="btn btn-secondary">Download Android APK (v2.0.0)</a>
+
+    <div class="disclaimer">
+      If you don't have the app yet, download the APK first, then come back and tap "Open in SplitMate App" to join automatically.
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const groupIdOrKey = urlParams.get('g');
+      
+      const openAppBtn = document.getElementById("btn-open-app");
+      
+      if (groupIdOrKey) {
+        // Intent URL for native Android App Links fallback
+        const intentUrl = `intent://join?g=${groupIdOrKey}#Intent;scheme=splitmate;package=com.splitmate.app;S.browser_fallback_url=https://github.com/akshaykaradkar/splitmate/releases/latest/download/splitmate-2.0.0.apk;end`;
+        openAppBtn.href = intentUrl;
+        
+        // Auto-attempt to open the app (some browsers block this if not triggered by user click, but it's safe to try)
+        setTimeout(() => {
+          window.location.href = intentUrl;
+        }, 500);
+      } else {
+        openAppBtn.style.display = 'none';
+        document.querySelector('p').textContent = "No valid invite code found. Please ask your friend to share the link again.";
+      }
+    });
+  </script>
+</body>
+</html>

@@ -97,10 +97,11 @@ val SupportedCurrencies = listOf(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OnboardingSetupScreen(
-    onCompleteProfile: (name: String, currency: CountryCurrency, avatarSeed: String) -> Unit = { _, _, _ -> }
+    onCompleteProfile: (name: String, phone: String, currency: CountryCurrency, avatarSeed: String) -> Unit = { _, _, _, _ -> }
 ) {
     val context = LocalContext.current
     var nameText by remember { mutableStateOf("") }
+    var phoneText by remember { mutableStateOf("") }
     var randomSeedSuffix by remember { mutableStateOf(101) }
     var selectedPresentationStyle by remember { mutableStateOf("Masculine") }
     val selectedCurrency = SupportedCurrencies[0] // Strictly locked to INR (₹)
@@ -355,6 +356,40 @@ fun OnboardingSetupScreen(
                         .fillMaxWidth()
                         .sizeIn(minHeight = 54.dp)
                 )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Input 3: Mobile Number
+                OutlinedTextField(
+                    value = phoneText,
+                    onValueChange = { phoneText = it },
+                    label = { Text("10-Digit Mobile Number", fontFamily = SplitMateBrandFontFamily, fontWeight = FontWeight.SemiBold) },
+                    placeholder = { Text("e.g. 9876543210", fontFamily = SplitMateBrandFontFamily) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Rounded.Phone,
+                            contentDescription = null,
+                            tint = primaryText
+                        )
+                    },
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone),
+                    shape = SplitMateThemeTokens.RadiusCard,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = primaryText,
+                        unfocusedTextColor = primaryText,
+                        focusedContainerColor = cardBg,
+                        unfocusedContainerColor = cardBg,
+                        focusedBorderColor = primaryText,
+                        unfocusedBorderColor = SplitMateThemeTokens.BorderLight,
+                        focusedLabelColor = primaryText,
+                        unfocusedLabelColor = secondaryText,
+                        cursorColor = primaryText
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .sizeIn(minHeight = 54.dp)
+                )
             }
 
             // CTA: Primary pill button at bottom
@@ -368,8 +403,9 @@ fun OnboardingSetupScreen(
                     onClick = {
                         com.splitmate.app.ui.performCrispTactileHaptic(context, heavy = true)
                         val finalName = if (nameText.isBlank()) "Explorer" else nameText.trim()
+                        val finalPhone = phoneText.trim()
                         val styledSeed = "$effectiveSeed|$selectedPresentationStyle"
-                        onCompleteProfile(finalName, selectedCurrency, styledSeed)
+                        onCompleteProfile(finalName, finalPhone, selectedCurrency, styledSeed)
                     },
                     shape = SplitMateThemeTokens.RadiusPill,
                     colors = ButtonDefaults.buttonColors(
@@ -418,6 +454,7 @@ fun OnboardingSetupScreen(
 @Composable
 fun UserSettingsScreen(
     userName: String = "Akshay",
+    userPhone: String = "",
     avatarSeed: String = userName,
     upiId: String = "",
     defaultCurrencyCode: String = "INR",
@@ -429,7 +466,7 @@ fun UserSettingsScreen(
     onBackClick: () -> Unit = {},
     onUpdateUpiId: (String) -> Unit = {},
     onUpdateCurrencyCode: (String) -> Unit = {},
-    onUpdateUserProfile: (newName: String, newSeed: String) -> Unit = { _, _ -> },
+    onUpdateUserProfile: (newName: String, newPhone: String, newSeed: String) -> Unit = { _, _, _ -> },
     onThemeToggle: (isDark: Boolean) -> Unit = {},
     onExportLedgerText: () -> String = { "" },
     onClearVaultClick: () -> Unit = {}
@@ -440,6 +477,7 @@ fun UserSettingsScreen(
     var showResetDataDialog by remember { mutableStateOf(false) }
 
     var editedName by remember(userName) { mutableStateOf(userName) }
+    var editedPhone by remember(userPhone) { mutableStateOf(userPhone) }
     var editedUpiId by remember(upiId) { mutableStateOf(upiId) }
     @Suppress("UNUSED_VARIABLE") var largestRemainderEnabled by remember { mutableStateOf(prefs.getBoolean("pref_largest_remainder", true)) }
     var includeUpiInWhatsApp by remember { mutableStateOf(prefs.getBoolean("pref_whatsapp_upi", true)) }
@@ -649,6 +687,42 @@ fun UserSettingsScreen(
                             )
 
                             OutlinedTextField(
+                                value = editedPhone,
+                                onValueChange = { editedPhone = it },
+                                label = {
+                                    Text(
+                                        text = "10-Digit Mobile Number",
+                                        fontFamily = SplitMateBrandFontFamily,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                },
+                                placeholder = {
+                                    Text("e.g. 9876543210", fontFamily = SplitMateBrandFontFamily)
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Phone,
+                                        contentDescription = null,
+                                        tint = textPrimary
+                                    )
+                                },
+                                singleLine = true,
+                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = textPrimary,
+                                    unfocusedTextColor = textPrimary,
+                                    focusedContainerColor = mutedBg.copy(alpha = 0.4f),
+                                    unfocusedContainerColor = mutedBg.copy(alpha = 0.4f),
+                                    focusedBorderColor = textPrimary,
+                                    unfocusedBorderColor = borderColor,
+                                    focusedLabelColor = textPrimary,
+                                    unfocusedLabelColor = textSecondary
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            OutlinedTextField(
                                 value = editedUpiId,
                                 onValueChange = { editedUpiId = it },
                                 label = {
@@ -733,8 +807,9 @@ fun UserSettingsScreen(
                             Button(
                                 onClick = {
                                     val clean = editedName.trim().ifEmpty { "Explorer" }
+                                    val cleanPhone = editedPhone.trim()
                                     val cleanUpi = editedUpiId.trim()
-                                    onUpdateUserProfile(clean, "$clean|$selectedStyle")
+                                    onUpdateUserProfile(clean, cleanPhone, "$clean|$selectedStyle")
                                     onUpdateUpiId(cleanUpi)
                                     Toast.makeText(context, "Saved Profile & UPI Handle", Toast.LENGTH_SHORT).show()
                                 },

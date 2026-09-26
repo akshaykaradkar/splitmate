@@ -31,10 +31,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.AccountBalanceWallet
+import androidx.compose.material.icons.rounded.ElectricBolt
 import androidx.compose.material.icons.rounded.HistoryEdu
 import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -135,7 +136,6 @@ enum class TripHubTab(val title: String) {
 
 enum class GlobalNavTab(val label: String, val icon: ImageVector) {
     LEDGERS("Ledgers", Icons.Rounded.AccountBalanceWallet),
-    SPLIT("Split", Icons.AutoMirrored.Rounded.ReceiptLong),
     SETTLE("Settle", Icons.Rounded.SwapHoriz),
     AUDIT("Audit", Icons.Rounded.HistoryEdu)
 }
@@ -224,7 +224,6 @@ fun SplitMateAppNavHost(
         backStack = emptyList()
         currentRoute = when (tab) {
             GlobalNavTab.LEDGERS -> SplitMateRoute.DashboardLedgers
-            GlobalNavTab.SPLIT -> SplitMateRoute.QuickExpense
             GlobalNavTab.SETTLE -> SplitMateRoute.GreedySettlement
             GlobalNavTab.AUDIT -> SplitMateRoute.AuditVault
         }
@@ -317,17 +316,15 @@ fun SplitMateAppNavHost(
         navigateBack()
     }
 
-    // Auto-hide the Bottom Bar whenever inside TripHub, TrainPnrReview, FlightPdfReview,
+    // Auto-hide the Bottom Bar whenever inside TripHub, QuickExpense, TrainPnrReview, FlightPdfReview,
     // OR whenever uiState.openedGroupDetailId != null
     val isGlobalTabVisible = (currentRoute is SplitMateRoute.DashboardLedgers ||
-        currentRoute is SplitMateRoute.QuickExpense ||
         currentRoute is SplitMateRoute.GreedySettlement ||
         currentRoute is SplitMateRoute.AuditVault) &&
         uiState.openedGroupDetailId == null
 
     val selectedGlobalTab = when (currentRoute) {
         is SplitMateRoute.DashboardLedgers -> GlobalNavTab.LEDGERS
-        is SplitMateRoute.QuickExpense -> GlobalNavTab.SPLIT
         is SplitMateRoute.GreedySettlement -> GlobalNavTab.SETTLE
         is SplitMateRoute.AuditVault -> GlobalNavTab.AUDIT
         else -> null
@@ -338,6 +335,32 @@ fun SplitMateAppNavHost(
 
     Scaffold(
         containerColor = SplitMateTheme.ScreenBg,
+        floatingActionButton = {
+            if (currentRoute is SplitMateRoute.DashboardLedgers && uiState.openedGroupDetailId == null) {
+                ExtendedFloatingActionButton(
+                    onClick = { navigateTo(SplitMateRoute.QuickExpense) },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Rounded.ElectricBolt,
+                            contentDescription = "Log Expense",
+                            tint = SplitMateTheme.ScreenBg
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = "Log Expense",
+                            fontWeight = FontWeight.ExtraBold,
+                            color = SplitMateTheme.ScreenBg,
+                            fontFamily = SplitMateTheme.FontRounded
+                        )
+                    },
+                    containerColor = SplitMateTheme.PrimaryDark,
+                    contentColor = SplitMateTheme.ScreenBg,
+                    shape = SplitMateTheme.RadiusBadge,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+            }
+        },
         bottomBar = {
             AnimatedVisibility(
                 visible = isGlobalTabVisible && selectedGlobalTab != null,

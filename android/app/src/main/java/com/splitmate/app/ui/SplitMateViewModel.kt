@@ -76,6 +76,7 @@ data class SplitMateUiState(
     val currentUserSeed: String = "Akshay|Masculine",
     val currentUserCountry: String = "India",
     val userUpiId: String = "",
+    val userPhone: String = "",
     val isDarkTheme: Boolean = false,
     val activeCurrencyCode: String = "INR",
     val isOfflineMode: Boolean = false,
@@ -90,8 +91,49 @@ data class SplitMateUiState(
     val statusBannerMessage: String? = null,
     val selectedTabName: String = "LEDGERS",
     val openedGroupDetailId: String? = null,
-    val returnToGroupDetailId: String? = null
+    val returnToGroupDetailId: String? = null,
+    val isPhoneVerified: Boolean = false,
+    val pinHash: String = "",
+    val avatarStyleId: String = "open-peeps",
+    val avatarColorPresetId: String = "Buckwheat",
+    val pendingOtpCodeForBanner: String? = null,
+    val pendingOtpPhone10: String = "",
+    val isCloudSyncing: Boolean = false,
+    val cloudRestoreSummary: com.splitmate.app.data.CloudRestoreSummary? = null,
+    val discoveredCloudProfile: com.splitmate.app.data.CloudUserProfileRecord? = null
 ) {
+    val pendingInviteGroups: List<ExpenseGroupEntity>
+        get() {
+            val userPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(userPhone)
+            return groups.filter { g ->
+                val gMembers = members.filter { it.groupId == g.groupId }
+                val me = gMembers.find { it.isCurrentUser }
+                    ?: gMembers.find { userPhone10.length == 10 && com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(it.userPhone) == userPhone10 }
+                me?.inviteStatus == "PENDING"
+            }
+        }
+
+    val declinedInviteGroups: List<ExpenseGroupEntity>
+        get() {
+            val userPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(userPhone)
+            return groups.filter { g ->
+                val gMembers = members.filter { it.groupId == g.groupId }
+                val me = gMembers.find { it.isCurrentUser }
+                    ?: gMembers.find { userPhone10.length == 10 && com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(it.userPhone) == userPhone10 }
+                me?.inviteStatus == "DECLINED"
+            }
+        }
+
+    val activeJoinedGroups: List<ExpenseGroupEntity>
+        get() {
+            val userPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(userPhone)
+            return groups.filter { g ->
+                val gMembers = members.filter { it.groupId == g.groupId }
+                val me = gMembers.find { it.isCurrentUser }
+                    ?: gMembers.find { userPhone10.length == 10 && com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(it.userPhone) == userPhone10 }
+                me == null || me.inviteStatus == "JOINED"
+            }
+        }
     val activeCurrency: CurrencyRateEntity
         get() = currencyRates.find { it.currencyCode == activeCurrencyCode }
             ?: CurrencyRateEntity("INR", "Indian Rupee", "₹", 1.0, baseCurrency = "INR")
@@ -176,7 +218,7 @@ class SplitMateViewModel(
 
     val totalBalance: StateFlow<String> = _uiState.map { state ->
         val sym = "₹"
-        if (state.groups.isEmpty() || state.expenses.isEmpty()) {
+        if (state.activeJoinedGroups.isEmpty() || state.expenses.isEmpty()) {
             "${sym}0.00"
         } else {
             val netCents = computeOverallUserBalanceCents(state)
@@ -189,11 +231,12 @@ class SplitMateViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "₹0.00")
 
     val activeGroups: StateFlow<List<ActiveGroupCardUiModel>> = _uiState.map { state ->
-        if (state.groups.isEmpty()) {
+        val joinedGroups = state.activeJoinedGroups
+        if (joinedGroups.isEmpty()) {
             emptyList()
         } else {
             val sym = "₹"
-            state.groups.map { group ->
+            joinedGroups.map { group ->
                 val groupMembers = state.members.filter { it.groupId == group.groupId }
                 val groupExpenses = state.expenses.filter { it.groupId == group.groupId }
                 val groupExpenseIds = groupExpenses.map { it.expenseId }.toSet()
@@ -240,6 +283,9 @@ class SplitMateViewModel(
             }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val activeGroupCards: StateFlow<List<ActiveGroupCardUiModel>>
+        get() = activeGroups
 
     val settlementPlan: StateFlow<List<SettlementTransferUiModel>> = _uiState.map { state ->
         if (state.groups.isEmpty()) {
@@ -306,12 +352,25 @@ class SplitMateViewModel(
 
     @Volatile
     private var isRoomHydrated: Boolean = (dao == null)
-    private val pendingColdStartSyncRequests = mutableListOf<Triple<String, String?, Boolean>>()
+    private val pendingColdStartSyncRequests = mutableListOf<Pair<String, Boolean>>()
 
     init {
         if (dao != null) {
             observeRoomDatabase(dao)
         }
+    }
+
+    private fun parseAvatarStyleAndPresetFromSeed(
+        seed: String,
+        defaultStyle: String = "open-peeps",
+        defaultPreset: String = "Buckwheat"
+    ): Pair<String, String> {
+        val tokens = seed.split("|").map { it.trim() }.filter { it.isNotEmpty() }
+        val validStyles = setOf("open-peeps", "adventurer", "dylan", "micah", "lorelei", "notionists", "toon-head")
+        val validPresets = setOf("Buckwheat", "BoldPop", "Electric", "Terracotta", "Periwinkle")
+        val resolvedStyle = tokens.firstOrNull { validStyles.contains(it) } ?: defaultStyle
+        val resolvedPreset = tokens.firstOrNull { validPresets.contains(it) } ?: defaultPreset
+        return resolvedStyle to resolvedPreset
     }
 
     private fun createCleanProductionInitialState(): SplitMateUiState = SplitMateUiState(
@@ -330,8 +389,8 @@ class SplitMateViewModel(
 
     private fun createInitialSeededState(): SplitMateUiState {
         val initialGroups = listOf(
-            ExpenseGroupEntity("g_tahoe", "Lake Tahoe Cabin", "INR"),
-            ExpenseGroupEntity("g_mission", "Mission Apt Roommates", "INR")
+            ExpenseGroupEntity("g_tahoe", "Lake Tahoe Cabin", "INR", isDemoSeed = true),
+            ExpenseGroupEntity("g_mission", "Mission Apt Roommates", "INR", isDemoSeed = true)
         )
         val initialMembers = listOf(
             GroupMemberEntity("m_1", "g_tahoe", "Akshay", "Akshay", isCurrentUser = true),
@@ -372,6 +431,29 @@ class SplitMateViewModel(
         )
     }
 
+    fun seedDefaultData() {
+        val seeded = createInitialSeededState()
+        val demoGroups = listOf(
+            ExpenseGroupEntity("g_tahoe", "Lake Tahoe Cabin", "INR", isDemoSeed = true),
+            ExpenseGroupEntity("g_apt4b", "Apt 4B", "INR", isDemoSeed = true)
+        )
+        _uiState.update { curr ->
+            curr.copy(
+                groups = if (curr.groups.isEmpty()) seeded.groups else curr.groups.map { g ->
+                    if (g.name == "Lake Tahoe Cabin" || g.name == "Apt 4B" || g.name == "Mission Apt Roommates") {
+                        g.copy(isDemoSeed = true)
+                    } else g
+                },
+                members = curr.members.ifEmpty { seeded.members },
+                expenses = curr.expenses.ifEmpty { seeded.expenses },
+                splits = curr.splits.ifEmpty { seeded.splits }
+            )
+        }
+        viewModelScope.launch(ioDispatcher) {
+            demoGroups.forEach { dao?.insertGroup(it) }
+        }
+    }
+
     private fun observeRoomDatabase(roomDao: SplitMateDao) {
         viewModelScope.launch(ioDispatcher) {
             if (roomDao.getCurrencyRate("INR") == null) {
@@ -389,13 +471,27 @@ class SplitMateViewModel(
                 val nextActiveGroup = curr.openedGroupDetailId?.takeIf { id -> initialGroups.any { it.groupId == id } }
                     ?: curr.activeGroupId.takeIf { id -> initialGroups.any { it.groupId == id } }
                     ?: initialGroups.firstOrNull()?.groupId.orEmpty()
+                val (initStyle, initPreset) = if (initialProfile != null) {
+                    parseAvatarStyleAndPresetFromSeed(
+                        initialProfile.avatarSeed,
+                        curr.avatarStyleId,
+                        curr.avatarColorPresetId
+                    )
+                } else {
+                    curr.avatarStyleId to curr.avatarColorPresetId
+                }
                 curr.copy(
-                    hasRegisteredProfile = initialProfile != null,
+                    hasRegisteredProfile = initialProfile != null && initialProfile.isPhoneVerified && initialProfile.userPhone.length >= 10,
                     currentUserName = initialProfile?.name ?: curr.currentUserName,
                     currentUserSeed = initialProfile?.avatarSeed ?: curr.currentUserSeed,
                     currentUserCountry = initialProfile?.countryName ?: curr.currentUserCountry,
                     activeCurrencyCode = initialProfile?.currencyCode ?: curr.activeCurrencyCode,
                     userUpiId = initialProfile?.upiId ?: curr.userUpiId,
+                    userPhone = initialProfile?.userPhone ?: curr.userPhone,
+                    isPhoneVerified = initialProfile?.isPhoneVerified ?: curr.isPhoneVerified,
+                    pinHash = initialProfile?.pinHash ?: curr.pinHash,
+                    avatarStyleId = initStyle,
+                    avatarColorPresetId = initPreset,
                     isDarkTheme = initialProfile?.isDarkTheme ?: curr.isDarkTheme,
                     groups = initialGroups,
                     activeGroupId = nextActiveGroup,
@@ -407,16 +503,19 @@ class SplitMateViewModel(
                 )
             }
 
+            if (initialProfile != null && initialProfile.isPhoneVerified && initialProfile.userPhone.length >= 10) {
+                syncAllGroupsWithCloud(null)
+            }
+
             val queuedRequests = synchronized(pendingColdStartSyncRequests) {
                 isRoomHydrated = true
                 val copy = pendingColdStartSyncRequests.toList()
                 pendingColdStartSyncRequests.clear()
                 copy
             }
-            queuedRequests.forEach { (rawPayload, claimOverride, openAfter) ->
+            queuedRequests.forEach { (rawPayload, openAfter) ->
                 importAndMergeGroupSyncPayload(
                     rawPayloadOrMessage = rawPayload,
-                    claimedMemberIdOverride = claimOverride,
                     openGroupAfterMerge = openAfter
                 )
             }
@@ -425,13 +524,23 @@ class SplitMateViewModel(
                 roomDao.observeUserProfile().collect { profile ->
                     if (profile != null) {
                         _uiState.update {
+                            val (pStyle, pPreset) = parseAvatarStyleAndPresetFromSeed(
+                                profile.avatarSeed,
+                                it.avatarStyleId,
+                                it.avatarColorPresetId
+                            )
                             it.copy(
-                                hasRegisteredProfile = true,
+                                hasRegisteredProfile = (profile.isPhoneVerified && profile.userPhone.length >= 10) || it.hasRegisteredProfile,
                                 currentUserName = profile.name,
                                 currentUserSeed = profile.avatarSeed,
                                 currentUserCountry = profile.countryName,
                                 activeCurrencyCode = profile.currencyCode,
                                 userUpiId = profile.upiId,
+                                userPhone = profile.userPhone,
+                                isPhoneVerified = profile.isPhoneVerified,
+                                pinHash = profile.pinHash,
+                                avatarStyleId = pStyle,
+                                avatarColorPresetId = pPreset,
                                 isDarkTheme = profile.isDarkTheme
                             )
                         }
@@ -485,12 +594,16 @@ class SplitMateViewModel(
         countryName: String,
         currencyCode: String,
         currencySymbol: String,
-        avatarSeed: String = name
+        avatarSeed: String = name,
+        userPhone: String = ""
     ) {
         val cleanName = name.trim().ifEmpty { "Explorer" }
         val cleanSeed = avatarSeed.trim().ifEmpty { cleanName }
         val cleanHandle = cleanName.lowercase(Locale.US).replace(Regex("[^a-z0-9]"), "").ifEmpty { "explorer" }
         val defaultUpi = "$cleanHandle@okaxis"
+        val cleanPhone = cleanIndianTenDigitPhone(userPhone)
+        val currentState = _uiState.value
+        val resolvedUpi = currentState.userUpiId.ifBlank { defaultUpi }
         val profile = UserProfileEntity(
             profileId = "me",
             name = cleanName,
@@ -498,8 +611,11 @@ class SplitMateViewModel(
             countryName = countryName,
             currencyCode = currencyCode,
             currencySymbol = currencySymbol,
-            upiId = defaultUpi,
-            isDarkTheme = _uiState.value.isDarkTheme
+            upiId = resolvedUpi,
+            userPhone = cleanPhone,
+            isPhoneVerified = currentState.isPhoneVerified,
+            pinHash = currentState.pinHash,
+            isDarkTheme = currentState.isDarkTheme
         )
 
         val cleanFirstToken = cleanName.split(Regex("\\s+")).firstOrNull()?.lowercase(Locale.US).orEmpty()
@@ -508,7 +624,11 @@ class SplitMateViewModel(
         _uiState.update { state ->
             val updatedMembersByGroup = state.members.groupBy { it.groupId }.flatMap { (_, groupMembers) ->
                 val matchingExistingMember = groupMembers.firstOrNull { m ->
-                    m.name.trim().equals(cleanName, ignoreCase = true) ||
+                    (cleanPhone.length == 10 && (
+                        cleanIndianTenDigitPhone(m.userPhone) == cleanPhone ||
+                            m.upiId.split("|").any { cleanIndianTenDigitPhone(it.trim().substringBefore("@")) == cleanPhone }
+                        )) ||
+                        m.name.trim().equals(cleanName, ignoreCase = true) ||
                         (cleanFirstToken.length >= 3 &&
                             m.name.trim().split(Regex("\\s+")).firstOrNull()?.lowercase(Locale.US) == cleanFirstToken) ||
                         m.upiId.split("|").any { it.trim().equals(defaultUpi, ignoreCase = true) }
@@ -519,7 +639,8 @@ class SplitMateViewModel(
                         if (m.memberId == matchingExistingMember.memberId) {
                             m.copy(
                                 isCurrentUser = true,
-                                upiId = m.upiId.ifBlank { defaultUpi },
+                                upiId = m.upiId.ifBlank { resolvedUpi },
+                                userPhone = m.userPhone.ifBlank { cleanPhone },
                                 avatarSeed = m.avatarSeed.ifBlank { cleanSeed }
                             )
                         } else if (m.isCurrentUser) {
@@ -539,7 +660,8 @@ class SplitMateViewModel(
                             m.copy(
                                 name = cleanName,
                                 avatarSeed = cleanSeed,
-                                upiId = m.upiId.ifBlank { defaultUpi }
+                                upiId = m.upiId.ifBlank { resolvedUpi },
+                                userPhone = m.userPhone.ifBlank { cleanPhone }
                             )
                         } else {
                             m
@@ -556,7 +678,8 @@ class SplitMateViewModel(
                 currentUserSeed = cleanSeed,
                 currentUserCountry = countryName,
                 activeCurrencyCode = currencyCode,
-                userUpiId = defaultUpi,
+                userUpiId = resolvedUpi,
+                userPhone = cleanPhone,
                 members = updatedMembersByGroup,
                 statusBannerMessage = "Welcome $cleanName"
             )
@@ -636,15 +759,189 @@ class SplitMateViewModel(
     private var lastExpenseCommitSignature: String = ""
     private var lastGroupCreateMs: Long = 0L
 
+    private data class InferredExpenseMetadata(
+        val expenseCategory: String,
+        val travelPnr: String,
+        val providerName: String,
+        val scheduledAtEpochMs: Long?
+    )
+
+    private fun parseTravelDateTimeToEpochMs(rawCandidate: String): Long? {
+        val cleaned = rawCandidate
+            .replace("•", " ")
+            .replace(Regex("""^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,?\s+""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*\b""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+        if (cleaned.isBlank()) return null
+
+        var parsedTimeHourMin: Pair<Int, Int>? = null
+        val m12 = Regex("""\b(0?[1-9]|1[0-2]):([0-5]\d)\s*(AM|PM)\b""", RegexOption.IGNORE_CASE).find(cleaned)
+        val m24 = Regex("""\b([01]?\d|2[0-3]):([0-5]\d)(?:\s*hrs)?\b""", RegexOption.IGNORE_CASE).find(cleaned)
+        if (m12 != null) {
+            val h12 = m12.groupValues[1].toIntOrNull() ?: 0
+            val min = m12.groupValues[2].toIntOrNull() ?: 0
+            val ampm = m12.groupValues[3].uppercase(Locale.US)
+            val h24 = when {
+                ampm == "PM" && h12 < 12 -> h12 + 12
+                ampm == "AM" && h12 == 12 -> 0
+                else -> h12
+            }
+            parsedTimeHourMin = h24 to min
+        } else if (m24 != null) {
+            val h24 = m24.groupValues[1].toIntOrNull() ?: 0
+            val min = m24.groupValues[2].toIntOrNull() ?: 0
+            parsedTimeHourMin = h24 to min
+        }
+
+        val dateOnly = cleaned
+            .replace(Regex("""\b(0?[1-9]|1[0-2]):([0-5]\d)\s*(AM|PM)\b""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""\b([01]?\d|2[0-3]):([0-5]\d)(?:\s*hrs)?\b""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,?\s+""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+            .trim(',', '-', '•')
+            .trim()
+        if (dateOnly.isBlank()) return null
+
+        val fullPatterns = listOf(
+            "dd MMM yyyy", "d MMM yyyy", "dd MMMM yyyy", "d MMMM yyyy",
+            "yyyy-MM-dd", "dd-MM-yyyy", "dd/MM/yyyy", "dd-MMM-yyyy",
+            "dd-MMM-yy", "MMM dd, yyyy", "MMM d, yyyy", "dd MMM yy"
+        )
+        val shortPatterns = listOf("dd MMM", "d MMM", "dd MMMM", "d MMMM", "MMM dd", "MMM d")
+        val fallbackYear = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+
+        var parsedDateMillis: Long? = null
+        for (pattern in fullPatterns) {
+            val parsed = runCatching {
+                java.text.SimpleDateFormat(pattern, Locale.US).apply { isLenient = false }.parse(dateOnly)
+            }.getOrNull()
+            if (parsed != null) {
+                parsedDateMillis = parsed.time
+                break
+            }
+        }
+        if (parsedDateMillis == null) {
+            for (shortPattern in shortPatterns) {
+                val parsed = runCatching {
+                    java.text.SimpleDateFormat(shortPattern, Locale.US).apply { isLenient = false }.parse(dateOnly)
+                }.getOrNull()
+                if (parsed != null) {
+                    val c = java.util.Calendar.getInstance().apply {
+                        time = parsed
+                        set(java.util.Calendar.YEAR, fallbackYear)
+                    }
+                    parsedDateMillis = c.timeInMillis
+                    break
+                }
+            }
+        }
+        val baseDate = parsedDateMillis ?: return null
+        return java.util.Calendar.getInstance().apply {
+            timeInMillis = baseDate
+            if (parsedTimeHourMin != null) {
+                set(java.util.Calendar.HOUR_OF_DAY, parsedTimeHourMin.first)
+                set(java.util.Calendar.MINUTE, parsedTimeHourMin.second)
+                set(java.util.Calendar.SECOND, 0)
+            } else {
+                set(java.util.Calendar.HOUR_OF_DAY, 12)
+                set(java.util.Calendar.MINUTE, 0)
+                set(java.util.Calendar.SECOND, 0)
+            }
+        }.timeInMillis
+    }
+
+    private fun inferStructuredExpenseMetadata(
+        rawTitle: String,
+        explicitCategory: String? = null,
+        explicitPnr: String? = null,
+        explicitProvider: String? = null,
+        explicitScheduledAt: Long? = null
+    ): InferredExpenseMetadata {
+        val trimmed = rawTitle.trim()
+        val lower = trimmed.replace(Regex("""train/flight|flight/train""", RegexOption.IGNORE_CASE), "train").lowercase(Locale.US)
+        val parsedTicket = runCatching { extractTravelTicketFromTitle(trimmed) }.getOrNull()
+
+        val bracketPnr = Regex("""\[PNR:([A-Za-z0-9]{6,12})\]""", RegexOption.IGNORE_CASE)
+            .find(trimmed)?.groupValues?.getOrNull(1)?.uppercase(Locale.US)
+        val labelledPnr = Regex("""\bPNR:\s*([A-Za-z0-9]{6,10})\b""", RegexOption.IGNORE_CASE)
+            .find(trimmed)?.groupValues?.getOrNull(1)?.uppercase(Locale.US)
+        val pnrDigits = Regex("""\b(\d{10})\b""").find(trimmed)?.groupValues?.getOrNull(1)
+        val resolvedPnr = explicitPnr?.trim()?.takeIf { it.isNotEmpty() }?.uppercase(Locale.US)
+            ?: parsedTicket?.pnr?.trim()?.takeIf { it.isNotEmpty() }?.uppercase(Locale.US)
+            ?: bracketPnr
+            ?: labelledPnr
+            ?: pnrDigits
+            ?: ""
+
+        val hasTenDigitPnr = (resolvedPnr.length == 10 && resolvedPnr.all { it.isDigit() }) || pnrDigits != null
+        val hasFiveDigitTrainNo = Regex("""^\d{5}\b""").containsMatchIn(parsedTicket?.trainOrFlightNo?.trim().orEmpty()) ||
+            Regex("""\btrain\s+\d{5}\b""").containsMatchIn(lower)
+        val hasExplicitAirlineOrFlightNo = Regex("""\b(indigo|air india|akasa|spicejet|vistara|airasia|alliance air|star air|fly91|emirates|qatar|lufthansa)\b""").containsMatchIn(lower) ||
+            Regex("""\b(6e|ai|ix|qp|sg|uk|i5|9i|s5)[\s\-]?\d{2,4}\b""").containsMatchIn(lower)
+        val isTrainPdfMislabelledAsFlight = trimmed.startsWith("Flight", ignoreCase = true) &&
+            parsedTicket?.trainOrFlightNo.isNullOrBlank() &&
+            !hasExplicitAirlineOrFlightNo &&
+            (trimmed.startsWith("Flight  (") || trimmed.startsWith("Flight ("))
+
+        val resolvedCategory = when {
+            !explicitCategory.isNullOrBlank() -> explicitCategory.trim().uppercase(Locale.US)
+            hasTenDigitPnr ||
+                hasFiveDigitTrainNo ||
+                isTrainPdfMislabelledAsFlight ||
+                Regex("""\b(train|irctc|express|shatabdi|rajdhani|vande bharat|vande|duronto|sleeper|berth|coach|3a|2a|1a|3e|2s)\b""").containsMatchIn(lower) -> "TRAIN"
+            isFlightTicketExpense(trimmed, parsedTicket) ||
+                hasExplicitAirlineOrFlightNo ||
+                Regex("""\b(flight|airfare|boarding pass)\b""").containsMatchIn(lower) -> "FLIGHT"
+            parsedTicket != null && parsedTicket.hasTicketMetadata -> "TRAIN"
+            Regex("""\b(hotel|resort|stay|villa|airbnb|hostel|cottage|lodge|homestay|check-in|nights|room)\b""").containsMatchIn(lower) -> "STAY"
+            Regex("""\b(rental|enfield|moped|scooter|bike|scooty|two wheeler|cycle|kayak|coracle)\b""").containsMatchIn(lower) -> "RENTAL"
+            Regex("""\b(cab|taxi|uber|ola|rapido|auto|rickshaw|innova|transfer|pickup|drop|bus)\b""").containsMatchIn(lower) -> "CAB"
+            else -> "OTHER"
+        }
+
+        val resolvedProvider = when {
+            !explicitProvider.isNullOrBlank() -> explicitProvider.trim()
+            parsedTicket?.trainOrFlightNo?.isNotBlank() == true -> parsedTicket.trainOrFlightNo.trim()
+            resolvedCategory == "TRAIN" -> "IRCTC"
+            resolvedCategory == "FLIGHT" -> trimmed.substringBefore("(").substringBefore("|").trim().take(40)
+            else -> ""
+        }
+
+        val resolvedScheduledAt = explicitScheduledAt?.takeIf { it > 0L } ?: run {
+            val depCandidate = listOfNotNull(
+                parsedTicket?.departureInfo?.takeIf { it.isNotBlank() },
+                parsedTicket?.departureDate?.takeIf { it.isNotBlank() }
+            ).firstOrNull()
+            if (depCandidate.isNullOrBlank()) {
+                null
+            } else {
+                parseTravelDateTimeToEpochMs(depCandidate)
+            }
+        }
+
+        return InferredExpenseMetadata(
+            expenseCategory = resolvedCategory,
+            travelPnr = resolvedPnr,
+            providerName = resolvedProvider,
+            scheduledAtEpochMs = resolvedScheduledAt
+        )
+    }
+
     /**
-     * Commits a Quick Equal Expense from QuickExpenseScreen or PnrExpenseReviewScreen:
+     * Commits a Quick Equal Expense from QuickExpenseScreen, FlightExpenseReviewScreen, or PnrExpenseReviewScreen:
      * Strictly divides [totalAmountCents] equally among [selectedMemberIds] with Payer-First Largest Remainder (`0.00¢` drift).
      */
     fun commitQuickEqualExpense(
         title: String,
         totalAmountCents: Long,
         selectedMemberIds: List<String>,
-        payerMemberId: String? = null
+        payerMemberId: String? = null,
+        explicitCategory: String? = null,
+        explicitTravelPnr: String? = null,
+        explicitProviderName: String? = null,
+        explicitScheduledAtEpochMs: Long? = null
     ) {
         if (totalAmountCents <= 0L) return
         val state = _uiState.value
@@ -659,20 +956,23 @@ class SplitMateViewModel(
         lastExpenseCommitMs = nowMs
         lastExpenseCommitSignature = commitSig
 
+        val inferred = inferStructuredExpenseMetadata(
+            rawTitle = title,
+            explicitCategory = explicitCategory,
+            explicitPnr = explicitTravelPnr,
+            explicitProvider = explicitProviderName,
+            explicitScheduledAt = explicitScheduledAtEpochMs
+        )
+
         // Guard against adding the exact same 6-char Flight PNR or 10-digit Train PNR twice to the group ledger
-        val bracketPnr = Regex("""\[PNR:([A-Za-z0-9]{6,12})\]""", RegexOption.IGNORE_CASE)
-            .find(title)?.groupValues?.getOrNull(1)?.uppercase(Locale.US)
-        // Defense-in-depth: also match labelled "PNR: AB12CD" / "pnr:1234567890" references (6-10 alphanumeric)
-        val labelledPnr = Regex("""\bPNR:\s*([A-Za-z0-9]{6,10})\b""", RegexOption.IGNORE_CASE)
-            .find(title)?.groupValues?.getOrNull(1)?.uppercase(Locale.US)
-        val pnrDigits = Regex("""\b(\d{10})\b""").find(title)?.groupValues?.getOrNull(1)
-        val detectedPnr = bracketPnr ?: labelledPnr ?: pnrDigits
+        val detectedPnr = inferred.travelPnr.takeIf { it.isNotBlank() }
 
         if (!detectedPnr.isNullOrBlank()) {
             val wordBoundaryPnrRegex = Regex("""\b${Regex.escape(detectedPnr)}\b""", RegexOption.IGNORE_CASE)
             val existingExp = state.expenses.firstOrNull { exp ->
                 exp.groupId == state.activeGroupId && (
-                    exp.title.contains("[PNR:$detectedPnr]", ignoreCase = true) ||
+                    exp.travelPnr.equals(detectedPnr, ignoreCase = true) ||
+                        exp.title.contains("[PNR:$detectedPnr]", ignoreCase = true) ||
                         wordBoundaryPnrRegex.containsMatchIn(exp.title)
                     )
             }
@@ -724,6 +1024,10 @@ class SplitMateViewModel(
             unassignedBaseCents = 0L,
             currencyCode = "INR",
             lockedExchangeRate = lockedRate,
+            expenseCategory = inferred.expenseCategory,
+            travelPnr = inferred.travelPnr,
+            providerName = inferred.providerName,
+            scheduledAtEpochMs = inferred.scheduledAtEpochMs,
             syncStatus = syncStatus
         )
 
@@ -747,8 +1051,43 @@ class SplitMateViewModel(
         }
 
         viewModelScope.launch(ioDispatcher) {
-            dao?.insertExpenseWithSplits(expenseEntity, splitEntities)
+            val d = dao
+            if (d != null) {
+                d.insertExpenseWithSplits(expenseEntity, splitEntities)
+                val normUserPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(_uiState.value.userPhone)
+                if (normUserPhone.length == 10) {
+                    com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
+                        context = null,
+                        dao = d,
+                        groupId = expenseEntity.groupId,
+                        localUserPhone10 = normUserPhone,
+                        localUserName = _uiState.value.currentUserName.ifBlank { "You" }
+                    )
+                }
+            }
         }
+    }
+
+    fun logExpense(
+        title: String,
+        totalAmountCents: Long,
+        selectedMemberIds: List<String>,
+        payerMemberId: String? = null,
+        expenseCategory: String = "OTHER",
+        travelPnr: String = "",
+        providerName: String = "",
+        scheduledAtEpochMs: Long? = null
+    ) {
+        commitQuickEqualExpense(
+            title = title,
+            totalAmountCents = totalAmountCents,
+            selectedMemberIds = selectedMemberIds,
+            payerMemberId = payerMemberId,
+            explicitCategory = expenseCategory.takeIf { it.isNotBlank() && it != "OTHER" },
+            explicitTravelPnr = travelPnr,
+            explicitProviderName = providerName,
+            explicitScheduledAtEpochMs = scheduledAtEpochMs
+        )
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -766,12 +1105,17 @@ class SplitMateViewModel(
         _uiState.update { it.copy(isOfflineMode = offline) }
     }
 
-    fun updateUserProfile(newName: String, newSeedOrCurrency: String, newUpiId: String? = null) {
+    fun updateUserProfile(newName: String, newPhone: String, newSeedOrCurrency: String, newUpiId: String? = null) {
         val cleanName = newName.trim().ifEmpty { "Akshay" }
+        val cleanPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(newPhone)
         var resolvedSeed = ""
         var resolvedUpi = ""
         var resolvedDark = false
         var resolvedCountry = "India"
+        var resolvedStyleId = "open-peeps"
+        var resolvedPresetId = "Buckwheat"
+        var resolvedIsPhoneVerified = false
+        var resolvedPinHash = ""
         var updatedCurrentUserMembers = emptyList<GroupMemberEntity>()
 
         _uiState.update { state ->
@@ -780,21 +1124,42 @@ class SplitMateViewModel(
             } else {
                 state.currentUserSeed.substringAfter('|', "Masculine")
             }
+            val (parsedStyle, parsedPreset) = parseAvatarStyleAndPresetFromSeed(
+                newSeedOrCurrency,
+                state.avatarStyleId,
+                state.avatarColorPresetId
+            )
             val updatedSeed = "$cleanName|$styleFromArg"
             val finalUpi = newUpiId?.trim() ?: state.userUpiId
             resolvedSeed = updatedSeed
             resolvedUpi = finalUpi
             resolvedDark = state.isDarkTheme
             resolvedCountry = state.currentUserCountry
+            resolvedStyleId = parsedStyle
+            resolvedPresetId = parsedPreset
+            resolvedIsPhoneVerified = state.isPhoneVerified
+            resolvedPinHash = state.pinHash
 
             val updatedMembers = state.members.map { m ->
-                if (m.isCurrentUser) m.copy(name = cleanName, avatarSeed = updatedSeed, upiId = finalUpi) else m
+                if (m.isCurrentUser) {
+                    m.copy(
+                        name = cleanName,
+                        avatarSeed = updatedSeed,
+                        upiId = finalUpi,
+                        userPhone = cleanPhone
+                    )
+                } else {
+                    m
+                }
             }
             updatedCurrentUserMembers = updatedMembers.filter { it.isCurrentUser }
             state.copy(
                 currentUserName = cleanName,
                 currentUserSeed = updatedSeed,
                 userUpiId = finalUpi,
+                userPhone = cleanPhone,
+                avatarStyleId = parsedStyle,
+                avatarColorPresetId = parsedPreset,
                 activeCurrencyCode = "INR",
                 members = updatedMembers,
                 statusBannerMessage = "Saved profile & payment preferences"
@@ -802,21 +1167,648 @@ class SplitMateViewModel(
         }
 
         viewModelScope.launch(ioDispatcher) {
-            dao?.upsertUserProfile(
-                UserProfileEntity(
-                    profileId = "me",
-                    name = cleanName,
-                    avatarSeed = resolvedSeed,
-                    countryName = resolvedCountry,
-                    currencyCode = "INR",
-                    currencySymbol = "₹",
-                    upiId = resolvedUpi,
-                    isDarkTheme = resolvedDark
-                )
+            val existingProfile = dao?.getUserProfile()
+            val profileEntity = UserProfileEntity(
+                profileId = "me",
+                name = cleanName,
+                avatarSeed = resolvedSeed,
+                countryName = resolvedCountry,
+                currencyCode = "INR",
+                currencySymbol = "₹",
+                upiId = resolvedUpi,
+                userPhone = cleanPhone,
+                isPhoneVerified = existingProfile?.isPhoneVerified ?: resolvedIsPhoneVerified,
+                pinHash = existingProfile?.pinHash ?: resolvedPinHash,
+                isDarkTheme = resolvedDark,
+                createdAt = existingProfile?.createdAt ?: System.currentTimeMillis()
             )
+            dao?.upsertUserProfile(profileEntity)
             if (updatedCurrentUserMembers.isNotEmpty()) {
                 dao?.insertMembers(updatedCurrentUserMembers)
             }
+            com.splitmate.app.data.CloudGroupSyncRepository.pushUserProfileToCloud(
+                profile = profileEntity,
+                avatarStyle = resolvedStyleId,
+                avatarColorPreset = resolvedPresetId
+            )
+            syncAllGroupsWithCloud(null)
+        }
+    }
+
+    private suspend fun dispatchOnMain(block: () -> Unit) {
+        runCatching {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
+                block()
+            }
+        }.getOrElse {
+            block()
+        }
+    }
+
+    private suspend fun refreshStateFromDaoSnapshot(
+        d: SplitMateDao,
+        summary: com.splitmate.app.data.CloudRestoreSummary? = null,
+        statusMsg: String? = null
+    ) {
+        val profile = d.getUserProfile()
+        val allGroups = d.getAllGroups()
+        val allMembers = allGroups.flatMap { d.getMembersForGroup(it.groupId) }
+        val allExpenses = allGroups.flatMap { d.getExpensesForGroup(it.groupId) }
+        val allSplits = allGroups.flatMap { d.getSplitsForGroup(it.groupId) }
+        val allSettlements = allGroups.flatMap { d.getSettlementsForGroup(it.groupId) }
+        _uiState.update { curr ->
+            val nextActiveGroup = curr.openedGroupDetailId?.takeIf { id -> allGroups.any { it.groupId == id } }
+                ?: curr.activeGroupId.takeIf { id -> allGroups.any { it.groupId == id } }
+                ?: allGroups.firstOrNull()?.groupId.orEmpty()
+            val (pStyle, pPreset) = if (profile != null) {
+                parseAvatarStyleAndPresetFromSeed(profile.avatarSeed, curr.avatarStyleId, curr.avatarColorPresetId)
+            } else {
+                curr.avatarStyleId to curr.avatarColorPresetId
+            }
+            curr.copy(
+                hasRegisteredProfile = (profile != null && profile.isPhoneVerified && profile.userPhone.length >= 10) || curr.hasRegisteredProfile,
+                currentUserName = profile?.name ?: curr.currentUserName,
+                currentUserSeed = profile?.avatarSeed ?: curr.currentUserSeed,
+                userUpiId = profile?.upiId ?: curr.userUpiId,
+                userPhone = profile?.userPhone ?: curr.userPhone,
+                isPhoneVerified = profile?.isPhoneVerified ?: curr.isPhoneVerified,
+                pinHash = profile?.pinHash ?: curr.pinHash,
+                avatarStyleId = pStyle,
+                avatarColorPresetId = pPreset,
+                groups = allGroups,
+                activeGroupId = nextActiveGroup,
+                members = allMembers,
+                expenses = allExpenses,
+                splits = allSplits,
+                settlements = allSettlements,
+                isCloudSyncing = false,
+                cloudRestoreSummary = summary ?: curr.cloudRestoreSummary,
+                statusBannerMessage = statusMsg ?: curr.statusBannerMessage
+            )
+        }
+    }
+
+    fun lookupCloudProfileForPhone(
+        rawPhone: String,
+        onFound: (com.splitmate.app.data.CloudUserProfileRecord?) -> Unit = {}
+    ) {
+        val phone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(rawPhone)
+        if (!com.splitmate.app.data.PhoneIdentityValidator.isValidIndianMobile10(phone10)) {
+            _uiState.update { it.copy(discoveredCloudProfile = null) }
+            onFound(null)
+            return
+        }
+        if (dao == null) {
+            onFound(_uiState.value.discoveredCloudProfile)
+            return
+        }
+        viewModelScope.launch(ioDispatcher) {
+            val record = com.splitmate.app.data.CloudGroupSyncRepository.fetchUserProfileFromCloud(phone10)
+            _uiState.update { it.copy(discoveredCloudProfile = record) }
+            dispatchOnMain { onFound(record) }
+        }
+    }
+
+    fun requestPhoneOtp(
+        context: android.content.Context?,
+        rawPhone: String
+    ): com.splitmate.app.data.OtpDispatchResult? {
+        val res = com.splitmate.app.data.PhoneOtpAuthManager.sendOtp(context, rawPhone)
+        if (res != null) {
+            _uiState.update {
+                it.copy(
+                    pendingOtpCodeForBanner = res.generatedOtpCode,
+                    pendingOtpPhone10 = res.phone10,
+                    statusBannerMessage = "6-digit OTP sent to +91 ${res.phone10}"
+                )
+            }
+            lookupCloudProfileForPhone(res.phone10)
+        } else {
+            _uiState.update {
+                it.copy(statusBannerMessage = "Enter a valid 10-digit Indian mobile number")
+            }
+        }
+        return res
+    }
+
+    fun verifyPinAndRestoreCloud(
+        context: android.content.Context?,
+        rawPhone: String,
+        enteredPin4: String,
+        fallbackUserName: String = "",
+        fallbackUpiId: String = "",
+        avatarStyleId: String = "open-peeps",
+        avatarColorPresetId: String = "Buckwheat",
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val phone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(rawPhone)
+        if (!com.splitmate.app.data.PhoneIdentityValidator.isValidIndianMobile10(phone10)) {
+            onResult(false, "Enter a valid 10-digit Indian mobile number")
+            return
+        }
+        if (enteredPin4.trim().length != 4) {
+            onResult(false, "Enter your 4-digit Recovery PIN")
+            return
+        }
+        _uiState.update { it.copy(isCloudSyncing = true) }
+        viewModelScope.launch(ioDispatcher) {
+            val localProfile = dao?.getUserProfile()
+            val cachedRemoteProfile = _uiState.value.discoveredCloudProfile?.takeIf { it.phone10 == phone10 }
+            val localStatePinHash = _uiState.value.pinHash.takeIf {
+                it.isNotBlank() && com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(_uiState.value.userPhone) == phone10
+            }
+            val remoteProfile = if (cachedRemoteProfile != null || localProfile?.pinHash?.isNotBlank() == true || localStatePinHash != null || dao == null) {
+                cachedRemoteProfile
+            } else {
+                com.splitmate.app.data.CloudGroupSyncRepository.fetchUserProfileFromCloud(phone10)
+            }
+            val expectedPinHash = remoteProfile?.pinHash?.takeIf { it.isNotBlank() }
+                ?: localProfile?.pinHash?.takeIf { it.isNotBlank() }
+                ?: localStatePinHash.orEmpty()
+
+            if (expectedPinHash.isBlank()) {
+                _uiState.update { it.copy(isCloudSyncing = false) }
+                dispatchOnMain {
+                    onResult(false, "No 4-digit PIN found for +91 $phone10 — please verify via 6-digit OTP first.")
+                }
+                return@launch
+            }
+
+            val pinValid = com.splitmate.app.data.PhoneOtpAuthManager.verifyPin(phone10, enteredPin4, expectedPinHash)
+            if (!pinValid) {
+                val errMsg = "Incorrect 4-digit Recovery PIN. Try again or tap Send 6-Digit OTP to reset."
+                _uiState.update { it.copy(isCloudSyncing = false, statusBannerMessage = errMsg) }
+                dispatchOnMain { onResult(false, errMsg) }
+                return@launch
+            }
+
+            val resolvedName = remoteProfile?.name?.takeIf { it.isNotBlank() && it != "Explorer" }
+                ?: fallbackUserName.trim().takeIf { it.isNotBlank() }
+                ?: localProfile?.name?.takeIf { it.isNotBlank() }
+                ?: "Explorer"
+            val resolvedStyle = remoteProfile?.avatarStyle?.takeIf { it.isNotBlank() } ?: avatarStyleId
+            val resolvedPreset = remoteProfile?.avatarColorPreset?.takeIf { it.isNotBlank() } ?: avatarColorPresetId
+            val resolvedUpi = remoteProfile?.upiVpa?.takeIf { it.isNotBlank() }
+                ?: fallbackUpiId.trim().takeIf { it.isNotBlank() }
+                ?: "$phone10@upi"
+            val updatedSeed = "$resolvedName|Neutral|$resolvedStyle|$resolvedPreset"
+
+            val d = dao
+            if (d != null) {
+                val profileEntity = UserProfileEntity(
+                    profileId = "me",
+                    name = resolvedName,
+                    avatarSeed = updatedSeed,
+                    countryName = localProfile?.countryName ?: _uiState.value.currentUserCountry,
+                    currencyCode = "INR",
+                    currencySymbol = "₹",
+                    upiId = resolvedUpi,
+                    userPhone = phone10,
+                    isPhoneVerified = true,
+                    pinHash = expectedPinHash,
+                    isDarkTheme = localProfile?.isDarkTheme ?: _uiState.value.isDarkTheme,
+                    createdAt = localProfile?.createdAt ?: System.currentTimeMillis()
+                )
+                d.upsertUserProfile(profileEntity)
+                val summary = com.splitmate.app.data.CloudGroupSyncRepository.restoreAndSyncAllForVerifiedPhone(
+                    context = context,
+                    dao = d,
+                    phone10 = phone10
+                )
+                refreshStateFromDaoSnapshot(
+                    d = d,
+                    summary = summary,
+                    statusMsg = "Welcome back $resolvedName (+91 $phone10)"
+                )
+            } else {
+                _uiState.update { curr ->
+                    curr.copy(
+                        hasRegisteredProfile = true,
+                        currentUserName = resolvedName,
+                        currentUserSeed = updatedSeed,
+                        userUpiId = resolvedUpi,
+                        userPhone = phone10,
+                        isPhoneVerified = true,
+                        pinHash = expectedPinHash,
+                        avatarStyleId = resolvedStyle,
+                        avatarColorPresetId = resolvedPreset,
+                        isCloudSyncing = false,
+                        statusBannerMessage = "Welcome back $resolvedName (+91 $phone10)"
+                    )
+                }
+            }
+            dispatchOnMain {
+                onResult(true, "Welcome back $resolvedName (+91 $phone10)")
+            }
+        }
+    }
+
+    fun verifyPhoneOtpAndSyncCloud(
+        context: android.content.Context?,
+        rawPhone: String,
+        enteredOtp: String,
+        userName: String,
+        upiId: String,
+        avatarStyleId: String = "open-peeps",
+        avatarColorPresetId: String = "Buckwheat",
+        optionalPin4: String = "",
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val verified = com.splitmate.app.data.PhoneOtpAuthManager.verifyOtp(rawPhone, enteredOtp)
+        if (!verified) {
+            val errMsg = "Invalid or expired 6-digit OTP"
+            _uiState.update { it.copy(statusBannerMessage = errMsg) }
+            onResult(false, errMsg)
+            return
+        }
+
+        val phone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(rawPhone)
+        val newPinHash = com.splitmate.app.data.PhoneOtpAuthManager.hashPin(phone10, optionalPin4)
+        val typedName = userName.trim()
+        val cleanName = typedName.ifEmpty {
+            _uiState.value.discoveredCloudProfile?.name?.takeIf { it.isNotBlank() }
+                ?: _uiState.value.currentUserName.ifEmpty { "Explorer" }
+        }
+        val cleanHandle = cleanName.lowercase(Locale.US).replace(Regex("[^a-z0-9]"), "").ifEmpty { "explorer" }
+        val cleanUpi = upiId.trim().ifEmpty {
+            _uiState.value.discoveredCloudProfile?.upiVpa?.takeIf { it.isNotBlank() }
+                ?: _uiState.value.userUpiId.ifEmpty {
+                    if (phone10.length == 10) "${phone10}@upi" else "${cleanHandle}@okaxis"
+                }
+        }
+        val updatedSeed = "$cleanName|Neutral|$avatarStyleId|$avatarColorPresetId"
+        var updatedCurrentUserMembers = emptyList<GroupMemberEntity>()
+
+        _uiState.update { state ->
+            val updatedMembers = state.members.map { m ->
+                if (m.isCurrentUser || (phone10.length == 10 && com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(m.userPhone) == phone10)) {
+                    m.copy(
+                        name = cleanName,
+                        avatarSeed = updatedSeed,
+                        upiId = cleanUpi,
+                        userPhone = phone10,
+                        isCurrentUser = true
+                    )
+                } else {
+                    m
+                }
+            }
+            updatedCurrentUserMembers = updatedMembers.filter { it.isCurrentUser }
+            state.copy(
+                hasRegisteredProfile = true,
+                currentUserName = cleanName,
+                currentUserSeed = updatedSeed,
+                userUpiId = cleanUpi,
+                userPhone = phone10,
+                isPhoneVerified = true,
+                pinHash = newPinHash.ifEmpty { state.discoveredCloudProfile?.pinHash ?: state.pinHash },
+                avatarStyleId = avatarStyleId,
+                avatarColorPresetId = avatarColorPresetId,
+                pendingOtpCodeForBanner = null,
+                isCloudSyncing = true,
+                members = updatedMembers,
+                statusBannerMessage = "Verified +91 $phone10"
+            )
+        }
+
+        val d = dao
+        if (d == null) {
+            _uiState.update { curr ->
+                val remainingGroups = curr.groups.filterNot { g ->
+                    g.isDemoSeed && curr.expenses.count { it.groupId == g.groupId } <= 3
+                }
+                val remainingGroupIds = remainingGroups.map { it.groupId }.toSet()
+                curr.copy(
+                    groups = remainingGroups,
+                    members = curr.members.filter { remainingGroupIds.contains(it.groupId) },
+                    expenses = curr.expenses.filter { remainingGroupIds.contains(it.groupId) },
+                    isCloudSyncing = false,
+                    cloudRestoreSummary = com.splitmate.app.data.CloudRestoreSummary(
+                        restoredJoinedGroupsCount = remainingGroups.size,
+                        discoveredPendingInvitesCount = 0
+                    )
+                )
+            }
+            onResult(true, "Verified +91 $phone10")
+            return
+        }
+
+        viewModelScope.launch(ioDispatcher) {
+            val remoteProfile = _uiState.value.discoveredCloudProfile?.takeIf { it.phone10 == phone10 }
+                ?: com.splitmate.app.data.CloudGroupSyncRepository.fetchUserProfileFromCloud(phone10)
+            val existingProfile = d.getUserProfile()
+            val effectiveName = if (typedName.isNotEmpty() && typedName != "Explorer") {
+                typedName
+            } else {
+                remoteProfile?.name?.takeIf { it.isNotBlank() } ?: cleanName
+            }
+            val effectiveStyle = if (avatarStyleId != "open-peeps" || remoteProfile == null) {
+                avatarStyleId
+            } else {
+                remoteProfile.avatarStyle.ifBlank { avatarStyleId }
+            }
+            val effectivePreset = if (avatarColorPresetId != "Buckwheat" || remoteProfile == null) {
+                avatarColorPresetId
+            } else {
+                remoteProfile.avatarColorPreset.ifBlank { avatarColorPresetId }
+            }
+            val effectiveUpi = if (upiId.trim().isNotEmpty()) {
+                upiId.trim()
+            } else {
+                remoteProfile?.upiVpa?.takeIf { it.isNotBlank() } ?: cleanUpi
+            }
+            val effectivePinHash = when {
+                newPinHash.isNotEmpty() -> newPinHash
+                !remoteProfile?.pinHash.isNullOrBlank() -> remoteProfile!!.pinHash
+                !existingProfile?.pinHash.isNullOrBlank() -> existingProfile!!.pinHash
+                else -> ""
+            }
+            val effectiveSeed = "$effectiveName|Neutral|$effectiveStyle|$effectivePreset"
+
+            val profileEntity = UserProfileEntity(
+                profileId = "me",
+                name = effectiveName,
+                avatarSeed = effectiveSeed,
+                countryName = existingProfile?.countryName ?: _uiState.value.currentUserCountry,
+                currencyCode = "INR",
+                currencySymbol = "₹",
+                upiId = effectiveUpi,
+                userPhone = phone10,
+                isPhoneVerified = true,
+                pinHash = effectivePinHash,
+                isDarkTheme = existingProfile?.isDarkTheme ?: _uiState.value.isDarkTheme,
+                createdAt = existingProfile?.createdAt ?: System.currentTimeMillis()
+            )
+            d.upsertUserProfile(profileEntity)
+            if (updatedCurrentUserMembers.isNotEmpty()) {
+                d.insertMembers(updatedCurrentUserMembers.map {
+                    it.copy(name = effectiveName, avatarSeed = effectiveSeed, upiId = effectiveUpi, userPhone = phone10)
+                })
+            }
+            com.splitmate.app.data.CloudGroupSyncRepository.pushUserProfileToCloud(
+                profile = profileEntity,
+                avatarStyle = effectiveStyle,
+                avatarColorPreset = effectivePreset
+            )
+            val summary = com.splitmate.app.data.CloudGroupSyncRepository.restoreAndSyncAllForVerifiedPhone(
+                context = context,
+                dao = d,
+                phone10 = phone10
+            )
+            refreshStateFromDaoSnapshot(
+                d = d,
+                summary = summary,
+                statusMsg = "Verified +91 $phone10"
+            )
+            dispatchOnMain {
+                onResult(true, "Verified +91 $phone10")
+            }
+        }
+    }
+
+    fun resetPinAfterOtpVerified(phone10: String, newPin4: String) {
+        val normPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(phone10)
+            .ifEmpty { com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(_uiState.value.userPhone) }
+        if (normPhone.isEmpty()) return
+        val newPinHash = com.splitmate.app.data.PhoneOtpAuthManager.hashPin(normPhone, newPin4)
+        _uiState.update {
+            it.copy(
+                pinHash = newPinHash,
+                statusBannerMessage = "4-digit recovery PIN updated"
+            )
+        }
+        viewModelScope.launch(ioDispatcher) {
+            val d = dao ?: return@launch
+            val existing = d.getUserProfile()
+            if (existing != null) {
+                val updated = existing.copy(pinHash = newPinHash)
+                d.upsertUserProfile(updated)
+                com.splitmate.app.data.CloudGroupSyncRepository.pushUserProfileToCloud(
+                    profile = updated,
+                    avatarStyle = _uiState.value.avatarStyleId,
+                    avatarColorPreset = _uiState.value.avatarColorPresetId
+                )
+            }
+        }
+    }
+
+    fun syncAllGroupsWithCloud(context: android.content.Context? = null) {
+        val d = dao ?: return
+        val state = _uiState.value
+        val phone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(state.userPhone)
+        if (phone10.length != 10) return
+        _uiState.update { it.copy(isCloudSyncing = true) }
+        viewModelScope.launch(ioDispatcher) {
+            val summary = com.splitmate.app.data.CloudGroupSyncRepository.restoreAndSyncAllForVerifiedPhone(
+                context = context,
+                dao = d,
+                phone10 = phone10
+            )
+            refreshStateFromDaoSnapshot(
+                d = d,
+                summary = summary,
+                statusMsg = "Cloud sync complete (${summary.restoredJoinedGroupsCount} active, ${summary.discoveredPendingInvitesCount} pending)"
+            )
+        }
+    }
+
+    fun acceptGroupInvite(context: android.content.Context?, groupId: String) {
+        val state = _uiState.value
+        val userPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(state.userPhone)
+        val groupName = state.groups.find { it.groupId == groupId }?.name ?: "Group"
+        var updatedGroupMembers = emptyList<GroupMemberEntity>()
+
+        _uiState.update { curr ->
+            val gMembers = curr.members.filter { it.groupId == groupId }
+            val targetMemberId = gMembers.find { it.isCurrentUser }?.memberId
+                ?: gMembers.find {
+                    userPhone10.length == 10 &&
+                        com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(it.userPhone) == userPhone10
+                }?.memberId
+            val nextMembers = curr.members.map { m ->
+                if (m.groupId == groupId && m.memberId == targetMemberId) {
+                    m.copy(inviteStatus = "JOINED", isCurrentUser = true)
+                } else {
+                    m
+                }
+            }
+            updatedGroupMembers = nextMembers.filter { it.groupId == groupId }
+            curr.copy(
+                members = nextMembers,
+                activeGroupId = groupId,
+                statusBannerMessage = "Joined \"$groupName\""
+            )
+        }
+
+        viewModelScope.launch(ioDispatcher) {
+            val d = dao ?: return@launch
+            if (updatedGroupMembers.isNotEmpty()) {
+                d.insertMembers(updatedGroupMembers)
+            }
+            com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
+                context = context,
+                dao = d,
+                groupId = groupId,
+                localUserPhone10 = userPhone10,
+                localUserName = _uiState.value.currentUserName.ifBlank { "You" }
+            )
+        }
+    }
+
+    fun declineGroupInvite(context: android.content.Context?, groupId: String) {
+        val state = _uiState.value
+        val userPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(state.userPhone)
+        val groupName = state.groups.find { it.groupId == groupId }?.name ?: "Group"
+        var updatedGroupMembers = emptyList<GroupMemberEntity>()
+
+        _uiState.update { curr ->
+            val gMembers = curr.members.filter { it.groupId == groupId }
+            val targetMemberId = gMembers.find { it.isCurrentUser }?.memberId
+                ?: gMembers.find {
+                    userPhone10.length == 10 &&
+                        com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(it.userPhone) == userPhone10
+                }?.memberId
+            val nextMembers = curr.members.map { m ->
+                if (m.groupId == groupId && m.memberId == targetMemberId) {
+                    m.copy(inviteStatus = "DECLINED")
+                } else {
+                    m
+                }
+            }
+            updatedGroupMembers = nextMembers.filter { it.groupId == groupId }
+            curr.copy(
+                members = nextMembers,
+                statusBannerMessage = "Declined invite to \"$groupName\""
+            )
+        }
+
+        viewModelScope.launch(ioDispatcher) {
+            val d = dao ?: return@launch
+            if (updatedGroupMembers.isNotEmpty()) {
+                d.insertMembers(updatedGroupMembers)
+            }
+            com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
+                context = context,
+                dao = d,
+                groupId = groupId,
+                localUserPhone10 = userPhone10,
+                localUserName = _uiState.value.currentUserName.ifBlank { "You" }
+            )
+        }
+    }
+
+    fun restoreDeclinedGroupInvite(context: android.content.Context?, groupId: String) {
+        val state = _uiState.value
+        val userPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(state.userPhone)
+        val groupName = state.groups.find { it.groupId == groupId }?.name ?: "Group"
+        var updatedGroupMembers = emptyList<GroupMemberEntity>()
+
+        _uiState.update { curr ->
+            val gMembers = curr.members.filter { it.groupId == groupId }
+            val targetMemberId = gMembers.find { it.isCurrentUser }?.memberId
+                ?: gMembers.find {
+                    userPhone10.length == 10 &&
+                        com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(it.userPhone) == userPhone10
+                }?.memberId
+            val nextMembers = curr.members.map { m ->
+                if (m.groupId == groupId && m.memberId == targetMemberId) {
+                    m.copy(inviteStatus = "JOINED", isCurrentUser = true)
+                } else {
+                    m
+                }
+            }
+            updatedGroupMembers = nextMembers.filter { it.groupId == groupId }
+            curr.copy(
+                members = nextMembers,
+                activeGroupId = groupId,
+                statusBannerMessage = "Restored and joined \"$groupName\""
+            )
+        }
+
+        viewModelScope.launch(ioDispatcher) {
+            val d = dao ?: return@launch
+            if (updatedGroupMembers.isNotEmpty()) {
+                d.insertMembers(updatedGroupMembers)
+            }
+            com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
+                context = context,
+                dao = d,
+                groupId = groupId,
+                localUserPhone10 = userPhone10,
+                localUserName = _uiState.value.currentUserName.ifBlank { "You" }
+            )
+        }
+    }
+
+    fun reassignDeclinedMemberSharesEqually(
+        context: android.content.Context?,
+        groupId: String,
+        declinedMemberId: String
+    ) {
+        val state = _uiState.value
+        val groupMembers = state.members.filter { it.groupId == groupId }
+        val declinedMember = groupMembers.find { it.memberId == declinedMemberId }
+        val activeJoinedMembers = groupMembers.filter {
+            it.memberId != declinedMemberId && it.inviteStatus == "JOINED"
+        }
+        if (activeJoinedMembers.isEmpty()) return
+
+        val currentUser = activeJoinedMembers.find { it.isCurrentUser }
+        val groupExpenses = state.expenses.filter { it.groupId == groupId }
+        val affectedExpenses = groupExpenses.filter { exp ->
+            state.splits.any { sp ->
+                sp.expenseId == exp.expenseId &&
+                    sp.memberId == declinedMemberId &&
+                    sp.finalOwedCents > 0L
+            }
+        }
+        if (affectedExpenses.isEmpty()) return
+
+        val replacementSplitsByExpenseId = linkedMapOf<String, List<ExpenseSplitEntity>>()
+        affectedExpenses.forEach { expense ->
+            val equalAllocations = SplitMateMathEngine.splitEquallyZeroDrift(
+                totalCents = expense.totalAmountCents,
+                members = activeJoinedMembers.map { it.memberId to it.name },
+                payerId = expense.payerId,
+                currentUserId = currentUser?.memberId
+            )
+            val newSplits = equalAllocations.mapIndexed { idx, alloc ->
+                ExpenseSplitEntity(
+                    splitId = "${expense.expenseId}_sp_$idx",
+                    expenseId = expense.expenseId,
+                    memberId = alloc.memberId,
+                    baseClaimedCents = alloc.baseClaimedCents,
+                    finalOwedCents = alloc.finalCents,
+                    plusOneCent = alloc.plusOneCent
+                )
+            }
+            replacementSplitsByExpenseId[expense.expenseId] = newSplits
+        }
+
+        val affectedExpenseIds = replacementSplitsByExpenseId.keys
+        val flattenedNewSplits = replacementSplitsByExpenseId.values.flatten()
+        val declinedName = declinedMember?.name ?: "Declined member"
+
+        _uiState.update { curr ->
+            curr.copy(
+                splits = curr.splits.filterNot { affectedExpenseIds.contains(it.expenseId) } + flattenedNewSplits,
+                statusBannerMessage = "Reassigned $declinedName's share equally among ${activeJoinedMembers.size} active members"
+            )
+        }
+
+        viewModelScope.launch(ioDispatcher) {
+            val d = dao ?: return@launch
+            replacementSplitsByExpenseId.forEach { (expId, newSplits) ->
+                d.replaceExpenseSplits(expId, newSplits)
+            }
+            val userPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(_uiState.value.userPhone)
+            com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
+                context = context,
+                dao = d,
+                groupId = groupId,
+                localUserPhone10 = userPhone10,
+                localUserName = _uiState.value.currentUserName.ifBlank { "You" }
+            )
         }
     }
 
@@ -894,19 +1886,23 @@ class SplitMateViewModel(
             iconName = cleanIcon
         )
 
+        val normUserPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(_uiState.value.userPhone)
         val meMember = GroupMemberEntity(
             memberId = "${groupId}_me",
             groupId = groupId,
             name = _uiState.value.currentUserName.ifBlank { "You" },
             avatarSeed = _uiState.value.currentUserSeed,
             upiId = _uiState.value.userUpiId,
-            isCurrentUser = true
+            userPhone = normUserPhone,
+            isCurrentUser = true,
+            inviteStatus = "JOINED"
         )
         val friendMembers = memberDrafts.mapIndexedNotNull { index, draft ->
             val fName = draft.name.trim()
-            if (fName.isEmpty()) null else {
-                val cleanPhone = cleanIndianTenDigitPhone(draft.cleanPhone)
-                val autoUpiId = if (cleanPhone.length >= 10) "${cleanPhone}@upi" else ""
+            val cleanPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(draft.cleanPhone)
+            val isSelf = normUserPhone.isNotBlank() && cleanPhone.isNotBlank() && cleanPhone == normUserPhone
+            if (fName.isEmpty() || isSelf) null else {
+                val autoUpiId = if (cleanPhone.length == 10) "${cleanPhone}@upi" else ""
                 val style = draft.presentationStyle.ifBlank { "Neutral" }
                 GroupMemberEntity(
                     memberId = "${groupId}_f$index",
@@ -914,7 +1910,9 @@ class SplitMateViewModel(
                     name = fName,
                     avatarSeed = "$fName|$style",
                     upiId = autoUpiId,
-                    isCurrentUser = false
+                    userPhone = cleanPhone,
+                    isCurrentUser = false,
+                    inviteStatus = if (cleanPhone.length == 10) "PENDING" else "JOINED"
                 )
             }
         }
@@ -930,9 +1928,27 @@ class SplitMateViewModel(
         }
 
         viewModelScope.launch(ioDispatcher) {
-            dao?.insertGroup(newGroup)
-            dao?.insertMembers(allNewMembers)
+            val d = dao
+            if (d != null) {
+                d.insertGroup(newGroup)
+                d.insertMembers(allNewMembers)
+                com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
+                    context = null,
+                    dao = d,
+                    groupId = groupId,
+                    localUserPhone10 = normUserPhone,
+                    localUserName = _uiState.value.currentUserName.ifBlank { "You" }
+                )
+            }
         }
+    }
+
+    fun createGroupWithMembers(
+        name: String,
+        iconName: String = "Flight",
+        memberDrafts: List<NewGroupMemberDraft>
+    ) {
+        createNewGroupWithContacts(name = name, iconName = iconName, memberDrafts = memberDrafts)
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -994,7 +2010,8 @@ class SplitMateViewModel(
         val targetGroupId = preferredGroupId ?: state.openedGroupDetailId ?: state.activeGroupId
 
         val allMatches = state.expenses.filter { exp ->
-            exp.title.contains("[PNR:$cleanPnr]", ignoreCase = true) ||
+            exp.travelPnr.equals(cleanPnr, ignoreCase = true) ||
+                exp.title.contains("[PNR:$cleanPnr]", ignoreCase = true) ||
                 Regex("""\b${Regex.escape(cleanPnr)}\b""", RegexOption.IGNORE_CASE).containsMatchIn(exp.title)
         }
         val bestMatch = allMatches.firstOrNull { it.groupId == targetGroupId }
@@ -1005,25 +2022,43 @@ class SplitMateViewModel(
         return bestMatch to matchedGroup
     }
 
-    fun addMemberToActiveGroup(friendName: String) {
+    fun addMemberToActiveGroup(friendName: String, rawPhone: String = "") {
         val clean = friendName.trim()
         if (clean.isEmpty()) return
-        val groupId = _uiState.value.activeGroupId
+        val state = _uiState.value
+        val groupId = state.activeGroupId
+        val normUserPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(state.userPhone)
+        val cleanPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(rawPhone)
+        if (normUserPhone.isNotBlank() && cleanPhone.isNotBlank() && cleanPhone == normUserPhone) return
+
         val newMember = GroupMemberEntity(
             memberId = "m_${System.currentTimeMillis()}",
             groupId = groupId,
             name = clean,
             avatarSeed = "$clean|Neutral",
-            isCurrentUser = false
+            upiId = if (cleanPhone.length == 10) "${cleanPhone}@upi" else "",
+            userPhone = cleanPhone,
+            isCurrentUser = false,
+            inviteStatus = if (cleanPhone.length == 10) "PENDING" else "JOINED"
         )
-        _uiState.update { state ->
-            state.copy(
-                members = state.members + newMember,
+        _uiState.update { curr ->
+            curr.copy(
+                members = curr.members + newMember,
                 statusBannerMessage = "Added $clean to group"
             )
         }
         viewModelScope.launch(ioDispatcher) {
-            dao?.insertMembers(listOf(newMember))
+            val d = dao
+            if (d != null) {
+                d.insertMembers(listOf(newMember))
+                com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
+                    context = null,
+                    dao = d,
+                    groupId = groupId,
+                    localUserPhone10 = normUserPhone,
+                    localUserName = _uiState.value.currentUserName.ifBlank { "You" }
+                )
+            }
         }
     }
 
@@ -1037,26 +2072,36 @@ class SplitMateViewModel(
 
     fun addContactsToGroup(groupId: String, contacts: List<DeviceContact>) {
         if (contacts.isEmpty()) return
-        val existingMembers = _uiState.value.members.filter { it.groupId == groupId }
-        val existingPhones = existingMembers.map { cleanIndianTenDigitPhone(it.upiId.substringBefore("@")) }.filter { it.isNotEmpty() }.toSet()
+        val stateBefore = _uiState.value
+        val normUserPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(stateBefore.userPhone)
+        val existingMembers = stateBefore.members.filter { it.groupId == groupId }
+        val existingPhones = existingMembers.flatMap { m ->
+            listOf(
+                com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(m.userPhone),
+                com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(m.upiId.substringBefore("@"))
+            )
+        }.filter { it.isNotEmpty() }.toSet()
         val existingNames = existingMembers.map { it.name.trim().lowercase() }.toSet()
         val now = System.currentTimeMillis()
         val seenBatchPhones = HashSet<String>()
         val seenBatchPhonelessNames = HashSet<String>()
         val newMembers = contacts.mapIndexedNotNull { idx, c ->
             val cleanName = c.name.trim()
-            val cleanPhone = cleanIndianTenDigitPhone(c.cleanPhone)
+            val cleanPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(c.cleanPhone)
+            val isSelfPhone = normUserPhone.isNotBlank() && cleanPhone.isNotBlank() && cleanPhone == normUserPhone
             val isDuplicatePhone = cleanPhone.isNotEmpty() && (existingPhones.contains(cleanPhone) || !seenBatchPhones.add(cleanPhone))
             val isDuplicatePhoneLessName = cleanPhone.isEmpty() && (existingNames.contains(cleanName.lowercase()) || !seenBatchPhonelessNames.add(cleanName.lowercase()))
-            if (cleanName.isEmpty() || isDuplicatePhone || isDuplicatePhoneLessName) null
+            if (cleanName.isEmpty() || isSelfPhone || isDuplicatePhone || isDuplicatePhoneLessName) null
             else {
                 GroupMemberEntity(
                     memberId = "${groupId}_c_${now}_$idx",
                     groupId = groupId,
                     name = cleanName,
                     avatarSeed = "$cleanName|Neutral",
-                    upiId = if (cleanPhone.length >= 10) "${cleanPhone}@upi" else "",
-                    isCurrentUser = false
+                    upiId = if (cleanPhone.length == 10) "${cleanPhone}@upi" else "",
+                    userPhone = cleanPhone,
+                    isCurrentUser = false,
+                    inviteStatus = if (cleanPhone.length == 10) "PENDING" else "JOINED"
                 )
             }
         }
@@ -1068,7 +2113,17 @@ class SplitMateViewModel(
             )
         }
         viewModelScope.launch(ioDispatcher) {
-            dao?.insertMembers(newMembers)
+            val d = dao
+            if (d != null) {
+                d.insertMembers(newMembers)
+                com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
+                    context = null,
+                    dao = d,
+                    groupId = groupId,
+                    localUserPhone10 = normUserPhone,
+                    localUserName = _uiState.value.currentUserName.ifBlank { "You" }
+                )
+            }
         }
     }
 
@@ -1095,11 +2150,26 @@ class SplitMateViewModel(
         }
 
         viewModelScope.launch(ioDispatcher) {
-            dao?.insertSettlement(settlement)
+            val d = dao
+            if (d != null) {
+                d.insertSettlement(settlement)
+                val normUserPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(_uiState.value.userPhone)
+                if (normUserPhone.length == 10) {
+                    com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
+                        context = null,
+                        dao = d,
+                        groupId = settlement.groupId,
+                        localUserPhone10 = normUserPhone,
+                        localUserName = _uiState.value.currentUserName.ifBlank { "You" }
+                    )
+                }
+            }
         }
     }
 
     fun rollbackExpense(expenseId: String) {
+        val removedExpense = _uiState.value.expenses.find { it.expenseId == expenseId }
+        val targetGroupId = removedExpense?.groupId ?: _uiState.value.activeGroupId
         _uiState.update { curr ->
             val removed = curr.expenses.find { it.expenseId == expenseId }
             curr.copy(
@@ -1109,9 +2179,27 @@ class SplitMateViewModel(
             )
         }
         viewModelScope.launch(ioDispatcher) {
-            dao?.deleteSplitsForExpense(expenseId)
-            dao?.deleteExpense(expenseId)
+            val d = dao
+            if (d != null) {
+                d.deleteSplitsForExpense(expenseId)
+                d.deleteExpense(expenseId)
+                val normUserPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(_uiState.value.userPhone)
+                if (targetGroupId.isNotBlank()) {
+                    com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
+                        context = null,
+                        dao = d,
+                        groupId = targetGroupId,
+                        localUserPhone10 = normUserPhone,
+                        localUserName = _uiState.value.currentUserName.ifBlank { "You" },
+                        additionalTombstones = mapOf(expenseId to System.currentTimeMillis())
+                    )
+                }
+            }
         }
+    }
+
+    fun deleteExpense(expenseId: String) {
+        rollbackExpense(expenseId)
     }
 
     fun undoSettlement(settlementId: String) {
@@ -1176,17 +2264,18 @@ class SplitMateViewModel(
         val state = _uiState.value
         val existing = state.expenses.find { it.expenseId == expenseId } ?: return
         val cleanTitle = newTitle.trim().ifEmpty { existing.title }
+        val inferred = inferStructuredExpenseMetadata(cleanTitle)
 
         // Guard against editing an expense to collide with another expense's PNR in the same group
         // (labelled "PNR: XXXXXX" 6-10 alphanumeric Flight/Train PNR, or bare 10-digit Train PNR)
-        val newPnrDigits = Regex("""\bPNR:\s*([A-Za-z0-9]{6,10})\b""", RegexOption.IGNORE_CASE)
-            .find(cleanTitle)?.groupValues?.getOrNull(1)?.uppercase(Locale.US)
-            ?: Regex("""\b(\d{10})\b""").find(cleanTitle)?.groupValues?.getOrNull(1)
+        val newPnrDigits = inferred.travelPnr.takeIf { it.isNotBlank() }
         if (!newPnrDigits.isNullOrBlank()) {
             val pnrWordMatcher = Regex("""\b${Regex.escape(newPnrDigits)}\b""", RegexOption.IGNORE_CASE)
             val conflictingExpense = state.expenses.firstOrNull { other ->
                 other.groupId == existing.groupId && other.expenseId != expenseId &&
-                    (other.title.contains(newPnrDigits) || pnrWordMatcher.containsMatchIn(other.title))
+                    (other.travelPnr.equals(newPnrDigits, ignoreCase = true) ||
+                        other.title.contains(newPnrDigits) ||
+                        pnrWordMatcher.containsMatchIn(other.title))
             }
             if (conflictingExpense != null) {
                 _uiState.update { curr ->
@@ -1218,7 +2307,11 @@ class SplitMateViewModel(
             title = cleanTitle,
             payerId = resolvedPayerId,
             baseSubtotalCents = newTotalCents,
-            totalAmountCents = newTotalCents
+            totalAmountCents = newTotalCents,
+            expenseCategory = inferred.expenseCategory.takeIf { it != "OTHER" } ?: existing.expenseCategory,
+            travelPnr = inferred.travelPnr.ifBlank { existing.travelPnr },
+            providerName = inferred.providerName.ifBlank { existing.providerName },
+            scheduledAtEpochMs = inferred.scheduledAtEpochMs ?: existing.scheduledAtEpochMs
         )
 
         val updatedSplits = equalAllocations.mapIndexed { idx, alloc ->
@@ -1241,7 +2334,20 @@ class SplitMateViewModel(
         }
 
         viewModelScope.launch(ioDispatcher) {
-            dao?.insertExpenseWithSplits(updatedExpense, updatedSplits)
+            val d = dao
+            if (d != null) {
+                d.insertExpenseWithSplits(updatedExpense, updatedSplits)
+                val normUserPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(_uiState.value.userPhone)
+                if (normUserPhone.length == 10) {
+                    com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
+                        context = null,
+                        dao = d,
+                        groupId = updatedExpense.groupId,
+                        localUserPhone10 = normUserPhone,
+                        localUserName = _uiState.value.currentUserName.ifBlank { "You" }
+                    )
+                }
+            }
         }
     }
 
@@ -1455,13 +2561,61 @@ class SplitMateViewModel(
     }
 
     /**
+     * Uploads the SM2_ sync capsule to a zero-cost cloud KV store (bytebin.lucko.me) 
+     * and returns a short, clickable invite link.
+     */
+    fun generateShortInviteLink(groupId: String, onResult: (String) -> Unit) {
+        val bundle = exportGroupSyncPayload(groupId) ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val payload = bundle.syncToken
+            val shortUrl = runCatching {
+                val url = java.net.URL("https://bytebin.lucko.me/post")
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.setRequestProperty("User-Agent", "SplitMate/2.0")
+                conn.setRequestProperty("Content-Type", "text/plain")
+                conn.doOutput = true
+                conn.outputStream.write(payload.toByteArray(Charsets.UTF_8))
+                
+                val response = conn.inputStream.bufferedReader().readText()
+                val shortKey = org.json.JSONObject(response).getString("key")
+                "https://akshaykaradkar.github.io/splitmate/join?g=$shortKey"
+            }.getOrElse {
+                // Fallback to long deep link if offline
+                bundle.deepLinkUri
+            }
+            
+            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                onResult(shortUrl)
+            }
+        }
+    }
+
+    /**
+     * Fetches a sync capsule from the cloud KV store and merges it.
+     */
+    fun resolveAndMergeShortInviteKey(shortKey: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val payload = runCatching {
+                val url = java.net.URL("https://bytebin.lucko.me/$shortKey")
+                url.readText()
+            }.getOrNull()
+            
+            if (!payload.isNullOrBlank()) {
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    importAndMergeGroupSyncPayload(payload, openGroupAfterMerge = true)
+                }
+            }
+        }
+    }
+
+    /**
      * Imports an `SM2_<base64url>` Sync Capsule (or full WhatsApp message / `splitmate://trip-sync` URI),
      * performs an idempotent CRDT-style union merge by primary keys (`groupId`, `memberId`, `expenseId`,
      * `splitId`, `settlementId`), and resolves the local user's perspective via 4-stage identity resolution.
      */
     fun importAndMergeGroupSyncPayload(
         rawPayloadOrMessage: String,
-        claimedMemberIdOverride: String? = null,
         openGroupAfterMerge: Boolean = true
     ): GroupSyncMergeResult {
         val token = extractSyncTokenFromRawInput(rawPayloadOrMessage)
@@ -1583,7 +2737,7 @@ class SplitMateViewModel(
             synchronized(pendingColdStartSyncRequests) {
                 if (!isRoomHydrated) {
                     pendingColdStartSyncRequests.add(
-                        Triple(rawPayloadOrMessage, claimedMemberIdOverride, openGroupAfterMerge)
+                        Pair(rawPayloadOrMessage, openGroupAfterMerge)
                     )
                     return GroupSyncMergeResult(
                         success = true,
@@ -1627,11 +2781,10 @@ class SplitMateViewModel(
         }
         val mergedMembersUnlocked = memberMap.values.toList()
 
-        // 2. 4-Stage Local Perspective Identity Resolution
+        // 2. Automatic Local Perspective Identity Resolution
         val resolvedPerspectiveMemberId = resolveLocalPerspectiveMemberId(
             mergedGroupMembers = mergedMembersUnlocked,
             existingLocalGroupMembers = existingGroupMembers,
-            claimedMemberIdOverride = claimedMemberIdOverride,
             state = state
         )
 
@@ -1750,37 +2903,32 @@ class SplitMateViewModel(
     }
 
     /**
-     * 4-Stage Identity Resolution for local perspective (`isCurrentUser`):
-     * 1. Explicit override (`claimedMemberIdOverride`) or existing local claim in this group
-     * 2. 10-digit Indian mobile number match
+     * Automatic Identity Resolution for local perspective (`isCurrentUser`):
+     * 1. Existing local claim in this group
+     * 2. 10-digit Indian mobile number match (`state.userPhone` + `userUpiId` extraction)
      * 3. Normalized UPI VPA match
      * 4. Local profile name / first-name match
      */
     fun resolveLocalPerspectiveMemberId(
         mergedGroupMembers: List<GroupMemberEntity>,
         existingLocalGroupMembers: List<GroupMemberEntity> = emptyList(),
-        claimedMemberIdOverride: String? = null,
         state: SplitMateUiState = _uiState.value
     ): String {
         if (mergedGroupMembers.isEmpty()) return ""
 
-        // Stage 1a: Explicit memberId override
-        if (!claimedMemberIdOverride.isNullOrBlank()) {
-            val explicitMatch = mergedGroupMembers.find { it.memberId == claimedMemberIdOverride }
-            if (explicitMatch != null) return explicitMatch.memberId
-        }
-
-        // Stage 1b: Existing local claim in this group on this device
+        // Stage 1: Existing local claim in this group on this device
         val existingLocalClaim = existingLocalGroupMembers.find { it.isCurrentUser }
         if (existingLocalClaim != null && mergedGroupMembers.any { it.memberId == existingLocalClaim.memberId }) {
             return existingLocalClaim.memberId
         }
 
-        // Collect local user's phone(s) and VPA(s) from userUpiId and other local groups' isCurrentUser records
+        // Collect local user's phone(s) and VPA(s) from userPhone, userUpiId and other local groups' isCurrentUser records
         val localRawTokens = buildList {
+            if (state.userPhone.isNotBlank()) add(state.userPhone)
             addAll(state.userUpiId.split("|").map { it.trim() }.filter { it.isNotEmpty() })
             state.members.filter { it.isCurrentUser && it.groupId != mergedGroupMembers.first().groupId }
                 .forEach { m ->
+                    if (m.userPhone.isNotBlank()) add(m.userPhone)
                     addAll(m.upiId.split("|").map { it.trim() }.filter { it.isNotEmpty() })
                 }
         }
@@ -1793,10 +2941,11 @@ class SplitMateViewModel(
         // Stage 2: 10-Digit Indian Phone Match
         if (localPhones.isNotEmpty()) {
             val phoneMatch = mergedGroupMembers.firstOrNull { m ->
-                m.upiId.split("|").any { part ->
-                    val memberPhone = cleanIndianTenDigitPhone(part.trim().substringBefore("@"))
-                    memberPhone.length == 10 && localPhones.contains(memberPhone)
+                val mPhones = buildList {
+                    if (m.userPhone.isNotBlank()) add(cleanIndianTenDigitPhone(m.userPhone))
+                    addAll(m.upiId.split("|").map { cleanIndianTenDigitPhone(it.trim().substringBefore("@")) })
                 }
+                mPhones.any { memberPhone -> memberPhone.length == 10 && localPhones.contains(memberPhone) }
             }
             if (phoneMatch != null) return phoneMatch.memberId
         }
@@ -1862,7 +3011,7 @@ class SplitMateViewModel(
     }
 
     private fun computeOverallUserBalanceCents(state: SplitMateUiState): Long {
-        return state.groups.sumOf { group ->
+        return state.activeJoinedGroups.sumOf { group ->
             val gMembers = state.members.filter { it.groupId == group.groupId }
             val gExpenses = state.expenses.filter { it.groupId == group.groupId }
             val gExpenseIds = gExpenses.map { it.expenseId }.toSet()

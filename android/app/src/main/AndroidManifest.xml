@@ -5,6 +5,7 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Android 11+ (API 30+) Package Visibility for Native 1-Tap UPI Deep-Linking Schemes -->
     <queries>
@@ -61,6 +62,26 @@
                 <data
                     android:scheme="splitmate"
                     android:host="trip-sync" />
+            </intent-filter>
+
+            <!-- Short Invite Links -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="splitmate"
+                    android:host="join" />
+            </intent-filter>
+            
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="akshaykaradkar.github.io"
+                    android:pathPrefix="/splitmate/join" />
             </intent-filter>
 
             <!-- System Share Sheet Receiver for WhatsApp Sync messages (SM2_... shared as text/plain),

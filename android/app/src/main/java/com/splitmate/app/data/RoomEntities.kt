@@ -27,6 +27,7 @@ data class ExpenseGroupEntity(
     val name: String,
     val currencyCode: String = "INR",
     val iconName: String = "Flight",
+    val isDemoSeed: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )
 
@@ -51,7 +52,9 @@ data class GroupMemberEntity(
     val name: String,
     val avatarSeed: String,
     val isCurrentUser: Boolean = false,
-    val upiId: String = ""
+    val upiId: String = "",
+    val userPhone: String = "",
+    val inviteStatus: String = "JOINED"
 ) {
     val diceBearSvgUrl: String
         get() = com.splitmate.app.ui.buildDiceBearOpenPeepsUrl(avatarSeed)
@@ -99,6 +102,10 @@ data class ExpenseEntity(
     val unassignedBaseCents: Long,
     val currencyCode: String,
     val lockedExchangeRate: Double,
+    val expenseCategory: String = "OTHER",
+    val travelPnr: String = "",
+    val providerName: String = "",
+    val scheduledAtEpochMs: Long? = null,
     val syncStatus: String = "SYNCED", // "PENDING" when created offline, "SYNCED" when online
     val createdAt: Long = System.currentTimeMillis()
 )
@@ -195,6 +202,9 @@ data class UserProfileEntity(
     val currencyCode: String,
     val currencySymbol: String,
     val upiId: String,
+    val userPhone: String = "",
+    val isPhoneVerified: Boolean = false,
+    val pinHash: String = "",
     val isDarkTheme: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )

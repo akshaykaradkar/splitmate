@@ -63,6 +63,44 @@ object PnrNetworkRepository {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?): Boolean = size > MAX_CACHE_ENTRIES
     }
 
+    fun exportAllFlightVaultJsonByPnr(context: Context): Map<String, String> {
+        val prefs = EncryptedPrefsProvider.getPnrVaultPrefs(context)
+        return prefs.all
+            .filterKeys { it.startsWith("flight_result_json_") }
+            .mapKeys { it.key.removePrefix("flight_result_json_") }
+            .mapValues { it.value.toString() }
+    }
+
+    fun importFlightVaultJsonByPnr(context: Context, map: Map<String, String>) {
+        if (map.isEmpty()) return
+        val prefs = EncryptedPrefsProvider.getPnrVaultPrefs(context)
+        val editor = prefs.edit()
+        map.forEach { (pnr, json) ->
+            editor.putString("flight_result_json_$pnr", json)
+            recordAndEvictLruIfNeeded(prefs, editor, pnr)
+        }
+        editor.apply()
+    }
+
+    fun exportAllTrainSnapshotJsonByPnr(context: Context): Map<String, String> {
+        val prefs = EncryptedPrefsProvider.getPnrVaultPrefs(context)
+        return prefs.all
+            .filterKeys { it.startsWith("snapshot_json_") }
+            .mapKeys { it.key.removePrefix("snapshot_json_") }
+            .mapValues { it.value.toString() }
+    }
+
+    fun importTrainSnapshotJsonByPnr(context: Context, map: Map<String, String>) {
+        if (map.isEmpty()) return
+        val prefs = EncryptedPrefsProvider.getPnrVaultPrefs(context)
+        val editor = prefs.edit()
+        map.forEach { (pnr, json) ->
+            editor.putString("snapshot_json_$pnr", json)
+            recordAndEvictLruIfNeeded(prefs, editor, pnr)
+        }
+        editor.apply()
+    }
+
     private const val MAX_VAULT_ENTRIES = 75
     private const val KEY_LRU_INDEX = "vault_pnr_lru_index"
 
@@ -133,10 +171,14 @@ object PnrNetworkRepository {
     fun isTicketAllConfirmed(ticket: ParsedTravelTicket): Boolean {
         val key = normalizePnrKey(ticket.pnr)
         if (key.length != 6 && key.length != 10) return false
+        if (ticket.trainOrFlightNo.isBlank() && ticket.fromStation.isBlank() && ticket.coachAndSeats.isBlank()) {
+            return false
+        }
         val badge = ticket.bookingStatus.trim().uppercase(Locale.US)
         val isCnf = badge.startsWith("CNF") || badge == "CONFIRMED" || (key.length == 6 && ticket.chartStatus.contains("Flight", ignoreCase = true))
         if (!isCnf) return false
         val seatsUpper = ticket.coachAndSeats.uppercase(Locale.US)
+        if (seatsUpper.isBlank() && key.length == 10) return false
         return !seatsUpper.contains("WL") && !seatsUpper.contains("RAC") && !seatsUpper.contains("WAITLIST")
     }
 
@@ -149,7 +191,7 @@ object PnrNetworkRepository {
         result: UniversalFlightTicketExtractor.UniversalFlightTicketResult
     ): LivePnrStatusSnapshot? {
         val cleanPnr = normalizePnrKey(result.pnr)
-        if (cleanPnr.length != 6 || !result.isValidFlightTicket) return null
+        if ((cleanPnr.length != 6 && cleanPnr.length != 10) || !result.isValidFlightTicket) return null
         synchronized(lruFlightResultCache) {
             lruFlightResultCache[cleanPnr] = result
         }
@@ -222,11 +264,11 @@ object PnrNetworkRepository {
         val snapshot = LivePnrStatusSnapshot(
             pnr = cleanPnr,
             trainNo = result.flightNumber,
-            trainName = result.airlineName.ifBlank { "Flight" },
+            trainName = result.airlineName.ifBlank { if (cleanPnr.length == 10) "IRCTC Express" else "Flight" },
             fromStation = result.originIata,
             toStation = result.destinationIata,
             departureTime = listOf(result.travelDate, result.departureTime).filter { it.isNotBlank() }.joinToString(" • "),
-            travelClass = listOf(result.cabinClass, result.fareType).filter { it.isNotBlank() }.joinToString(" • ").ifBlank { "Economy" },
+            travelClass = listOf(result.cabinClass, result.fareType).filter { it.isNotBlank() }.joinToString(" • ").ifBlank { if (cleanPnr.length == 10) "3A" else "Economy" },
             totalFareRupees = (result.totalFarePaise / 100L).toInt(),
             passengerCount = result.passengers.size.coerceAtLeast(1),
             bookingStatusBadge = "CNF (Confirmed)",
@@ -241,10 +283,10 @@ object PnrNetworkRepository {
             coachPositionHint = listOf(
                 if (result.cabinBaggage.isNotBlank()) "Cabin: ${result.cabinBaggage}" else "",
                 if (result.checkInBaggage.isNotBlank()) "Check-in: ${result.checkInBaggage}" else ""
-            ).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "Confirmed Flight Ticket · Offline Ready" },
+            ).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "Confirmed Ticket · Offline Ready" },
             liveTrainLocationRadar = "${result.airlineName} ${result.flightNumber} · ${result.originCity.ifBlank { result.originIata }} -> ${result.destinationCity.ifBlank { result.destinationIata }}",
             confirmationProbability = "100% Confirmed · Saved in Offline PNR Vault",
-            sourceLabel = "Confirmed Offline Vault (Flight PDF · 0 Internet Used)",
+            sourceLabel = "Confirmed Offline Vault (E-Ticket PDF · 0 Internet Used)",
             isLiveVerified = true,
             isManualEntry = false
         )
@@ -257,7 +299,7 @@ object PnrNetworkRepository {
         pnr: String
     ): UniversalFlightTicketExtractor.UniversalFlightTicketResult? {
         val cleanPnr = normalizePnrKey(pnr)
-        if (cleanPnr.length != 6) return null
+        if (cleanPnr.length != 6 && cleanPnr.length != 10) return null
         synchronized(lruFlightResultCache) {
             lruFlightResultCache[cleanPnr]?.let { return it }
         }

@@ -920,10 +920,11 @@ fun FlightExpenseReviewScreen(
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 playBoardingPassTearAndStampOneShot(isAudioSensoryEnabled)
                                 val parsedTicket = extractedTicket.toParsedTravelTicket().copy(
-                                    coachAndSeats = "${extractedTicket.cabinClass.ifBlank { "Economy" }} · ${selectedMemberIds.size} Pax"
+                                    coachAndSeats = "${extractedTicket.cabinClass.ifBlank { if (extractedTicket.isTrainPdfTicket) "3A" else "Economy" }} · ${selectedMemberIds.size} Pax"
                                 )
+                                val defaultVehicleWord = if (extractedTicket.isTrainPdfTicket) "Train" else "Flight"
                                 val formattedTitle = formatTravelExpenseTitle(
-                                    baseCategory = "${extractedTicket.airlineName.ifBlank { "Flight" }} ${extractedTicket.flightNumber} (${extractedTicket.originIata} → ${extractedTicket.destinationIata})",
+                                    baseCategory = "${extractedTicket.airlineName.ifBlank { defaultVehicleWord }} ${extractedTicket.flightNumber} (${extractedTicket.originIata} → ${extractedTicket.destinationIata})",
                                     ticket = parsedTicket
                                 )
                                 commitScope.launch {

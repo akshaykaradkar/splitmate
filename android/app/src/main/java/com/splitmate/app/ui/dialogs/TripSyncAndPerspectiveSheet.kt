@@ -239,12 +239,24 @@ fun TripSyncAndPerspectiveSheet(
     var manualPasteInput by remember { mutableStateOf("") }
     var feedbackBannerText by remember { mutableStateOf<String?>(null) }
     var isFeedbackError by remember { mutableStateOf(false) }
+    var shortInviteUrl by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(resolvedGroupId) {
+        viewModel.generateShortInviteLink(resolvedGroupId) { generatedUrl ->
+            shortInviteUrl = generatedUrl
+        }
+    }
 
     LaunchedEffect(resolvedGroupId, exportBundle?.syncToken) {
         runCatching {
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
             val clipText = clipboard?.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
-            val extracted = SplitMateViewModel.extractSyncTokenFromRawInput(clipText)
+            
+            // Try extracting SM2 code or short link g parameter
+            val urlRegex = Regex("""https://akshaykaradkar\.github\.io/splitmate/join\?g=([A-Za-z0-9_-]+)""")
+            val shortKeyMatch = urlRegex.find(clipText)?.groupValues?.getOrNull(1)
+            
+            val extracted = SplitMateViewModel.extractSyncTokenFromRawInput(clipText) ?: shortKeyMatch
             detectedClipboardCapsule = if (extracted != null && extracted != exportBundle?.syncToken) {
                 extracted
             } else {
@@ -367,203 +379,7 @@ fun TripSyncAndPerspectiveSheet(
             }
 
             // =========================================================================
-            // SECTION 1: 1-Tap Perspective Switcher ("Who are you in this trip?")
-            // =========================================================================
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = SplitMateTheme.SurfaceWhite,
-                border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.PersonPin,
-                            contentDescription = null,
-                            tint = SplitMateTheme.SageText,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text(
-                            text = "Who are you in this trip?",
-                            fontFamily = FigtreeFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = SplitMateTheme.PrimaryDark
-                        )
-                    }
-                    Text(
-                        text = "Tap your name to re-project all balances, train berths, and UPI settlement actions from your perspective.",
-                        fontFamily = FigtreeFontFamily,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 12.sp,
-                        color = SplitMateTheme.TextSecondary
-                    )
-
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        resolvedMembers.forEach { member ->
-                            val isMe = member.isCurrentUser
-                            val netCents = netBalancesMap[member.memberId] ?: 0L
-                            val formattedAbs = formatIndianRupeesFromCents(
-                                cents = abs(netCents),
-                                includePlusSign = false,
-                                currencySymbol = "₹"
-                            )
-                            val balanceLabel = when {
-                                netCents > 0L -> "+$formattedAbs"
-                                netCents < 0L -> "-$formattedAbs"
-                                else -> "Settled ₹0.00"
-                            }
-
-                            val rowBg = when {
-                                isMe && isDark -> Color(0xFF233216)
-                                isMe -> BuckwheatSageContainer.copy(alpha = 0.65f)
-                                else -> SplitMateTheme.SurfaceMuted
-                            }
-                            val rowBorder = when {
-                                isMe && isDark -> BuckwheatSageContainer
-                                isMe -> BuckwheatOlivePrimary
-                                else -> SplitMateTheme.BorderLight
-                            }
-                            val badgeBg = when {
-                                netCents > 0L && isDark -> Color(0xFF283A18)
-                                netCents > 0L -> BuckwheatSageContainer
-                                netCents < 0L && isDark -> Color(0xFF3A2019)
-                                netCents < 0L -> BuckwheatPeachContainer
-                                else -> SplitMateTheme.SurfaceWhite
-                            }
-                            val badgeText = when {
-                                netCents > 0L && isDark -> BuckwheatSageContainer
-                                netCents > 0L -> BuckwheatOlivePrimary
-                                netCents < 0L && isDark -> Color(0xFFFECDD3)
-                                netCents < 0L -> BuckwheatTerracottaDark
-                                else -> SplitMateTheme.TextSecondary
-                            }
-
-                            Surface(
-                                onClick = {
-                                    performCrispTactileHaptic(context, localView, heavy = false)
-                                    viewModel.claimGroupMemberPerspective(resolvedGroupId, member.memberId)
-                                    isFeedbackError = false
-                                    feedbackBannerText = "Switched perspective to ${member.name} (You)"
-                                },
-                                shape = RoundedCornerShape(14.dp),
-                                color = rowBg,
-                                border = BorderStroke(if (isMe) 1.5.dp else 1.dp, rowBorder),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .minimumInteractiveComponentSize()
-                                    .defaultMinSize(minHeight = 48.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(34.dp)
-                                                .clip(CircleShape)
-                                                .background(
-                                                    if (isMe) BuckwheatOlivePrimary else SplitMateTheme.SurfaceWhite
-                                                ),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = extractInitialsFromNameOrSeed(member.name),
-                                                fontFamily = FigtreeFontFamily,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                fontSize = 12.sp,
-                                                color = if (isMe) Color.White else SplitMateTheme.PrimaryDark
-                                            )
-                                        }
-                                        Column {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                            ) {
-                                                Text(
-                                                    text = member.name,
-                                                    fontFamily = FigtreeFontFamily,
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontSize = 14.sp,
-                                                    color = SplitMateTheme.PrimaryDark,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                                if (isMe) {
-                                                    Surface(
-                                                        shape = CircleShape,
-                                                        color = BuckwheatOlivePrimary
-                                                    ) {
-                                                        Text(
-                                                            text = "YOU",
-                                                            fontFamily = FigtreeFontFamily,
-                                                            fontWeight = FontWeight.ExtraBold,
-                                                            fontSize = 10.sp,
-                                                            color = Color.White,
-                                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                            if (member.upiId.isNotBlank()) {
-                                                Text(
-                                                    text = member.upiId.substringAfter("|", member.upiId),
-                                                    fontFamily = FigtreeFontFamily,
-                                                    fontWeight = FontWeight.Medium,
-                                                    fontSize = 11.sp,
-                                                    color = SplitMateTheme.TextSecondary,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = badgeBg,
-                                        border = BorderStroke(1.dp, badgeText.copy(alpha = 0.2f))
-                                    ) {
-                                        Text(
-                                            text = balanceLabel,
-                                            style = TextStyle(
-                                                fontFamily = SplitMateTnumMonospace,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 12.sp,
-                                                fontFeatureSettings = "tnum"
-                                            ),
-                                            color = badgeText,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // =========================================================================
-            // SECTION 2: 1-Tap WhatsApp Share & Copy Sync Capsule
+            // SECTION 1: Invite Friends to Trip
             // =========================================================================
             if (exportBundle != null) {
                 Surface(
@@ -589,7 +405,7 @@ fun TripSyncAndPerspectiveSheet(
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
-                                text = "Share Trip Sync Capsule",
+                                text = "Invite Friends to Trip",
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp,
@@ -620,7 +436,7 @@ fun TripSyncAndPerspectiveSheet(
                                     color = SplitMateTheme.PrimaryDark
                                 )
                                 Text(
-                                    text = exportBundle.deepLinkUri,
+                                    text = shortInviteUrl ?: "Generating secure short link...",
                                     style = TextStyle(
                                         fontFamily = SplitMateTnumMonospace,
                                         fontWeight = FontWeight.Medium,
@@ -638,12 +454,18 @@ fun TripSyncAndPerspectiveSheet(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
+                            val activeShareText = if (shortInviteUrl != null) {
+                                "Join my trip on SplitMate!\n$shortInviteUrl"
+                            } else {
+                                exportBundle.whatsappShareText
+                            }
+
                             Button(
                                 onClick = {
                                     performCrispTactileHaptic(context, localView, heavy = false)
                                     val whatsappIntent = Intent(Intent.ACTION_SEND).apply {
                                         type = "text/plain"
-                                        putExtra(Intent.EXTRA_TEXT, exportBundle.whatsappShareText)
+                                        putExtra(Intent.EXTRA_TEXT, activeShareText)
                                         setPackage("com.whatsapp")
                                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                     }
@@ -653,9 +475,9 @@ fun TripSyncAndPerspectiveSheet(
                                         val fallbackIntent = Intent.createChooser(
                                             Intent(Intent.ACTION_SEND).apply {
                                                 type = "text/plain"
-                                                putExtra(Intent.EXTRA_TEXT, exportBundle.whatsappShareText)
+                                                putExtra(Intent.EXTRA_TEXT, activeShareText)
                                             },
-                                            "Share SplitMate Trip Sync Capsule"
+                                            "Share SplitMate Trip Invite"
                                         ).apply {
                                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                         }
@@ -679,7 +501,7 @@ fun TripSyncAndPerspectiveSheet(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Share via WhatsApp",
+                                    text = "Share Invite Link",
                                     fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
@@ -692,10 +514,10 @@ fun TripSyncAndPerspectiveSheet(
                                     performCrispTactileHaptic(context, localView, heavy = false)
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                                     clipboard?.setPrimaryClip(
-                                        ClipData.newPlainText("SplitMate Trip Sync", exportBundle.whatsappShareText)
+                                        ClipData.newPlainText("SplitMate Trip Sync", activeShareText)
                                     )
                                     isFeedbackError = false
-                                    feedbackBannerText = "Copied trip sync capsule (${exportBundle.compressedBytesSize} bytes) to clipboard"
+                                    feedbackBannerText = "Copied invite link to clipboard"
                                 },
                                 shape = RoundedCornerShape(14.dp),
                                 border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
@@ -726,7 +548,7 @@ fun TripSyncAndPerspectiveSheet(
             }
 
             // =========================================================================
-            // SECTION 3: Auto-Detected Clipboard Capsule Banner & Manual Paste Merge
+            // SECTION 2: Auto-Detected Clipboard Capsule Banner & Manual Paste Merge
             // =========================================================================
             Surface(
                 shape = RoundedCornerShape(20.dp),
@@ -751,7 +573,7 @@ fun TripSyncAndPerspectiveSheet(
                             modifier = Modifier.size(18.dp)
                         )
                         Text(
-                            text = "Merge Incoming Trip Capsule",
+                            text = "Have an invite link or code? Paste here",
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
@@ -759,7 +581,7 @@ fun TripSyncAndPerspectiveSheet(
                         )
                     }
 
-                    // Auto-detected clipboard banner when a valid SM2_ token is on the clipboard
+                    // Auto-detected clipboard banner when a valid SM2_ token or short link is on the clipboard
                     val clipToken = detectedClipboardCapsule
                     if (!clipToken.isNullOrBlank()) {
                         Surface(
@@ -799,14 +621,21 @@ fun TripSyncAndPerspectiveSheet(
                                 Button(
                                     onClick = {
                                         performCrispTactileHaptic(context, localView, heavy = false)
-                                        val result = viewModel.importAndMergeGroupSyncPayload(
-                                            rawPayloadOrMessage = clipToken,
-                                            openGroupAfterMerge = true
-                                        )
-                                        isFeedbackError = !result.success
-                                        feedbackBannerText = result.message
-                                        if (result.success) {
+                                        if (!clipToken.startsWith("SM2_") && clipToken.length < 50) {
+                                            viewModel.resolveAndMergeShortInviteKey(clipToken)
+                                            isFeedbackError = false
+                                            feedbackBannerText = "Fetching invite link..."
                                             detectedClipboardCapsule = null
+                                        } else {
+                                            val result = viewModel.importAndMergeGroupSyncPayload(
+                                                rawPayloadOrMessage = clipToken,
+                                                openGroupAfterMerge = true
+                                            )
+                                            isFeedbackError = !result.success
+                                            feedbackBannerText = result.message
+                                            if (result.success) {
+                                                detectedClipboardCapsule = null
+                                            }
                                         }
                                     },
                                     shape = RoundedCornerShape(12.dp),
@@ -914,15 +743,28 @@ fun TripSyncAndPerspectiveSheet(
                         Button(
                             onClick = {
                                 performCrispTactileHaptic(context, localView, heavy = false)
-                                val result = viewModel.importAndMergeGroupSyncPayload(
-                                    rawPayloadOrMessage = manualPasteInput,
-                                    openGroupAfterMerge = true
-                                )
-                                isFeedbackError = !result.success
-                                feedbackBannerText = result.message
-                                if (result.success) {
+                                
+                                val urlRegex = Regex("""https://akshaykaradkar\.github\.io/splitmate/join\?g=([A-Za-z0-9_-]+)""")
+                                val shortKeyMatch = urlRegex.find(manualPasteInput)?.groupValues?.getOrNull(1)
+                                
+                                if (shortKeyMatch != null || (!manualPasteInput.startsWith("SM2_") && manualPasteInput.trim().length < 50)) {
+                                    val key = shortKeyMatch ?: manualPasteInput.trim()
+                                    viewModel.resolveAndMergeShortInviteKey(key)
+                                    isFeedbackError = false
+                                    feedbackBannerText = "Fetching invite link..."
                                     manualPasteInput = ""
                                     detectedClipboardCapsule = null
+                                } else {
+                                    val result = viewModel.importAndMergeGroupSyncPayload(
+                                        rawPayloadOrMessage = manualPasteInput,
+                                        openGroupAfterMerge = true
+                                    )
+                                    isFeedbackError = !result.success
+                                    feedbackBannerText = result.message
+                                    if (result.success) {
+                                        manualPasteInput = ""
+                                        detectedClipboardCapsule = null
+                                    }
                                 }
                             },
                             enabled = manualPasteInput.isNotBlank(),

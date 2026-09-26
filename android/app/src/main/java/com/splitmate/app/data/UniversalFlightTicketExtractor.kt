@@ -84,8 +84,11 @@ object UniversalFlightTicketExtractor {
         val paymentMethod: String,
         val extractionDurationMs: Long
     ) {
+        val isTrainPdfTicket: Boolean
+            get() = (pnr.length == 10 && pnr.all { it.isDigit() }) || airlineCode.equals("IRCTC", ignoreCase = true)
+
         val isValidFlightTicket: Boolean
-            get() = pnr.length == 6 && (flightNumber.isNotBlank() || originIata.isNotBlank() || destinationIata.isNotBlank())
+            get() = (pnr.length == 6 || isTrainPdfTicket) && (flightNumber.isNotBlank() || originIata.isNotBlank() || destinationIata.isNotBlank())
 
         val totalFareRupeesFormatted: String
             get() {
@@ -112,7 +115,7 @@ object UniversalFlightTicketExtractor {
                 departureTime = departureTime,
                 coachAndSeats = paxSummary.ifBlank { cabinClass },
                 bookingStatus = "CNF",
-                chartStatus = "Confirmed Flight",
+                chartStatus = if (isTrainPdfTicket) "Chart Prepared" else "Confirmed Flight",
                 liveTrainRadar = if (durationText.isNotBlank()) "Non-stop • $durationText" else "Scheduled",
                 fareRupees = totalFareRupeesFormatted,
                 cleanTitle = buildCleanExpenseTitle()
@@ -918,11 +921,37 @@ object UniversalFlightTicketExtractor {
             }
         }
 
+        val isIrctcTrainPdf = airlineCode.isBlank() && (
+            upperCompact.contains("IRCTC") ||
+                upperCompact.contains("INDIAN RAILWAYS") ||
+                upperCompact.contains("ELECTRONIC RESERVATION SLIP") ||
+                Regex("""\bPNR\s*(?:NO\.?|NUMBER)?\s*[:\-]?\s*\d{10}\b""").containsMatchIn(upperCompact)
+            )
+
+        if (isIrctcTrainPdf) {
+            airlineCode = "IRCTC"
+            val trainNameMatch = Regex("""(?:Train\s*No\.?\s*(?:&\s*Name|/Name)?\s*[:\-]?\s*)?(\d{5})\s*[/\-–]?\s*([A-Z][A-Za-z\s]{3,28}?(?:EXP|EXPRESS|RAJDHANI|SHATABDI|VANDE\s*BHARAT|DURONTO|SF|MAIL))""", RegexOption.IGNORE_CASE)
+                .find(compactText)
+            val fiveDigitNo = trainNameMatch?.groupValues?.getOrNull(1)
+                ?: Regex("""(?:Train\s*(?:No|Number|#)\s*[:\-]?\s*)(\d{5})\b""", RegexOption.IGNORE_CASE).find(compactText)?.groupValues?.getOrNull(1)
+                ?: Regex("""\b(1\d{4}|2\d{4}|0\d{4})\b""").find(compactText)?.groupValues?.getOrNull(1)
+                ?: ""
+            if (fiveDigitNo.isNotBlank()) {
+                detectedFlights.add(fiveDigitNo)
+            }
+            airlineName = trainNameMatch?.groupValues?.getOrNull(2)?.trim()?.takeIf { it.isNotBlank() } ?: "IRCTC Express"
+        }
+
         val primaryFlightNumber = detectedFlights.firstOrNull().orEmpty()
 
-        // --- PASS 3: OTA Booking ID & 6-Char Airline PNR Resolution ---
+        // --- PASS 3: OTA Booking ID & PNR Resolution (10-Digit IRCTC Train PNR or 6-Char Airline PNR) ---
         val otaBookingId = BookingIdRegex.find(flatText)?.groupValues?.get(1)?.trim().orEmpty()
-        val pnr = bcbpMatch?.groupValues?.get(2)?.trim()?.takeIf { it.length == 6 }
+        val tenDigitTrainPnr = if (isIrctcTrainPdf || airlineCode.isBlank()) {
+            Regex("""\bPNR\s*(?:No\.?|Number)?\s*[:\-]?\s*(\d{10})\b""", RegexOption.IGNORE_CASE).find(flatText)?.groupValues?.getOrNull(1)
+                ?: if (isIrctcTrainPdf) Regex("""\b([2468]\d{9})\b""").find(flatText)?.groupValues?.getOrNull(1) else null
+        } else null
+        val pnr = tenDigitTrainPnr
+            ?: bcbpMatch?.groupValues?.get(2)?.trim()?.takeIf { it.length == 6 }
             ?: extractBestSixCharPnr(flatText, normalizedLines, primaryFlightNumber.replace(" ", ""), otaBookingId)
 
         // --- PASS 4: Universal Route (Origin & Destination IATA + Cities + Via Airports) ---

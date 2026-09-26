@@ -5,7 +5,11 @@ import android.net.Uri
 import android.os.Build
 import android.provider.ContactsContract
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -29,8 +33,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -346,6 +352,305 @@ fun buildDiceBearOpenPeepsUrl(rawSeed: String, styleOverride: String? = null): S
     return "https://api.dicebear.com/9.x/open-peeps/svg?seed=${Uri.encode(seedBase)}&backgroundColor=d7e8b6,fed8c8,dce3fd$headParam"
 }
 
+// ==============================================================================
+// BLUSH OPEN-PEEPS & DICEBEAR AVATAR SYSTEM
+// ==============================================================================
+
+data class DiceBearStyleSpec(val id: String, val label: String, val subtitle: String)
+
+val SplitMateDiceBearStyles: List<DiceBearStyleSpec> = listOf(
+    DiceBearStyleSpec("open-peeps", "Open Peeps", "Hand-Drawn Ink"),
+    DiceBearStyleSpec("adventurer", "Adventurer", "Travel Crew"),
+    DiceBearStyleSpec("dylan", "Dylan", "Editorial Pop"),
+    DiceBearStyleSpec("micah", "Micah", "Warm Modern"),
+    DiceBearStyleSpec("lorelei", "Lorelei", "Expressive"),
+    DiceBearStyleSpec("notionists", "Notionists", "Minimalist"),
+    DiceBearStyleSpec("toon-head", "Toon Head", "2026 Cartoon")
+)
+
+data class AvatarColorPresetSpec(
+    val id: String, 
+    val label: String, 
+    val hexCsv: String, 
+    val primaryBgColor: Color, 
+    val accentRingColor: Color
+)
+
+val SplitMateAvatarColorPresets: List<AvatarColorPresetSpec> = listOf(
+    AvatarColorPresetSpec("Buckwheat", "Buckwheat", "d7e8b6,fed8c8,dce3fd,f4efe6,fde68a", Color(0xFFD7E8B6), Color(0xFF365314)),
+    AvatarColorPresetSpec("BoldPop", "BoldPop", "ffbe0b,fb5607,ff006e,8338ec,3a86ff", Color(0xFFFFBE0B), Color(0xFF8338EC)),
+    AvatarColorPresetSpec("Electric", "Electric", "00f5d4,00bbf9,fee440,f15bb5,9b5de5", Color(0xFF00F5D4), Color(0xFF9B5DE5)),
+    AvatarColorPresetSpec("Terracotta", "Terracotta", "fed8c8,fce3d7,ee8564,fde68a,f4efe6", Color(0xFFFED8C8), Color(0xFFEE8564)),
+    AvatarColorPresetSpec("Periwinkle", "Periwinkle", "dce3fd,eef2ff,c7d2fe,d7e8b6,f4efe6", Color(0xFFDCE3FD), Color(0xFFC7D2FE))
+)
+
+fun buildDiceBearAvatarUrl(
+    name: String, 
+    phone: String = "", 
+    styleId: String = "open-peeps", 
+    colorPresetId: String = "Buckwheat", 
+    flip: Boolean = false
+): String {
+    val tokens = name.split("|").map { it.trim() }.filter { it.isNotEmpty() }
+    val validStyleIds = SplitMateDiceBearStyles.map { it.id }.toSet()
+    val validPresetIds = SplitMateAvatarColorPresets.map { it.id }.toSet()
+    val effectiveStyleId = tokens.firstOrNull { validStyleIds.contains(it) } ?: styleId
+    val effectivePresetId = tokens.firstOrNull { validPresetIds.contains(it) } ?: colorPresetId
+    val baseName = tokens.firstOrNull { !validStyleIds.contains(it) && !validPresetIds.contains(it) && it != "Neutral" && it != "Feminine" && it != "Masculine" }
+        ?: name.trim().ifEmpty { "Explorer" }
+    val cleanPhone10 = phone.filter { it.isDigit() }.takeLast(10)
+    val seed = if (cleanPhone10.length == 10) "${baseName}_$cleanPhone10" else baseName
+    val preset = SplitMateAvatarColorPresets.find { it.id == effectivePresetId } ?: SplitMateAvatarColorPresets.first()
+    val flipParam = if (flip) "&flip=true" else ""
+    return "https://api.dicebear.com/9.x/$effectiveStyleId/svg?seed=${Uri.encode(seed)}&backgroundColor=${preset.hexCsv}&backgroundType=gradientLinear&radius=50$flipParam"
+}
+
+// Preserve existing fallback and automatically decode composite styleId|colorPresetId seeds
+fun buildOpenPeepsAvatarSvgUrl(seed: String): String {
+    return buildDiceBearAvatarUrl(name = seed, styleId = "open-peeps", colorPresetId = "Buckwheat")
+}
+
+@Composable
+fun SplitMateCharacterAvatar(
+    name: String,
+    phone: String = "",
+    size: androidx.compose.ui.unit.Dp = 48.dp,
+    styleId: String = "open-peeps",
+    colorPresetId: String = "Buckwheat",
+    highlighted: Boolean = false,
+    flip: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val preset = SplitMateAvatarColorPresets.find { it.id == colorPresetId } ?: SplitMateAvatarColorPresets.first()
+    val url = buildDiceBearAvatarUrl(name, phone, styleId, colorPresetId, flip)
+    
+    val ringColor = if (highlighted) preset.accentRingColor else SplitMateTheme.BorderLight
+    val ringWidth = if (highlighted) 3.dp else 1.dp
+    
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(preset.primaryBgColor)
+            .border(ringWidth, ringColor, CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        coil.compose.AsyncImage(
+            model = coil.request.ImageRequest.Builder(LocalContext.current)
+                .data(url)
+                .decoderFactory(coil.decode.SvgDecoder.Factory())
+                .crossfade(true)
+                .build(),
+            contentDescription = "Avatar for $name",
+            modifier = Modifier.fillMaxSize()
+        )
+    }
+}
+
+@Composable
+fun OpenPeepsHeroStage(
+    name: String,
+    phone: String,
+    selectedStyleId: String,
+    selectedColorPresetId: String,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition(label = "hero_breathing")
+    val breatheY1 by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = -8f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = androidx.compose.animation.core.tween(2000, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "breathe_1"
+    )
+    val breatheY2 by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = -12f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = androidx.compose.animation.core.tween(2200, easing = androidx.compose.animation.core.FastOutSlowInEasing, delayMillis = 300),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "breathe_2"
+    )
+    val breatheY3 by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = -10f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = androidx.compose.animation.core.tween(2400, easing = androidx.compose.animation.core.FastOutSlowInEasing, delayMillis = 600),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "breathe_3"
+    )
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(260.dp),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        // Layer 1: Organic Buckwheat radial blob backdrop + floor shadow
+        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            
+            // Floor shadow ellipse
+            drawOval(
+                color = Color(0xFFEDE7DF),
+                topLeft = androidx.compose.ui.geometry.Offset(w * 0.1f, h * 0.85f),
+                size = androidx.compose.ui.geometry.Size(w * 0.8f, h * 0.15f)
+            )
+
+            // Organic Blobs
+            val pathSage = androidx.compose.ui.graphics.Path().apply {
+                moveTo(w * 0.2f, h * 0.8f)
+                quadraticBezierTo(w * 0.1f, h * 0.4f, w * 0.3f, h * 0.2f)
+                quadraticBezierTo(w * 0.5f, h * 0.1f, w * 0.4f, h * 0.8f)
+                close()
+            }
+            drawPath(pathSage, Color(0xFFD7E8B6).copy(alpha = 0.6f))
+            
+            val pathPeach = androidx.compose.ui.graphics.Path().apply {
+                moveTo(w * 0.5f, h * 0.9f)
+                quadraticBezierTo(w * 0.8f, h * 0.3f, w * 0.7f, h * 0.15f)
+                quadraticBezierTo(w * 0.9f, h * 0.5f, w * 0.8f, h * 0.85f)
+                close()
+            }
+            drawPath(pathPeach, Color(0xFFFED8C8).copy(alpha = 0.6f))
+
+            drawCircle(
+                color = Color(0xFFDCE3FD).copy(alpha = 0.5f),
+                radius = w * 0.15f,
+                center = androidx.compose.ui.geometry.Offset(w * 0.5f, h * 0.5f)
+            )
+        }
+
+        // Layer 2 & 3: The 4 flanking full-body Open-Peeps + Center Hero
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy((-18).dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.Bottom
+        ) {
+            // Far Left: Standing 4
+            coil.compose.AsyncImage(
+                model = coil.request.ImageRequest.Builder(LocalContext.current)
+                    .data("file:///android_asset/peeps/peep_standing_4.svg")
+                    .decoderFactory(coil.decode.SvgDecoder.Factory())
+                    .build(),
+                contentDescription = null,
+                modifier = Modifier
+                    .width(60.dp)
+                    .height(140.dp)
+                    .graphicsLayer { translationY = breatheY1 }
+            )
+            // Mid Left: Sitting 2
+            coil.compose.AsyncImage(
+                model = coil.request.ImageRequest.Builder(LocalContext.current)
+                    .data("file:///android_asset/peeps/peep_sitting_2.svg")
+                    .decoderFactory(coil.decode.SvgDecoder.Factory())
+                    .build(),
+                contentDescription = null,
+                modifier = Modifier
+                    .width(70.dp)
+                    .height(160.dp)
+                    .graphicsLayer { translationY = breatheY2 }
+            )
+            
+            // Layer 3: Center Hero
+            Box(
+                modifier = Modifier
+                    .width(100.dp)
+                    .height(200.dp)
+                    .graphicsLayer { translationY = breatheY3 }
+                    .zIndex(3f),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                // Sitting 14 body
+                coil.compose.AsyncImage(
+                    model = coil.request.ImageRequest.Builder(LocalContext.current)
+                        .data("file:///android_asset/peeps/peep_sitting_14.svg")
+                        .decoderFactory(coil.decode.SvgDecoder.Factory())
+                        .build(),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = 40.dp)
+                )
+                // Live Reacting Avatar Head
+                SplitMateCharacterAvatar(
+                    name = name,
+                    phone = phone,
+                    size = 86.dp,
+                    styleId = selectedStyleId,
+                    colorPresetId = selectedColorPresetId,
+                    highlighted = true,
+                    modifier = Modifier.offset(y = (-10).dp)
+                )
+                
+                // "YOU" Badge
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF365314),
+                    modifier = Modifier.align(Alignment.BottomCenter).offset(y = 10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.VerifiedUser,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Text(
+                            text = "YOU",
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            // Mid Right: Sitting 10 (Flipped)
+            coil.compose.AsyncImage(
+                model = coil.request.ImageRequest.Builder(LocalContext.current)
+                    .data("file:///android_asset/peeps/peep_sitting_10.svg")
+                    .decoderFactory(coil.decode.SvgDecoder.Factory())
+                    .build(),
+                contentDescription = null,
+                modifier = Modifier
+                    .width(70.dp)
+                    .height(160.dp)
+                    .graphicsLayer { 
+                        scaleX = -1f 
+                        translationY = breatheY2
+                    }
+            )
+            // Far Right: Standing 8 (Flipped)
+            coil.compose.AsyncImage(
+                model = coil.request.ImageRequest.Builder(LocalContext.current)
+                    .data("file:///android_asset/peeps/peep_standing_8.svg")
+                    .decoderFactory(coil.decode.SvgDecoder.Factory())
+                    .build(),
+                contentDescription = null,
+                modifier = Modifier
+                    .width(60.dp)
+                    .height(140.dp)
+                    .graphicsLayer { 
+                        scaleX = -1f 
+                        translationY = breatheY1
+                    }
+            )
+        }
+    }
+}
+
 /**
  * 8 Expressive Material 3 Category Icons for Group Creation & Group Cards.
  */
@@ -410,6 +715,11 @@ fun cleanIndianTenDigitPhone(rawNumber: String): String {
         digitsOnly.length > 10 -> digitsOnly.takeLast(10)
         else -> digitsOnly
     }
+}
+
+fun normalizeValidatedPhone10(raw: String): String {
+    val clean = cleanIndianTenDigitPhone(raw)
+    return if (clean.length < 10) "" else clean.takeLast(10)
 }
 
 fun formatTenDigitIndianPhone(cleanPhone: String): String {
@@ -853,16 +1163,20 @@ fun isFlightTicketExpense(
     parsedTicket: ParsedTravelTicket? = extractTravelTicketFromTitle(title)
 ): Boolean {
     val cleanPnr = parsedTicket?.pnr?.trim().orEmpty()
-    if (cleanPnr.length == 6 && cleanPnr.all { it.isLetterOrDigit() }) {
-        return true
-    }
-    if (cleanPnr.length == 10 && cleanPnr.all { it.isDigit() }) {
+    if ((cleanPnr.length == 10 && cleanPnr.all { it.isDigit() }) ||
+        Regex("""\b\d{10}\b""").containsMatchIn(title) ||
+        Regex("""\b(train|irctc|express|rajdhani|shatabdi|vande|duronto|sleeper|berth|3a|2a|1a|3e)\b""", RegexOption.IGNORE_CASE).containsMatchIn(title) ||
+        Regex("""^\d{5}\b""").containsMatchIn(parsedTicket?.trainOrFlightNo?.trim().orEmpty())
+    ) {
         return false
     }
-    val lower = title.lowercase()
+    if (cleanPnr.length == 6 && cleanPnr.all { it.isLetterOrDigit() } && cleanPnr.any { it.isLetter() }) {
+        return true
+    }
+    val lower = title.replace(Regex("""train/flight|flight/train""", RegexOption.IGNORE_CASE), "train").lowercase()
     return lower.contains("flight") || lower.contains("airfare") || lower.contains("indigo") ||
         lower.contains("air india") || lower.contains("akasa") || lower.contains("spicejet") ||
-        lower.contains("vistara") || lower.contains("airport") || lower.contains("boarding") ||
+        lower.contains("vistara") || lower.contains("airport") ||
         Regex("""\b(6e|ai|ix|qp|sg|uk)[\s\-]?\d{2,4}\b""", RegexOption.IGNORE_CASE).containsMatchIn(title)
 }
 

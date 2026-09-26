@@ -60,26 +60,38 @@ class MainActivity : ComponentActivity() {
         when (incomingIntent.action) {
             Intent.ACTION_VIEW -> {
                 val dataUri = incomingIntent.data ?: return
-                if (dataUri.scheme.equals("splitmate", ignoreCase = true) &&
-                    dataUri.host.equals("trip-sync", ignoreCase = true)
-                ) {
+                val isTripSync = dataUri.scheme.equals("splitmate", ignoreCase = true) && dataUri.host.equals("trip-sync", ignoreCase = true)
+                val isJoinApp = dataUri.scheme.equals("splitmate", ignoreCase = true) && dataUri.host.equals("join", ignoreCase = true)
+                val isJoinWeb = dataUri.scheme.equals("https", ignoreCase = true) && dataUri.host.equals("akshaykaradkar.github.io", ignoreCase = true) && dataUri.path?.startsWith("/splitmate/join") == true
+                
+                if (isTripSync) {
                     val rawPayload = dataUri.getQueryParameter("payload")?.takeIf { it.isNotBlank() }
                         ?: dataUri.toString()
-                    val claimParam = dataUri.getQueryParameter("claim")?.takeIf { it.isNotBlank() }
                     if (SplitMateViewModel.extractSyncTokenFromRawInput(rawPayload) != null) {
                         incomingIntent.putExtra("com.splitmate.SYNC_CONSUMED", true)
                         splitMateViewModel.importAndMergeGroupSyncPayload(
                             rawPayloadOrMessage = rawPayload,
-                            claimedMemberIdOverride = claimParam,
                             openGroupAfterMerge = true
                         )
+                    }
+                } else if (isJoinApp || isJoinWeb) {
+                    val shortKey = dataUri.getQueryParameter("g")
+                    if (!shortKey.isNullOrBlank()) {
+                        incomingIntent.putExtra("com.splitmate.SYNC_CONSUMED", true)
+                        splitMateViewModel.resolveAndMergeShortInviteKey(shortKey)
                     }
                 }
             }
             Intent.ACTION_SEND -> {
                 if (incomingIntent.type?.startsWith("text/plain", ignoreCase = true) == true) {
                     val sharedText = incomingIntent.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
-                    if (SplitMateViewModel.extractSyncTokenFromRawInput(sharedText) != null) {
+                    
+                    // Support pasting full short links directly via ACTION_SEND
+                    val gParam = extractShortKeyFromUrl(sharedText)
+                    if (gParam != null) {
+                        incomingIntent.putExtra("com.splitmate.SYNC_CONSUMED", true)
+                        splitMateViewModel.resolveAndMergeShortInviteKey(gParam)
+                    } else if (SplitMateViewModel.extractSyncTokenFromRawInput(sharedText) != null) {
                         incomingIntent.putExtra("com.splitmate.SYNC_CONSUMED", true)
                         splitMateViewModel.importAndMergeGroupSyncPayload(
                             rawPayloadOrMessage = sharedText,
@@ -89,5 +101,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+    
+    private fun extractShortKeyFromUrl(text: String): String? {
+        val urlRegex = Regex("""https://akshaykaradkar\.github\.io/splitmate/join\?g=([A-Za-z0-9_-]+)""")
+        return urlRegex.find(text)?.groupValues?.getOrNull(1)
     }
 }

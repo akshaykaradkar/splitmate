@@ -56,6 +56,7 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.PersonPin
+import androidx.compose.material.icons.rounded.PersonRemove
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
@@ -97,16 +98,23 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import android.content.Context
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
+import coil.decode.SvgDecoder
+import coil.request.ImageRequest
 import com.splitmate.app.SplitMateMathEngine
 import com.splitmate.app.SplitMateTheme
 import com.splitmate.app.data.ExpenseEntity
@@ -125,12 +133,12 @@ import com.splitmate.app.ui.ParsedTravelTicket
 import com.splitmate.app.ui.SettlementTransferUiModel
 import com.splitmate.app.ui.SplitMateTnumMonospace
 import com.splitmate.app.ui.SplitMateViewModel
+import com.splitmate.app.ui.buildDiceBearOpenPeepsUrl
 import com.splitmate.app.ui.cleanDisplayExpenseTitle
 import com.splitmate.app.ui.cleanIndianTenDigitPhone
 import com.splitmate.app.ui.components.ActiveTravelPassMode
 import com.splitmate.app.ui.components.AnimatedTransitDeckHeroCard
 import com.splitmate.app.ui.components.UpiExpressPaymentSheet
-import com.splitmate.app.ui.dialogs.PerspectiveAndSyncHeaderPill
 import com.splitmate.app.ui.dialogs.TripSyncAndPerspectiveSheet
 import com.splitmate.app.ui.extractInitialsFromNameOrSeed
 import com.splitmate.app.ui.extractTravelTicketFromTitle
@@ -141,6 +149,7 @@ import com.splitmate.app.ui.performCrispTactileHaptic
 import com.splitmate.app.ui.resolveStationDisplayName
 import com.splitmate.app.ui.toSmartTitleCase
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
@@ -203,27 +212,53 @@ fun SplitMateViewModel.recordSettlement(
 /**
  * Deterministic Room-to-Card Classifier (`classifyGroupExpenseForTripHub`):
  * Maps any real [ExpenseEntity] logged in Room to its canonical Stitch v2.0 card archetype.
+ * Strictly checks `TRAIN` before `FLIGHT` so 10-digit PNRs, 5-digit train numbers, `"Train/Flight"`
+ * prefixes, and train E-Ticket PDFs without an airline/flight number are never misclassified as Flights.
  */
 fun classifyGroupExpenseForTripHub(expense: ExpenseEntity): TripHubBookingCategory {
+    when (expense.expenseCategory.trim().uppercase(Locale.US)) {
+        "TRAIN" -> return TripHubBookingCategory.TRAIN
+        "FLIGHT" -> return TripHubBookingCategory.FLIGHT
+        "STAY", "HOTEL" -> return TripHubBookingCategory.STAY
+        "RENTAL" -> return TripHubBookingCategory.RENTAL
+        "CAB" -> return TripHubBookingCategory.CAB
+        "FOOD", "DINING", "GROCERIES", "SHOPPING", "GENERAL" -> return TripHubBookingCategory.GENERAL
+    }
     val rawTitle = expense.title.trim()
-    val lower = rawTitle.lowercase(Locale.US)
+    val lower = rawTitle.replace(Regex("""train/flight|flight/train""", RegexOption.IGNORE_CASE), "train").lowercase(Locale.US)
     val parsedTicket = extractTravelTicketFromTitle(rawTitle)
 
-    // 1. Flight check (6-char alphanumeric PNR or airline keywords)
+    // 1. Train check FIRST (10-digit numeric PNR, 5-digit train number, Indian Railways keywords,
+    // or a PDF ticket saved with generic "Flight (" prefix but zero airline name and zero flight number)
+    val hasTenDigitPnr = Regex("""\b\d{10}\b""").containsMatchIn(rawTitle) ||
+        (parsedTicket?.pnr?.length == 10 && parsedTicket.pnr.all { it.isDigit() })
+    val hasFiveDigitTrainNo = Regex("""^\d{5}\b""").containsMatchIn(parsedTicket?.trainOrFlightNo?.trim().orEmpty()) ||
+        Regex("""\btrain\s+\d{5}\b""").containsMatchIn(lower)
+    val hasExplicitAirlineOrFlightNo = Regex("""\b(indigo|air india|akasa|spicejet|vistara|airasia|alliance air|star air|fly91|emirates|qatar|lufthansa)\b""").containsMatchIn(lower) ||
+        Regex("""\b(6e|ai|ix|qp|sg|uk|i5|9i|s5)[\s\-]?\d{2,4}\b""").containsMatchIn(lower)
+    val isTrainPdfMislabelledAsFlight = rawTitle.startsWith("Flight", ignoreCase = true) &&
+        parsedTicket?.trainOrFlightNo.isNullOrBlank() &&
+        !hasExplicitAirlineOrFlightNo &&
+        (rawTitle.startsWith("Flight  (") || rawTitle.startsWith("Flight ("))
+
+    if (hasTenDigitPnr ||
+        hasFiveDigitTrainNo ||
+        isTrainPdfMislabelledAsFlight ||
+        Regex("""\b(train|irctc|express|shatabdi|rajdhani|vande bharat|vande|duronto|sleeper|berth|coach|3a|2a|1a|3e|2s)\b""").containsMatchIn(lower)
+    ) {
+        return TripHubBookingCategory.TRAIN
+    }
+
+    // 2. Flight check SECOND (6-char alphanumeric PNR with explicit airline/flight indicators)
     if (isFlightTicketExpense(rawTitle, parsedTicket) ||
-        Regex("""\b(flight|indigo|air india|akasa|spicejet|vistara|boarding pass)\b""").containsMatchIn(lower) ||
-        Regex("""\b(6e|ai|qp|sg|uk)-\d{2,4}\b""").containsMatchIn(lower)
+        hasExplicitAirlineOrFlightNo ||
+        Regex("""\b(flight|airfare|boarding pass)\b""").containsMatchIn(lower)
     ) {
         return TripHubBookingCategory.FLIGHT
     }
 
-    // 2. Train check (10-digit numeric PNR or Indian Railways keywords)
-    val hasTenDigitPnr = Regex("""\b\d{10}\b""").containsMatchIn(rawTitle) ||
-        (parsedTicket?.pnr?.length == 10 && parsedTicket.pnr.all { it.isDigit() })
-    if (hasTenDigitPnr ||
-        (parsedTicket != null && parsedTicket.hasTicketMetadata) ||
-        Regex("""\b(train|irctc|pnr|express|shatabdi|rajdhani|vande bharat|sleeper|3a|2a|1a)\b""").containsMatchIn(lower)
-    ) {
+    // Fallback travel ticket metadata defaults to TRAIN
+    if (parsedTicket != null && parsedTicket.hasTicketMetadata) {
         return TripHubBookingCategory.TRAIN
     }
 
@@ -244,6 +279,242 @@ fun classifyGroupExpenseForTripHub(expense: ExpenseEntity): TripHubBookingCatego
 
     // 6. General Shared Expense
     return TripHubBookingCategory.GENERAL
+}
+
+data class ResolvedExpenseSchedule(
+    val effectiveEpochMs: Long,
+    val shortDateLabel: String,
+    val fullDateLabel: String,
+    val timeLabel: String,
+    val hasExplicitTicketDate: Boolean
+)
+
+private val TicketDateParsePatterns = listOf(
+    "dd MMM yyyy",
+    "d MMM yyyy",
+    "dd MMMM yyyy",
+    "d MMMM yyyy",
+    "yyyy-MM-dd",
+    "dd-MM-yyyy",
+    "dd/MM/yyyy",
+    "dd-MMM-yyyy",
+    "dd-MMM-yy",
+    "MMM dd, yyyy",
+    "MMM d, yyyy",
+    "dd MMM yy"
+)
+
+private val TicketShortDateNoYearPatterns = listOf(
+    "dd MMM",
+    "d MMM",
+    "dd MMMM",
+    "d MMMM",
+    "MMM dd",
+    "MMM d"
+)
+
+/**
+ * Resolves the actual travel/departure date & time from a Train PNR or Flight Boarding Pass PDF
+ * (via `PnrNetworkRepository` vault or `ParsedTravelTicket` title metadata), falling back to
+ * `expense.createdAtEpochMs` only for general expenses that have no travel date.
+ */
+fun resolveExpenseSchedule(
+    context: Context?,
+    expense: ExpenseEntity
+): ResolvedExpenseSchedule {
+    val explicitEpoch = expense.scheduledAtEpochMs
+    if (explicitEpoch != null && explicitEpoch > 0L) {
+        val dateObj = Date(explicitEpoch)
+        val shortDate = SimpleDateFormat("dd MMM", Locale.US).format(dateObj)
+        val fullDate = SimpleDateFormat("dd MMM yyyy", Locale.US).format(dateObj)
+        val timeStr = SimpleDateFormat("hh:mm a", Locale.US).format(dateObj)
+        return ResolvedExpenseSchedule(
+            effectiveEpochMs = explicitEpoch,
+            shortDateLabel = shortDate,
+            fullDateLabel = fullDate,
+            timeLabel = timeStr,
+            hasExplicitTicketDate = true
+        )
+    }
+
+    val parsedTicket = extractTravelTicketFromTitle(expense.title)
+    val pnrCandidate = expense.travelPnr?.trim()?.takeIf { it.isNotBlank() }
+        ?: parsedTicket?.pnr?.trim()?.takeIf { it.isNotBlank() }
+        ?: Regex("""\b(\d{10})\b""").find(expense.title)?.groupValues?.getOrNull(1)
+        ?: PnrNetworkRepository.normalizePnrKey(expense.title).takeIf { it.length == 6 || it.length == 10 }
+        ?: ""
+
+    val flightVault = if (context != null && (pnrCandidate.length == 6 || pnrCandidate.length == 10)) {
+        PnrNetworkRepository.loadConfirmedFlightTicketResult(context, pnrCandidate)
+    } else null
+
+    val pnrSnapshot = if (context != null && (pnrCandidate.length == 6 || pnrCandidate.length == 10)) {
+        loadPersistedPnrSnapshot(context, pnrCandidate)
+    } else null
+
+    val candidateDateTimeStrings = listOfNotNull(
+        flightVault?.let { listOf(it.travelDate, it.departureTime).filter { s -> s.isNotBlank() }.joinToString(" ") }?.takeIf { it.isNotBlank() },
+        pnrSnapshot?.departureTime?.takeIf { it.isNotBlank() },
+        parsedTicket?.departureInfo?.takeIf { it.isNotBlank() },
+        parsedTicket?.departureDate?.takeIf { it.isNotBlank() },
+        parsedTicket?.departureTime?.takeIf { it.isNotBlank() }
+    )
+
+    val fallbackCal = Calendar.getInstance().apply { timeInMillis = expense.createdAtEpochMs }
+    val fallbackYear = fallbackCal.get(Calendar.YEAR)
+
+    var parsedDateMillis: Long? = null
+    var parsedTimeHourMin: Pair<Int, Int>? = null
+    var formattedTicketTime: String? = null
+
+    for (rawCandidate in candidateDateTimeStrings) {
+        val cleaned = rawCandidate
+            .replace("•", " ")
+            .replace(Regex("""^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,?\s+""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*\b""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+
+        // Extract time if present
+        if (parsedTimeHourMin == null) {
+            val m12 = Regex("""\b(0?[1-9]|1[0-2]):([0-5]\d)\s*(AM|PM)\b""", RegexOption.IGNORE_CASE).find(cleaned)
+            val m24 = Regex("""\b([01]?\d|2[0-3]):([0-5]\d)(?:\s*hrs)?\b""", RegexOption.IGNORE_CASE).find(cleaned)
+            if (m12 != null) {
+                val h12 = m12.groupValues[1].toIntOrNull() ?: 0
+                val min = m12.groupValues[2].toIntOrNull() ?: 0
+                val ampm = m12.groupValues[3].uppercase(Locale.US)
+                val h24 = when {
+                    ampm == "PM" && h12 < 12 -> h12 + 12
+                    ampm == "AM" && h12 == 12 -> 0
+                    else -> h12
+                }
+                parsedTimeHourMin = h24 to min
+                formattedTicketTime = String.format(Locale.US, "%02d:%02d %s", h12, min, ampm)
+            } else if (m24 != null) {
+                val h24 = m24.groupValues[1].toIntOrNull() ?: 0
+                val min = m24.groupValues[2].toIntOrNull() ?: 0
+                parsedTimeHourMin = h24 to min
+                val calTmp = Calendar.getInstance().apply {
+                    set(Calendar.HOUR_OF_DAY, h24)
+                    set(Calendar.MINUTE, min)
+                }
+                formattedTicketTime = SimpleDateFormat("hh:mm a", Locale.US).format(calTmp.time)
+            }
+        }
+
+        // Extract date substring by stripping time tokens
+        if (parsedDateMillis == null) {
+            val dateOnly = cleaned
+                .replace(Regex("""\b(0?[1-9]|1[0-2]):([0-5]\d)\s*(AM|PM)\b""", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("""\b([01]?\d|2[0-3]):([0-5]\d)(?:\s*hrs)?\b""", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("""^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,?\s+""", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("""\s+"""), " ")
+                .trim()
+                .trim(',', '-', '•')
+                .trim()
+
+            if (dateOnly.isNotBlank()) {
+                for (pattern in TicketDateParsePatterns) {
+                    val parsed = runCatching {
+                        SimpleDateFormat(pattern, Locale.US).apply { isLenient = false }.parse(dateOnly)
+                    }.getOrNull()
+                    if (parsed != null) {
+                        parsedDateMillis = parsed.time
+                        break
+                    }
+                }
+                if (parsedDateMillis == null) {
+                    for (shortPattern in TicketShortDateNoYearPatterns) {
+                        val parsed = runCatching {
+                            SimpleDateFormat(shortPattern, Locale.US).apply { isLenient = false }.parse(dateOnly)
+                        }.getOrNull()
+                        if (parsed != null) {
+                            val c = Calendar.getInstance().apply {
+                                time = parsed
+                                set(Calendar.YEAR, fallbackYear)
+                            }
+                            parsedDateMillis = c.timeInMillis
+                            break
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    val effectiveEpoch = if (parsedDateMillis != null) {
+        val cal = Calendar.getInstance().apply {
+            timeInMillis = parsedDateMillis
+            if (parsedTimeHourMin != null) {
+                set(Calendar.HOUR_OF_DAY, parsedTimeHourMin.first)
+                set(Calendar.MINUTE, parsedTimeHourMin.second)
+                set(Calendar.SECOND, 0)
+            } else {
+                set(Calendar.HOUR_OF_DAY, 12)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+            }
+        }
+        cal.timeInMillis
+    } else {
+        expense.createdAtEpochMs
+    }
+
+    val effectiveDate = Date(effectiveEpoch)
+    val shortStr = SimpleDateFormat("dd MMM", Locale.US).format(effectiveDate)
+    val fullStr = SimpleDateFormat("dd MMM yyyy", Locale.US).format(effectiveDate)
+    val timeStr = formattedTicketTime ?: SimpleDateFormat("hh:mm a", Locale.US).format(effectiveDate)
+
+    return ResolvedExpenseSchedule(
+        effectiveEpochMs = effectiveEpoch,
+        shortDateLabel = shortStr,
+        fullDateLabel = fullStr,
+        timeLabel = timeStr,
+        hasExplicitTicketDate = parsedDateMillis != null
+    )
+}
+
+@Composable
+fun TripHubMemberAvatar(
+    seedOrName: String,
+    fallbackName: String = seedOrName,
+    size: Dp = 42.dp,
+    backgroundColor: Color,
+    textColor: Color,
+    fontSize: TextUnit = 14.sp
+) {
+    val context = LocalContext.current
+    val effectiveSeed = seedOrName.ifBlank { fallbackName }
+    val svgUrl = remember(effectiveSeed) { buildDiceBearOpenPeepsUrl(effectiveSeed) }
+    val initials = remember(fallbackName) { extractInitialsFromNameOrSeed(fallbackName) }
+
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(backgroundColor),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = initials,
+            fontFamily = FigtreeFontFamily,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = fontSize,
+            color = textColor
+        )
+        AsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(svgUrl)
+                .decoderFactory(SvgDecoder.Factory())
+                .crossfade(true)
+                .build(),
+            contentDescription = fallbackName,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(CircleShape)
+        )
+    }
 }
 
 // ==============================================================================
@@ -429,10 +700,10 @@ fun TripHomeScreen(
     val activePerspectiveMember: GroupMemberEntity? = remember(groupMembers) {
         groupMembers.find { it.isCurrentUser } ?: groupMembers.firstOrNull()
     }
-    val groupExpenses: List<ExpenseEntity> = remember(uiState.expenses, resolvedGroupId) {
+    val groupExpenses: List<ExpenseEntity> = remember(uiState.expenses, resolvedGroupId, context) {
         uiState.expenses
             .filter { it.groupId == resolvedGroupId }
-            .sortedBy { it.createdAtEpochMs }
+            .sortedBy { resolveExpenseSchedule(context, it).effectiveEpochMs }
     }
     val groupExpenseIds = remember(groupExpenses) {
         groupExpenses.map { it.expenseId }.toSet()
@@ -479,8 +750,8 @@ fun TripHomeScreen(
         }
     }
 
-    // Dynamic subtitle derived strictly from real Room timestamps
-    val dynamicTripSubtitle = remember(groupExpenses, groupMembers.size, isTravelGroup) {
+    // Dynamic subtitle derived from actual travel ticket dates when available (fallback to logged dates)
+    val dynamicTripSubtitle = remember(groupExpenses, groupMembers.size, isTravelGroup, context) {
         val memberNoun = when {
             isTravelGroup && groupMembers.size == 1 -> "Traveler"
             isTravelGroup -> "Travelers"
@@ -491,11 +762,13 @@ fun TripHomeScreen(
         if (groupExpenses.isEmpty()) {
             if (isTravelGroup) "$travelerLabel · Ready to log bookings" else "$travelerLabel · Ready to log expenses"
         } else {
-            val minEpoch = groupExpenses.minOf { it.createdAtEpochMs }
-            val maxEpoch = groupExpenses.maxOf { it.createdAtEpochMs }
-            val fmt = SimpleDateFormat("dd MMM", Locale.US)
-            val startStr = fmt.format(Date(minEpoch))
-            val endStr = fmt.format(Date(maxEpoch))
+            val schedules = groupExpenses.map { resolveExpenseSchedule(context, it) }
+            val explicitTicketSchedules = schedules.filter { it.hasExplicitTicketDate }
+            val pool = explicitTicketSchedules.ifEmpty { schedules }
+            val minSchedule = pool.minByOrNull { it.effectiveEpochMs } ?: schedules.first()
+            val maxSchedule = pool.maxByOrNull { it.effectiveEpochMs } ?: schedules.last()
+            val startStr = minSchedule.shortDateLabel
+            val endStr = maxSchedule.shortDateLabel
             val rangeStr = if (startStr == endStr) startStr else "$startStr - $endStr"
             "$rangeStr · $travelerLabel"
         }
@@ -669,6 +942,91 @@ fun TripHomeScreen(
                 },
                 isTravelGroup = isTravelGroup
             )
+
+            // =================================================================
+            // DECLINED MEMBER SHARE REASSIGNMENT BANNER (0.00c DRIFT)
+            // =================================================================
+            val declinedMembersWithOpenSplits = remember(groupMembers, groupSplits) {
+                groupMembers.filter { m ->
+                    m.inviteStatus.equals("DECLINED", ignoreCase = true) &&
+                        groupSplits.any { sp -> sp.memberId == m.memberId && sp.finalOwedCents > 0L }
+                }
+            }
+            declinedMembersWithOpenSplits.forEach { declinedMember ->
+                val declinedShareCents = groupSplits
+                    .filter { it.memberId == declinedMember.memberId && it.finalOwedCents > 0L }
+                    .sumOf { it.finalOwedCents }
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0xFFFED8C8),
+                    border = BorderStroke(1.dp, Color(0xFFE06B52).copy(alpha = 0.35f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.PersonRemove,
+                                contentDescription = null,
+                                tint = Color(0xFF7C2D12),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "${declinedMember.name} declined this group invite (${formatIndianRupeesFromCents(declinedShareCents, includePlusSign = false)} unassigned)",
+                                fontFamily = FigtreeFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = Color(0xFF7C2D12),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = Color(0xFFE06B52),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    performCrispTactileHaptic(context, localView, heavy = true)
+                                    viewModel.reassignDeclinedMemberSharesEqually(
+                                        context = context,
+                                        groupId = resolvedGroupId,
+                                        declinedMemberId = declinedMember.memberId
+                                    )
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.SwapHoriz,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Reassign ${declinedMember.name}'s Share Equally",
+                                    fontFamily = FigtreeFontFamily,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 12.sp,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+                }
+            }
 
             // =================================================================
             // SECTION BODY CONTENT (`Overview`, `Plan`, `Travel`, `Money`, `People`)
@@ -856,7 +1214,7 @@ fun TripHomeScreen(
 private fun TripHubTopBar(
     groupName: String,
     subtitle: String,
-    activePerspectiveMember: GroupMemberEntity?,
+    @Suppress("UNUSED_PARAMETER") activePerspectiveMember: GroupMemberEntity?,
     isSearchExpanded: Boolean,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
@@ -926,6 +1284,47 @@ private fun TripHubTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
+                Surface(
+                    onClick = {
+                        performCrispTactileHaptic(context, localView, heavy = false)
+                        onOpenSyncAndPerspectiveSheet()
+                    },
+                    shape = CircleShape,
+                    color = Color.Transparent,
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .defaultMinSize(minHeight = 48.dp)
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.padding(vertical = 6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(TripHubTokens.SunkenWell, CircleShape)
+                                .border(1.dp, TripHubTokens.CardBorder, CircleShape)
+                                .padding(horizontal = 11.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.PersonAdd,
+                                contentDescription = "Invite Friends via Link",
+                                tint = TripHubTokens.TextPrimary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = "Invite",
+                                fontFamily = FigtreeFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = TripHubTokens.TextPrimary
+                            )
+                        }
+                    }
+                }
+
                 IconButton(
                     onClick = onToggleSearch,
                     modifier = Modifier
@@ -952,60 +1351,6 @@ private fun TripHubTopBar(
                         tint = TripHubTokens.TextPrimary,
                         modifier = Modifier.size(21.dp)
                     )
-                }
-            }
-        }
-
-        // Perspective & Sync Header Pill + Share Sync Action Pill (both enforce >= 48.dp touch bounds)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            PerspectiveAndSyncHeaderPill(
-                activeMember = activePerspectiveMember,
-                onClick = onOpenSyncAndPerspectiveSheet,
-                modifier = Modifier.weight(1f, fill = false)
-            )
-
-            Surface(
-                onClick = {
-                    performCrispTactileHaptic(context, localView, heavy = false)
-                    onOpenSyncAndPerspectiveSheet()
-                },
-                shape = CircleShape,
-                color = Color.Transparent,
-                modifier = Modifier
-                    .minimumInteractiveComponentSize()
-                    .defaultMinSize(minHeight = 48.dp)
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.padding(vertical = 6.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(TripHubTokens.SunkenWell, CircleShape)
-                            .border(1.dp, TripHubTokens.CardBorder, CircleShape)
-                            .padding(horizontal = 12.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Share,
-                            contentDescription = "Share Sync Capsule",
-                            tint = TripHubTokens.TextPrimary,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = "Share Sync",
-                            fontFamily = FigtreeFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = TripHubTokens.TextPrimary
-                        )
-                    }
                 }
             }
         }
@@ -1618,13 +1963,16 @@ fun DeepGreenTrainTicketCard(
             ?: parsedTicket?.bookingStatus?.ifBlank { "3A Sleeper" }
             ?: "Confirmed"
     }
-    val loggedDateLabel = remember(expense.createdAtEpochMs) {
-        SimpleDateFormat("dd MMM", Locale.US).format(Date(expense.createdAtEpochMs))
+    val expenseSchedule = remember(context, expense) {
+        resolveExpenseSchedule(context, expense)
     }
-    val depTimeLabel = remember(snapshot, parsedTicket, loggedDateLabel) {
-        snapshot?.departureTime?.takeIf { it.isNotBlank() }
+    val loggedDateLabel = expenseSchedule.shortDateLabel
+    val depTimeLabel = remember(snapshot, parsedTicket, expenseSchedule) {
+        val datePrefix = expenseSchedule.shortDateLabel
+        val rawDep = snapshot?.departureTime?.takeIf { it.isNotBlank() }
             ?: parsedTicket?.departureInfo?.takeIf { it.isNotBlank() }
-            ?: loggedDateLabel
+            ?: expenseSchedule.timeLabel
+        if (rawDep.contains(datePrefix, ignoreCase = true)) rawDep else "$datePrefix · $rawDep"
     }
     val arrTimeLabel = remember(snapshot) {
         snapshot?.arrivalTime?.takeIf { it.isNotBlank() } ?: "Scheduled Arrival"
@@ -2046,21 +2394,14 @@ fun DeepGreenTrainTicketCard(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(CircleShape)
-                                        .background(TripHubTokens.TerracottaPeachBg),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = extractInitialsFromNameOrSeed(payer?.name ?: "P"),
-                                        fontFamily = FigtreeFontFamily,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 12.sp,
-                                        color = TripHubTokens.TerracottaIconTint
-                                    )
-                                }
+                                TripHubMemberAvatar(
+                                    seedOrName = payer?.avatarSeed?.ifBlank { payer.name } ?: "Payer",
+                                    fallbackName = payer?.name ?: "P",
+                                    size = 36.dp,
+                                    backgroundColor = TripHubTokens.TerracottaPeachBg,
+                                    textColor = TripHubTokens.TerracottaIconTint,
+                                    fontSize = 12.sp
+                                )
                                 Column {
                                     Text(
                                         text = "Payer",
@@ -2236,12 +2577,16 @@ fun ReturnTransitTrainCard(
         groupMembers.find { it.memberId == expense.payerId }
     }
 
-    val loggedDateLabel = remember(expense.createdAtEpochMs) {
-        SimpleDateFormat("dd MMM", Locale.US).format(Date(expense.createdAtEpochMs))
+    val expenseSchedule = remember(context, expense) {
+        resolveExpenseSchedule(context, expense)
     }
-    val depLabel = snapshot?.departureTime?.takeIf { it.isNotBlank() }
-        ?: parsedTicket?.departureInfo?.takeIf { it.isNotBlank() }
-        ?: loggedDateLabel
+    val loggedDateLabel = expenseSchedule.shortDateLabel
+    val depLabel = remember(snapshot, parsedTicket, expenseSchedule) {
+        val rawDep = snapshot?.departureTime?.takeIf { it.isNotBlank() }
+            ?: parsedTicket?.departureInfo?.takeIf { it.isNotBlank() }
+            ?: expenseSchedule.timeLabel
+        if (rawDep.contains(loggedDateLabel, ignoreCase = true)) rawDep else "$loggedDateLabel · $rawDep"
+    }
     val classAndStatus = buildString {
         val cls = snapshot?.travelClass?.ifBlank { "3A Sleeper" } ?: "3A Sleeper"
         append(cls)
@@ -2430,21 +2775,14 @@ fun ReturnTransitTrainCard(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(30.dp)
-                                .clip(CircleShape)
-                                .background(TripHubTokens.PeriwinkleBoxBg),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = extractInitialsFromNameOrSeed(payer?.name ?: "P"),
-                                fontFamily = FigtreeFontFamily,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 11.sp,
-                                color = TripHubTokens.PeriwinkleIconTint
-                            )
-                        }
+                        TripHubMemberAvatar(
+                            seedOrName = payer?.avatarSeed?.ifBlank { payer.name } ?: "Payer",
+                            fallbackName = payer?.name ?: "P",
+                            size = 30.dp,
+                            backgroundColor = TripHubTokens.PeriwinkleBoxBg,
+                            textColor = TripHubTokens.PeriwinkleIconTint,
+                            fontSize = 11.sp
+                        )
                         Column {
                             Text(
                                 text = "Paid by ${payer?.name ?: "Member"}",
@@ -2613,8 +2951,16 @@ fun PeriwinkleFlightBookingCard(
             "${parsedTicket.trainOrCarrierName} ${parsedTicket.trainOrFlightNo}".trim()
         else -> cleanDisplayExpenseTitle(expense.title)
     }
-    val loggedDateLabel = remember(expense.createdAtEpochMs) {
-        SimpleDateFormat("dd MMM", Locale.US).format(Date(expense.createdAtEpochMs))
+    val expenseSchedule = remember(context, expense) {
+        resolveExpenseSchedule(context, expense)
+    }
+    val loggedDateLabel = remember(expenseSchedule, flightResult) {
+        val depTime = flightResult?.departureTime?.takeIf { it.isNotBlank() }
+        if (depTime != null && !expenseSchedule.shortDateLabel.contains(depTime)) {
+            "${expenseSchedule.shortDateLabel} · $depTime"
+        } else {
+            expenseSchedule.shortDateLabel
+        }
     }
 
     Column(
@@ -3875,10 +4221,12 @@ private fun TripHubPlanTimelineView(
         return
     }
 
-    val dayFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale.US) }
-    val timeFormat = remember { SimpleDateFormat("hh:mm a", Locale.US) }
-    val groupedByDay = remember(classifiedExpenses) {
-        classifiedExpenses.groupBy { (exp, _) -> dayFormat.format(Date(exp.createdAtEpochMs)) }
+    val context = LocalContext.current
+    val groupedByDay = remember(classifiedExpenses, context) {
+        classifiedExpenses
+            .map { (exp, cat) -> Triple(exp, cat, resolveExpenseSchedule(context, exp)) }
+            .sortedBy { it.third.effectiveEpochMs }
+            .groupBy { it.third.fullDateLabel }
     }
 
     LazyColumn(
@@ -3943,9 +4291,9 @@ private fun TripHubPlanTimelineView(
             items(
                 items = dayItems,
                 key = { "plan_${it.first.expenseId}" }
-            ) { (expense, category) ->
+            ) { (expense, category, schedule) ->
                 val payer = groupMembers.find { it.memberId == expense.payerId }
-                val timeLabel = timeFormat.format(Date(expense.createdAtEpochMs))
+                val timeLabel = schedule.timeLabel
 
                 Surface(
                     shape = RoundedCornerShape(18.dp),
@@ -4585,8 +4933,8 @@ private fun TripHubMoneySettlementView(
  */
 @Composable
 private fun TripHubPeoplePerspectiveView(
-    viewModel: SplitMateViewModel,
-    groupId: String,
+    @Suppress("UNUSED_PARAMETER") viewModel: SplitMateViewModel,
+    @Suppress("UNUSED_PARAMETER") groupId: String,
     groupMembers: List<GroupMemberEntity>,
     netBalancesMap: Map<String, Long>,
     onAddMemberClick: () -> Unit,
@@ -4657,7 +5005,7 @@ private fun TripHubPeoplePerspectiveView(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Share Trip Sync Capsule",
+                        text = "Invite Friends via Link",
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,
@@ -4708,33 +5056,105 @@ private fun TripHubPeoplePerspectiveView(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(42.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        if (isMe) TripHubTokens.PositiveSagePillBg else TripHubTokens.SunkenWell
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = extractInitialsFromNameOrSeed(member.name),
-                                    fontFamily = FigtreeFontFamily,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 14.sp,
-                                    color = if (isMe) TripHubTokens.PositiveSageText else TripHubTokens.TextPrimary
-                                )
-                            }
+                            TripHubMemberAvatar(
+                                seedOrName = member.avatarSeed.ifBlank { member.name },
+                                fallbackName = member.name,
+                                size = 44.dp,
+                                backgroundColor = if (isMe) TripHubTokens.PositiveSagePillBg else TripHubTokens.SunkenWell,
+                                textColor = if (isMe) TripHubTokens.PositiveSageText else TripHubTokens.TextPrimary,
+                                fontSize = 14.sp
+                            )
                             Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        text = member.name,
+                                        fontFamily = FigtreeFontFamily,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 16.sp,
+                                        color = TripHubTokens.TextPrimary
+                                    )
+                                    if (isMe) {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = TripHubTokens.PositiveSagePillBg
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Verified,
+                                                    contentDescription = null,
+                                                    tint = TripHubTokens.PositiveSageText,
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Text(
+                                                    text = "You",
+                                                    fontFamily = FigtreeFontFamily,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    fontSize = 10.sp,
+                                                    color = TripHubTokens.PositiveSageText
+                                                )
+                                            }
+                                        }
+                                    } else if (member.inviteStatus.equals("PENDING", ignoreCase = true)) {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = Color(0xFFDCE3FD)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Schedule,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF1E3A8A),
+                                                    modifier = Modifier.size(11.dp)
+                                                )
+                                                Text(
+                                                    text = "INVITE PENDING",
+                                                    fontFamily = FigtreeFontFamily,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    fontSize = 9.sp,
+                                                    color = Color(0xFF1E3A8A)
+                                                )
+                                            }
+                                        }
+                                    } else if (member.inviteStatus.equals("DECLINED", ignoreCase = true)) {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = Color(0xFFFED8C8)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.PersonRemove,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF7C2D12),
+                                                    modifier = Modifier.size(11.dp)
+                                                )
+                                                Text(
+                                                    text = "DECLINED",
+                                                    fontFamily = FigtreeFontFamily,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    fontSize = 9.sp,
+                                                    color = Color(0xFF7C2D12)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                                 Text(
-                                    text = member.name,
-                                    fontFamily = FigtreeFontFamily,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 16.sp,
-                                    color = TripHubTokens.TextPrimary
-                                )
-                                Text(
-                                    text = member.upiId.ifBlank { "UPI / Phone not linked yet" },
+                                    text = member.upiId.ifBlank { member.userPhone.ifBlank { "UPI / Phone not linked yet" } },
                                     style = TextStyle(
                                         fontFamily = SplitMateTnumMonospace,
                                         fontWeight = FontWeight.Medium,
@@ -4770,43 +5190,6 @@ private fun TripHubPeoplePerspectiveView(
                                     else -> TripHubTokens.TextSecondary
                                 },
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                            )
-                        }
-                    }
-
-                    Surface(
-                        onClick = {
-                            performCrispTactileHaptic(context, localView, heavy = false)
-                            viewModel.claimGroupMemberPerspective(groupId, member.memberId)
-                        },
-                        shape = CircleShape,
-                        color = if (isMe) TripHubTokens.PositiveSagePillBg else TripHubTokens.SunkenWell,
-                        border = BorderStroke(1.dp, TripHubTokens.CardBorder),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .minimumInteractiveComponentSize()
-                            .defaultMinSize(minHeight = 48.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 11.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = if (isMe) Icons.Rounded.Verified else Icons.Rounded.PersonPin,
-                                contentDescription = null,
-                                tint = if (isMe) TripHubTokens.PositiveSageText else TripHubTokens.TextPrimary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (isMe) "Active Perspective (You)" else "View as ${member.name}",
-                                fontFamily = FigtreeFontFamily,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 13.sp,
-                                color = if (isMe) TripHubTokens.PositiveSageText else TripHubTokens.TextPrimary
                             )
                         }
                     }

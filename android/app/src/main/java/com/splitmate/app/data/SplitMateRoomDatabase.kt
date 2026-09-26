@@ -17,7 +17,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SettlementEntity::class,
         UserProfileEntity::class
     ],
-    version = 5,
+    version = 7,
     exportSchema = false
 )
 abstract class SplitMateRoomDatabase : RoomDatabase() {
@@ -137,6 +137,27 @@ abstract class SplitMateRoomDatabase : RoomDatabase() {
                 db.execSQL("PRAGMA foreign_keys=ON")
             }
         }
+        
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `group_members` ADD COLUMN `userPhone` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `user_profile` ADD COLUMN `userPhone` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `user_profile` ADD COLUMN `isPhoneVerified` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `user_profile` ADD COLUMN `pinHash` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `expense_groups` ADD COLUMN `isDemoSeed` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("UPDATE `expense_groups` SET `isDemoSeed` = 1 WHERE `name` IN ('Lake Tahoe Cabin', 'Apt 4B')")
+                db.execSQL("ALTER TABLE `group_members` ADD COLUMN `inviteStatus` TEXT NOT NULL DEFAULT 'JOINED'")
+                db.execSQL("ALTER TABLE `expenses` ADD COLUMN `expenseCategory` TEXT NOT NULL DEFAULT 'OTHER'")
+                db.execSQL("ALTER TABLE `expenses` ADD COLUMN `travelPnr` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `expenses` ADD COLUMN `providerName` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `expenses` ADD COLUMN `scheduledAtEpochMs` INTEGER DEFAULT NULL")
+            }
+        }
 
         fun getInstance(context: Context): SplitMateRoomDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -145,7 +166,7 @@ abstract class SplitMateRoomDatabase : RoomDatabase() {
                     SplitMateRoomDatabase::class.java,
                     "splitmate_native_room.db"
                 )
-                    .addMigrations(MIGRATION_4_5)
+                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .fallbackToDestructiveMigrationFrom(1, 2, 3)
                     .fallbackToDestructiveMigrationOnDowngrade()
                     .build()

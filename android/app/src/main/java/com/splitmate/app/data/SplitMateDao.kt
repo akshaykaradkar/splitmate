@@ -23,6 +23,12 @@ interface SplitMateDao {
     @Query("SELECT * FROM expense_groups ORDER BY createdAt DESC")
     fun observeGroups(): Flow<List<ExpenseGroupEntity>>
 
+    @Query("SELECT * FROM expense_groups")
+    suspend fun getAllGroups(): List<ExpenseGroupEntity>
+
+    @Query("SELECT * FROM expense_groups WHERE groupId = :groupId LIMIT 1")
+    suspend fun getGroupById(groupId: String): ExpenseGroupEntity?
+
     @Query("SELECT * FROM group_members WHERE groupId = :groupId")
     fun observeGroupMembers(groupId: String): Flow<List<GroupMemberEntity>>
 
@@ -87,6 +93,18 @@ interface SplitMateDao {
     // --- Settlements ---
     @Query("SELECT * FROM settlements ORDER BY settledAt DESC")
     fun observeAllSettlements(): Flow<List<SettlementEntity>>
+
+    @Query("SELECT * FROM expenses WHERE groupId = :groupId")
+    suspend fun getExpensesForGroup(groupId: String): List<ExpenseEntity>
+
+    @Query("SELECT * FROM expense_splits WHERE expenseId IN (SELECT expenseId FROM expenses WHERE groupId = :groupId)")
+    suspend fun getSplitsForGroup(groupId: String): List<ExpenseSplitEntity>
+
+    @Query("SELECT * FROM settlements WHERE groupId = :groupId")
+    suspend fun getSettlementsForGroup(groupId: String): List<SettlementEntity>
+
+    @Query("SELECT * FROM group_members WHERE groupId = :groupId")
+    suspend fun getMembersForGroup(groupId: String): List<GroupMemberEntity>
 
     @Upsert
     suspend fun insertSettlement(settlement: SettlementEntity)
