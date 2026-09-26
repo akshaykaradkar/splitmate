@@ -1,5 +1,6 @@
 package com.splitmate.app.ui.screens
 
+import androidx.compose.material.icons.automirrored.rounded.Send
 import android.Manifest
 import android.content.pm.PackageManager
 import android.widget.Toast
@@ -440,7 +441,7 @@ fun UserSettingsScreen(
 
     var editedName by remember(userName) { mutableStateOf(userName) }
     var editedUpiId by remember(upiId) { mutableStateOf(upiId) }
-    var largestRemainderEnabled by remember { mutableStateOf(prefs.getBoolean("pref_largest_remainder", true)) }
+    @Suppress("UNUSED_VARIABLE") var largestRemainderEnabled by remember { mutableStateOf(prefs.getBoolean("pref_largest_remainder", true)) }
     var includeUpiInWhatsApp by remember { mutableStateOf(prefs.getBoolean("pref_whatsapp_upi", true)) }
     var hapticsEnabled by remember { mutableStateOf(prefs.getBoolean("pref_haptics", true)) }
 
@@ -779,7 +780,7 @@ fun UserSettingsScreen(
                     ) {
                         Column {
                             SettingsRowItem(
-                                icon = Icons.Rounded.Send,
+                                icon = Icons.AutoMirrored.Rounded.Send,
                                 iconBg = SplitMateThemeTokens.AccentSage.copy(alpha = 0.45f),
                                 iconTint = SplitMateThemeTokens.SageText,
                                 title = "Include My UPI ID in WhatsApp Reminders",
@@ -811,8 +812,8 @@ fun UserSettingsScreen(
 
                             SettingsRowItem(
                                 icon = Icons.Rounded.Share,
-                                iconBg = Color(0xFFE8EDFB),
-                                iconTint = Color(0xFF244896),
+                                iconBg = if (isDarkTheme) Color(0xFF282552) else Color(0xFFEEF2FF),
+                                iconTint = if (isDarkTheme) Color(0xFFDCE3FD) else Color(0xFF3730A3),
                                 title = "Export & Share Trip Ledger Summary",
                                 subtitle = "Share a clean WhatsApp/Clipboard summary of all group balances & expenses ($activeGroupsCount active groups)",
                                 titleColor = textPrimary,
@@ -868,8 +869,8 @@ fun UserSettingsScreen(
                         Column {
                             SettingsRowItem(
                                 icon = if (isDarkTheme) Icons.Rounded.DarkMode else Icons.Rounded.LightMode,
-                                iconBg = Color(0xFFE8EDFB),
-                                iconTint = Color(0xFF244896),
+                                iconBg = if (isDarkTheme) Color(0xFF282552) else Color(0xFFEEF2FF),
+                                iconTint = if (isDarkTheme) Color(0xFFDCE3FD) else Color(0xFF3730A3),
                                 title = "Dark Theme (Warm Espresso #181512)",
                                 subtitle = "Switch between Buckwheat Cream Light and Warm Espresso Night canvas",
                                 titleColor = textPrimary,

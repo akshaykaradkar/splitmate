@@ -39,6 +39,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.splitmate.app.SplitMateTheme
+import com.splitmate.app.ui.DesignSystemBindings
 import kotlinx.coroutines.delay
 import kotlin.math.cos
 import kotlin.math.sin
@@ -61,13 +63,18 @@ enum class Gm3EnergyState(val label: String) {
 
 /**
  * Palette accent presets matching SplitMate's M3 Expressive tonal system.
+ *
+ * Light-mode tokens (`baseContainer`, `borderTint`) are the canonical Buckwheat values.
+ * `darkBorderTint` is a lightened accent that keeps >= 4.5:1 contrast against the
+ * GM3 dark card surface (`#24201C`).
  */
 enum class Gm3EnergyAccentPalette(
     val baseContainer: Color,
     val primaryBlob: Color,
     val secondaryBlob: Color,
     val tertiaryBlob: Color,
-    val borderTint: Color
+    val borderTint: Color,
+    val darkBorderTint: Color
 ) {
     /** Warm Olive + Sage + Peach for IRCTC Train PNR & Receipt Claim Engine */
     BUCKWHEAT_SAGE(
@@ -75,7 +82,8 @@ enum class Gm3EnergyAccentPalette(
         primaryBlob = Color(0xFFD7E8B6),    // Soft Sage Container
         secondaryBlob = Color(0xFFFED8C8),  // Warm Peach Container
         tertiaryBlob = Color(0xFFE5F2D0),   // Light Olive Tonal
-        borderTint = Color(0xFF416913)      // Deep Olive
+        borderTint = Color(0xFF416913),     // Deep Olive
+        darkBorderTint = Color(0xFFB5DC86)  // Light Sage accent for dark surfaces
     ),
 
     /** Periwinkle + Lavender + Peach for Airline E-Ticket PDF & Boarding Pass Engine */
@@ -84,8 +92,25 @@ enum class Gm3EnergyAccentPalette(
         primaryBlob = Color(0xFFDCE3FD),    // Soft Periwinkle Container
         secondaryBlob = Color(0xFFEDE9FE),  // Lavender Tonal
         tertiaryBlob = Color(0xFFFED8C8),   // Warm Peach Accent
-        borderTint = Color(0xFF3730A3)      // Deep Indigo
-    )
+        borderTint = Color(0xFF3730A3),     // Deep Indigo
+        darkBorderTint = Color(0xFFC7D2FE)  // Light Periwinkle accent for dark surfaces
+    );
+
+    /** Base container resolved against the current theme (dark: GM3 dark card surface `#24201C`). */
+    val resolvedBaseContainer: Color
+        get() = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkCardSurface else baseContainer
+
+    /** Resting (idle) border resolved against the current theme (dark: `#38312B`). */
+    val resolvedRestingBorder: Color
+        get() = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkBorder else Color(0xFFEDE7DF)
+
+    /** Accent tint (status dot, active border, state label) resolved against the current theme. */
+    val resolvedAccentTint: Color
+        get() = if (SplitMateTheme.isDark) darkBorderTint else borderTint
+
+    /** Blob alpha multiplier: pastel blobs are dimmed on dark surfaces so light text stays legible. */
+    val resolvedBlobAlphaScale: Float
+        get() = if (SplitMateTheme.isDark) 0.12f else 1f
 }
 
 /**
@@ -163,10 +188,15 @@ fun Gm3AuroraEnergySurface(
         label = "gm3EnergyPulse"
     )
 
+    val baseContainer = palette.resolvedBaseContainer
+    val restingBorder = palette.resolvedRestingBorder
+    val accentTint = palette.resolvedAccentTint
+    val blobAlphaScale = palette.resolvedBlobAlphaScale
+
     Box(
         modifier = modifier
             .clip(shape)
-            .background(palette.baseContainer)
+            .background(baseContainer)
             .drawWithCache {
                 val w = size.width
                 val h = size.height
@@ -186,11 +216,12 @@ fun Gm3AuroraEnergySurface(
                 )
 
                 onDrawBehind {
-                    if (animatedAlpha > 0.01f) {
+                    val blobAlpha = animatedAlpha * blobAlphaScale
+                    if (blobAlpha > 0.01f) {
                         drawCircle(
                             brush = Brush.radialGradient(
                                 colors = listOf(
-                                    palette.primaryBlob.copy(alpha = animatedAlpha * 0.85f),
+                                    palette.primaryBlob.copy(alpha = blobAlpha * 0.85f),
                                     palette.primaryBlob.copy(alpha = 0f)
                                 ),
                                 center = c1,
@@ -202,7 +233,7 @@ fun Gm3AuroraEnergySurface(
                         drawCircle(
                             brush = Brush.radialGradient(
                                 colors = listOf(
-                                    palette.secondaryBlob.copy(alpha = animatedAlpha * 0.78f),
+                                    palette.secondaryBlob.copy(alpha = blobAlpha * 0.78f),
                                     palette.secondaryBlob.copy(alpha = 0f)
                                 ),
                                 center = c2,
@@ -214,7 +245,7 @@ fun Gm3AuroraEnergySurface(
                         drawCircle(
                             brush = Brush.radialGradient(
                                 colors = listOf(
-                                    palette.tertiaryBlob.copy(alpha = animatedAlpha * 0.72f),
+                                    palette.tertiaryBlob.copy(alpha = blobAlpha * 0.72f),
                                     palette.tertiaryBlob.copy(alpha = 0f)
                                 ),
                                 center = c3,
@@ -229,9 +260,9 @@ fun Gm3AuroraEnergySurface(
             .border(
                 width = borderWidth,
                 color = if (animatedAlpha > 0.05f) {
-                    palette.borderTint.copy(alpha = 0.22f + animatedAlpha * 0.28f)
+                    accentTint.copy(alpha = 0.22f + animatedAlpha * 0.28f)
                 } else {
-                    Color(0xFFEDE7DF)
+                    restingBorder
                 },
                 shape = shape
             ),
@@ -270,19 +301,19 @@ fun Gm3EnergyStatusPill(
                 modifier = Modifier
                     .size(7.dp)
                     .clip(CircleShape)
-                    .background(palette.borderTint)
+                    .background(palette.resolvedAccentTint)
             )
             Text(
                 text = statusText,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF23201E)
+                color = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkPrimaryText else Color(0xFF23201E)
             )
             Text(
                 text = "• ${state.label}",
                 fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = palette.borderTint
+                color = palette.resolvedAccentTint
             )
         }
     }

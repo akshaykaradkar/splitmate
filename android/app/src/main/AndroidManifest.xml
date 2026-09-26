@@ -46,10 +46,29 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- $0.00-Server-Cost Multi-Member Trip Sync Deep-Link Receiver (splitmate://trip-sync?payload=SM2_...) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="splitmate"
+                    android:host="trip-sync" />
+            </intent-filter>
+
+            <!-- System Share Sheet Receiver for WhatsApp Sync messages (SM2_... shared as text/plain),
+                 consumed by MainActivity.handleIncomingSyncIntent via Intent.EXTRA_TEXT -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
     </application>

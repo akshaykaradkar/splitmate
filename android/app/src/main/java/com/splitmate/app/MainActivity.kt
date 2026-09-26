@@ -1,5 +1,6 @@
 package com.splitmate.app
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -18,12 +19,14 @@ import com.splitmate.app.ui.SplitMateViewModel
  */
 class MainActivity : ComponentActivity() {
 
+    private lateinit var splitMateViewModel: SplitMateViewModel
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
         val database = SplitMateRoomDatabase.getInstance(applicationContext)
-        val viewModel = ViewModelProvider(
+        splitMateViewModel = ViewModelProvider(
             this,
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
@@ -33,10 +36,57 @@ class MainActivity : ComponentActivity() {
             }
         )[SplitMateViewModel::class.java]
 
+        if (savedInstanceState == null) {
+            handleIncomingSyncIntent(intent)
+        }
+
         setContent {
-            val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+            val uiState by splitMateViewModel.uiState.collectAsStateWithLifecycle()
             SplitMateMaterial3ExpressiveTheme(darkTheme = uiState.isDarkTheme) {
-                SplitMateApp(viewModel = viewModel)
+                SplitMateApp(viewModel = splitMateViewModel)
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingSyncIntent(intent)
+    }
+
+    private fun handleIncomingSyncIntent(incomingIntent: Intent?) {
+        if (incomingIntent == null || !::splitMateViewModel.isInitialized) return
+        if (incomingIntent.getBooleanExtra("com.splitmate.SYNC_CONSUMED", false)) return
+        when (incomingIntent.action) {
+            Intent.ACTION_VIEW -> {
+                val dataUri = incomingIntent.data ?: return
+                if (dataUri.scheme.equals("splitmate", ignoreCase = true) &&
+                    dataUri.host.equals("trip-sync", ignoreCase = true)
+                ) {
+                    val rawPayload = dataUri.getQueryParameter("payload")?.takeIf { it.isNotBlank() }
+                        ?: dataUri.toString()
+                    val claimParam = dataUri.getQueryParameter("claim")?.takeIf { it.isNotBlank() }
+                    if (SplitMateViewModel.extractSyncTokenFromRawInput(rawPayload) != null) {
+                        incomingIntent.putExtra("com.splitmate.SYNC_CONSUMED", true)
+                        splitMateViewModel.importAndMergeGroupSyncPayload(
+                            rawPayloadOrMessage = rawPayload,
+                            claimedMemberIdOverride = claimParam,
+                            openGroupAfterMerge = true
+                        )
+                    }
+                }
+            }
+            Intent.ACTION_SEND -> {
+                if (incomingIntent.type?.startsWith("text/plain", ignoreCase = true) == true) {
+                    val sharedText = incomingIntent.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
+                    if (SplitMateViewModel.extractSyncTokenFromRawInput(sharedText) != null) {
+                        incomingIntent.putExtra("com.splitmate.SYNC_CONSUMED", true)
+                        splitMateViewModel.importAndMergeGroupSyncPayload(
+                            rawPayloadOrMessage = sharedText,
+                            openGroupAfterMerge = true
+                        )
+                    }
+                }
             }
         }
     }

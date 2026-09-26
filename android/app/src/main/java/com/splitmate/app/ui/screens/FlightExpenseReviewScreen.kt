@@ -1,5 +1,7 @@
 package com.splitmate.app.ui.screens
 
+import androidx.compose.material.icons.automirrored.rounded.VolumeOff
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
@@ -406,8 +408,7 @@ data class FlightSplitMember(
     val id: String,
     val name: String,
     val initials: String,
-    val shareAmount: Long,
-    val shareAmountPaise: Long = shareAmount * 100L,
+    val shareAmountPaise: Long,
     val avatarBg: Color,
     val avatarFg: Color,
     val isPayer: Boolean = false,
@@ -702,18 +703,26 @@ fun FlightExpenseReviewScreen(
         }
     }
 
-    // Calculate exact 0.00¢ drift Largest Remainder split across selected group members
-    val splitAllocationsPaise: Map<String, Long> = remember(totalAirfarePaise, selectedMemberIds) {
-        val activeIds = selectedMemberIds.toList()
-        if (activeIds.isEmpty() || totalAirfarePaise <= 0L) {
+    // Calculate exact 0.00¢ drift Largest Remainder split across selected group members.
+    // Delegates to SplitMateMathEngine.splitEquallyZeroDrift with the exact same member filtering,
+    // payer resolution, and Payer-first -> memberId tie-break ordering used by
+    // SplitMateViewModel.commitQuickEqualExpense / editExistingExpense, so the +₹0.01 remainder
+    // paise shown in this preview always match the persisted Room splits 1:1.
+    val splitAllocationsPaise: Map<String, Long> = remember(totalAirfarePaise, selectedMemberIds, selectedPayerId, groupMembers) {
+        val chosenMembers = groupMembers.filter { it.memberId in selectedMemberIds }
+        if (chosenMembers.isEmpty() || totalAirfarePaise <= 0L) {
             emptyMap()
         } else {
-            val count = activeIds.size.toLong()
-            val baseShare = totalAirfarePaise / count
-            val remainder = (totalAirfarePaise % count).toInt()
-            activeIds.mapIndexed { index, memberId ->
-                memberId to (baseShare + if (index < remainder) 1L else 0L)
-            }.toMap()
+            val currentUserId = groupMembers.firstOrNull { it.isCurrentUser }?.memberId
+            val resolvedPayerId = groupMembers.firstOrNull { it.memberId == selectedPayerId }?.memberId
+                ?: currentUserId
+                ?: groupMembers.firstOrNull()?.memberId
+            SplitMateMathEngine.splitEquallyZeroDrift(
+                totalCents = totalAirfarePaise,
+                members = chosenMembers.map { it.memberId to it.name },
+                payerId = resolvedPayerId,
+                currentUserId = currentUserId
+            ).associate { allocation -> allocation.memberId to allocation.finalCents }
         }
     }
 
@@ -727,7 +736,6 @@ fun FlightExpenseReviewScreen(
                 id = member.memberId,
                 name = displayName,
                 initials = extractInitialsFromNameOrSeed(member.name.ifBlank { member.avatarSeed }),
-                shareAmount = (memberSharePaise / 100.0).roundToLong(),
                 shareAmountPaise = memberSharePaise,
                 avatarBg = bg,
                 avatarFg = fg,
@@ -828,7 +836,8 @@ fun FlightExpenseReviewScreen(
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 onPickAnotherPdfClick()
-                            }
+                            },
+                            modifier = Modifier.minimumInteractiveComponentSize()
                         ) {
                             Surface(
                                 shape = CircleShape,
@@ -847,7 +856,7 @@ fun FlightExpenseReviewScreen(
                             }
                         }
 
-                        // Switch Group Dropdown Button
+                        // Switch Group Dropdown Button (48dp touch bounds, 40dp visual circle)
                         Box {
                             Surface(
                                 onClick = { showGroupDropdown = true },
@@ -855,7 +864,8 @@ fun FlightExpenseReviewScreen(
                                 color = FlightPassTokens.AviationNavy,
                                 border = BorderStroke(1.dp, FlightPassTokens.SkyBlueBorder),
                                 modifier = Modifier
-                                    .padding(end = 12.dp)
+                                    .padding(end = 8.dp)
+                                    .minimumInteractiveComponentSize()
                                     .size(40.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
@@ -948,7 +958,10 @@ fun FlightExpenseReviewScreen(
                             shape = FlightPassTokens.RadiusPill,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = if (SplitMateTheme.isDark) Color(0xFF282552) else FlightPassTokens.AviationNavy,
-                                contentColor = FlightPassTokens.AccentSageGlow
+                                contentColor = FlightPassTokens.AccentSageGlow,
+                                // Dark: warm sunken charcoal slab instead of a flat grey veil; Light: unchanged M3 default.
+                                disabledContainerColor = if (SplitMateTheme.isDark) Color(0xFF2E2A25) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                                disabledContentColor = if (SplitMateTheme.isDark) FlightPassTokens.TextSecondary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -956,6 +969,8 @@ fun FlightExpenseReviewScreen(
                                 .shadow(12.dp, FlightPassTokens.RadiusPill, spotColor = Color(0x332B2768)),
                             contentPadding = PaddingValues(horizontal = 20.dp)
                         ) {
+                            val isCommitEnabled = selectedMemberIds.isNotEmpty() && totalAirfarePaise > 0L && !isCommittingBoardingPass
+                            val exactButtonTotal = if (totalAirfarePaise % 100L == 0L) "₹$formattedButtonTotal" else formatFlightPaiseExact(totalAirfarePaise)
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Center
@@ -969,15 +984,17 @@ fun FlightExpenseReviewScreen(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(
                                     text = if (existingFlightExpenseInGroup != null) {
-                                        "Already Added · Update Earlier Split (₹$formattedButtonTotal)"
+                                        "Already Added · Update Earlier Split ($exactButtonTotal)"
                                     } else {
-                                        "Confirm ₹$formattedButtonTotal · Paid by $payerMemberName"
+                                        "Confirm $exactButtonTotal · Paid by $payerMemberName"
                                     },
+                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                                     fontSize = 15.5.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    color = Color.White
+                                    // Dark disabled: #B8B0A4 on #2E2A25 (~6.5:1). Light: unchanged white.
+                                    color = if (!isCommitEnabled && SplitMateTheme.isDark) FlightPassTokens.TextSecondary else Color.White
                                 )
                             }
                         }
@@ -1047,8 +1064,8 @@ fun FlightExpenseReviewScreen(
                     val bcbpDisplay = "M1$bcbpSurname/$bcbpGiven E${extractedTicket.originIata}${extractedTicket.destinationIata}${extractedTicket.flightNumber} · PNR $pnrCode"
 
                     val perSeatDisplay = if (selectedMemberIds.isNotEmpty()) {
-                        val perMemberRupees = (totalAirfareRupees / selectedMemberIds.size.coerceAtLeast(1))
-                        "₹${NumberFormat.getNumberInstance(Locale("en", "IN")).format(perMemberRupees)} × ${selectedMemberIds.size} Split · Paid by $payerMemberName"
+                        val perMemberFloorPaise = totalAirfarePaise / selectedMemberIds.size.coerceAtLeast(1).toLong()
+                        "${formatFlightPaiseExact(perMemberFloorPaise)} × ${selectedMemberIds.size} Split · Paid by $payerMemberName"
                     } else {
                         "Taxes & Airport Fees Included"
                     }
@@ -1128,7 +1145,8 @@ fun FlightExpenseReviewScreen(
                                         onClick = { showPayerDropdown = true },
                                         shape = FlightPassTokens.RadiusPill,
                                         color = FlightPassTokens.TicketPaperWhite,
-                                        border = BorderStroke(1.dp, FlightPassTokens.SkyBlueBorder)
+                                        border = BorderStroke(1.dp, FlightPassTokens.SkyBlueBorder),
+                                        modifier = Modifier.minimumInteractiveComponentSize()
                                     ) {
                                         Text(
                                             text = "Change Payer ▾",
@@ -1164,7 +1182,8 @@ fun FlightExpenseReviewScreen(
                                         onClick = { showPayerDropdown = true },
                                         shape = FlightPassTokens.RadiusPill,
                                         color = FlightPassTokens.SkyBlue,
-                                        border = BorderStroke(1.dp, FlightPassTokens.SkyBlueBorder)
+                                        border = BorderStroke(1.dp, FlightPassTokens.SkyBlueBorder),
+                                        modifier = Modifier.minimumInteractiveComponentSize()
                                     ) {
                                         Text(
                                             text = "Paid by: $payerMemberName ▾",
@@ -1376,6 +1395,7 @@ fun FlightExpenseReviewScreen(
                                                         ) {
                                                             Text(
                                                                 text = "Paid ${formatFlightPaiseExact(totalAirfarePaise)} · Gets back ${formatFlightPaiseExact(returnsPaise)}",
+                                                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                                                                 fontSize = 9.5.sp,
                                                                 fontWeight = FontWeight.Bold,
                                                                 color = FlightPassTokens.StatusGreenText,
@@ -1417,6 +1437,7 @@ fun FlightExpenseReviewScreen(
 
                                         Text(
                                             text = formatFlightPaiseExact(member.shareAmountPaise),
+                                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                                             fontFamily = SplitMateTheme.FontDisplay,
                                             fontSize = 16.sp,
                                             fontWeight = FontWeight.ExtraBold,
@@ -1523,7 +1544,7 @@ fun PaperSensoryFeedbackBanner(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = if (isFeedbackEnabled) Icons.Rounded.VolumeUp else Icons.Rounded.VolumeOff,
+                    imageVector = if (isFeedbackEnabled) Icons.AutoMirrored.Rounded.VolumeUp else Icons.AutoMirrored.Rounded.VolumeOff,
                     contentDescription = null,
                     tint = if (isFeedbackEnabled) FlightPassTokens.StatusGreenText else FlightPassTokens.TextSecondary,
                     modifier = Modifier.size(13.dp)
@@ -2396,6 +2417,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
                             )
                             Text(
                                 text = "₹${NumberFormat.getNumberInstance(Locale("en", "IN")).format(totalAirfare)}",
+                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                                 fontFamily = SplitMateTheme.FontDisplay,
                                 fontSize = 38.sp,
                                 fontWeight = FontWeight.Black,
@@ -2512,6 +2534,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
                             }
                             Text(
                                 text = "PNR $pnrNumber · ₹${NumberFormat.getNumberInstance(Locale("en", "IN")).format(totalAirfare)}",
+                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color(0xFFFDE68A)

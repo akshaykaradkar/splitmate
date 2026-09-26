@@ -223,6 +223,21 @@ fun QuickExpenseScreen(
     val perPersonPaise = if (memberCount > 0) totalAmountPaise / memberCount else 0L
     val remainderPaise = if (memberCount > 0) totalAmountPaise % memberCount else 0L
     val payerExtraPaise = if (remainderPaise > 0L) 1L else 0L
+    val remainderRecipientIds = remember(totalAmountPaise, selectedMemberIds, selectedPayerId, activeMembers) {
+        val chosen = activeMembers
+            .filter { selectedMemberIds.contains(it.memberId) }
+            .ifEmpty { activeMembers }
+        val currentUserId = activeMembers.firstOrNull { it.isCurrentUser }?.memberId
+        val payerId = selectedPayerId.ifBlank {
+            currentUserId ?: chosen.firstOrNull()?.memberId.orEmpty()
+        }
+        com.splitmate.app.SplitMateMathEngine.splitEquallyZeroDrift(
+            totalCents = totalAmountPaise,
+            members = chosen.map { it.memberId to it.name },
+            payerId = payerId,
+            currentUserId = currentUserId
+        ).filter { it.plusOneCent }.map { it.memberId }.toSet()
+    }
 
     if (showEditTitleDialog) {
         val existingTicket = remember(expenseCategoryTitle) {
@@ -230,7 +245,7 @@ fun QuickExpenseScreen(
         }
         var draftTitle by remember {
             mutableStateOf(
-                if (expenseCategoryTitle.contains("PNR:") || expenseCategoryTitle.contains("🚆")) "Train / PNR Ticket"
+                if (expenseCategoryTitle.contains("PNR:") || expenseCategoryTitle.contains("\uD83D\uDE86")) "Train / PNR Ticket"
                 else expenseCategoryTitle
             )
         }
@@ -288,7 +303,7 @@ fun QuickExpenseScreen(
             }
         }
 
-        val triggerLivePnrLookup: (String) -> Unit = { targetPnr ->
+        @Suppress("UNUSED_VARIABLE") val triggerLivePnrLookup: (String) -> Unit = { targetPnr ->
             val clean10 = targetPnr.replace(Regex("[^0-9]"), "").take(10)
             if (clean10.length == 10 && !isCheckingLivePnr) {
                 com.splitmate.app.ui.performCrispTactileHaptic(context, dialogView, heavy = true)
@@ -849,7 +864,9 @@ fun QuickExpenseScreen(
                                 shape = RoundedCornerShape(chipCorner),
                                 color = if (isChosen) selectedBg else QuickExpenseThemeTokens.SageSurface,
                                 border = BorderStroke(1.dp, if (isChosen) selectedBg else QuickExpenseThemeTokens.AccentSage),
-                                modifier = Modifier.heightIn(min = 32.dp)
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .heightIn(min = 32.dp)
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
@@ -890,7 +907,9 @@ fun QuickExpenseScreen(
                                 shape = RoundedCornerShape(customChipCorner),
                                 color = if (isCustomNote) selectedBg else surfaceColor,
                                 border = BorderStroke(1.dp, if (isCustomNote) selectedBg else keypadBorder),
-                                modifier = Modifier.heightIn(min = 32.dp)
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .heightIn(min = 32.dp)
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
@@ -950,7 +969,8 @@ fun QuickExpenseScreen(
                                         border = BorderStroke(
                                             1.dp,
                                             if (isPayer) QuickExpenseThemeTokens.SageBorder else keypadBorder
-                                        )
+                                        ),
+                                        modifier = Modifier.minimumInteractiveComponentSize()
                                     ) {
                                         Row(
                                             modifier = Modifier.padding(start = 4.dp, end = 9.dp, top = 3.dp, bottom = 3.dp),
@@ -1030,7 +1050,8 @@ fun QuickExpenseScreen(
                                 },
                                 shape = QuickExpenseThemeTokens.RadiusPill,
                                 color = QuickExpenseThemeTokens.SageSurface,
-                                border = BorderStroke(1.dp, QuickExpenseThemeTokens.AccentSage.copy(alpha = 0.8f))
+                                border = BorderStroke(1.dp, QuickExpenseThemeTokens.AccentSage.copy(alpha = 0.8f)),
+                                modifier = Modifier.minimumInteractiveComponentSize()
                             ) {
                                 Box(
                                     contentAlignment = Alignment.Center,
@@ -1087,7 +1108,7 @@ fun QuickExpenseScreen(
                                         )
                                         .padding(horizontal = 4.dp, vertical = 2.dp)
                                 ) {
-                                    val isRemainderRecipient = isSelected && person.id == selectedMemberIds.firstOrNull() && remainderPaise > 0L
+                                    val isRemainderRecipient = isSelected && remainderRecipientIds.contains(person.id) && remainderPaise > 0L
                                     Box(
                                         modifier = Modifier
                                             .size(50.dp)
@@ -1256,7 +1277,7 @@ fun QuickExpenseScreen(
                                             fontFamily = SplitMateBrandFontFamily,
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = textSecondary,
+                                            color = if (isDark) Color(0xFFD6CEC4) else textSecondary,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -1563,13 +1584,18 @@ fun QuickExpenseScreen(
                             // Log & Split FAB spanning EXACTLY two rows in height (54dp + 8dp + 54dp = 116dp)
                             // Always 100% opaque — never transparent or washed-out white/grey when amount is 0.
                             val canCommitSplit = hasSelectedGroup && totalAmountPaise > 0L && selectedMemberIds.isNotEmpty()
+                            // Dark Mode inversion: Soft Sage #D7E8B6 container + deep olive #1E2F08 content
+                            // (~11:1 contrast). Light Mode keeps the Soft Charcoal #23201E pill with light text.
+                            // Disabled state keeps the legible SageSurface / SageText tonal pairing in both themes.
+                            val ctaEnabledContainer = if (isDark) Color(0xFFD7E8B6) else Color(0xFF23201E)
+                            val ctaEnabledContent = if (isDark) Color(0xFF1E2F08) else Color.White
                             val ctaContainerColor = if (canCommitSplit) {
-                                Color(0xFF23201E)
+                                ctaEnabledContainer
                             } else {
                                 QuickExpenseThemeTokens.SageSurface
                             }
                             val ctaContentColor = if (canCommitSplit) {
-                                Color.White
+                                ctaEnabledContent
                             } else {
                                 QuickExpenseThemeTokens.SageText
                             }
@@ -1597,7 +1623,7 @@ fun QuickExpenseScreen(
                                 shadowElevation = if (canCommitSplit) 6.dp else 2.dp,
                                 border = BorderStroke(
                                     width = 1.5.dp,
-                                    color = if (canCommitSplit) Color(0xFF23201E) else QuickExpenseThemeTokens.AccentSage
+                                    color = if (canCommitSplit) ctaEnabledContainer else QuickExpenseThemeTokens.AccentSage
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1613,7 +1639,7 @@ fun QuickExpenseScreen(
                                     Surface(
                                         shape = CircleShape,
                                         color = if (canCommitSplit) {
-                                            QuickExpenseThemeTokens.AccentSage.copy(alpha = 0.25f)
+                                            if (isDark) ctaEnabledContent.copy(alpha = 0.12f) else QuickExpenseThemeTokens.AccentSage.copy(alpha = 0.25f)
                                         } else {
                                             QuickExpenseThemeTokens.AccentSage.copy(alpha = 0.45f)
                                         },
@@ -1623,7 +1649,11 @@ fun QuickExpenseScreen(
                                             Icon(
                                                 imageVector = Icons.Rounded.ElectricBolt,
                                                 contentDescription = null,
-                                                tint = if (canCommitSplit) QuickExpenseThemeTokens.AccentSage else QuickExpenseThemeTokens.SageText,
+                                                tint = if (canCommitSplit) {
+                                                    if (isDark) ctaEnabledContent else QuickExpenseThemeTokens.AccentSage
+                                                } else {
+                                                    QuickExpenseThemeTokens.SageText
+                                                },
                                                 modifier = Modifier.size(20.dp)
                                             )
                                         }

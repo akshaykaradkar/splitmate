@@ -66,13 +66,12 @@ object SplitMateMathEngine {
      */
     fun orderParticipantsPayerFirst(
         memberIds: Collection<String>,
-        payerId: String?,
+        payerId: String? = null,
         currentUserId: String? = null
     ): List<String> {
         val primaryPayerId = payerId?.takeIf { it.isNotBlank() } ?: currentUserId
         return memberIds.distinct().sortedWith(
             compareByDescending<String> { it == primaryPayerId }
-                .thenByDescending { it == currentUserId }
                 .thenBy { it }
         )
     }
@@ -182,7 +181,11 @@ object SplitMateMathEngine {
         if (discrepancy > 0 && allocations.any { it.baseClaimedCents > 0L }) {
             val sortedIndices = allocations.indices
                 .filter { allocations[it].baseClaimedCents > 0L }
-                .sortedByDescending { allocations[it].fractionalRemainder }
+                .sortedWith(
+                    compareByDescending<Int> { allocations[it].fractionalRemainder }
+                        .thenByDescending { allocations[it].memberId == payerId }
+                        .thenBy { allocations[it].memberId }
+                )
             for (i in 0 until min(discrepancy, sortedIndices.size)) {
                 val idx = sortedIndices[i]
                 allocations[idx].finalCents += 1L

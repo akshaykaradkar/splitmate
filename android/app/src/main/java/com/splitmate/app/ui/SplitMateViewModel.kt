@@ -16,13 +16,59 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.net.URLDecoder
+import java.net.URLEncoder
+import java.util.Base64
 import java.util.Locale
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 
 import com.splitmate.app.data.UserProfileEntity
+
+data class GroupSyncExportBundle(
+    val groupId: String,
+    val groupName: String,
+    val memberCount: Int,
+    val expenseCount: Int,
+    val settlementCount: Int,
+    val totalSpendCents: Long,
+    val syncToken: String,
+    val deepLinkUri: String,
+    val whatsappShareText: String,
+    val compressedBytesSize: Int = syncToken.length
+) {
+    val payloadToken: String get() = syncToken
+    val compactToken: String get() = syncToken
+    val deepLinkUrl: String get() = deepLinkUri
+    val shareMessage: String get() = whatsappShareText
+}
+
+data class GroupSyncMergeResult(
+    val success: Boolean,
+    val groupId: String = "",
+    val groupName: String = "",
+    val claimedMemberId: String? = null,
+    val claimedMemberName: String? = null,
+    val mergedMemberCount: Int = 0,
+    val mergedExpenseCount: Int = 0,
+    val mergedSplitCount: Int = 0,
+    val mergedSettlementCount: Int = 0,
+    val newlyAddedExpenseCount: Int = 0,
+    val newlyAddedSettlementCount: Int = 0,
+    val message: String = ""
+) {
+    val isSuccess: Boolean get() = success
+    val resolvedMemberId: String? get() = claimedMemberId
+    val resolvedMemberName: String? get() = claimedMemberName
+    val statusMessage: String get() = message
+}
 
 data class SplitMateUiState(
     val hasRegisteredProfile: Boolean = true,
@@ -258,6 +304,10 @@ class SplitMateViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    @Volatile
+    private var isRoomHydrated: Boolean = (dao == null)
+    private val pendingColdStartSyncRequests = mutableListOf<Triple<String, String?, Boolean>>()
+
     init {
         if (dao != null) {
             observeRoomDatabase(dao)
@@ -327,59 +377,104 @@ class SplitMateViewModel(
             if (roomDao.getCurrencyRate("INR") == null) {
                 roomDao.upsertCurrencyRates(defaultSeedCurrencies())
             }
-        }
-        viewModelScope.launch(ioDispatcher) {
-            roomDao.observeUserProfile().collect { profile ->
-                if (profile != null) {
-                    _uiState.update {
-                        it.copy(
-                            hasRegisteredProfile = true,
-                            currentUserName = profile.name,
-                            currentUserSeed = profile.avatarSeed,
-                            currentUserCountry = profile.countryName,
-                            activeCurrencyCode = profile.currencyCode,
-                            userUpiId = profile.upiId,
-                            isDarkTheme = profile.isDarkTheme
-                        )
+            val initialProfile = roomDao.observeUserProfile().first()
+            val initialGroups = roomDao.observeGroups().first()
+            val initialMembers = roomDao.observeAllMembers().first()
+            val initialExpenses = roomDao.observeAllExpenses().first()
+            val initialSplits = roomDao.observeAllSplits().first()
+            val initialSettlements = roomDao.observeAllSettlements().first()
+            val initialRates = roomDao.observeCurrencyRates().first()
+
+            _uiState.update { curr ->
+                val nextActiveGroup = curr.openedGroupDetailId?.takeIf { id -> initialGroups.any { it.groupId == id } }
+                    ?: curr.activeGroupId.takeIf { id -> initialGroups.any { it.groupId == id } }
+                    ?: initialGroups.firstOrNull()?.groupId.orEmpty()
+                curr.copy(
+                    hasRegisteredProfile = initialProfile != null,
+                    currentUserName = initialProfile?.name ?: curr.currentUserName,
+                    currentUserSeed = initialProfile?.avatarSeed ?: curr.currentUserSeed,
+                    currentUserCountry = initialProfile?.countryName ?: curr.currentUserCountry,
+                    activeCurrencyCode = initialProfile?.currencyCode ?: curr.activeCurrencyCode,
+                    userUpiId = initialProfile?.upiId ?: curr.userUpiId,
+                    isDarkTheme = initialProfile?.isDarkTheme ?: curr.isDarkTheme,
+                    groups = initialGroups,
+                    activeGroupId = nextActiveGroup,
+                    members = initialMembers,
+                    expenses = initialExpenses,
+                    splits = initialSplits,
+                    settlements = initialSettlements,
+                    currencyRates = initialRates.ifEmpty { curr.currencyRates }
+                )
+            }
+
+            val queuedRequests = synchronized(pendingColdStartSyncRequests) {
+                isRoomHydrated = true
+                val copy = pendingColdStartSyncRequests.toList()
+                pendingColdStartSyncRequests.clear()
+                copy
+            }
+            queuedRequests.forEach { (rawPayload, claimOverride, openAfter) ->
+                importAndMergeGroupSyncPayload(
+                    rawPayloadOrMessage = rawPayload,
+                    claimedMemberIdOverride = claimOverride,
+                    openGroupAfterMerge = openAfter
+                )
+            }
+
+            launch {
+                roomDao.observeUserProfile().collect { profile ->
+                    if (profile != null) {
+                        _uiState.update {
+                            it.copy(
+                                hasRegisteredProfile = true,
+                                currentUserName = profile.name,
+                                currentUserSeed = profile.avatarSeed,
+                                currentUserCountry = profile.countryName,
+                                activeCurrencyCode = profile.currencyCode,
+                                userUpiId = profile.upiId,
+                                isDarkTheme = profile.isDarkTheme
+                            )
+                        }
+                    } else {
+                        _uiState.update { it.copy(hasRegisteredProfile = false) }
                     }
-                } else {
-                    _uiState.update { it.copy(hasRegisteredProfile = false) }
                 }
             }
-        }
-        viewModelScope.launch(ioDispatcher) {
-            roomDao.observeGroups().collect { groups ->
-                _uiState.update { curr ->
-                    val nextActiveGroup = curr.activeGroupId.takeIf { id -> groups.any { it.groupId == id } }
-                        ?: groups.firstOrNull()?.groupId.orEmpty()
-                    curr.copy(groups = groups, activeGroupId = nextActiveGroup)
+            launch {
+                roomDao.observeGroups().collect { groups ->
+                    _uiState.update { curr ->
+                        val nextActiveGroup = curr.openedGroupDetailId?.takeIf { id -> groups.any { it.groupId == id } }
+                            ?: curr.activeGroupId.takeIf { id -> groups.any { it.groupId == id } }
+                            ?: groups.firstOrNull()?.groupId.orEmpty()
+                        curr.copy(groups = groups, activeGroupId = nextActiveGroup)
+                    }
                 }
             }
-        }
-        viewModelScope.launch(ioDispatcher) {
-            roomDao.observeAllMembers().collect { members ->
-                _uiState.update { it.copy(members = members) }
+            launch {
+                roomDao.observeAllMembers().collect { members ->
+                    _uiState.update { it.copy(members = members) }
+                }
             }
-        }
-        viewModelScope.launch(ioDispatcher) {
-            roomDao.observeAllExpenses().collect { expenses ->
-                _uiState.update { it.copy(expenses = expenses) }
+            launch {
+                roomDao.observeAllExpenses().collect { expenses ->
+                    _uiState.update { it.copy(expenses = expenses) }
+                }
             }
-        }
-        viewModelScope.launch(ioDispatcher) {
-            roomDao.observeAllSplits().collect { splits ->
-                _uiState.update { it.copy(splits = splits) }
+            launch {
+                roomDao.observeAllSplits().collect { splits ->
+                    _uiState.update { it.copy(splits = splits) }
+                }
             }
-        }
-        viewModelScope.launch(ioDispatcher) {
-            roomDao.observeAllSettlements().collect { settlements ->
-                _uiState.update { it.copy(settlements = settlements) }
+            launch {
+                roomDao.observeAllSettlements().collect { settlements ->
+                    _uiState.update { it.copy(settlements = settlements) }
+                }
             }
-        }
-        viewModelScope.launch(ioDispatcher) {
-            roomDao.observeCurrencyRates().collect { rates ->
-                if (rates.isNotEmpty()) {
-                    _uiState.update { it.copy(currencyRates = rates) }
+            launch {
+                roomDao.observeCurrencyRates().collect { rates ->
+                    if (rates.isNotEmpty()) {
+                        _uiState.update { it.copy(currencyRates = rates) }
+                    }
                 }
             }
         }
@@ -406,11 +501,55 @@ class SplitMateViewModel(
             upiId = defaultUpi,
             isDarkTheme = _uiState.value.isDarkTheme
         )
-        val updatedCurrentUserMembers = _uiState.value.members
-            .filter { it.isCurrentUser }
-            .map { it.copy(name = cleanName, avatarSeed = cleanSeed, upiId = it.upiId.ifBlank { defaultUpi }) }
+
+        val cleanFirstToken = cleanName.split(Regex("\\s+")).firstOrNull()?.lowercase(Locale.US).orEmpty()
+        val persistedModifiedMembers = mutableListOf<GroupMemberEntity>()
 
         _uiState.update { state ->
+            val updatedMembersByGroup = state.members.groupBy { it.groupId }.flatMap { (_, groupMembers) ->
+                val matchingExistingMember = groupMembers.firstOrNull { m ->
+                    m.name.trim().equals(cleanName, ignoreCase = true) ||
+                        (cleanFirstToken.length >= 3 &&
+                            m.name.trim().split(Regex("\\s+")).firstOrNull()?.lowercase(Locale.US) == cleanFirstToken) ||
+                        m.upiId.split("|").any { it.trim().equals(defaultUpi, ignoreCase = true) }
+                }
+
+                val updatedGroupList = if (matchingExistingMember != null) {
+                    groupMembers.map { m ->
+                        if (m.memberId == matchingExistingMember.memberId) {
+                            m.copy(
+                                isCurrentUser = true,
+                                upiId = m.upiId.ifBlank { defaultUpi },
+                                avatarSeed = m.avatarSeed.ifBlank { cleanSeed }
+                            )
+                        } else if (m.isCurrentUser) {
+                            m.copy(isCurrentUser = false)
+                        } else {
+                            m
+                        }
+                    }
+                } else {
+                    groupMembers.map { m ->
+                        val isLocalPlaceholder = m.memberId.endsWith("_me") ||
+                            m.memberId == "m_1" ||
+                            m.memberId == "m_1_apt" ||
+                            m.name.equals("You", ignoreCase = true) ||
+                            m.name.equals("Explorer", ignoreCase = true)
+                        if (m.isCurrentUser && isLocalPlaceholder) {
+                            m.copy(
+                                name = cleanName,
+                                avatarSeed = cleanSeed,
+                                upiId = m.upiId.ifBlank { defaultUpi }
+                            )
+                        } else {
+                            m
+                        }
+                    }
+                }
+                persistedModifiedMembers.addAll(updatedGroupList.filterIndexed { idx, upd -> upd != groupMembers[idx] })
+                updatedGroupList
+            }
+
             state.copy(
                 hasRegisteredProfile = true,
                 currentUserName = cleanName,
@@ -418,16 +557,14 @@ class SplitMateViewModel(
                 currentUserCountry = countryName,
                 activeCurrencyCode = currencyCode,
                 userUpiId = defaultUpi,
-                members = state.members.map { m ->
-                    if (m.isCurrentUser) m.copy(name = cleanName, avatarSeed = cleanSeed, upiId = m.upiId.ifBlank { defaultUpi }) else m
-                },
+                members = updatedMembersByGroup,
                 statusBannerMessage = "Welcome $cleanName"
             )
         }
         viewModelScope.launch(ioDispatcher) {
             dao?.upsertUserProfile(profile)
-            if (updatedCurrentUserMembers.isNotEmpty()) {
-                dao?.insertMembers(updatedCurrentUserMembers)
+            if (persistedModifiedMembers.isNotEmpty()) {
+                dao?.insertMembers(persistedModifiedMembers)
             }
         }
     }
@@ -525,14 +662,18 @@ class SplitMateViewModel(
         // Guard against adding the exact same 6-char Flight PNR or 10-digit Train PNR twice to the group ledger
         val bracketPnr = Regex("""\[PNR:([A-Za-z0-9]{6,12})\]""", RegexOption.IGNORE_CASE)
             .find(title)?.groupValues?.getOrNull(1)?.uppercase(Locale.US)
+        // Defense-in-depth: also match labelled "PNR: AB12CD" / "pnr:1234567890" references (6-10 alphanumeric)
+        val labelledPnr = Regex("""\bPNR:\s*([A-Za-z0-9]{6,10})\b""", RegexOption.IGNORE_CASE)
+            .find(title)?.groupValues?.getOrNull(1)?.uppercase(Locale.US)
         val pnrDigits = Regex("""\b(\d{10})\b""").find(title)?.groupValues?.getOrNull(1)
-        val detectedPnr = bracketPnr ?: pnrDigits
+        val detectedPnr = bracketPnr ?: labelledPnr ?: pnrDigits
 
         if (!detectedPnr.isNullOrBlank()) {
+            val wordBoundaryPnrRegex = Regex("""\b${Regex.escape(detectedPnr)}\b""", RegexOption.IGNORE_CASE)
             val existingExp = state.expenses.firstOrNull { exp ->
                 exp.groupId == state.activeGroupId && (
                     exp.title.contains("[PNR:$detectedPnr]", ignoreCase = true) ||
-                        exp.title.contains(detectedPnr, ignoreCase = true)
+                        wordBoundaryPnrRegex.containsMatchIn(exp.title)
                     )
             }
             if (existingExp != null) {
@@ -1036,11 +1177,16 @@ class SplitMateViewModel(
         val existing = state.expenses.find { it.expenseId == expenseId } ?: return
         val cleanTitle = newTitle.trim().ifEmpty { existing.title }
 
-        // Guard against editing an expense to collide with another expense's 10-digit PNR in the same group
-        val newPnrDigits = Regex("""\b(\d{10})\b""").find(cleanTitle)?.groupValues?.getOrNull(1)
+        // Guard against editing an expense to collide with another expense's PNR in the same group
+        // (labelled "PNR: XXXXXX" 6-10 alphanumeric Flight/Train PNR, or bare 10-digit Train PNR)
+        val newPnrDigits = Regex("""\bPNR:\s*([A-Za-z0-9]{6,10})\b""", RegexOption.IGNORE_CASE)
+            .find(cleanTitle)?.groupValues?.getOrNull(1)?.uppercase(Locale.US)
+            ?: Regex("""\b(\d{10})\b""").find(cleanTitle)?.groupValues?.getOrNull(1)
         if (!newPnrDigits.isNullOrBlank()) {
+            val pnrWordMatcher = Regex("""\b${Regex.escape(newPnrDigits)}\b""", RegexOption.IGNORE_CASE)
             val conflictingExpense = state.expenses.firstOrNull { other ->
-                other.groupId == existing.groupId && other.expenseId != expenseId && other.title.contains(newPnrDigits)
+                other.groupId == existing.groupId && other.expenseId != expenseId &&
+                    (other.title.contains(newPnrDigits) || pnrWordMatcher.containsMatchIn(other.title))
             }
             if (conflictingExpense != null) {
                 _uiState.update { curr ->
@@ -1116,6 +1262,585 @@ class SplitMateViewModel(
         }
     }
 
+    /**
+     * Switches the local device's active perspective ("Viewing as: <Member> (You)") within [groupId]
+     * in `<16ms` by toggling `GroupMemberEntity.isCurrentUser` and persisting to Room.
+     */
+    fun claimGroupMemberPerspective(groupId: String, memberId: String) {
+        val state = _uiState.value
+        val targetGroupMembers = state.members.filter { it.groupId == groupId }
+        val claimedMember = targetGroupMembers.find { it.memberId == memberId } ?: return
+        val groupName = state.groups.find { it.groupId == groupId }?.name ?: "Trip"
+
+        val updatedGroupMembers = targetGroupMembers.map { m ->
+            m.copy(isCurrentUser = (m.memberId == memberId))
+        }
+
+        _uiState.update { curr ->
+            curr.copy(
+                members = curr.members.map { m ->
+                    if (m.groupId == groupId) {
+                        m.copy(isCurrentUser = (m.memberId == memberId))
+                    } else {
+                        m
+                    }
+                },
+                statusBannerMessage = "Viewing \"$groupName\" as ${claimedMember.name} (You)"
+            )
+        }
+
+        viewModelScope.launch(ioDispatcher) {
+            dao?.insertMembers(updatedGroupMembers)
+        }
+    }
+
+    /**
+     * Computes the canonical per-member net balance map (in integer paise/cents) for [groupId].
+     * Positive = creditor (`YOU GET BACK`), Negative = debtor (`YOU OWE`), Zero = settled.
+     */
+    fun computeGroupMemberNetBalances(groupId: String = _uiState.value.activeGroupId): Map<String, Long> {
+        val state = _uiState.value
+        val groupMembers = state.members.filter { it.groupId == groupId }
+        if (groupMembers.isEmpty()) return emptyMap()
+        val groupExpenses = state.expenses.filter { it.groupId == groupId }
+        val groupExpenseIds = groupExpenses.map { it.expenseId }.toSet()
+        val groupSplits = state.splits.filter { groupExpenseIds.contains(it.expenseId) }
+        val groupSettlements = state.settlements.filter { it.groupId == groupId }
+        return computeGroupNetBalances(groupMembers, groupExpenses, groupSplits, groupSettlements)
+    }
+
+    /**
+     * Exports a $0.00-server-cost compressed Sync Capsule (`SM2_<base64url>`) containing the
+     * canonical Group (`G`), Members (`M`), Expenses (`E`), Splits (`S`), and Settlements (`T`).
+     * Strictly zero Unicode emojis in [GroupSyncExportBundle.whatsappShareText].
+     */
+    fun exportGroupSyncPayload(groupId: String = _uiState.value.activeGroupId): GroupSyncExportBundle? {
+        val state = _uiState.value
+        val group = state.groups.find { it.groupId == groupId } ?: return null
+        val groupMembers = state.members
+            .filter { it.groupId == groupId }
+            .sortedBy { it.memberId }
+        if (groupMembers.isEmpty()) return null
+
+        val groupExpenses = state.expenses
+            .filter { it.groupId == groupId }
+            .sortedWith(compareBy<ExpenseEntity> { it.createdAt }.thenBy { it.expenseId })
+        val groupExpenseIds = groupExpenses.map { it.expenseId }.toSet()
+        val groupSplits = state.splits
+            .filter { groupExpenseIds.contains(it.expenseId) }
+            .sortedWith(compareBy<ExpenseSplitEntity> { it.expenseId }.thenBy { it.memberId }.thenBy { it.splitId })
+        val groupSettlements = state.settlements
+            .filter { it.groupId == groupId }
+            .sortedWith(compareBy<SettlementEntity> { it.settledAt }.thenBy { it.settlementId })
+
+        val lines = mutableListOf<String>()
+        lines.add("V|2")
+        lines.add(
+            listOf(
+                "G",
+                urlEnc(group.groupId),
+                urlEnc(group.name),
+                urlEnc(group.currencyCode),
+                urlEnc(group.iconName),
+                group.createdAt.toString()
+            ).joinToString("|")
+        )
+        groupMembers.forEach { m ->
+            lines.add(
+                listOf(
+                    "M",
+                    urlEnc(m.memberId),
+                    urlEnc(m.groupId),
+                    urlEnc(m.name),
+                    urlEnc(m.avatarSeed),
+                    urlEnc(m.upiId),
+                    if (m.isCurrentUser) "1" else "0"
+                ).joinToString("|")
+            )
+        }
+        groupExpenses.forEach { e ->
+            lines.add(
+                listOf(
+                    "E",
+                    urlEnc(e.expenseId),
+                    urlEnc(e.groupId),
+                    urlEnc(e.title),
+                    urlEnc(e.payerId),
+                    e.baseSubtotalCents.toString(),
+                    e.taxCents.toString(),
+                    e.tipCents.toString(),
+                    e.totalAmountCents.toString(),
+                    e.lockedMultiplier.toString(),
+                    e.unassignedBaseCents.toString(),
+                    urlEnc(e.currencyCode),
+                    e.lockedExchangeRate.toString(),
+                    urlEnc(e.syncStatus),
+                    e.createdAt.toString()
+                ).joinToString("|")
+            )
+        }
+        groupSplits.forEach { s ->
+            lines.add(
+                listOf(
+                    "S",
+                    urlEnc(s.splitId),
+                    urlEnc(s.expenseId),
+                    urlEnc(s.memberId),
+                    s.baseClaimedCents.toString(),
+                    s.finalOwedCents.toString(),
+                    if (s.plusOneCent) "1" else "0"
+                ).joinToString("|")
+            )
+        }
+        groupSettlements.forEach { t ->
+            lines.add(
+                listOf(
+                    "T",
+                    urlEnc(t.settlementId),
+                    urlEnc(t.groupId),
+                    urlEnc(t.fromMemberId),
+                    urlEnc(t.fromMemberName),
+                    urlEnc(t.toMemberId),
+                    urlEnc(t.toMemberName),
+                    t.amountCents.toString(),
+                    urlEnc(t.currencyCode),
+                    t.lockedExchangeRate.toString(),
+                    urlEnc(t.syncStatus),
+                    t.settledAt.toString()
+                ).joinToString("|")
+            )
+        }
+
+        val wireText = lines.joinToString("\n")
+        val compressedBytes = ByteArrayOutputStream().use { baos ->
+            GZIPOutputStream(baos).use { gzip ->
+                gzip.write(wireText.toByteArray(Charsets.UTF_8))
+            }
+            baos.toByteArray()
+        }
+        val base64Url = Base64.getUrlEncoder().withoutPadding().encodeToString(compressedBytes)
+        val syncToken = "SM2_$base64Url"
+        val deepLinkUri = "splitmate://trip-sync?payload=$syncToken"
+        val totalSpendCents = groupExpenses.sumOf { it.totalAmountCents }
+        val formattedTotalSpend = formatIndianRupeesFromCents(
+            cents = totalSpendCents,
+            includePlusSign = false,
+            currencySymbol = "₹"
+        )
+        val memberNamesSummary = groupMembers.joinToString(", ") { it.name }
+
+        // Strictly zero Unicode emojis anywhere in whatsappShareText
+        val whatsappShareText = buildString {
+            append("*SplitMate Trip Sync: ${group.name}*\n")
+            append("Travelers (${groupMembers.size}): $memberNamesSummary\n")
+            append("Bookings & Expenses: ${groupExpenses.size} | Total Spend: $formattedTotalSpend\n\n")
+            append("1. Tap link to open & sync in SplitMate:\n")
+            append("$deepLinkUri\n\n")
+            append("2. Or copy this message and tap 'Paste & Merge Sync Capsule' in SplitMate:\n")
+            append(syncToken)
+        }
+
+        return GroupSyncExportBundle(
+            groupId = group.groupId,
+            groupName = group.name,
+            memberCount = groupMembers.size,
+            expenseCount = groupExpenses.size,
+            settlementCount = groupSettlements.size,
+            totalSpendCents = totalSpendCents,
+            syncToken = syncToken,
+            deepLinkUri = deepLinkUri,
+            whatsappShareText = whatsappShareText,
+            compressedBytesSize = compressedBytes.size
+        )
+    }
+
+    /**
+     * Imports an `SM2_<base64url>` Sync Capsule (or full WhatsApp message / `splitmate://trip-sync` URI),
+     * performs an idempotent CRDT-style union merge by primary keys (`groupId`, `memberId`, `expenseId`,
+     * `splitId`, `settlementId`), and resolves the local user's perspective via 4-stage identity resolution.
+     */
+    fun importAndMergeGroupSyncPayload(
+        rawPayloadOrMessage: String,
+        claimedMemberIdOverride: String? = null,
+        openGroupAfterMerge: Boolean = true
+    ): GroupSyncMergeResult {
+        val token = extractSyncTokenFromRawInput(rawPayloadOrMessage)
+            ?: return GroupSyncMergeResult(
+                success = false,
+                message = "No valid SplitMate SM2_ sync capsule found"
+            )
+
+        val wireText = runCatching {
+            val base64Part = token.removePrefix("SM2_").trim()
+            val compressed = Base64.getUrlDecoder().decode(base64Part)
+            GZIPInputStream(ByteArrayInputStream(compressed)).bufferedReader(Charsets.UTF_8).use { it.readText() }
+        }.getOrElse {
+            return GroupSyncMergeResult(
+                success = false,
+                message = "Invalid or corrupted SplitMate sync capsule"
+            )
+        }
+
+        var parsedGroup: ExpenseGroupEntity? = null
+        val parsedMembers = mutableListOf<GroupMemberEntity>()
+        val parsedExpenses = mutableListOf<ExpenseEntity>()
+        val parsedSplits = mutableListOf<ExpenseSplitEntity>()
+        val parsedSettlements = mutableListOf<SettlementEntity>()
+
+        wireText.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .forEach { line ->
+                val parts = line.split("|")
+                when (parts.firstOrNull()) {
+                    "G" -> if (parts.size >= 6) {
+                        parsedGroup = ExpenseGroupEntity(
+                            groupId = urlDec(parts[1]),
+                            name = urlDec(parts[2]).toSmartTitleCase(),
+                            currencyCode = urlDec(parts[3]).ifBlank { "INR" },
+                            iconName = urlDec(parts[4]).ifBlank { "Flight" },
+                            createdAt = parts[5].toLongOrNull() ?: System.currentTimeMillis()
+                        )
+                    }
+                    "M" -> if (parts.size >= 7) {
+                        parsedMembers.add(
+                            GroupMemberEntity(
+                                memberId = urlDec(parts[1]),
+                                groupId = urlDec(parts[2]),
+                                name = urlDec(parts[3]),
+                                avatarSeed = urlDec(parts[4]).ifBlank { urlDec(parts[3]) },
+                                upiId = urlDec(parts[5]),
+                                isCurrentUser = parts[6] == "1"
+                            )
+                        )
+                    }
+                    "E" -> if (parts.size >= 15) {
+                        parsedExpenses.add(
+                            ExpenseEntity(
+                                expenseId = urlDec(parts[1]),
+                                groupId = urlDec(parts[2]),
+                                title = urlDec(parts[3]),
+                                payerId = urlDec(parts[4]),
+                                baseSubtotalCents = parts[5].toLongOrNull() ?: 0L,
+                                taxCents = parts[6].toLongOrNull() ?: 0L,
+                                tipCents = parts[7].toLongOrNull() ?: 0L,
+                                totalAmountCents = parts[8].toLongOrNull() ?: 0L,
+                                lockedMultiplier = parts[9].toDoubleOrNull() ?: 1.0,
+                                unassignedBaseCents = parts[10].toLongOrNull() ?: 0L,
+                                currencyCode = urlDec(parts[11]).ifBlank { "INR" },
+                                lockedExchangeRate = parts[12].toDoubleOrNull() ?: 1.0,
+                                syncStatus = urlDec(parts[13]).ifBlank { "SYNCED" },
+                                createdAt = parts[14].toLongOrNull() ?: System.currentTimeMillis()
+                            )
+                        )
+                    }
+                    "S" -> if (parts.size >= 7) {
+                        parsedSplits.add(
+                            ExpenseSplitEntity(
+                                splitId = urlDec(parts[1]),
+                                expenseId = urlDec(parts[2]),
+                                memberId = urlDec(parts[3]),
+                                baseClaimedCents = parts[4].toLongOrNull() ?: 0L,
+                                finalOwedCents = parts[5].toLongOrNull() ?: 0L,
+                                plusOneCent = parts[6] == "1"
+                            )
+                        )
+                    }
+                    "T" -> if (parts.size >= 12) {
+                        parsedSettlements.add(
+                            SettlementEntity(
+                                settlementId = urlDec(parts[1]),
+                                groupId = urlDec(parts[2]),
+                                fromMemberId = urlDec(parts[3]),
+                                fromMemberName = urlDec(parts[4]),
+                                toMemberId = urlDec(parts[5]),
+                                toMemberName = urlDec(parts[6]),
+                                amountCents = parts[7].toLongOrNull() ?: 0L,
+                                currencyCode = urlDec(parts[8]).ifBlank { "INR" },
+                                lockedExchangeRate = parts[9].toDoubleOrNull() ?: 1.0,
+                                syncStatus = urlDec(parts[10]).ifBlank { "SYNCED" },
+                                settledAt = parts[11].toLongOrNull() ?: System.currentTimeMillis()
+                            )
+                        )
+                    }
+                }
+            }
+
+        val incomingGroup = parsedGroup ?: return GroupSyncMergeResult(
+            success = false,
+            message = "Sync capsule is missing group metadata"
+        )
+        val groupId = incomingGroup.groupId
+        val incomingGroupMembers = parsedMembers.filter { it.groupId == groupId }
+        if (incomingGroupMembers.isEmpty()) {
+            return GroupSyncMergeResult(
+                success = false,
+                message = "Sync capsule has no group members"
+            )
+        }
+
+        if (!isRoomHydrated) {
+            synchronized(pendingColdStartSyncRequests) {
+                if (!isRoomHydrated) {
+                    pendingColdStartSyncRequests.add(
+                        Triple(rawPayloadOrMessage, claimedMemberIdOverride, openGroupAfterMerge)
+                    )
+                    return GroupSyncMergeResult(
+                        success = true,
+                        groupId = groupId,
+                        groupName = incomingGroup.name,
+                        mergedMemberCount = incomingGroupMembers.size,
+                        mergedExpenseCount = parsedExpenses.count { it.groupId == groupId },
+                        message = "Queued cold-start sync for \"${incomingGroup.name}\""
+                    )
+                }
+            }
+        }
+
+        val state = _uiState.value
+        val existingGroup = state.groups.find { it.groupId == groupId }
+        val mergedGroup = if (existingGroup != null) {
+            incomingGroup.copy(
+                name = incomingGroup.name.ifBlank { existingGroup.name },
+                iconName = incomingGroup.iconName.ifBlank { existingGroup.iconName },
+                createdAt = minOf(existingGroup.createdAt, incomingGroup.createdAt)
+            )
+        } else {
+            incomingGroup
+        }
+
+        // 1. Union merge members by memberId
+        val existingGroupMembers = state.members.filter { it.groupId == groupId }
+        val memberMap = linkedMapOf<String, GroupMemberEntity>()
+        existingGroupMembers.forEach { m -> memberMap[m.memberId] = m }
+        incomingGroupMembers.forEach { inc ->
+            val prev = memberMap[inc.memberId]
+            memberMap[inc.memberId] = if (prev != null) {
+                prev.copy(
+                    name = inc.name.ifBlank { prev.name },
+                    avatarSeed = inc.avatarSeed.ifBlank { prev.avatarSeed },
+                    upiId = inc.upiId.ifBlank { prev.upiId }
+                )
+            } else {
+                inc
+            }
+        }
+        val mergedMembersUnlocked = memberMap.values.toList()
+
+        // 2. 4-Stage Local Perspective Identity Resolution
+        val resolvedPerspectiveMemberId = resolveLocalPerspectiveMemberId(
+            mergedGroupMembers = mergedMembersUnlocked,
+            existingLocalGroupMembers = existingGroupMembers,
+            claimedMemberIdOverride = claimedMemberIdOverride,
+            state = state
+        )
+
+        val finalGroupMembers = mergedMembersUnlocked.map { m ->
+            m.copy(isCurrentUser = (m.memberId == resolvedPerspectiveMemberId))
+        }
+        val claimedMember = finalGroupMembers.find { it.memberId == resolvedPerspectiveMemberId }
+        val validMemberIds = finalGroupMembers.map { it.memberId }.toSet()
+
+        // 3. Union merge expenses by expenseId (defensively filtered against validMemberIds for FK safety)
+        val existingGroupExpenses = state.expenses.filter {
+            it.groupId == groupId && validMemberIds.contains(it.payerId)
+        }
+        val existingExpenseIds = existingGroupExpenses.map { it.expenseId }.toSet()
+        val incomingGroupExpenses = parsedExpenses.filter {
+            it.groupId == groupId && validMemberIds.contains(it.payerId)
+        }
+        val newlyAddedExpenseCount = incomingGroupExpenses.count { !existingExpenseIds.contains(it.expenseId) }
+
+        val expenseMap = linkedMapOf<String, ExpenseEntity>()
+        existingGroupExpenses.forEach { e -> expenseMap[e.expenseId] = e }
+        incomingGroupExpenses.forEach { inc -> expenseMap[inc.expenseId] = inc }
+        val mergedGroupExpenses = expenseMap.values.sortedWith(
+            compareByDescending<ExpenseEntity> { it.createdAt }.thenBy { it.expenseId }
+        )
+        val mergedGroupExpenseIds = mergedGroupExpenses.map { it.expenseId }.toSet()
+
+        // 4. Union merge splits by (expenseId, memberId) so unique & FK constraints are strictly respected
+        val existingGroupSplits = state.splits.filter {
+            mergedGroupExpenseIds.contains(it.expenseId) && validMemberIds.contains(it.memberId)
+        }
+        val incomingGroupSplits = parsedSplits.filter {
+            mergedGroupExpenseIds.contains(it.expenseId) && validMemberIds.contains(it.memberId)
+        }
+        val incomingSplitExpenseIds = incomingGroupSplits.map { it.expenseId }.toSet()
+        val splitKeyMap = linkedMapOf<String, ExpenseSplitEntity>()
+        // Keep existing splits for expenses not updated in incoming capsule (or as baseline)
+        existingGroupSplits.filterNot { incomingSplitExpenseIds.contains(it.expenseId) }.forEach { sp ->
+            splitKeyMap["${sp.expenseId}|${sp.memberId}"] = sp
+        }
+        incomingGroupSplits.forEach { sp ->
+            splitKeyMap["${sp.expenseId}|${sp.memberId}"] = sp
+        }
+        val mergedGroupSplits = splitKeyMap.values.toList()
+
+        // 5. Union merge settlements by settlementId (defensively filtered against validMemberIds for FK safety)
+        val existingGroupSettlements = state.settlements.filter {
+            it.groupId == groupId &&
+                validMemberIds.contains(it.fromMemberId) &&
+                validMemberIds.contains(it.toMemberId)
+        }
+        val existingSettlementIds = existingGroupSettlements.map { it.settlementId }.toSet()
+        val incomingGroupSettlements = parsedSettlements.filter {
+            it.groupId == groupId &&
+                validMemberIds.contains(it.fromMemberId) &&
+                validMemberIds.contains(it.toMemberId)
+        }
+        val newlyAddedSettlementCount = incomingGroupSettlements.count { !existingSettlementIds.contains(it.settlementId) }
+
+        val settlementMap = linkedMapOf<String, SettlementEntity>()
+        existingGroupSettlements.forEach { st -> settlementMap[st.settlementId] = st }
+        incomingGroupSettlements.forEach { st -> settlementMap[st.settlementId] = st }
+        val mergedGroupSettlements = settlementMap.values.sortedWith(
+            compareByDescending<SettlementEntity> { it.settledAt }.thenBy { it.settlementId }
+        )
+
+        val statusMsg = "Synced \"${mergedGroup.name}\" as ${claimedMember?.name ?: "Member"} (${mergedGroupExpenses.size} expenses)"
+
+        _uiState.update { curr ->
+            val otherGroups = curr.groups.filterNot { it.groupId == groupId }
+            val otherMembers = curr.members.filterNot { it.groupId == groupId }
+            val otherExpenses = curr.expenses.filterNot { it.groupId == groupId }
+            val currentGroupExpenseIds = (curr.expenses.filter { it.groupId == groupId }.map { it.expenseId } + mergedGroupExpenseIds).toSet()
+            val otherSplits = curr.splits.filterNot { currentGroupExpenseIds.contains(it.expenseId) }
+            val otherSettlements = curr.settlements.filterNot { it.groupId == groupId }
+
+            curr.copy(
+                groups = listOf(mergedGroup) + otherGroups,
+                members = otherMembers + finalGroupMembers,
+                expenses = mergedGroupExpenses + otherExpenses,
+                splits = otherSplits + mergedGroupSplits,
+                settlements = mergedGroupSettlements + otherSettlements,
+                activeGroupId = if (openGroupAfterMerge) groupId else curr.activeGroupId.ifBlank { groupId },
+                openedGroupDetailId = if (openGroupAfterMerge) groupId else curr.openedGroupDetailId,
+                selectedTabName = if (openGroupAfterMerge) "LEDGERS" else curr.selectedTabName,
+                statusBannerMessage = statusMsg
+            )
+        }
+
+        viewModelScope.launch(ioDispatcher) {
+            dao?.insertGroup(mergedGroup)
+            dao?.insertMembers(finalGroupMembers)
+            mergedGroupExpenses.forEach { exp ->
+                val expSplits = mergedGroupSplits.filter { it.expenseId == exp.expenseId }
+                dao?.insertExpenseWithSplits(exp, expSplits)
+            }
+            mergedGroupSettlements.forEach { st ->
+                dao?.insertSettlement(st)
+            }
+        }
+
+        return GroupSyncMergeResult(
+            success = true,
+            groupId = groupId,
+            groupName = mergedGroup.name,
+            claimedMemberId = resolvedPerspectiveMemberId,
+            claimedMemberName = claimedMember?.name,
+            mergedMemberCount = finalGroupMembers.size,
+            mergedExpenseCount = mergedGroupExpenses.size,
+            mergedSplitCount = mergedGroupSplits.size,
+            mergedSettlementCount = mergedGroupSettlements.size,
+            newlyAddedExpenseCount = newlyAddedExpenseCount,
+            newlyAddedSettlementCount = newlyAddedSettlementCount,
+            message = statusMsg
+        )
+    }
+
+    /**
+     * 4-Stage Identity Resolution for local perspective (`isCurrentUser`):
+     * 1. Explicit override (`claimedMemberIdOverride`) or existing local claim in this group
+     * 2. 10-digit Indian mobile number match
+     * 3. Normalized UPI VPA match
+     * 4. Local profile name / first-name match
+     */
+    fun resolveLocalPerspectiveMemberId(
+        mergedGroupMembers: List<GroupMemberEntity>,
+        existingLocalGroupMembers: List<GroupMemberEntity> = emptyList(),
+        claimedMemberIdOverride: String? = null,
+        state: SplitMateUiState = _uiState.value
+    ): String {
+        if (mergedGroupMembers.isEmpty()) return ""
+
+        // Stage 1a: Explicit memberId override
+        if (!claimedMemberIdOverride.isNullOrBlank()) {
+            val explicitMatch = mergedGroupMembers.find { it.memberId == claimedMemberIdOverride }
+            if (explicitMatch != null) return explicitMatch.memberId
+        }
+
+        // Stage 1b: Existing local claim in this group on this device
+        val existingLocalClaim = existingLocalGroupMembers.find { it.isCurrentUser }
+        if (existingLocalClaim != null && mergedGroupMembers.any { it.memberId == existingLocalClaim.memberId }) {
+            return existingLocalClaim.memberId
+        }
+
+        // Collect local user's phone(s) and VPA(s) from userUpiId and other local groups' isCurrentUser records
+        val localRawTokens = buildList {
+            addAll(state.userUpiId.split("|").map { it.trim() }.filter { it.isNotEmpty() })
+            state.members.filter { it.isCurrentUser && it.groupId != mergedGroupMembers.first().groupId }
+                .forEach { m ->
+                    addAll(m.upiId.split("|").map { it.trim() }.filter { it.isNotEmpty() })
+                }
+        }
+
+        val localPhones = localRawTokens
+            .map { cleanIndianTenDigitPhone(it.substringBefore("@")) }
+            .filter { it.length == 10 }
+            .toSet()
+
+        // Stage 2: 10-Digit Indian Phone Match
+        if (localPhones.isNotEmpty()) {
+            val phoneMatch = mergedGroupMembers.firstOrNull { m ->
+                m.upiId.split("|").any { part ->
+                    val memberPhone = cleanIndianTenDigitPhone(part.trim().substringBefore("@"))
+                    memberPhone.length == 10 && localPhones.contains(memberPhone)
+                }
+            }
+            if (phoneMatch != null) return phoneMatch.memberId
+        }
+
+        // Stage 3: Normalized UPI VPA Match
+        val localVpas = localRawTokens
+            .filter { it.contains("@") }
+            .map { it.lowercase(Locale.US) }
+            .toSet()
+        if (localVpas.isNotEmpty()) {
+            val vpaMatch = mergedGroupMembers.firstOrNull { m ->
+                m.upiId.split("|").any { part ->
+                    val cleanPart = part.trim().lowercase(Locale.US)
+                    cleanPart.contains("@") && localVpas.contains(cleanPart)
+                }
+            }
+            if (vpaMatch != null) return vpaMatch.memberId
+        }
+
+        // Stage 4: Local Profile Name / First-Name Match
+        val cleanLocalName = state.currentUserName.trim()
+        if (cleanLocalName.isNotBlank() &&
+            !cleanLocalName.equals("You", ignoreCase = true) &&
+            !cleanLocalName.equals("Explorer", ignoreCase = true)
+        ) {
+            val exactNameMatch = mergedGroupMembers.firstOrNull {
+                it.name.trim().equals(cleanLocalName, ignoreCase = true)
+            }
+            if (exactNameMatch != null) return exactNameMatch.memberId
+
+            val localFirst = cleanLocalName.split(Regex("\\s+")).firstOrNull()?.lowercase(Locale.US).orEmpty()
+            if (localFirst.length >= 3) {
+                val firstNameMatch = mergedGroupMembers.firstOrNull { m ->
+                    val memberFirst = m.name.trim().split(Regex("\\s+")).firstOrNull()?.lowercase(Locale.US).orEmpty()
+                    memberFirst == localFirst
+                }
+                if (firstNameMatch != null) return firstNameMatch.memberId
+            }
+        }
+
+        return mergedGroupMembers.firstOrNull { it.isCurrentUser }?.memberId
+            ?: mergedGroupMembers.first().memberId
+    }
+
     private fun computeGroupNetBalances(
         groupMembers: List<GroupMemberEntity>,
         groupExpenses: List<ExpenseEntity>,
@@ -1168,6 +1893,19 @@ class SplitMateViewModel(
     )
 
     companion object {
+        private fun urlEnc(raw: String): String = URLEncoder.encode(raw, Charsets.UTF_8.name())
+        private fun urlDec(encoded: String): String = URLDecoder.decode(encoded, Charsets.UTF_8.name())
+
+        /**
+         * Extracts the `SM2_<base64url>` compressed token from a raw token string, a
+         * `splitmate://trip-sync?payload=SM2_...` deep-link URI, or a full multi-line WhatsApp share message.
+         */
+        fun extractSyncTokenFromRawInput(rawInput: String): String? {
+            if (rawInput.isBlank()) return null
+            val match = Regex("""SM2_[A-Za-z0-9_-]+""").find(rawInput)
+            return match?.value?.trim()?.takeIf { it.length > 8 }
+        }
+
         /**
          * Resolves the exact per-member split breakdown for an expense using the persisted
          * [ExpenseSplitEntity] records (`allSplits`), so deselected members are NEVER charged

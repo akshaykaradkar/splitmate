@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -431,11 +433,18 @@ fun SplitMateMainDashboardScaffold(
 
     val configuration = androidx.compose.ui.platform.LocalConfiguration.current
     val isMediumOrExpandedWindow = configuration.screenWidthDp >= 600
+    val isTwoPaneTabletWithGroups = configuration.screenWidthDp >= 720 && uiState.groups.isNotEmpty()
+    var useTripHubV2View by rememberSaveable { mutableStateOf(true) }
+    val isImmersiveTripHubOpen =
+        currentTab == SplitMateTab.LEDGERS && uiState.openedGroupDetailId != null && useTripHubV2View
+    val isTripHubCanvasVisible =
+        currentTab == SplitMateTab.LEDGERS && useTripHubV2View &&
+            (uiState.openedGroupDetailId != null || isTwoPaneTabletWithGroups)
 
     Scaffold(
         containerColor = animatedScreenBg,
         floatingActionButton = {
-            if (currentTab == SplitMateTab.LEDGERS) {
+            if (currentTab == SplitMateTab.LEDGERS && !isTripHubCanvasVisible) {
                 ExtendedFloatingActionButton(
                     onClick = {
                         viewModel.navigateToSubFlow(
@@ -469,16 +478,22 @@ fun SplitMateMainDashboardScaffold(
         },
         bottomBar = {
             if (!isMediumOrExpandedWindow) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
-                        .testTag("HorizontalFloatingToolbar")
+                AnimatedVisibility(
+                    visible = !isImmersiveTripHubOpen,
+                    enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                    exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
                 ) {
-                    SplitMateBottomNavigationBar(
-                        selectedTab = currentTab,
-                        onTabSelected = { tab -> viewModel.selectTab(tab.name) }
-                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
+                            .testTag("HorizontalFloatingToolbar")
+                    ) {
+                        SplitMateBottomNavigationBar(
+                            selectedTab = currentTab,
+                            onTabSelected = { tab -> viewModel.selectTab(tab.name) }
+                        )
+                    }
                 }
             }
         }
@@ -562,7 +577,9 @@ fun SplitMateMainDashboardScaffold(
                             openPnrOrFlightTicket(pnr)
                         }
                     },
-                    onAvatarSettingsClick = onOpenSettings
+                    onAvatarSettingsClick = onOpenSettings,
+                    useTripHubV2View = useTripHubV2View,
+                    onToggleTripHubView = { useTripHubV2View = it }
                 )
                 SplitMateTab.SPLIT -> QuickExpenseScreen(
                     viewModel = viewModel,
@@ -676,7 +693,9 @@ fun LedgersDashboardScreen(
     onNavigateToPnrSplit: () -> Unit = {},
     onUploadFlightPdf: () -> Unit = {},
     onOpenPnrWithTicket: (String) -> Unit = {},
-    onAvatarSettingsClick: () -> Unit = {}
+    onAvatarSettingsClick: () -> Unit = {},
+    useTripHubV2View: Boolean = true,
+    onToggleTripHubView: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
     val totalBalance by viewModel.totalBalance.collectAsStateWithLifecycle()
@@ -689,10 +708,15 @@ fun LedgersDashboardScreen(
     var editingExpense by remember { mutableStateOf<com.splitmate.app.data.ExpenseEntity?>(null) }
     var deletingExpense by remember { mutableStateOf<com.splitmate.app.data.ExpenseEntity?>(null) }
     var showAddContactsToExistingGroupSheet by remember { mutableStateOf(false) }
+    var showClassicSyncSheet by remember { mutableStateOf(false) }
 
     // Intercept system Back when viewing inside a specific Group so user returns to All Groups list instead of exiting the app!
-    androidx.activity.compose.BackHandler(enabled = openedGroupDetailId != null) {
-        if (deletingExpense != null) {
+    androidx.activity.compose.BackHandler(
+        enabled = openedGroupDetailId != null || showClassicSyncSheet || showAddContactsToExistingGroupSheet
+    ) {
+        if (showClassicSyncSheet) {
+            showClassicSyncSheet = false
+        } else if (deletingExpense != null) {
             deletingExpense = null
         } else if (editingExpense != null) {
             editingExpense = null
@@ -948,19 +972,32 @@ fun LedgersDashboardScreen(
         )
     }
 
-    val openedGroup = uiState.groups.find { it.groupId == openedGroupDetailId }
-    if (showAddContactsToExistingGroupSheet && openedGroup != null) {
+    val isTwoPaneListDetailViewport = LocalConfiguration.current.screenWidthDp >= 720 && uiState.groups.isNotEmpty()
+    val currentOpenedGroup = uiState.groups.find { it.groupId == openedGroupDetailId }
+    val activeDetailTargetGroup =
+        currentOpenedGroup ?: if (isTwoPaneListDetailViewport) uiState.groups.firstOrNull() else null
+    if (showAddContactsToExistingGroupSheet && activeDetailTargetGroup != null) {
         ContactPickerBottomSheet(
             contacts = deviceContacts,
             isLoading = isLoadingContacts,
             multiSelect = true,
-            title = "Add Contacts to ${openedGroup.name}",
+            title = "Add Contacts to ${activeDetailTargetGroup.name}",
             subtitle = "Select contacts to add to this group",
             onDismissRequest = { showAddContactsToExistingGroupSheet = false },
             onConfirmSelected = { selected ->
-                viewModel.addContactsToGroup(openedGroup.groupId, selected)
+                viewModel.addContactsToGroup(activeDetailTargetGroup.groupId, selected)
                 showAddContactsToExistingGroupSheet = false
             }
+        )
+    }
+
+    if (showClassicSyncSheet && activeDetailTargetGroup != null) {
+        com.splitmate.app.ui.dialogs.TripSyncAndPerspectiveSheet(
+            viewModel = viewModel,
+            groupId = activeDetailTargetGroup.groupId,
+            groupName = activeDetailTargetGroup.name,
+            members = uiState.members.filter { it.groupId == activeDetailTargetGroup.groupId },
+            onDismiss = { showClassicSyncSheet = false }
         )
     }
 
@@ -979,107 +1016,160 @@ fun LedgersDashboardScreen(
         ) {
             // Back to All Groups Header — Keep Settle Up 100% visible at all times
             item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Surface(
-                        onClick = { viewModel.closeGroupDetail() },
-                        shape = SplitMateTheme.RadiusBadge,
-                        color = SplitMateTheme.SurfaceWhite,
-                        border = BorderStroke(1.dp, SplitMateTheme.BorderLight)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.ArrowBack,
-                                contentDescription = "Back to All Groups",
-                                tint = SplitMateTheme.PrimaryDark,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "All Groups",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                maxLines = 1,
-                                softWrap = false,
-                                color = SplitMateTheme.PrimaryDark
-                            )
-                        }
-                    }
-
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Surface(
-                            onClick = {
-                                val hasPerm = ContextCompat.checkSelfPermission(
-                                    context,
-                                    Manifest.permission.READ_CONTACTS
-                                ) == PackageManager.PERMISSION_GRANTED
-                                if (hasPerm) {
-                                    viewModel.loadDeviceContacts(context)
-                                    showAddContactsToExistingGroupSheet = true
-                                } else {
-                                    addToGroupPermLauncher.launch(Manifest.permission.READ_CONTACTS)
-                                }
-                            },
+                            onClick = { viewModel.closeGroupDetail() },
                             shape = SplitMateTheme.RadiusBadge,
-                            color = SplitMateTheme.SageSurface,
-                            border = BorderStroke(1.dp, SplitMateTheme.AccentSage)
+                            color = SplitMateTheme.SurfaceWhite,
+                            border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
+                            modifier = Modifier
+                                .minimumInteractiveComponentSize()
+                                .defaultMinSize(minHeight = 48.dp)
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    imageVector = Icons.Rounded.PersonAdd,
-                                    contentDescription = "Add Contact",
-                                    tint = SplitMateTheme.SageText,
-                                    modifier = Modifier.size(15.dp)
+                                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                                    contentDescription = "Back to All Groups",
+                                    tint = SplitMateTheme.PrimaryDark,
+                                    modifier = Modifier.size(16.dp)
                                 )
-                                Spacer(modifier = Modifier.width(5.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "+ Contact",
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 12.sp,
+                                    text = "All Groups",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
                                     maxLines = 1,
                                     softWrap = false,
-                                    color = SplitMateTheme.SageText
+                                    color = SplitMateTheme.PrimaryDark
                                 )
                             }
                         }
 
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                onClick = {
+                                    val hasPerm = ContextCompat.checkSelfPermission(
+                                        context,
+                                        Manifest.permission.READ_CONTACTS
+                                    ) == PackageManager.PERMISSION_GRANTED
+                                    if (hasPerm) {
+                                        viewModel.loadDeviceContacts(context)
+                                        showAddContactsToExistingGroupSheet = true
+                                    } else {
+                                        addToGroupPermLauncher.launch(Manifest.permission.READ_CONTACTS)
+                                    }
+                                },
+                                shape = SplitMateTheme.RadiusBadge,
+                                color = SplitMateTheme.SageSurface,
+                                border = BorderStroke(1.dp, SplitMateTheme.AccentSage),
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .defaultMinSize(minHeight = 48.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.PersonAdd,
+                                        contentDescription = "Add Contact",
+                                        tint = SplitMateTheme.SageText,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(
+                                        text = "+ Contact",
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 12.sp,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        color = SplitMateTheme.SageText
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                onClick = onNavigateToSettle,
+                                shape = SplitMateTheme.RadiusBadge,
+                                color = SplitMateTheme.PrimaryDark,
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .defaultMinSize(minHeight = 48.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.SwapHoriz,
+                                        contentDescription = "Settle Up",
+                                        tint = SplitMateTheme.ScreenBg,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(
+                                        text = "Settle Up",
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 12.sp,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        color = SplitMateTheme.ScreenBg
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        com.splitmate.app.ui.dialogs.PerspectiveAndSyncHeaderPill(
+                            members = groupMembers,
+                            onClick = { showClassicSyncSheet = true }
+                        )
+
                         Surface(
-                            onClick = onNavigateToSettle,
+                            onClick = { onToggleTripHubView(true) },
                             shape = SplitMateTheme.RadiusBadge,
-                            color = SplitMateTheme.PrimaryDark
+                            color = SplitMateTheme.SurfaceWhite,
+                            border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
+                            modifier = Modifier
+                                .minimumInteractiveComponentSize()
+                                .defaultMinSize(minHeight = 48.dp)
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Rounded.SwapHoriz,
-                                    contentDescription = "Settle Up",
-                                    tint = SplitMateTheme.ScreenBg,
+                                    imageVector = Icons.Rounded.SpaceDashboard,
+                                    contentDescription = "Switch to Trip Hub v2.0",
+                                    tint = SplitMateTheme.PrimaryDark,
                                     modifier = Modifier.size(15.dp)
                                 )
-                                Spacer(modifier = Modifier.width(5.dp))
                                 Text(
-                                    text = "Settle Up",
+                                    text = "Trip Hub v2.0",
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 12.sp,
                                     maxLines = 1,
                                     softWrap = false,
-                                    color = SplitMateTheme.ScreenBg
+                                    color = SplitMateTheme.PrimaryDark
                                 )
                             }
                         }
@@ -1252,7 +1342,8 @@ fun LedgersDashboardScreen(
                     Surface(
                         onClick = onNavigateToSplit,
                         shape = SplitMateTheme.RadiusBadge,
-                        color = SplitMateTheme.PrimaryDark
+                        color = SplitMateTheme.PrimaryDark,
+                        modifier = Modifier.minimumInteractiveComponentSize()
                     ) {
                         Text(
                             text = "+ Log Expense",
@@ -1426,7 +1517,8 @@ fun LedgersDashboardScreen(
                                             onClick = { isFlightSide = true },
                                             shape = SplitMateTheme.RadiusBadge,
                                             color = if (SplitMateTheme.isDark) Color(0xFF24214A) else Color(0xFFEEF2FF),
-                                            border = BorderStroke(1.dp, if (SplitMateTheme.isDark) Color(0xFF4E48A6) else Color(0xFFA5B4FC))
+                                            border = BorderStroke(1.dp, if (SplitMateTheme.isDark) Color(0xFF4E48A6) else Color(0xFFA5B4FC)),
+                                            modifier = Modifier.minimumInteractiveComponentSize()
                                         ) {
                                             Row(
                                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
@@ -1458,7 +1550,8 @@ fun LedgersDashboardScreen(
                                         Surface(
                                             onClick = onNavigateToPnrSplit,
                                             shape = SplitMateTheme.RadiusBadge,
-                                            color = Color(0xFF264010)
+                                            color = Color(0xFF264010),
+                                            modifier = Modifier.minimumInteractiveComponentSize()
                                         ) {
                                             Text(
                                                 text = "+ PNR",
@@ -1917,7 +2010,8 @@ fun LedgersDashboardScreen(
                                             if (SplitMateTheme.isDark) Color(0xFF282552) else Color(0xFFEEF2FF)
                                         } else {
                                             SplitMateTheme.SageSurface
-                                        }
+                                        },
+                                        modifier = Modifier.minimumInteractiveComponentSize()
                                     ) {
                                         Row(
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
@@ -1950,7 +2044,8 @@ fun LedgersDashboardScreen(
                                     Surface(
                                         onClick = { deletingExpense = expense },
                                         shape = SplitMateTheme.RadiusBadge,
-                                        color = SplitMateTheme.TerracottaSurface
+                                        color = SplitMateTheme.TerracottaSurface,
+                                        modifier = Modifier.minimumInteractiveComponentSize()
                                     ) {
                                         Row(
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
@@ -2634,9 +2729,8 @@ fun LedgersDashboardScreen(
     }
     }
 
-    val isTwoPaneListDetailViewport = LocalConfiguration.current.screenWidthDp >= 720 && uiState.groups.isNotEmpty()
     if (isTwoPaneListDetailViewport) {
-        val activeSupportingGroup = openedGroup ?: uiState.groups.first()
+        val activeSupportingGroup = currentOpenedGroup ?: uiState.groups.first()
         Row(
             modifier = Modifier
                 .fillMaxSize()
@@ -2659,12 +2753,41 @@ fun LedgersDashboardScreen(
                     .weight(0.57f)
                     .fillMaxHeight()
             ) {
-                renderGroupDetailPane(activeSupportingGroup)
+                if (useTripHubV2View) {
+                    com.splitmate.app.ui.screens.TripHomeScreen(
+                        viewModel = viewModel,
+                        groupId = activeSupportingGroup.groupId,
+                        onBackClick = { viewModel.closeGroupDetail() },
+                        onSwitchToClassicLedgerClick = { onToggleTripHubView(false) },
+                        onOpenTrainPnrReviewClick = { pnr ->
+                            if (pnr.isNotBlank()) onOpenPnrWithTicket(pnr) else onNavigateToPnrSplit()
+                        },
+                        onOpenFlightReviewClick = { pnr ->
+                            if (pnr.isNotBlank()) onOpenPnrWithTicket(pnr) else onUploadFlightPdf()
+                        },
+                        onLogQuickExpenseClick = onNavigateToSplit,
+                        onOpenSettleUpClick = onNavigateToSettle,
+                        onAddMemberClick = {
+                            val hasPerm = ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.READ_CONTACTS
+                            ) == PackageManager.PERMISSION_GRANTED
+                            if (hasPerm) {
+                                viewModel.loadDeviceContacts(context)
+                                showAddContactsToExistingGroupSheet = true
+                            } else {
+                                addToGroupPermLauncher.launch(Manifest.permission.READ_CONTACTS)
+                            }
+                        }
+                    )
+                } else {
+                    renderGroupDetailPane(activeSupportingGroup)
+                }
             }
         }
     } else {
         AnimatedContent(
-            targetState = openedGroup,
+            targetState = currentOpenedGroup,
             transitionSpec = {
                 (fadeIn(tween(240)) + scaleIn(
                     initialScale = 0.93f,
@@ -2679,7 +2802,36 @@ fun LedgersDashboardScreen(
             label = "GroupCardContainerTransform"
         ) { targetGroup ->
             if (targetGroup != null) {
-                renderGroupDetailPane(targetGroup)
+                if (useTripHubV2View) {
+                    com.splitmate.app.ui.screens.TripHomeScreen(
+                        viewModel = viewModel,
+                        groupId = targetGroup.groupId,
+                        onBackClick = { viewModel.closeGroupDetail() },
+                        onSwitchToClassicLedgerClick = { onToggleTripHubView(false) },
+                        onOpenTrainPnrReviewClick = { pnr ->
+                            if (pnr.isNotBlank()) onOpenPnrWithTicket(pnr) else onNavigateToPnrSplit()
+                        },
+                        onOpenFlightReviewClick = { pnr ->
+                            if (pnr.isNotBlank()) onOpenPnrWithTicket(pnr) else onUploadFlightPdf()
+                        },
+                        onLogQuickExpenseClick = onNavigateToSplit,
+                        onOpenSettleUpClick = onNavigateToSettle,
+                        onAddMemberClick = {
+                            val hasPerm = ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.READ_CONTACTS
+                            ) == PackageManager.PERMISSION_GRANTED
+                            if (hasPerm) {
+                                viewModel.loadDeviceContacts(context)
+                                showAddContactsToExistingGroupSheet = true
+                            } else {
+                                addToGroupPermLauncher.launch(Manifest.permission.READ_CONTACTS)
+                            }
+                        }
+                    )
+                } else {
+                    renderGroupDetailPane(targetGroup)
+                }
             } else {
                 renderMasterGroupListPane()
             }
@@ -3449,7 +3601,9 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                         shape = RoundedCornerShape(inspectorCornerRadius),
                                         color = if (showMaxHeapGraphInspector) Color(0xFF365314) else SplitMateTheme.SageSurface,
                                         border = BorderStroke(1.dp, Color(0xFF416913).copy(alpha = 0.45f)),
-                                        modifier = Modifier.size(24.dp)
+                                        modifier = Modifier
+                                            .minimumInteractiveComponentSize()
+                                            .size(24.dp)
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
                                             Icon(
@@ -4715,7 +4869,9 @@ fun AuditVaultScreen(
                                 shape = RoundedCornerShape(allCornerRadius),
                                 color = if (allSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.SurfaceWhite,
                                 border = BorderStroke(1.dp, if (allSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.BorderLight),
-                                modifier = Modifier.heightIn(min = 32.dp)
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .heightIn(min = 32.dp)
                             ) {
                                 Box(
                                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
@@ -4745,7 +4901,9 @@ fun AuditVaultScreen(
                                 shape = RoundedCornerShape(chipCornerRadius),
                                 color = if (isSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.SurfaceWhite,
                                 border = BorderStroke(1.dp, if (isSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.BorderLight),
-                                modifier = Modifier.heightIn(min = 32.dp)
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .heightIn(min = 32.dp)
                             ) {
                                 Box(
                                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),

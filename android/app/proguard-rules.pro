@@ -8,6 +8,7 @@
 -keep class * extends androidx.room.RoomDatabase { *; }
 -keep @androidx.room.Entity class * { *; }
 -keep @androidx.room.Dao class * { *; }
+-keep class com.splitmate.app.data.** { *; }
 
 # 3. Kotlin Coroutines & Serialization / JSON
 -dontwarn kotlinx.coroutines.**

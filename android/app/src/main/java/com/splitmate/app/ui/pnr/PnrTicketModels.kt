@@ -169,9 +169,9 @@ suspend fun fetchLivePnrAndTrainStatus(
 
 fun formatTravelExpenseTitle(baseCategory: String, ticket: ParsedTravelTicket): String {
     val cleanBase = baseCategory
-        .replace("🚆", "")
-        .replace("✈️", "")
-        .replace("✈", "")
+        .replace("\uD83D\uDE86", "")
+        .replace("\u2708\uFE0F", "")
+        .replace("\u2708", "")
         .trim()
     if (!ticket.hasTicketMetadata) return cleanBase.ifBlank { "Travel Ticket" }
 
@@ -254,9 +254,9 @@ fun extractTravelTicketFromTitle(title: String): ParsedTravelTicket? {
             }
             idx == 0 -> {
                 val cleanFirst = seg
-                    .replace("🚆", "")
-                    .replace("✈️", "")
-                    .replace("✈", "")
+                    .replace("\uD83D\uDE86", "")
+                    .replace("\u2708\uFE0F", "")
+                    .replace("\u2708", "")
                     .replace("Train/Flight", "")
                     .replace("Flight", "")
                     .replace("Train", "")
@@ -278,9 +278,9 @@ fun extractTravelTicketFromTitle(title: String): ParsedTravelTicket? {
         Regex("""^[A-Z0-9]{2}-\d{2,4}$""", RegexOption.IGNORE_CASE).matches(trainNo)
 
     val rawFirstSegment = segments.firstOrNull()
-        ?.replace("🚆", "")
-        ?.replace("✈️", "")
-        ?.replace("✈", "")
+        ?.replace("\uD83D\uDE86", "")
+        ?.replace("\u2708\uFE0F", "")
+        ?.replace("\u2708", "")
         ?.trim()
         .orEmpty()
 
@@ -319,9 +319,9 @@ fun cleanDisplayExpenseTitle(rawTitle: String): String {
     val parsedTicket = extractTravelTicketFromTitle(rawTitle)
     val base = parsedTicket?.cleanTitle?.takeIf { it.isNotBlank() } ?: rawTitle.substringBefore("[PNR:").trim()
     return base
-        .replace("🚆", "")
-        .replace("✈️", "")
-        .replace("✈", "")
+        .replace("\uD83D\uDE86", "")
+        .replace("\u2708\uFE0F", "")
+        .replace("\u2708", "")
         .replace(Regex("""^(Train/Flight|Flight/Train)\s+""", RegexOption.IGNORE_CASE), "")
         .replace(Regex("""^Train\s+(?=\d{5}\b)""", RegexOption.IGNORE_CASE), "")
         .replace(" Express", " Exp")

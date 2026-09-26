@@ -188,21 +188,57 @@ private fun discoverGmailAndUpiFromAndroidContacts(
     }
 }
 
+/** Max decoded QR bitmap edge length; keeps the ZXing `IntArray` well under ~10 MB even for 48MP photos. */
+private const val MAX_QR_DECODE_DIMENSION_PX = 1600
+
+/**
+ * Computes a power-of-two `inSampleSize` so that `max(width, height) / inSampleSize <= maxDimensionPx`.
+ * Power-of-two values are used because `BitmapFactory` rounds non-power-of-two sample sizes down.
+ */
+private fun computeQrInSampleSize(width: Int, height: Int, maxDimensionPx: Int): Int {
+    if (width <= 0 || height <= 0) return 1
+    var sampleSize = 1
+    while (maxOf(width, height) / sampleSize > maxDimensionPx) {
+        sampleSize *= 2
+    }
+    return sampleSize
+}
+
 /**
  * Decodes an NPCI UPI QR Code image from Gallery/Screenshots in <10ms using ZXing (`MultiFormatReader`)
  * and extracts the exact `pa` (Payee VPA e.g. `gauri301998@okhdfcbank`).
+ *
+ * Uses a two-pass decode (`inJustDecodeBounds` then `inSampleSize`) so high-MP camera photos are
+ * downsampled to at most [MAX_QR_DECODE_DIMENSION_PX] on the longest edge before pixel extraction.
  */
 private fun decodeUpiVpaFromQrUri(context: Context, imageUri: Uri): String? {
     return try {
-        val inputStream = context.contentResolver.openInputStream(imageUri) ?: return null
-        val bitmap = BitmapFactory.decodeStream(inputStream)
-        inputStream.close()
-        if (bitmap == null) return null
+        // Pass 1: read image bounds only (no pixel allocation; decodeStream returns null by design here)
+        val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        val boundsStream = context.contentResolver.openInputStream(imageUri) ?: return null
+        boundsStream.use { stream -> BitmapFactory.decodeStream(stream, null, boundsOptions) }
+        if (boundsOptions.outWidth <= 0 || boundsOptions.outHeight <= 0) return null
+
+        // Pass 2: decode downsampled pixels
+        val decodeOptions = BitmapFactory.Options().apply {
+            inSampleSize = computeQrInSampleSize(
+                boundsOptions.outWidth,
+                boundsOptions.outHeight,
+                MAX_QR_DECODE_DIMENSION_PX
+            )
+        }
+        val bitmap = context.contentResolver.openInputStream(imageUri)?.use { pixelStream ->
+            BitmapFactory.decodeStream(pixelStream, null, decodeOptions)
+        } ?: return null
 
         val width = bitmap.width
         val height = bitmap.height
         val pixels = IntArray(width * height)
-        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+        try {
+            bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+        } finally {
+            bitmap.recycle()
+        }
 
         val source = RGBLuminanceSource(width, height, pixels)
         val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
@@ -221,6 +257,8 @@ private fun decodeUpiVpaFromQrUri(context: Context, imageUri: Uri): String? {
         }
         null
     } catch (_: Exception) {
+        null
+    } catch (_: OutOfMemoryError) {
         null
     }
 }
@@ -997,7 +1035,8 @@ fun UpiExpressPaymentSheet(
                             border = BorderStroke(
                                 1.dp,
                                 if (isCurrentSuffix) SplitMateTheme.PrimaryDark else SplitMateTheme.BorderLight
-                            )
+                            ),
+                            modifier = Modifier.minimumInteractiveComponentSize()
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -1150,7 +1189,7 @@ fun UpiExpressPaymentSheet(
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(46.dp)
+                    .defaultMinSize(minHeight = 48.dp)
             ) {
                 Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))

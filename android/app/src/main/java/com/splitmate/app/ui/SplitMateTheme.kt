@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -893,7 +894,7 @@ fun resolveExpenseCategoryIcon(title: String): ImageVector {
         lower.contains("dinner") || lower.contains("food") || lower.contains("lunch") ||
             lower.contains("restaurant") || lower.contains("pizza") || lower.contains("biryani") ||
             lower.contains("zomato") || lower.contains("swiggy") || lower.contains("meal") -> Icons.Rounded.Restaurant
-        else -> Icons.Rounded.ReceiptLong
+        else -> Icons.AutoMirrored.Rounded.ReceiptLong
     }
 }
 
@@ -929,6 +930,7 @@ fun performCrispTactileHaptic(
     if (!prefs.getBoolean("pref_haptics", true)) return
 
     runCatching {
+        @Suppress("DEPRECATION")
         view?.performHapticFeedback(
             if (heavy) android.view.HapticFeedbackConstants.LONG_PRESS
             else android.view.HapticFeedbackConstants.KEYBOARD_TAP,
@@ -1017,7 +1019,7 @@ fun SplitMateCircularLogoBadge(
 @Composable
 fun CompactLedgerTicketStub(
     ticket: ParsedTravelTicket,
-    totalAmountDisplay: String = "",
+    @Suppress("UNUSED_PARAMETER") totalAmountDisplay: String = "",
     perPersonShareDisplay: String = "",
     onInspectTactilePass: (() -> Unit)? = null
 ) {

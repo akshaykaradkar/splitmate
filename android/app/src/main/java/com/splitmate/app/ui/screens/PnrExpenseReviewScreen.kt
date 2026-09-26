@@ -482,7 +482,9 @@ fun PnrExpenseReviewScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .statusBarsPadding()
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                    // 48dp touch bounds below add 3dp around each 42dp circle; padding reduced 20/14 -> 17/11
+                    // so the visual circle positions and bar height remain identical.
+                    .padding(horizontal = 17.dp, vertical = 11.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -491,7 +493,9 @@ fun PnrExpenseReviewScreen(
                     shape = CircleShape,
                     color = TactilePaperPassTokens.PaperSurface,
                     border = androidx.compose.foundation.BorderStroke(1.dp, TactilePaperPassTokens.HairlineBorder),
-                    modifier = Modifier.size(42.dp)
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .size(42.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
@@ -526,13 +530,16 @@ fun PnrExpenseReviewScreen(
                         shape = CircleShape,
                         color = TactilePaperPassTokens.PaperSurface,
                         border = androidx.compose.foundation.BorderStroke(1.dp, TactilePaperPassTokens.HairlineBorder),
-                        modifier = Modifier.size(42.dp)
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .size(42.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = Icons.Rounded.Groups,
                                 contentDescription = "Switch Group",
-                                tint = TactilePaperPassTokens.ForestTop,
+                                // Dark: #D7E8B6 on #1F1D1A paper (ForestTop #264010 would be ~1.4:1). Light: unchanged.
+                                tint = if (SplitMateTheme.isDark) TactilePaperPassTokens.SageConfirmedText else TactilePaperPassTokens.ForestTop,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -638,8 +645,8 @@ fun PnrExpenseReviewScreen(
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = TactilePaperPassTokens.ForestTop,
                                 contentColor = Color.White,
-                                disabledContainerColor = Color(0xFFD5CFC2),
-                                disabledContentColor = Color(0xFF6B655E)
+                                disabledContainerColor = if (SplitMateTheme.isDark) Color(0xFF2E2A25) else Color(0xFFD5CFC2),
+                                disabledContentColor = if (SplitMateTheme.isDark) TactilePaperPassTokens.InkSecondary else Color(0xFF6B655E)
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -658,6 +665,7 @@ fun PnrExpenseReviewScreen(
                                     selectedExistingExpense != null -> "Update Split & Save Changes · ${formatPaiseDisplay(effectiveTotalPaise)}"
                                     else -> "Confirm & Add ${formatPaiseDisplay(effectiveTotalPaise)} (${formatPaiseDisplay(perSelectedMemberSharePaise)}/person)"
                                 },
+                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp
@@ -735,6 +743,7 @@ fun PnrExpenseReviewScreen(
                                     Spacer(modifier = Modifier.width(5.dp))
                                     Text(
                                         text = "PNR $extractedPnr · ${formatPaiseDisplay(exp.totalAmountCents)} ${if (isActiveTicket) "(Editing below)" else "(Tap to view pass)"}",
+                                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                                         fontFamily = FigtreeFontFamily,
                                         fontWeight = if (isActiveTicket) FontWeight.Bold else FontWeight.SemiBold,
                                         fontSize = 12.sp,
@@ -1083,6 +1092,7 @@ fun PnrSearchLookupCard(
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 17.sp,
                                 letterSpacing = 1.4.sp,
+                                fontFeatureSettings = "tnum",
                                 color = TactilePaperPassTokens.InkPrimary
                             ),
                             modifier = Modifier.fillMaxWidth()
@@ -1428,7 +1438,7 @@ fun TactilePaperBoardingPass(
                         ) {
                             com.splitmate.app.AvatarToken(
                                 initials = pax.name,
-                                bg = if (pax.isPayer) TactilePaperPassTokens.SageConfirmedBg else Color(0xFFF0ECE1),
+                                bg = if (pax.isPayer) TactilePaperPassTokens.SageConfirmedBg else if (SplitMateTheme.isDark) Color(0xFF2E2A25) else Color(0xFFF0ECE1),
                                 textColor = if (pax.isPayer) TactilePaperPassTokens.SageConfirmedText else TactilePaperPassTokens.InkSecondary,
                                 size = 34
                             )
@@ -1437,7 +1447,7 @@ fun TactilePaperBoardingPass(
 
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
-                                color = if (pax.isPayer) TactilePaperPassTokens.SageConfirmedBg else Color(0xFFF0ECE1),
+                                color = if (pax.isPayer) TactilePaperPassTokens.SageConfirmedBg else if (SplitMateTheme.isDark) Color(0xFF2E2A25) else Color(0xFFF0ECE1),
                                 border = androidx.compose.foundation.BorderStroke(
                                     1.dp,
                                     if (pax.isPayer) TactilePaperPassTokens.SageConfirmedBorder else TactilePaperPassTokens.HairlineBorder
@@ -1465,6 +1475,7 @@ fun TactilePaperBoardingPass(
                                 )
                                 Text(
                                     text = "Per-Passenger Share: $perPersonShareDisplay",
+                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                                     fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 11.sp,
@@ -1551,6 +1562,7 @@ fun TactilePaperBoardingPass(
                     Row(verticalAlignment = Alignment.Bottom) {
                         Text(
                             text = totalFareDisplay,
+                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.Black,
                             fontSize = 24.sp,
@@ -1564,6 +1576,7 @@ fun TactilePaperBoardingPass(
                         ) {
                             Text(
                                 text = "$perPersonShareDisplay / each",
+                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 11.sp,
@@ -1575,6 +1588,7 @@ fun TactilePaperBoardingPass(
                     Spacer(modifier = Modifier.height(3.dp))
                     Text(
                         text = "Base $baseFareDisplay + IRCTC Conv. $convenienceFeeDisplay + Insurance $insuranceFeeDisplay",
+                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Medium,
                         fontSize = 10.sp,
@@ -1672,7 +1686,8 @@ private fun MemberSplitSelectionCard(
                             border = androidx.compose.foundation.BorderStroke(
                                 1.dp,
                                 if (isCurrentPayer) TactilePaperPassTokens.ForestTop else TactilePaperPassTokens.HairlineBorder
-                            )
+                            ),
+                            modifier = Modifier.minimumInteractiveComponentSize()
                         ) {
                             Text(
                                 text = if (member.isCurrentUser) "Paid by ${member.name} (You)" else "Paid by ${member.name}",
@@ -1718,7 +1733,8 @@ private fun MemberSplitSelectionCard(
                     onClick = onSelectExactTicketCount,
                     shape = RoundedCornerShape(999.dp),
                     color = TactilePaperPassTokens.SageConfirmedBg,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, TactilePaperPassTokens.SageConfirmedBorder)
+                    border = androidx.compose.foundation.BorderStroke(1.dp, TactilePaperPassTokens.SageConfirmedBorder),
+                    modifier = Modifier.minimumInteractiveComponentSize()
                 ) {
                     Text(
                         text = "Select $ticketPassengerCount Pax",
@@ -1815,7 +1831,8 @@ private fun MemberSplitSelectionCard(
                         Box(modifier = Modifier.size(40.dp)) {
                             com.splitmate.app.AvatarToken(
                                 initials = member.avatarSeed.ifBlank { member.name },
-                                bg = if (isSelected) TactilePaperPassTokens.SageConfirmedBg else Color(0xFFEAE4D7),
+                                // Dark: #2E2A25 behind #D7E8B6 initials (~11:1) instead of a light-cream disc. Light: unchanged.
+                                bg = if (isSelected) TactilePaperPassTokens.SageConfirmedBg else if (SplitMateTheme.isDark) Color(0xFF2E2A25) else Color(0xFFEAE4D7),
                                 textColor = TactilePaperPassTokens.SageConfirmedText,
                                 size = 38
                             )
@@ -1826,7 +1843,7 @@ private fun MemberSplitSelectionCard(
                                     .clip(CircleShape)
                                     .background(
                                         when {
-                                            !isSelected -> Color(0xFFD6CFC0)
+                                            !isSelected -> if (SplitMateTheme.isDark) Color(0xFF5A534A) else Color(0xFFD6CFC0)
                                             isPayer -> TactilePaperPassTokens.ForestTop
                                             else -> TactilePaperPassTokens.SageConfirmedText
                                         }
@@ -1837,7 +1854,7 @@ private fun MemberSplitSelectionCard(
                                 Icon(
                                     imageVector = if (isSelected) Icons.Rounded.Check else Icons.Rounded.Close,
                                     contentDescription = if (isSelected) "Selected" else "Excluded",
-                                    tint = Color.White,
+                                    tint = if (SplitMateTheme.isDark && isSelected && !isPayer) TactilePaperPassTokens.ForestBottom else Color.White,
                                     modifier = Modifier.size(10.dp)
                                 )
                             }
@@ -1861,6 +1878,7 @@ private fun MemberSplitSelectionCard(
                                     isPayer -> "Paid full $totalFareDisplay"
                                     else -> "Owes $payerMemberName $memberExactShareDisplay · via UPI"
                                 },
+                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Medium,
                                 fontSize = 12.sp,
@@ -1872,6 +1890,7 @@ private fun MemberSplitSelectionCard(
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
                             text = if (isSelected) memberExactShareDisplay else "₹0",
+                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 16.sp,
@@ -1880,6 +1899,7 @@ private fun MemberSplitSelectionCard(
                         if (isPayer) {
                             Text(
                                 text = "Getting back $payerReimbursementDisplay",
+                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.sp,

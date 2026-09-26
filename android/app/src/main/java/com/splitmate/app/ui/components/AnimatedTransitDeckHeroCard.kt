@@ -317,7 +317,7 @@ private fun TrainPassCard(
     trainCountLogged: Int,
     onCardHeaderTap: () -> Unit,
     onPrimaryCtaClick: () -> Unit,
-    onSwitchToFlightClick: () -> Unit
+    @Suppress("UNUSED_PARAMETER") onSwitchToFlightClick: () -> Unit
 ) {
     val ticketShape = AnimatedTicketNotchShape(
         cornerRadius = 26f * 3f,
@@ -606,6 +606,7 @@ private fun TrainPassCard(
                         border = BorderStroke(0.5.dp, AnimatedTransitDeckTokens.SageBorder),
                         shadowElevation = 3.dp,
                         modifier = Modifier
+                            .minimumInteractiveComponentSize()
                             .height(38.dp)
                             .sizeIn(minWidth = 124.dp)
                     ) {
@@ -655,7 +656,7 @@ private fun FlightPassCard(
     flightCountActive: Int,
     onCardHeaderTap: () -> Unit,
     onPrimaryCtaClick: () -> Unit,
-    onSwitchToTrainClick: () -> Unit
+    @Suppress("UNUSED_PARAMETER") onSwitchToTrainClick: () -> Unit
 ) {
     val ticketShape = AnimatedTicketNotchShape(
         cornerRadius = 26f * 3f,
@@ -916,6 +917,7 @@ private fun FlightPassCard(
                         border = BorderStroke(0.5.dp, AnimatedTransitDeckTokens.SkyBlueBorder),
                         shadowElevation = 3.dp,
                         modifier = Modifier
+                            .minimumInteractiveComponentSize()
                             .height(38.dp)
                             .sizeIn(minWidth = 124.dp)
                     ) {
