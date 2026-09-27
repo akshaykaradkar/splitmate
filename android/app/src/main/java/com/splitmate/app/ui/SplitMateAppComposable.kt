@@ -382,111 +382,17 @@ fun SplitMateCloudOtpOnboardingScreen(
     }
 
     val discoveredProfile = uiState.discoveredCloudProfile?.takeIf { it.phone10 == normalizedPhone10 }
-
-    // 30-second resend countdown timer driven by uiState.otpResendAvailableAtEpochMs
-    var remainingResendSec by remember { mutableIntStateOf(0) }
-    LaunchedEffect(uiState.otpResendAvailableAtEpochMs) {
-        while (true) {
-            val diffMs = uiState.otpResendAvailableAtEpochMs - System.currentTimeMillis()
-            if (diffMs <= 0L) {
-                remainingResendSec = 0
-                break
-            }
-            remainingResendSec = ((diffMs + 999L) / 1000L).toInt()
-            delay(1000L)
-        }
+    val hasExisting4DigitPin = remember(discoveredProfile, normalizedPhone10) {
+        val hash = discoveredProfile?.pinHash.orEmpty()
+        hash.isNotBlank() && PhoneOtpAuthManager.is4DigitPinHash(normalizedPhone10, hash)
     }
-
-    val submitOtpVerification: (String) -> Unit = { codeToVerify ->
-        val resolvedName = onboardingName.trim().ifBlank {
-            discoveredProfile?.name?.takeIf { it.isNotBlank() } ?: "Explorer"
-        }
-        val resolvedUpi = onboardingUpi.trim().ifBlank {
-            discoveredProfile?.upiVpa?.takeIf { it.isNotBlank() } ?: "$normalizedPhone10@upi"
-        }
-        val finalSeedKey = customSeedKey.ifBlank { resolvedName }
-        viewModel.verifyPhoneOtpAndSyncCloud(
-            context = context,
-            rawPhone = onboardingPhone,
-            enteredOtp = codeToVerify,
-            userName = resolvedName,
-            upiId = resolvedUpi,
-            avatarStyleId = selectedAvatarStyleId,
-            avatarColorPresetId = selectedColorPresetId,
-            optionalPin4 = enteredPin4,
-            avatarGender = selectedGender.id,
-            customSeedKey = finalSeedKey
-        ) { ok, msg ->
-            otpFeedbackMessage = msg
-            if (ok) {
-                onCompleteToDashboard()
-            }
-        }
-    }
-
-    // Auto-submit immediately when the 6th digit is entered during an active OTP challenge
-    LaunchedEffect(enteredOtpCode, uiState.isOtpChallengeActive) {
-        if (enteredOtpCode.length == 6 && uiState.isOtpChallengeActive && !uiState.isCloudSyncing) {
-            submitOtpVerification(enteredOtpCode)
-        }
-    }
-
-    // Google Play Services OS Hardware SIM Verification Launcher (Zero Manifest Permissions)
-    val googleSimVerificationLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartIntentSenderForResult()
-    ) { result ->
-        val verifiedPhone = PhoneOtpAuthManager.extractVerifiedSimPhoneFromIntent(context, result.data)
-        if (verifiedPhone != null) {
-            onboardingPhone = verifiedPhone
-            simVerifiedPhone10 = verifiedPhone
-            val hardwareToken = PhoneOtpAuthManager.issueHardwareSimVerifiedToken(context, verifiedPhone)
-            if (hardwareToken != null) {
-                val resolvedName = onboardingName.trim().ifBlank {
-                    discoveredProfile?.name?.takeIf { it.isNotBlank() } ?: "Explorer"
-                }
-                val resolvedUpi = onboardingUpi.trim().ifBlank {
-                    discoveredProfile?.upiVpa?.takeIf { it.isNotBlank() } ?: "$verifiedPhone@upi"
-                }
-                val finalSeedKey = customSeedKey.ifBlank { resolvedName }
-                viewModel.verifyPhoneOtpAndSyncCloud(
-                    context = context,
-                    rawPhone = verifiedPhone,
-                    enteredOtp = hardwareToken,
-                    userName = resolvedName,
-                    upiId = resolvedUpi,
-                    avatarStyleId = selectedAvatarStyleId,
-                    avatarColorPresetId = selectedColorPresetId,
-                    optionalPin4 = enteredPin4,
-                    avatarGender = selectedGender.id,
-                    customSeedKey = finalSeedKey
-                ) { ok, msg ->
-                    otpFeedbackMessage = if (ok) {
-                        "Hardware SIM +91 $verifiedPhone verified by Google Play Services"
-                    } else {
-                        msg
-                    }
-                    if (ok) {
-                        onCompleteToDashboard()
-                    }
-                }
-            }
-        } else {
-            otpFeedbackMessage = "SIM selection cancelled. Tap 'Verify SIM with Google' or use your 4-Digit Security PIN."
-        }
-    }
+    var isPinVisible by rememberSaveable { mutableStateOf(false) }
 
     val nameBringIntoViewRequester = remember { BringIntoViewRequester() }
     val phoneBringIntoViewRequester = remember { BringIntoViewRequester() }
-    val otpBringIntoViewRequester = remember { BringIntoViewRequester() }
+    val pinBringIntoViewRequester = remember { BringIntoViewRequester() }
 
     val isImeVisible = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
-
-    LaunchedEffect(uiState.isOtpChallengeActive) {
-        if (uiState.isOtpChallengeActive) {
-            delay(120L)
-            otpBringIntoViewRequester.bringIntoView()
-        }
-    }
 
     Scaffold(
         containerColor = SplitMateTheme.ScreenBg
@@ -889,7 +795,40 @@ fun SplitMateCloudOtpOnboardingScreen(
                             }
                     )
 
-                    // 4-Digit Account Security PIN (Protects Cloud Profile & Multi-Device Recovery)
+                    if (isValidPhone10) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (hasExisting4DigitPin) Color(0xFFD7E8B6).copy(alpha = 0.55f) else Color(0xFFF4EFE6),
+                            border = BorderStroke(1.dp, if (hasExisting4DigitPin) Color(0xFF416913).copy(alpha = 0.35f) else SplitMateTheme.BorderLight),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (hasExisting4DigitPin) Icons.Rounded.VerifiedUser else Icons.Rounded.Lock,
+                                    contentDescription = null,
+                                    tint = Color(0xFF365314),
+                                    modifier = Modifier.size(17.dp)
+                                )
+                                Text(
+                                    text = if (hasExisting4DigitPin) {
+                                        "Welcome back, ${discoveredProfile?.name ?: "Explorer"}! Enter your 4-Digit PIN to unlock +91 $normalizedPhone10."
+                                    } else {
+                                        "Set a 4-Digit Security PIN to protect +91 $normalizedPhone10 & sync trips across devices."
+                                    },
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF365314)
+                                )
+                            }
+                        }
+                    }
+
+                    // 4-Digit Account Security PIN (Option 1: 10-Digit Phone Number + 4-Digit PIN)
                     OutlinedTextField(
                         value = enteredPin4,
                         onValueChange = { rawPin ->
@@ -897,10 +836,10 @@ fun SplitMateCloudOtpOnboardingScreen(
                         },
                         label = {
                             Text(
-                                text = if (discoveredProfile != null) {
-                                    "4-Digit Account Security PIN (To Unlock +91 $normalizedPhone10)"
+                                text = if (hasExisting4DigitPin) {
+                                    "Enter 4-Digit Security PIN"
                                 } else {
-                                    "4-Digit Account Security PIN (Protects Cloud Profile)"
+                                    "Create 4-Digit Security PIN"
                                 },
                                 fontFamily = SplitMateTheme.FontRounded
                             )
@@ -909,27 +848,65 @@ fun SplitMateCloudOtpOnboardingScreen(
                         leadingIcon = {
                             Icon(Icons.Rounded.Lock, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
                         },
-                        visualTransformation = PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { isPinVisible = !isPinVisible }) {
+                                Icon(
+                                    imageVector = if (isPinVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                                    contentDescription = if (isPinVisible) "Hide PIN" else "Show PIN",
+                                    tint = SplitMateTheme.PrimaryDark
+                                )
+                            }
+                        },
+                        visualTransformation = if (isPinVisible) {
+                            androidx.compose.ui.text.input.VisualTransformation.None
+                        } else {
+                            PasswordVisualTransformation()
+                        },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                         singleLine = true,
                         shape = SplitMateTheme.RadiusInput,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .bringIntoViewRequester(pinBringIntoViewRequester)
+                            .onFocusEvent { state ->
+                                if (state.isFocused) {
+                                    coroutineScope.launch {
+                                        delay(120L)
+                                        pinBringIntoViewRequester.bringIntoView()
+                                    }
+                                }
+                            }
                     )
 
-                    // Method 1 Primary Hardware Authentication: Google Play Services OS SIM Verification Sheet (0 Permissions)
+                    // Option 1 Primary CTA: 10-Digit Phone Number + 4-Digit Security PIN
                     Button(
                         onClick = {
-                            PhoneOtpAuthManager.requestGoogleSimVerificationIntent(
+                            val resolvedName = onboardingName.trim().ifBlank {
+                                discoveredProfile?.name?.takeIf { it.isNotBlank() } ?: "Explorer"
+                            }
+                            val resolvedUpi = onboardingUpi.trim().ifBlank {
+                                discoveredProfile?.upiVpa?.takeIf { it.isNotBlank() } ?: "$normalizedPhone10@upi"
+                            }
+                            val finalSeedKey = customSeedKey.ifBlank { resolvedName }
+                            viewModel.verifyPinAndRestoreCloud(
                                 context = context,
-                                onIntentSenderReady = { senderRequest ->
-                                    googleSimVerificationLauncher.launch(senderRequest)
-                                },
-                                onFailure = { err ->
-                                    otpFeedbackMessage = err
+                                rawPhone = onboardingPhone,
+                                enteredPin4 = enteredPin4,
+                                fallbackUserName = resolvedName,
+                                fallbackUpiId = resolvedUpi,
+                                avatarStyleId = selectedAvatarStyleId,
+                                avatarColorPresetId = selectedColorPresetId,
+                                avatarGender = selectedGender.id,
+                                customSeedKey = finalSeedKey,
+                                preferLocalAvatarChoice = hasUserCustomizedAvatar || !hasExisting4DigitPin
+                            ) { ok, msg ->
+                                otpFeedbackMessage = msg
+                                if (ok) {
+                                    onCompleteToDashboard()
                                 }
-                            )
+                            }
                         },
-                        enabled = !uiState.isCloudSyncing,
+                        enabled = isValidPhone10 && enteredPin4.length == 4 && !uiState.isCloudSyncing,
                         shape = SplitMateTheme.RadiusButton,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF365314),
@@ -937,224 +914,26 @@ fun SplitMateCloudOtpOnboardingScreen(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(52.dp)
+                            .height(54.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Rounded.SimCard,
+                            imageVector = if (hasExisting4DigitPin) Icons.Rounded.LockOpen else Icons.Rounded.VerifiedUser,
                             contentDescription = null,
                             tint = Color(0xFFD7E8B6),
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (simVerifiedPhone10.isNotBlank()) {
-                                "Hardware SIM Verified (+91 $simVerifiedPhone10)"
-                            } else {
-                                "Verify Physical SIM with Google (Recommended)"
+                            text = when {
+                                uiState.isCloudSyncing -> "Syncing Shared Trips..."
+                                hasExisting4DigitPin -> "Unlock Account & Sync Trips"
+                                else -> "Save Profile & Start Splitting"
                             },
                             fontFamily = SplitMateTheme.FontRounded,
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 14.sp,
+                            fontSize = 15.sp,
                             color = Color(0xFFFAF6F0)
                         )
-                    }
-
-                    // Secondary Authentication Row: 4-Digit Account Security PIN Unlock / Registration + Primary-Device Push
-                    val canResendNow = remainingResendSec <= 0
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        FilledTonalButton(
-                            onClick = {
-                                val resolvedName = onboardingName.trim().ifBlank {
-                                    discoveredProfile?.name?.takeIf { it.isNotBlank() } ?: "Explorer"
-                                }
-                                val resolvedUpi = onboardingUpi.trim().ifBlank {
-                                    discoveredProfile?.upiVpa?.takeIf { it.isNotBlank() } ?: "$normalizedPhone10@upi"
-                                }
-                                val finalSeedKey = customSeedKey.ifBlank { resolvedName }
-                                if (discoveredProfile != null && discoveredProfile.pinHash.isNotBlank()) {
-                                    // Unlock existing cloud profile using secret 4-Digit Account Security PIN
-                                    viewModel.verifyPinAndRestoreCloud(
-                                        context = context,
-                                        rawPhone = onboardingPhone,
-                                        enteredPin4 = enteredPin4,
-                                        fallbackUserName = resolvedName,
-                                        fallbackUpiId = resolvedUpi,
-                                        avatarStyleId = selectedAvatarStyleId,
-                                        avatarColorPresetId = selectedColorPresetId
-                                    ) { ok, msg ->
-                                        otpFeedbackMessage = msg
-                                        if (ok) {
-                                            // If user customized their avatar on the Signup screen, persist their new avatar choice too
-                                            if (hasUserCustomizedAvatar) {
-                                                val customEncoded = AvatarSeedCodec.encode(
-                                                    seedKey = finalSeedKey,
-                                                    gender = selectedGender,
-                                                    styleId = selectedAvatarStyleId,
-                                                    colorPresetId = selectedColorPresetId
-                                                )
-                                                viewModel.updateUserProfile(
-                                                    newName = resolvedName,
-                                                    newPhone = normalizedPhone10,
-                                                    newSeedOrCurrency = customEncoded,
-                                                    newUpiId = resolvedUpi
-                                                )
-                                            }
-                                            onCompleteToDashboard()
-                                        }
-                                    }
-                                } else {
-                                    // Brand-new cloud account creation protected by the user's 4-Digit Account Security PIN
-                                    val simToken = PhoneOtpAuthManager.issueHardwareSimVerifiedToken(context, normalizedPhone10)
-                                    if (simToken != null) {
-                                        viewModel.verifyPhoneOtpAndSyncCloud(
-                                            context = context,
-                                            rawPhone = onboardingPhone,
-                                            enteredOtp = simToken,
-                                            userName = resolvedName,
-                                            upiId = resolvedUpi,
-                                            avatarStyleId = selectedAvatarStyleId,
-                                            avatarColorPresetId = selectedColorPresetId,
-                                            optionalPin4 = enteredPin4,
-                                            avatarGender = selectedGender.id,
-                                            customSeedKey = finalSeedKey
-                                        ) { ok, msg ->
-                                            otpFeedbackMessage = msg
-                                            if (ok) {
-                                                onCompleteToDashboard()
-                                            }
-                                        }
-                                    }
-                                }
-                            },
-                            enabled = isValidPhone10 && enteredPin4.length == 4 && !uiState.isCloudSyncing,
-                            shape = SplitMateTheme.RadiusButton,
-                            colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = Color(0xFFD7E8B6),
-                                contentColor = Color(0xFF365314)
-                            ),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(46.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.LockOpen,
-                                contentDescription = null,
-                                tint = Color(0xFF365314),
-                                modifier = Modifier.size(17.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (discoveredProfile != null) "Unlock with 4-Digit PIN" else "Save with 4-Digit PIN",
-                                fontFamily = SplitMateTheme.FontRounded,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 13.sp,
-                                color = Color(0xFF365314)
-                            )
-                        }
-
-                        if (isValidPhone10 && discoveredProfile != null) {
-                            OutlinedButton(
-                                onClick = {
-                                    if (canResendNow) {
-                                        viewModel.requestPhoneOtp(context, onboardingPhone)
-                                    }
-                                },
-                                enabled = canResendNow,
-                                shape = SplitMateTheme.RadiusButton,
-                                border = BorderStroke(1.dp, Color(0xFF416913).copy(alpha = 0.5f)),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-                                modifier = Modifier.height(46.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.PhonelinkLock,
-                                    contentDescription = null,
-                                    tint = Color(0xFF365314),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = if (!canResendNow) "${remainingResendSec}s" else "Primary Phone Code",
-                                    fontFamily = SplitMateTheme.FontRounded,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 12.sp,
-                                    color = Color(0xFF365314)
-                                )
-                            }
-                        }
-                    }
-
-                    // 6-Cell Segmented OTP Box Input (For Cross-Device Primary Phone Code Verification)
-                    if (uiState.isOtpChallengeActive || enteredOtpCode.isNotEmpty()) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .bringIntoViewRequester(otpBringIntoViewRequester),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.MarkChatRead,
-                                    contentDescription = null,
-                                    tint = Color(0xFF416913),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Text(
-                                    text = uiState.otpDeliveryStatusText.ifBlank {
-                                        "Enter the 6-digit sync key from your primary verified device for +91 $normalizedPhone10"
-                                    },
-                                    fontFamily = SplitMateTheme.FontRounded,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = SplitMateTheme.TextSecondary
-                                )
-                            }
-
-                            OtpSixDigitSegmentedField(
-                                otpValue = enteredOtpCode,
-                                onOtpChange = { newVal ->
-                                    enteredOtpCode = newVal
-                                    if (newVal.length == 6) {
-                                        submitOtpVerification(newVal)
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Button(
-                                onClick = { submitOtpVerification(enteredOtpCode) },
-                                enabled = enteredOtpCode.length == 6 && !uiState.isCloudSyncing,
-                                shape = SplitMateTheme.RadiusButton,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF365314),
-                                    contentColor = Color(0xFFFAF6F0)
-                                ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(54.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.VerifiedUser,
-                                    contentDescription = null,
-                                    tint = Color(0xFFFAF6F0),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = if (uiState.isCloudSyncing) "Syncing Shared Trips..." else "Verify & Sync Trips",
-                                    fontFamily = SplitMateTheme.FontRounded,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 15.sp,
-                                    color = Color(0xFFFAF6F0)
-                                )
-                            }
-                        }
                     }
 
                     otpFeedbackMessage?.let { feedback ->
@@ -1166,10 +945,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                             color = if (
                                 feedback.contains("Invalid", ignoreCase = true) ||
                                 feedback.contains("Incorrect", ignoreCase = true) ||
-                                feedback.contains("Please", ignoreCase = true) ||
-                                feedback.contains("unavailable", ignoreCase = true) ||
-                                feedback.contains("cancelled", ignoreCase = true) ||
-                                feedback.contains("expired", ignoreCase = true)
+                                feedback.contains("Enter", ignoreCase = true)
                             ) {
                                 Color(0xFFE06B52)
                             } else {
@@ -3569,7 +3345,7 @@ fun LedgersDashboardScreen(
             }
         }
 
-        // 1.2. Upgraded v2.0.0 User Phone Verification & Cloud Sync Banner
+        // 1.2. Option 1 User Phone + 4-Digit PIN Cloud Sync Banner
         val normalizedUserPhone10 = PhoneIdentityValidator.normalizeIndianPhone10(uiState.userPhone)
         if (!uiState.isPhoneVerified && (normalizedUserPhone10.length == 10 || uiState.userPhone.isBlank())) {
             item(key = "upgrade_phone_otp_banner") {
@@ -3601,7 +3377,7 @@ fun LedgersDashboardScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Rounded.VerifiedUser,
+                                        imageVector = Icons.Rounded.Lock,
                                         contentDescription = null,
                                         tint = Color(0xFF365314),
                                         modifier = Modifier.size(20.dp)
@@ -3610,7 +3386,7 @@ fun LedgersDashboardScreen(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
-                                        text = "Verify Phone for Cloud Sync",
+                                        text = "Link Phone & 4-Digit PIN",
                                         fontFamily = SplitMateTheme.FontDisplay,
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.ExtraBold,
@@ -3618,9 +3394,9 @@ fun LedgersDashboardScreen(
                                     )
                                     Text(
                                         text = if (normalizedUserPhone10.length == 10) {
-                                            "Verify +91 $normalizedUserPhone10 via 6-digit OTP to auto-discover shared trips"
+                                            "Unlock +91 $normalizedUserPhone10 with your 4-Digit PIN to sync shared trips"
                                         } else {
-                                            "Link your 10-digit mobile number to sync groups across phones"
+                                            "Link your 10-digit mobile number & 4-Digit PIN to sync groups across phones"
                                         },
                                         fontFamily = SplitMateTheme.FontRounded,
                                         fontSize = 11.sp,
@@ -3631,17 +3407,13 @@ fun LedgersDashboardScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Surface(
                                 onClick = {
-                                    showUpgradeOtpExpanded = true
-                                    val targetPhone = upgradePhoneInput.ifBlank { uiState.userPhone }
-                                    if (PhoneIdentityValidator.isValidIndianMobile10(PhoneIdentityValidator.normalizeIndianPhone10(targetPhone))) {
-                                        viewModel.requestPhoneOtp(context, targetPhone)
-                                    }
+                                    showUpgradeOtpExpanded = !showUpgradeOtpExpanded
                                 },
                                 shape = SplitMateTheme.RadiusBadge,
                                 color = Color(0xFF416913)
                             ) {
                                 Text(
-                                    text = "Verify Phone via OTP",
+                                    text = "Link Phone & PIN",
                                     fontFamily = SplitMateTheme.FontRounded,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 11.sp,
@@ -3651,51 +3423,36 @@ fun LedgersDashboardScreen(
                             }
                         }
 
-                        if (showUpgradeOtpExpanded || uiState.isOtpChallengeActive) {
+                        if (showUpgradeOtpExpanded) {
+                            val cleanUpgradePhone10 = PhoneIdentityValidator.normalizeIndianPhone10(upgradePhoneInput)
+                            val isValidUpgradePhone = PhoneIdentityValidator.isValidIndianMobile10(cleanUpgradePhone10)
+
                             OutlinedTextField(
                                 value = upgradePhoneInput,
                                 onValueChange = { upgradePhoneInput = it },
                                 label = { Text("10-Digit Mobile (+91)") },
+                                leadingIcon = {
+                                    Icon(Icons.Rounded.PhoneIphone, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
+                                },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                                 singleLine = true,
                                 shape = SplitMateTheme.RadiusInput,
                                 modifier = Modifier.fillMaxWidth()
                             )
 
-                            FilledTonalButton(
-                                onClick = {
-                                    val res = viewModel.requestPhoneOtp(context, upgradePhoneInput)
-                                    upgradeFeedbackMsg = if (res != null) {
-                                        "OTP sent for +91 ${res.phone10}"
-                                    } else {
-                                        "Enter a valid 10-digit Indian mobile number"
-                                    }
+                            OutlinedTextField(
+                                value = upgradeOtpInput,
+                                onValueChange = { rawPin ->
+                                    upgradeOtpInput = rawPin.filter { it.isDigit() }.take(4)
                                 },
-                                shape = SplitMateTheme.RadiusButton,
-                                colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = Color(0xFFD7E8B6),
-                                    contentColor = Color(0xFF365314)
-                                ),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(Icons.Rounded.Sms, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Send 6-Digit OTP", fontWeight = FontWeight.ExtraBold)
-                            }
-
-                            if (uiState.otpDeliveryStatusText.isNotBlank()) {
-                                Text(
-                                    text = uiState.otpDeliveryStatusText,
-                                    fontFamily = SplitMateTheme.FontRounded,
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = SplitMateTheme.TextSecondary
-                                )
-                            }
-
-                            OtpSixDigitSegmentedField(
-                                otpValue = upgradeOtpInput,
-                                onOtpChange = { upgradeOtpInput = it },
+                                label = { Text("4-Digit Security PIN") },
+                                leadingIcon = {
+                                    Icon(Icons.Rounded.Lock, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
+                                },
+                                visualTransformation = PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                                singleLine = true,
+                                shape = SplitMateTheme.RadiusInput,
                                 modifier = Modifier.fillMaxWidth()
                             )
 
@@ -3707,16 +3464,17 @@ fun LedgersDashboardScreen(
                                         fallbackStyleId = uiState.avatarStyleId,
                                         fallbackColorPresetId = uiState.avatarColorPresetId
                                     )
-                                    viewModel.verifyPhoneOtpAndSyncCloud(
+                                    viewModel.verifyPinAndRestoreCloud(
                                         context = context,
                                         rawPhone = upgradePhoneInput,
-                                        enteredOtp = upgradeOtpInput,
-                                        userName = uiState.currentUserName.ifBlank { "Akshay" },
-                                        upiId = uiState.userUpiId.ifBlank { "$clean10@upi" },
+                                        enteredPin4 = upgradeOtpInput,
+                                        fallbackUserName = uiState.currentUserName.ifBlank { "Akshay" },
+                                        fallbackUpiId = uiState.userUpiId.ifBlank { "$clean10@upi" },
                                         avatarStyleId = parsedDescriptor.styleId,
                                         avatarColorPresetId = parsedDescriptor.colorPresetId,
                                         avatarGender = parsedDescriptor.gender.id,
-                                        customSeedKey = parsedDescriptor.seedKey
+                                        customSeedKey = parsedDescriptor.seedKey,
+                                        preferLocalAvatarChoice = true
                                     ) { ok, msg ->
                                         upgradeFeedbackMsg = msg
                                         if (ok) {
@@ -3724,7 +3482,7 @@ fun LedgersDashboardScreen(
                                         }
                                     }
                                 },
-                                enabled = upgradeOtpInput.length == 6 && !uiState.isCloudSyncing,
+                                enabled = isValidUpgradePhone && upgradeOtpInput.length == 4 && !uiState.isCloudSyncing,
                                 shape = SplitMateTheme.RadiusButton,
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Color(0xFF416913),
@@ -3735,7 +3493,7 @@ fun LedgersDashboardScreen(
                                 Icon(Icons.Rounded.CloudDone, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = if (uiState.isCloudSyncing) "Syncing Shared Trips..." else "Verify & Sync Trips",
+                                    text = if (uiState.isCloudSyncing) "Syncing Shared Trips..." else "Save PIN & Sync Trips",
                                     fontWeight = FontWeight.ExtraBold
                                 )
                             }
@@ -3746,7 +3504,11 @@ fun LedgersDashboardScreen(
                                     fontFamily = SplitMateTheme.FontRounded,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF416913)
+                                    color = if (msg.contains("Incorrect", ignoreCase = true) || msg.contains("Enter", ignoreCase = true)) {
+                                        Color(0xFFE06B52)
+                                    } else {
+                                        Color(0xFF416913)
+                                    }
                                 )
                             }
                         }

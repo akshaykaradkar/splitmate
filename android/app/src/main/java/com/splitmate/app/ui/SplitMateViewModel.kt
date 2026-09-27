@@ -1491,6 +1491,9 @@ class SplitMateViewModel(
         fallbackUpiId: String = "",
         avatarStyleId: String = "open-peeps",
         avatarColorPresetId: String = "Buckwheat",
+        avatarGender: String = "",
+        customSeedKey: String = "",
+        preferLocalAvatarChoice: Boolean = false,
         onResult: (Boolean, String) -> Unit = { _, _ -> }
     ) {
         val phone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(rawPhone)
@@ -1499,7 +1502,7 @@ class SplitMateViewModel(
             return
         }
         if (enteredPin4.trim().length != 4) {
-            onResult(false, "Enter your 4-digit Recovery PIN")
+            onResult(false, "Enter your 4-digit Security PIN")
             return
         }
         _uiState.update { it.copy(isCloudSyncing = true) }
@@ -1509,54 +1512,95 @@ class SplitMateViewModel(
             val localStatePinHash = _uiState.value.pinHash.takeIf {
                 it.isNotBlank() && com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(_uiState.value.userPhone) == phone10
             }
-            val remoteProfile = if (cachedRemoteProfile != null || localProfile?.pinHash?.isNotBlank() == true || localStatePinHash != null || dao == null) {
-                cachedRemoteProfile
-            } else {
+            val remoteProfile = cachedRemoteProfile ?: if (dao != null) {
                 com.splitmate.app.data.CloudGroupSyncRepository.fetchUserProfileFromCloud(phone10)
+            } else {
+                null
             }
             val expectedPinHash = remoteProfile?.pinHash?.takeIf { it.isNotBlank() }
-                ?: localProfile?.pinHash?.takeIf { it.isNotBlank() }
+                ?: localProfile?.pinHash?.takeIf { it.isNotBlank() && com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(localProfile.userPhone) == phone10 }
                 ?: localStatePinHash.orEmpty()
 
-            if (expectedPinHash.isBlank()) {
-                _uiState.update { it.copy(isCloudSyncing = false) }
-                dispatchOnMain {
-                    onResult(false, "No 4-digit PIN found for +91 $phone10 — please verify via Google SIM first.")
+            val hasExisting4DigitPin = expectedPinHash.isNotBlank() &&
+                com.splitmate.app.data.PhoneOtpAuthManager.is4DigitPinHash(phone10, expectedPinHash)
+
+            val finalPinHash = if (hasExisting4DigitPin) {
+                val pinValid = com.splitmate.app.data.PhoneOtpAuthManager.verifyPin(phone10, enteredPin4, expectedPinHash)
+                if (!pinValid) {
+                    val errMsg = "Incorrect 4-digit Security PIN for +91 $phone10."
+                    _uiState.update { it.copy(isCloudSyncing = false, statusBannerMessage = errMsg) }
+                    dispatchOnMain { onResult(false, errMsg) }
+                    return@launch
                 }
-                return@launch
+                expectedPinHash
+            } else {
+                // Brand-new account or upgrading a legacy pre-PIN profile to a 4-digit Security PIN
+                com.splitmate.app.data.PhoneOtpAuthManager.hashPin(phone10, enteredPin4)
             }
 
-            val pinValid = com.splitmate.app.data.PhoneOtpAuthManager.verifyPin(phone10, enteredPin4, expectedPinHash)
-            if (!pinValid) {
-                val errMsg = "Incorrect 4-digit Security PIN. Try again or verify via Google SIM."
-                _uiState.update { it.copy(isCloudSyncing = false, statusBannerMessage = errMsg) }
-                dispatchOnMain { onResult(false, errMsg) }
-                return@launch
+            val resolvedName = (
+                if (preferLocalAvatarChoice && fallbackUserName.trim().isNotBlank() && fallbackUserName.trim() != "Explorer") {
+                    fallbackUserName.trim()
+                } else {
+                    remoteProfile?.name?.takeIf { it.isNotBlank() && it != "Explorer" }
+                        ?: fallbackUserName.trim().takeIf { it.isNotBlank() }
+                        ?: localProfile?.name?.takeIf { it.isNotBlank() }
+                        ?: "Explorer"
+                }
+            ).replace("|", " ").trim()
+
+            val explicitGender = if (avatarGender.isNotBlank()) {
+                com.splitmate.app.ui.AvatarGender.fromId(avatarGender).id
+            } else {
+                _uiState.value.avatarGender
             }
 
-            val resolvedName = (remoteProfile?.name?.takeIf { it.isNotBlank() && it != "Explorer" }
-                ?: fallbackUserName.trim().takeIf { it.isNotBlank() }
-                ?: localProfile?.name?.takeIf { it.isNotBlank() }
-                ?: "Explorer").replace("|", " ").trim()
-            val resolvedStyle = remoteProfile?.avatarStyle?.takeIf { it.isNotBlank() } ?: avatarStyleId
-            val resolvedPreset = remoteProfile?.avatarColorPreset?.takeIf { it.isNotBlank() } ?: avatarColorPresetId
-            val parsedRemoteAvatar = parseAvatarDescriptorFromSeed(
-                seed = remoteProfile?.avatarSeed?.takeIf { it.isNotBlank() }
-                    ?: localProfile?.avatarSeed.orEmpty(),
+            val updatedSeed = if (preferLocalAvatarChoice || remoteProfile?.avatarSeed.isNullOrBlank()) {
+                val resolvedSeedKey = customSeedKey.replace("|", " ").trim().ifBlank { resolvedName }
+                val resolvedStyle = avatarStyleId.ifBlank { "open-peeps" }
+                val resolvedPreset = avatarColorPresetId.ifBlank { "PastelWall" }
+                encodeCanonicalAvatarSeed(
+                    seedKey = resolvedSeedKey,
+                    gender = explicitGender,
+                    styleId = resolvedStyle,
+                    presetId = resolvedPreset
+                )
+            } else {
+                val resolvedStyle = remoteProfile?.avatarStyle?.takeIf { it.isNotBlank() } ?: avatarStyleId
+                val resolvedPreset = remoteProfile?.avatarColorPreset?.takeIf { it.isNotBlank() } ?: avatarColorPresetId
+                val parsedRemoteAvatar = parseAvatarDescriptorFromSeed(
+                    seed = remoteProfile?.avatarSeed?.takeIf { it.isNotBlank() }
+                        ?: localProfile?.avatarSeed.orEmpty(),
+                    defaultSeedKey = resolvedName,
+                    defaultStyle = resolvedStyle,
+                    defaultPreset = resolvedPreset,
+                    defaultGender = explicitGender
+                )
+                encodeCanonicalAvatarSeed(
+                    seedKey = parsedRemoteAvatar.seedKey.ifBlank { resolvedName },
+                    gender = parsedRemoteAvatar.gender,
+                    styleId = parsedRemoteAvatar.styleId,
+                    presetId = parsedRemoteAvatar.presetId
+                )
+            }
+
+            val finalAvatarDesc = parseAvatarDescriptorFromSeed(
+                seed = updatedSeed,
                 defaultSeedKey = resolvedName,
-                defaultStyle = resolvedStyle,
-                defaultPreset = resolvedPreset,
-                defaultGender = _uiState.value.avatarGender
+                defaultStyle = avatarStyleId,
+                defaultPreset = avatarColorPresetId,
+                defaultGender = explicitGender
             )
+
             val resolvedUpi = remoteProfile?.upiVpa?.takeIf { it.isNotBlank() }
                 ?: fallbackUpiId.trim().takeIf { it.isNotBlank() }
                 ?: "$phone10@upi"
-            val updatedSeed = encodeCanonicalAvatarSeed(
-                seedKey = parsedRemoteAvatar.seedKey.ifBlank { resolvedName },
-                gender = parsedRemoteAvatar.gender,
-                styleId = parsedRemoteAvatar.styleId,
-                presetId = parsedRemoteAvatar.presetId
-            )
+
+            val statusText = if (hasExisting4DigitPin) {
+                "Welcome back $resolvedName (+91 $phone10)"
+            } else {
+                "Verified +91 $phone10 with 4-Digit Security PIN"
+            }
 
             val d = dao
             if (d != null) {
@@ -1570,11 +1614,16 @@ class SplitMateViewModel(
                     upiId = resolvedUpi,
                     userPhone = phone10,
                     isPhoneVerified = true,
-                    pinHash = expectedPinHash,
+                    pinHash = finalPinHash,
                     isDarkTheme = localProfile?.isDarkTheme ?: _uiState.value.isDarkTheme,
                     createdAt = localProfile?.createdAt ?: System.currentTimeMillis()
                 )
                 d.upsertUserProfile(profileEntity)
+                com.splitmate.app.data.CloudGroupSyncRepository.pushUserProfileToCloud(
+                    profile = profileEntity,
+                    avatarStyle = finalAvatarDesc.styleId,
+                    avatarColorPreset = finalAvatarDesc.presetId
+                )
                 val summary = com.splitmate.app.data.CloudGroupSyncRepository.restoreAndSyncAllForVerifiedPhone(
                     context = context,
                     dao = d,
@@ -1593,10 +1642,15 @@ class SplitMateViewModel(
                 refreshStateFromDaoSnapshot(
                     d = d,
                     summary = summary,
-                    statusMsg = "Welcome back $resolvedName (+91 $phone10)"
+                    statusMsg = statusText
                 )
             } else {
                 _uiState.update { curr ->
+                    val updatedMembers = curr.members.map { m ->
+                        if (m.isCurrentUser || com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(m.userPhone) == phone10) {
+                            m.copy(name = resolvedName, avatarSeed = updatedSeed, upiId = resolvedUpi, userPhone = phone10, isCurrentUser = true)
+                        } else m
+                    }
                     curr.copy(
                         hasRegisteredProfile = true,
                         currentUserName = resolvedName,
@@ -1604,17 +1658,18 @@ class SplitMateViewModel(
                         userUpiId = resolvedUpi,
                         userPhone = phone10,
                         isPhoneVerified = true,
-                        pinHash = expectedPinHash,
-                        avatarStyleId = parsedRemoteAvatar.styleId,
-                        avatarColorPresetId = parsedRemoteAvatar.presetId,
-                        avatarGender = parsedRemoteAvatar.gender,
+                        pinHash = finalPinHash,
+                        avatarStyleId = finalAvatarDesc.styleId,
+                        avatarColorPresetId = finalAvatarDesc.presetId,
+                        avatarGender = finalAvatarDesc.gender,
+                        members = updatedMembers,
                         isCloudSyncing = false,
-                        statusBannerMessage = "Welcome back $resolvedName (+91 $phone10)"
+                        statusBannerMessage = statusText
                     )
                 }
             }
             dispatchOnMain {
-                onResult(true, "Welcome back $resolvedName (+91 $phone10)")
+                onResult(true, statusText)
             }
         }
     }

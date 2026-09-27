@@ -1436,6 +1436,18 @@ class SplitMateV2ZeroRegressionAndSyncTest {
             "Hardware SIM token must verify cleanly for the OS-verified SIM number"
         )
 
+        // Verify Option 1 is4DigitPinHash distinguishes 4-digit PIN hashes from legacy 256-bit random tokens
+        val fourDigitPinHash = com.splitmate.app.data.PhoneOtpAuthManager.hashPin("9876543210", "4829")
+        val legacyRandomTokenHash = com.splitmate.app.data.PhoneOtpAuthManager.getOrCreateDeviceOwnershipToken(null, "9876543210")
+        assertTrue(
+            com.splitmate.app.data.PhoneOtpAuthManager.is4DigitPinHash("9876543210", fourDigitPinHash),
+            "is4DigitPinHash must return true for a 4-digit PIN hash"
+        )
+        assertFalse(
+            com.splitmate.app.data.PhoneOtpAuthManager.is4DigitPinHash("9876543210", legacyRandomTokenHash),
+            "is4DigitPinHash must return false for a legacy 256-bit random device ownership token hash"
+        )
+
         // Verify end-to-end 4-token avatar sync across mergeGroupLedgerDocuments even when member userPhone is blank
         val customSeed = com.splitmate.app.ui.AvatarSeedCodec.encode(
             seedKey = "Explorer_888",

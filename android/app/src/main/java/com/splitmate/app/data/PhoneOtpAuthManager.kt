@@ -491,6 +491,25 @@ object PhoneOtpAuthManager {
         )
     }
 
+    /**
+     * Checks whether [storedPinHash] corresponds to a 4-digit numeric PIN (0000..9999) for [phone10],
+     * as opposed to a legacy 256-bit random device token from pre-PIN builds.
+     */
+    fun is4DigitPinHash(phone10: String, storedPinHash: String): Boolean {
+        if (storedPinHash.length != 64) return false
+        val normPhone = PhoneIdentityValidator.normalizeIndianPhone10(phone10).ifEmpty { phone10.trim() }
+        if (normPhone.isEmpty()) return false
+        val targetBytes = storedPinHash.toByteArray(Charsets.UTF_8)
+        for (pinInt in 0..9999) {
+            val pinStr = "%04d".format(java.util.Locale.US, pinInt)
+            val candidate = sha256("splitmate_pin_v1:$normPhone:$pinStr").toByteArray(Charsets.UTF_8)
+            if (MessageDigest.isEqual(targetBytes, candidate)) {
+                return true
+            }
+        }
+        return false
+    }
+
     fun hmacSha256(keyHex: String, message: String): String {
         val mac = Mac.getInstance("HmacSHA256")
         val secretKey = SecretKeySpec(keyHex.toByteArray(Charsets.UTF_8), "HmacSHA256")
