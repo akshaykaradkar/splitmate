@@ -426,40 +426,15 @@ fun SplitMateCloudOtpOnboardingScreen(
 
     var showSmsPermissionRecoveryCard by remember { mutableStateOf(false) }
 
-    val otpSmsPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val smsGranted = permissions[Manifest.permission.SEND_SMS] == true ||
-            ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
-        if (PhoneOtpAuthManager.checkHardwareSimMatchesPhone10(context, onboardingPhone)) {
-            showSmsPermissionRecoveryCard = false
-            otpFeedbackMessage = "Device SIM verified (+91 $normalizedPhone10). Syncing trips..."
-            submitOtpVerification("SIM_VERIFIED")
+    val otpNotificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        showSmsPermissionRecoveryCard = !granted
+        val res = viewModel.requestPhoneOtp(context, onboardingPhone)
+        if (res != null) {
+            otpFeedbackMessage = null
         } else {
-            showSmsPermissionRecoveryCard = !smsGranted
-            val res = viewModel.requestPhoneOtp(context, onboardingPhone)
-            if (res != null) {
-                otpFeedbackMessage = null
-            } else {
-                otpFeedbackMessage = "Please enter a valid 10-digit Indian mobile number (starts with 6-9)."
-            }
-        }
-    }
-
-    val simVerifyPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) {
-        if (PhoneOtpAuthManager.checkHardwareSimMatchesPhone10(context, onboardingPhone)) {
-            showSmsPermissionRecoveryCard = false
-            otpFeedbackMessage = "Device SIM verified (+91 $normalizedPhone10). Syncing trips..."
-            submitOtpVerification("SIM_VERIFIED")
-        } else {
-            val res = viewModel.requestPhoneOtp(context, onboardingPhone)
-            otpFeedbackMessage = if (res != null) {
-                "Carrier SIM number hidden by OS. Sent 6-digit verification code for +91 ${res.phone10}."
-            } else {
-                "Please enter a valid 10-digit Indian mobile number."
-            }
+            otpFeedbackMessage = "Please enter a valid 10-digit Indian mobile number (starts with 6-9)."
         }
     }
 
@@ -873,7 +848,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                             }
                     )
 
-                    // Send 6-Digit OTP + 1-Tap Hardware SIM Verification Row
+                    // Send 6-Digit OTP + Zero-Permission Native SMS Composer Row
                     val canResendNow = remainingResendSec <= 0
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -882,11 +857,12 @@ fun SplitMateCloudOtpOnboardingScreen(
                     ) {
                         FilledTonalButton(
                             onClick = {
-                                val hasSmsPerm = ContextCompat.checkSelfPermission(
-                                    context,
-                                    Manifest.permission.SEND_SMS
-                                ) == PackageManager.PERMISSION_GRANTED
-                                if (hasSmsPerm) {
+                                val needsNotifPerm = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+                                    ContextCompat.checkSelfPermission(
+                                        context,
+                                        Manifest.permission.POST_NOTIFICATIONS
+                                    ) != PackageManager.PERMISSION_GRANTED
+                                if (!needsNotifPerm) {
                                     showSmsPermissionRecoveryCard = false
                                     val res = viewModel.requestPhoneOtp(context, onboardingPhone)
                                     if (res != null) {
@@ -895,12 +871,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                                         otpFeedbackMessage = "Please enter a valid 10-digit Indian mobile number (starts with 6-9)."
                                     }
                                 } else {
-                                    otpSmsPermissionLauncher.launch(
-                                        arrayOf(
-                                            Manifest.permission.SEND_SMS,
-                                            Manifest.permission.READ_PHONE_NUMBERS
-                                        )
-                                    )
+                                    otpNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                                 }
                             },
                             enabled = isValidPhone10 && canResendNow,
@@ -914,7 +885,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                                 .height(46.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Rounded.Sms,
+                                imageVector = Icons.Rounded.NotificationsActive,
                                 contentDescription = null,
                                 tint = Color(0xFF365314),
                                 modifier = Modifier.size(18.dp)
@@ -936,17 +907,11 @@ fun SplitMateCloudOtpOnboardingScreen(
                         if (isValidPhone10) {
                             OutlinedButton(
                                 onClick = {
-                                    if (PhoneOtpAuthManager.checkHardwareSimMatchesPhone10(context, onboardingPhone)) {
-                                        showSmsPermissionRecoveryCard = false
-                                        otpFeedbackMessage = "Device SIM verified (+91 $normalizedPhone10). Syncing trips..."
-                                        submitOtpVerification("SIM_VERIFIED")
-                                    } else {
-                                        simVerifyPermissionLauncher.launch(
-                                            arrayOf(
-                                                Manifest.permission.READ_PHONE_NUMBERS,
-                                                Manifest.permission.READ_PHONE_STATE
-                                            )
-                                        )
+                                    PhoneOtpAuthManager.openZeroPermissionSmsComposer(
+                                        context = context,
+                                        rawPhone = onboardingPhone
+                                    ) { statusMsg ->
+                                        otpFeedbackMessage = statusMsg
                                     }
                                 },
                                 shape = SplitMateTheme.RadiusButton,
@@ -955,14 +920,14 @@ fun SplitMateCloudOtpOnboardingScreen(
                                 modifier = Modifier.height(46.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Rounded.SimCard,
+                                    imageVector = Icons.Rounded.Sms,
                                     contentDescription = null,
                                     tint = Color(0xFF365314),
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "Instant SIM",
+                                    text = "SMS App",
                                     fontFamily = SplitMateTheme.FontRounded,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 12.5.sp,
@@ -972,7 +937,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                         }
                     }
 
-                    // Inline M3 Permission Recovery Card if SEND_SMS / READ_PHONE_NUMBERS was denied
+                    // Inline M3 Notification / SMS Fallback Card if POST_NOTIFICATIONS was denied
                     AnimatedVisibility(visible = showSmsPermissionRecoveryCard) {
                         Surface(
                             shape = RoundedCornerShape(16.dp),
@@ -989,14 +954,14 @@ fun SplitMateCloudOtpOnboardingScreen(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "SMS / SIM Permission Needed",
+                                        text = "Notifications Disabled",
                                         fontFamily = SplitMateTheme.FontRounded,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = SplitMateTheme.TerracottaText
                                     )
                                     Text(
-                                        text = "Allow SMS or Phone permission in App Settings to receive your 6-digit verification code on this SIM.",
+                                        text = "Enable Notifications in App Settings or tap 'SMS App' to receive your 6-digit verification code.",
                                         fontFamily = SplitMateTheme.FontRounded,
                                         fontSize = 11.sp,
                                         color = SplitMateTheme.TextSecondary

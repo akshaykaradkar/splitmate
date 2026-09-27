@@ -563,6 +563,7 @@ class SplitMateV2ZeroRegressionAndSyncTest {
     @Test
     @DisplayName("7. Task 5.1.2: PhoneOtpAuthManager 6-Digit OTP, Expiry & Salted SHA-256 PIN")
     fun testPhoneOtpAuthManagerSixDigitOtpExpiryAndSha256Pin() {
+        com.splitmate.app.data.PhoneOtpAuthManager.clearPendingOtpChallenge(null)
         // Reject shortcode OTP dispatch
         assertEquals(
             null,
@@ -1294,6 +1295,7 @@ class SplitMateV2ZeroRegressionAndSyncTest {
         assertFalse(dltSms.contains("verification code", ignoreCase = true), "DLT-safe SMS must not contain 'verification code'")
 
         // 4. Verify phone-number-swap attack rejection
+        com.splitmate.app.data.PhoneOtpAuthManager.clearPendingOtpChallenge(null)
         val dispatch = com.splitmate.app.data.PhoneOtpAuthManager.sendOtp(null, "9876543210")
         assertNotNull(dispatch)
         val validCode = com.splitmate.app.data.PhoneOtpAuthManager.peekLastGeneratedOtpForTestOnly()!!
@@ -1382,5 +1384,28 @@ class SplitMateV2ZeroRegressionAndSyncTest {
         // Now the user is locked out, the challenge hash was destroyed but attempts/expiry remain
         val lockoutResend = com.splitmate.app.data.PhoneOtpAuthManager.sendOtp(null, "9876543210")
         assertEquals(null, lockoutResend, "sendOtp must fail when user is in 5-attempt brute-force lockout")
+        com.splitmate.app.data.PhoneOtpAuthManager.clearPendingOtpChallenge(null)
+    }
+
+    @Test
+    @DisplayName("18. Phase 3 Guard 7: Google Play Protect Enhanced Fraud Protection Compliance (Pixel 9a Sideload Safety)")
+    fun testPhase3Guard7GooglePlayProtectEnhancedFraudProtectionComplianceOnPixel9a() {
+        val srcMain = resolveSrcMainDir()
+        val manifestText = java.io.File(srcMain, "AndroidManifest.xml").readText(Charsets.UTF_8)
+        val forbiddenPlayProtectPermissions = listOf(
+            "android.permission.SEND_SMS",
+            "android.permission.RECEIVE_SMS",
+            "android.permission.READ_SMS",
+            "android.permission.READ_PHONE_NUMBERS",
+            "android.permission.READ_PHONE_STATE",
+            "android.permission.BIND_ACCESSIBILITY_SERVICE",
+            "android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+        )
+        for (perm in forbiddenPlayProtectPermissions) {
+            assertFalse(
+                manifestText.contains(perm),
+                "AndroidManifest.xml must NEVER declare '$perm' because Google Play Protect Enhanced Fraud Protection on Pixel 9a (Android 15) blocks sideloaded APKs with restricted permissions"
+            )
+        }
     }
 }
