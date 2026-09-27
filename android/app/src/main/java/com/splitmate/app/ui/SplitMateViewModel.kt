@@ -150,7 +150,15 @@ data class SplitMateUiState(
     val activeGroupMembers: List<GroupMemberEntity>
         get() {
             val targetGroupId = activeGroup?.groupId ?: activeGroupId
-            return members.filter { it.groupId == targetGroupId }
+            val userPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(userPhone)
+            return members.filter { it.groupId == targetGroupId }.map { m ->
+                val isMe = m.isCurrentUser || (userPhone10.length == 10 && com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(m.userPhone) == userPhone10)
+                if (isMe && currentUserSeed.isNotBlank()) {
+                    m.copy(avatarSeed = currentUserSeed, isCurrentUser = true)
+                } else {
+                    m
+                }
+            }
         }
 }
 
@@ -615,16 +623,25 @@ class SplitMateViewModel(
             launch {
                 roomDao.observeUserProfile().collect { profile ->
                     if (profile != null) {
-                        _uiState.update {
+                        _uiState.update { curr ->
                             val pDesc = parseAvatarDescriptorFromSeed(
                                 seed = profile.avatarSeed,
                                 defaultSeedKey = profile.name,
-                                defaultStyle = it.avatarStyleId,
-                                defaultPreset = it.avatarColorPresetId,
-                                defaultGender = it.avatarGender
+                                defaultStyle = curr.avatarStyleId,
+                                defaultPreset = curr.avatarColorPresetId,
+                                defaultGender = curr.avatarGender
                             )
-                            it.copy(
-                                hasRegisteredProfile = (profile.isPhoneVerified && profile.userPhone.length >= 10) || it.hasRegisteredProfile,
+                            val profPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(profile.userPhone)
+                            val syncedMembers = curr.members.map { m ->
+                                val isMe = m.isCurrentUser || (profPhone10.length == 10 && com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(m.userPhone) == profPhone10)
+                                if (isMe && profile.avatarSeed.isNotBlank()) {
+                                    m.copy(avatarSeed = profile.avatarSeed, isCurrentUser = true)
+                                } else {
+                                    m
+                                }
+                            }
+                            curr.copy(
+                                hasRegisteredProfile = (profile.isPhoneVerified && profile.userPhone.length >= 10) || curr.hasRegisteredProfile,
                                 currentUserName = profile.name,
                                 currentUserSeed = profile.avatarSeed,
                                 currentUserCountry = profile.countryName,
@@ -636,7 +653,8 @@ class SplitMateViewModel(
                                 avatarStyleId = pDesc.styleId,
                                 avatarColorPresetId = pDesc.presetId,
                                 avatarGender = pDesc.gender,
-                                isDarkTheme = profile.isDarkTheme
+                                isDarkTheme = profile.isDarkTheme,
+                                members = syncedMembers
                             )
                         }
                     } else {
@@ -656,7 +674,18 @@ class SplitMateViewModel(
             }
             launch {
                 roomDao.observeAllMembers().collect { members ->
-                    _uiState.update { it.copy(members = members) }
+                    _uiState.update { curr ->
+                        val userPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(curr.userPhone)
+                        val syncedMembers = members.map { m ->
+                            val isMe = m.isCurrentUser || (userPhone10.length == 10 && com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(m.userPhone) == userPhone10)
+                            if (isMe && curr.currentUserSeed.isNotBlank()) {
+                                m.copy(avatarSeed = curr.currentUserSeed, isCurrentUser = true)
+                            } else {
+                                m
+                            }
+                        }
+                        curr.copy(members = syncedMembers)
+                    }
                 }
             }
             launch {
@@ -758,12 +787,7 @@ class SplitMateViewModel(
                     }
                 } else {
                     groupMembers.map { m ->
-                        val isLocalPlaceholder = m.memberId.endsWith("_me") ||
-                            m.memberId == "m_1" ||
-                            m.memberId == "m_1_apt" ||
-                            m.name.equals("You", ignoreCase = true) ||
-                            m.name.equals("Explorer", ignoreCase = true)
-                        if (m.isCurrentUser && isLocalPlaceholder) {
+                        if (m.isCurrentUser) {
                             m.copy(
                                 name = cleanName,
                                 avatarSeed = cleanSeed,
@@ -798,6 +822,13 @@ class SplitMateViewModel(
             dao?.upsertUserProfile(profile)
             if (persistedModifiedMembers.isNotEmpty()) {
                 dao?.insertMembers(persistedModifiedMembers)
+            }
+            if (cleanPhone.length == 10) {
+                com.splitmate.app.data.CloudGroupSyncRepository.pushUserProfileToCloud(
+                    profile = profile,
+                    avatarStyle = parsedAvatar.styleId,
+                    avatarColorPreset = parsedAvatar.presetId
+                )
             }
         }
     }
@@ -1366,10 +1397,20 @@ class SplitMateViewModel(
                     presetId = curr.avatarColorPresetId
                 )
             }
+            val resolvedSeed = profile?.avatarSeed ?: curr.currentUserSeed
+            val resolvedPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(profile?.userPhone ?: curr.userPhone)
+            val syncedAllMembers = allMembers.map { m ->
+                val isMe = m.isCurrentUser || (resolvedPhone10.length == 10 && com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(m.userPhone) == resolvedPhone10)
+                if (isMe && resolvedSeed.isNotBlank()) {
+                    m.copy(avatarSeed = resolvedSeed, isCurrentUser = true)
+                } else {
+                    m
+                }
+            }
             curr.copy(
                 hasRegisteredProfile = (profile != null && profile.isPhoneVerified && profile.userPhone.length >= 10) || curr.hasRegisteredProfile,
                 currentUserName = profile?.name ?: curr.currentUserName,
-                currentUserSeed = profile?.avatarSeed ?: curr.currentUserSeed,
+                currentUserSeed = resolvedSeed,
                 userUpiId = profile?.upiId ?: curr.userUpiId,
                 userPhone = profile?.userPhone ?: curr.userPhone,
                 isPhoneVerified = profile?.isPhoneVerified ?: curr.isPhoneVerified,
@@ -1379,7 +1420,7 @@ class SplitMateViewModel(
                 avatarGender = pDesc.gender,
                 groups = allGroups,
                 activeGroupId = nextActiveGroup,
-                members = allMembers,
+                members = syncedAllMembers,
                 expenses = allExpenses,
                 splits = allSplits,
                 settlements = allSettlements,
@@ -1480,14 +1521,14 @@ class SplitMateViewModel(
             if (expectedPinHash.isBlank()) {
                 _uiState.update { it.copy(isCloudSyncing = false) }
                 dispatchOnMain {
-                    onResult(false, "No 4-digit PIN found for +91 $phone10 — please verify via 6-digit OTP first.")
+                    onResult(false, "No 4-digit PIN found for +91 $phone10 — please verify via Google SIM first.")
                 }
                 return@launch
             }
 
             val pinValid = com.splitmate.app.data.PhoneOtpAuthManager.verifyPin(phone10, enteredPin4, expectedPinHash)
             if (!pinValid) {
-                val errMsg = "Incorrect 4-digit Recovery PIN. Try again or tap Send 6-Digit OTP to reset."
+                val errMsg = "Incorrect 4-digit Security PIN. Try again or verify via Google SIM."
                 _uiState.update { it.copy(isCloudSyncing = false, statusBannerMessage = errMsg) }
                 dispatchOnMain { onResult(false, errMsg) }
                 return@launch
@@ -1593,7 +1634,7 @@ class SplitMateViewModel(
     ) {
         val verified = com.splitmate.app.data.PhoneOtpAuthManager.verifyOtp(context, rawPhone, enteredOtp)
         if (!verified) {
-            val errMsg = "Invalid or expired 6-digit OTP"
+            val errMsg = "Invalid or expired verification code"
             _uiState.update { it.copy(statusBannerMessage = errMsg) }
             onResult(false, errMsg)
             return
@@ -1696,16 +1737,12 @@ class SplitMateViewModel(
             } else {
                 remoteProfile?.name?.takeIf { it.isNotBlank() } ?: cleanName
             }).replace("|", " ").trim()
-            val effectiveStyle = if (avatarStyleId != "open-peeps" || remoteProfile == null) {
-                avatarStyleId
-            } else {
-                remoteProfile.avatarStyle.ifBlank { avatarStyleId }
-            }
-            val effectivePreset = if ((avatarColorPresetId != "Buckwheat" && avatarColorPresetId != "PastelWall") || remoteProfile == null) {
-                avatarColorPresetId
-            } else {
-                remoteProfile.avatarColorPreset.ifBlank { avatarColorPresetId }
-            }
+            val effectiveStyle = avatarStyleId.takeIf { it.isNotBlank() }
+                ?: remoteProfile?.avatarStyle?.takeIf { it.isNotBlank() }
+                ?: "open-peeps"
+            val effectivePreset = avatarColorPresetId.takeIf { it.isNotBlank() }
+                ?: remoteProfile?.avatarColorPreset?.takeIf { it.isNotBlank() }
+                ?: "PastelWall"
             val parsedRemoteAvatar = if (remoteProfile != null && remoteProfile.avatarSeed.isNotBlank()) {
                 parseAvatarDescriptorFromSeed(
                     seed = remoteProfile.avatarSeed,

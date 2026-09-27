@@ -1918,15 +1918,13 @@ fun EditFriendUpiDialog(
     val memberDrafts = remember(effectiveMembers) {
         androidx.compose.runtime.mutableStateMapOf<String, EditableMemberDraft>().apply {
             effectiveMembers.forEach { m ->
-                val parsedStyle = m.avatarSeed.substringAfter('|', "Neutral").takeIf {
-                    it in listOf("Masculine", "Feminine", "Neutral")
-                } ?: "Neutral"
+                val parsedDesc = com.splitmate.app.ui.AvatarSeedCodec.parse(m.avatarSeed.ifBlank { m.name })
                 put(
                     m.memberId,
                     EditableMemberDraft(
                         memberId = m.memberId,
                         name = m.name,
-                        style = parsedStyle,
+                        style = parsedDesc.gender.id,
                         upiId = m.upiId
                     )
                 )
@@ -1966,8 +1964,22 @@ fun EditFriendUpiDialog(
         }
     }
 
-    val avatarPreviewUrl = remember(activeDraft.name, activeDraft.style) {
-        buildDiceBearOpenPeepsUrl(activeDraft.name.ifBlank { activeMember.name }, activeDraft.style)
+    val activeCompositeSeed = remember(activeMember.avatarSeed, activeDraft.name, activeDraft.style) {
+        val baseDesc = com.splitmate.app.ui.AvatarSeedCodec.parse(activeMember.avatarSeed.ifBlank { activeMember.name })
+        val resolvedSeedKey = if (activeDraft.name.trim() == activeMember.name.trim() && baseDesc.seedKey.isNotBlank()) {
+            baseDesc.seedKey
+        } else {
+            activeDraft.name.trim().ifEmpty { activeMember.name }
+        }
+        com.splitmate.app.ui.AvatarSeedCodec.encode(
+            seedKey = resolvedSeedKey,
+            gender = com.splitmate.app.ui.AvatarGender.fromId(activeDraft.style),
+            styleId = baseDesc.styleId,
+            colorPresetId = baseDesc.colorPresetId
+        )
+    }
+    val avatarPreviewUrl = remember(activeCompositeSeed) {
+        buildDiceBearOpenPeepsUrl(activeCompositeSeed)
     }
     val cleanInitials = remember(activeDraft.name, activeMember.name) {
         extractInitialsFromNameOrSeed(activeDraft.name.ifBlank { activeMember.name })
@@ -2018,6 +2030,8 @@ fun EditFriendUpiDialog(
                             model = ImageRequest.Builder(context)
                                 .data(avatarPreviewUrl)
                                 .decoderFactory(SvgDecoder.Factory())
+                                .diskCacheKey("dicebear_avatar_$avatarPreviewUrl")
+                                .memoryCacheKey("dicebear_avatar_$avatarPreviewUrl")
                                 .crossfade(true)
                                 .build(),
                             contentDescription = "Friend Avatar",
@@ -2068,6 +2082,14 @@ fun EditFriendUpiDialog(
                                         "Neutral",
                                         candidate.upiId
                                     )
+                                    val candidateBaseDesc = com.splitmate.app.ui.AvatarSeedCodec.parse(candidate.avatarSeed.ifBlank { candidate.name })
+                                    val candidateCompositeSeed = com.splitmate.app.ui.AvatarSeedCodec.encode(
+                                        seedKey = if (draft.name.trim() == candidate.name.trim() && candidateBaseDesc.seedKey.isNotBlank()) candidateBaseDesc.seedKey else draft.name.trim().ifEmpty { candidate.name },
+                                        gender = com.splitmate.app.ui.AvatarGender.fromId(draft.style),
+                                        styleId = candidateBaseDesc.styleId,
+                                        colorPresetId = candidateBaseDesc.colorPresetId
+                                    )
+                                    val candidateUrl = buildDiceBearOpenPeepsUrl(candidateCompositeSeed)
                                     val isCurrentTarget = candidate.memberId == activeMember.memberId
                                     Surface(
                                         onClick = {
@@ -2102,8 +2124,10 @@ fun EditFriendUpiDialog(
                                                 ) {
                                                     AsyncImage(
                                                         model = ImageRequest.Builder(context)
-                                                            .data(buildDiceBearOpenPeepsUrl(draft.name, draft.style))
+                                                            .data(candidateUrl)
                                                             .decoderFactory(SvgDecoder.Factory())
+                                                            .diskCacheKey("dicebear_avatar_$candidateUrl")
+                                                            .memoryCacheKey("dicebear_avatar_$candidateUrl")
                                                             .build(),
                                                         contentDescription = draft.name,
                                                         contentScale = ContentScale.Crop,
@@ -2304,17 +2328,32 @@ fun EditFriendUpiDialog(
                             val batchUpdates = effectiveMembers.map { m ->
                                 val d = memberDrafts[m.memberId] ?: EditableMemberDraft(m.memberId, m.name, "Neutral", m.upiId)
                                 val cleanName = d.name.trim().ifEmpty { m.name }
+                                val baseDesc = com.splitmate.app.ui.AvatarSeedCodec.parse(m.avatarSeed.ifBlank { m.name })
+                                val resolvedSeedKey = if (cleanName == m.name.trim() && baseDesc.seedKey.isNotBlank()) baseDesc.seedKey else cleanName
+                                val encodedSeed = com.splitmate.app.ui.AvatarSeedCodec.encode(
+                                    seedKey = resolvedSeedKey,
+                                    gender = com.splitmate.app.ui.AvatarGender.fromId(d.style),
+                                    styleId = baseDesc.styleId,
+                                    colorPresetId = baseDesc.colorPresetId
+                                )
                                 com.splitmate.app.ui.SplitMateViewModel.BatchMemberUpdate(
                                     memberId = m.memberId,
                                     name = cleanName,
                                     upiId = d.upiId.trim(),
-                                    avatarSeed = "$cleanName|${d.style}"
+                                    avatarSeed = encodedSeed
                                 )
                             }
                             onSaveAll(batchUpdates)
                         } else {
                             val cleanName = activeDraft.name.trim().ifEmpty { activeMember.name }
-                            val styledSeed = "$cleanName|${activeDraft.style}"
+                            val baseDesc = com.splitmate.app.ui.AvatarSeedCodec.parse(activeMember.avatarSeed.ifBlank { activeMember.name })
+                            val resolvedSeedKey = if (cleanName == activeMember.name.trim() && baseDesc.seedKey.isNotBlank()) baseDesc.seedKey else cleanName
+                            val styledSeed = com.splitmate.app.ui.AvatarSeedCodec.encode(
+                                seedKey = resolvedSeedKey,
+                                gender = com.splitmate.app.ui.AvatarGender.fromId(activeDraft.style),
+                                styleId = baseDesc.styleId,
+                                colorPresetId = baseDesc.colorPresetId
+                            )
                             onSave(cleanName, activeDraft.upiId.trim(), styledSeed)
                         }
                     },

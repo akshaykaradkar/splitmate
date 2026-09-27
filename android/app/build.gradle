@@ -12,7 +12,7 @@ android {
         applicationId "com.splitmate.app"
         minSdk 26
         targetSdk 34
-        versionCode 36
+        versionCode 37
         versionName "2.1.2"
         resConfigs "en"
 
@@ -99,6 +99,9 @@ dependencies {
 
     // Jetpack Security Crypto (AES256-GCM Hardware-Backed Keystore for PNR Vault)
     implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+
+    // Google Play Services Identity (Zero-Permission OS Hardware SIM PhoneNumberHint Verification)
+    implementation 'com.google.android.gms:play-services-auth:21.0.0'
 
     // QA & Automated Testing: JUnit 5, CashApp Turbine, Coroutines Test, Compose Test Rule
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.2'

@@ -485,6 +485,18 @@ fun TripHubMemberAvatar(
 ) {
     val context = LocalContext.current
     val effectiveSeed = seedOrName.ifBlank { fallbackName }
+    val parsedDescriptor = remember(effectiveSeed) {
+        com.splitmate.app.ui.AvatarSeedCodec.parse(effectiveSeed)
+    }
+    val presetBg = remember(effectiveSeed, parsedDescriptor.colorPresetId, backgroundColor) {
+        if (effectiveSeed.contains('|')) {
+            com.splitmate.app.ui.SplitMateAvatarColorPresets
+                .find { it.id.equals(parsedDescriptor.colorPresetId, ignoreCase = true) }
+                ?.primaryBgColor ?: backgroundColor
+        } else {
+            backgroundColor
+        }
+    }
     val svgUrl = remember(effectiveSeed) { buildDiceBearOpenPeepsUrl(effectiveSeed) }
     val initials = remember(fallbackName) { extractInitialsFromNameOrSeed(fallbackName) }
 
@@ -492,7 +504,7 @@ fun TripHubMemberAvatar(
         modifier = Modifier
             .size(size)
             .clip(CircleShape)
-            .background(backgroundColor)
+            .background(presetBg)
             .border(1.5.dp, TripHubTokens.CardSurface, CircleShape),
         contentAlignment = Alignment.Center
     ) {
@@ -507,6 +519,8 @@ fun TripHubMemberAvatar(
             model = ImageRequest.Builder(context)
                 .data(svgUrl)
                 .decoderFactory(SvgDecoder.Factory())
+                .diskCacheKey("dicebear_avatar_$svgUrl")
+                .memoryCacheKey("dicebear_avatar_$svgUrl")
                 .crossfade(true)
                 .build(),
             contentDescription = fallbackName,

@@ -1408,4 +1408,78 @@ class SplitMateV2ZeroRegressionAndSyncTest {
             )
         }
     }
+
+    @Test
+    @DisplayName("19. Phase 3 Guard 8: Zero Local Notification OTP Leak, Google SIM Verification Token Binding & End-to-End Avatar Sync")
+    fun testPhase3Guard8ZeroNotificationOtpLeakGoogleSimTokenAndEndToEndAvatarSync() {
+        val srcMain = resolveSrcMainDir()
+        val authSource = java.io.File(srcMain, "java/com/splitmate/app/data/PhoneOtpAuthManager.kt").readText(Charsets.UTF_8)
+        assertFalse(
+            authSource.contains("dispatchSystemOtpNotification"),
+            "PhoneOtpAuthManager.kt must NEVER display OTPs in a local system notification on an unverified device"
+        )
+        assertTrue(
+            authSource.contains("GetPhoneNumberHintIntentRequest"),
+            "PhoneOtpAuthManager.kt must integrate Google Play Services PhoneNumberHint OS SIM verification"
+        )
+
+        // Verify hardware SIM token binds strictly to the OS-verified SIM number
+        com.splitmate.app.data.PhoneOtpAuthManager.clearPendingOtpChallenge(null)
+        val token = com.splitmate.app.data.PhoneOtpAuthManager.issueHardwareSimVerifiedToken(null, "+91 98765 43210")
+        assertNotNull(token, "issueHardwareSimVerifiedToken must succeed for valid OS-verified SIM number")
+        assertFalse(
+            com.splitmate.app.data.PhoneOtpAuthManager.verifyOtp("9123456789", token!!),
+            "Hardware SIM token must fail if phone number is swapped"
+        )
+        assertTrue(
+            com.splitmate.app.data.PhoneOtpAuthManager.verifyOtp("9876543210", token),
+            "Hardware SIM token must verify cleanly for the OS-verified SIM number"
+        )
+
+        // Verify end-to-end 4-token avatar sync across mergeGroupLedgerDocuments even when member userPhone is blank
+        val customSeed = com.splitmate.app.ui.AvatarSeedCodec.encode(
+            seedKey = "Explorer_888",
+            gender = com.splitmate.app.ui.AvatarGender.MALE,
+            styleId = "toon-head",
+            colorPresetId = "Sunrise"
+        )
+        val localDoc = com.splitmate.app.data.CloudGroupLedgerDocument(
+            group = com.splitmate.app.data.ExpenseGroupEntity("g_sync", "Sync Crew", "INR"),
+            members = listOf(
+                com.splitmate.app.data.GroupMemberEntity(
+                    memberId = "m_me",
+                    groupId = "g_sync",
+                    name = "Akshay",
+                    avatarSeed = "Akshay|open-peeps|PastelWall",
+                    isCurrentUser = true,
+                    userPhone = ""
+                ),
+                com.splitmate.app.data.GroupMemberEntity(
+                    memberId = "m_friend",
+                    groupId = "g_sync",
+                    name = "Rohan",
+                    avatarSeed = "Rohan|Male|adventurer|Electric",
+                    isCurrentUser = false,
+                    userPhone = "9123456789"
+                )
+            ),
+            expenses = emptyList(),
+            splits = emptyList(),
+            settlements = emptyList(),
+            deletedExpenseIds = emptyMap(),
+            flightVaultByPnr = emptyMap(),
+            trainSnapshotByPnr = emptyMap(),
+            updatedAtEpochMs = 1790000000000L
+        )
+        val mergedDoc = com.splitmate.app.data.CloudGroupSyncRepository.mergeGroupLedgerDocuments(
+            localDoc = localDoc,
+            remoteDoc = null,
+            localUserPhone10 = "9876543210",
+            localUserAvatarSeed = customSeed
+        )
+        val meMember = mergedDoc.members.first { it.memberId == "m_me" }
+        assertTrue(meMember.isCurrentUser, "Local current user member must remain isCurrentUser=true")
+        assertEquals(customSeed, meMember.avatarSeed, "Current user member must sync the exact 4-token signup avatarSeed")
+    }
 }
+

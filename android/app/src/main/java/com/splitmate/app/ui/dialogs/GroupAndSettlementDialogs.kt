@@ -377,6 +377,18 @@ fun AvatarToken(
     size: Int = 36
 ) {
     val context = LocalContext.current
+    val parsedDescriptor = remember(initials) {
+        com.splitmate.app.ui.AvatarSeedCodec.parse(initials)
+    }
+    val presetBg = remember(initials, parsedDescriptor.colorPresetId, bg) {
+        if (initials.contains('|')) {
+            com.splitmate.app.ui.SplitMateAvatarColorPresets
+                .find { it.id.equals(parsedDescriptor.colorPresetId, ignoreCase = true) }
+                ?.primaryBgColor ?: bg
+        } else {
+            bg
+        }
+    }
     val diceBearSvgUrl = remember(initials) {
         buildDiceBearOpenPeepsUrl(initials)
     }
@@ -388,7 +400,7 @@ fun AvatarToken(
         modifier = Modifier
             .size(size.dp)
             .clip(CircleShape)
-            .background(bg)
+            .background(presetBg)
             .border(2.dp, SplitMateTheme.SurfaceWhite, CircleShape),
         contentAlignment = Alignment.Center
     ) {
@@ -403,6 +415,8 @@ fun AvatarToken(
             model = ImageRequest.Builder(context)
                 .data(diceBearSvgUrl)
                 .decoderFactory(SvgDecoder.Factory())
+                .diskCacheKey("dicebear_avatar_$diceBearSvgUrl")
+                .memoryCacheKey("dicebear_avatar_$diceBearSvgUrl")
                 .crossfade(true)
                 .build(),
             contentDescription = null,

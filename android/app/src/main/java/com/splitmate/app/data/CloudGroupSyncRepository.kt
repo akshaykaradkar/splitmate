@@ -608,9 +608,11 @@ object CloudGroupSyncRepository {
                 }
             }
         }
+        val localMeMemberIds = localDoc.members.filter { it.isCurrentUser }.map { it.memberId }.toSet()
         val mergedMembers = memberMap.values.map { m ->
             val normPhone = PhoneIdentityValidator.normalizeIndianPhone10(m.userPhone)
-            val isMe = (normPhone == localUserPhone10 && localUserPhone10.length == 10)
+            val isMe = (normPhone == localUserPhone10 && localUserPhone10.length == 10) ||
+                (normPhone.isEmpty() && m.memberId in localMeMemberIds)
             m.copy(
                 isCurrentUser = isMe,
                 avatarSeed = if (isMe && localPreferredSeed.isNotBlank()) localPreferredSeed else m.avatarSeed
@@ -640,10 +642,11 @@ object CloudGroupSyncRepository {
         localUserPhone10: String,
         localUserAvatarSeed: String = ""
     ): CloudGroupLedgerDocument {
-        if (localUserPhone10.length != 10) return doc
+        if (localUserPhone10.length != 10 && localUserAvatarSeed.isBlank()) return doc
         val adjustedMembers = doc.members.map { m ->
             val normPhone = PhoneIdentityValidator.normalizeIndianPhone10(m.userPhone)
-            val isMe = (normPhone == localUserPhone10)
+            val isMe = (localUserPhone10.length == 10 && normPhone == localUserPhone10) ||
+                (normPhone.isEmpty() && m.isCurrentUser)
             m.copy(
                 isCurrentUser = isMe,
                 avatarSeed = if (isMe && localUserAvatarSeed.isNotBlank()) localUserAvatarSeed else m.avatarSeed

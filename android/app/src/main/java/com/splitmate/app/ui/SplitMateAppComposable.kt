@@ -286,6 +286,7 @@ fun SplitMateCloudOtpOnboardingScreen(
     var selectedColorPresetId by rememberSaveable { mutableStateOf(initialDescriptor.colorPresetId) }
     var selectedGenderId by rememberSaveable { mutableStateOf(initialDescriptor.gender.id) }
     var hasUserManuallySelectedGender by rememberSaveable { mutableStateOf(false) }
+    var hasUserCustomizedAvatar by rememberSaveable { mutableStateOf(false) }
     var customSeedKey by rememberSaveable {
         mutableStateOf(
             initialDescriptor.seedKey.takeIf {
@@ -295,6 +296,8 @@ fun SplitMateCloudOtpOnboardingScreen(
     }
     var isStudioExpanded by rememberSaveable { mutableStateOf(false) }
     var enteredOtpCode by rememberSaveable { mutableStateOf("") }
+    var enteredPin4 by rememberSaveable { mutableStateOf("") }
+    var simVerifiedPhone10 by rememberSaveable { mutableStateOf("") }
     var otpFeedbackMessage by remember { mutableStateOf<String?>(null) }
 
     val selectedGender = remember(selectedGenderId) { AvatarGender.fromId(selectedGenderId) }
@@ -324,7 +327,7 @@ fun SplitMateCloudOtpOnboardingScreen(
     }
 
     val effectiveSeedKey = remember(customSeedKey, debouncedStudioName) {
-        customSeedKey.ifBlank { debouncedStudioName.trim().ifBlank { "You" } }
+        customSeedKey.ifBlank { debouncedStudioName.trim().ifBlank { "Explorer" } }
     }
     val compositeLiveSeed = remember(effectiveSeedKey, selectedGender, selectedAvatarStyleId, selectedColorPresetId) {
         AvatarSeedCodec.encode(
@@ -345,29 +348,32 @@ fun SplitMateCloudOtpOnboardingScreen(
                     if (onboardingUpi.isBlank() && record.upiVpa.isNotBlank()) {
                         onboardingUpi = record.upiVpa
                     }
-                    if (record.avatarStyle.isNotBlank()) {
-                        selectedAvatarStyleId = AvatarSeedCodec.parse(
-                            rawSeed = record.avatarSeed.ifBlank { record.name },
-                            fallbackStyleId = record.avatarStyle,
-                            fallbackColorPresetId = record.avatarColorPreset
-                        ).styleId
-                    }
-                    if (record.avatarColorPreset.isNotBlank()) {
-                        selectedColorPresetId = AvatarSeedCodec.parse(
-                            rawSeed = record.avatarSeed.ifBlank { record.name },
-                            fallbackStyleId = record.avatarStyle,
-                            fallbackColorPresetId = record.avatarColorPreset
-                        ).colorPresetId
-                    }
-                    if (record.avatarSeed.isNotBlank()) {
-                        val parsedRemote = AvatarSeedCodec.parse(
-                            rawSeed = record.avatarSeed,
-                            fallbackStyleId = record.avatarStyle.ifBlank { selectedAvatarStyleId },
-                            fallbackColorPresetId = record.avatarColorPreset.ifBlank { selectedColorPresetId }
-                        )
-                        selectedGenderId = parsedRemote.gender.id
-                        if (parsedRemote.seedKey.isNotBlank() && parsedRemote.seedKey != record.name) {
-                            customSeedKey = parsedRemote.seedKey
+                    // Never overwrite avatar style, palette, gender, or customSeedKey if the user already customized them on this screen
+                    if (!hasUserCustomizedAvatar) {
+                        if (record.avatarStyle.isNotBlank()) {
+                            selectedAvatarStyleId = AvatarSeedCodec.parse(
+                                rawSeed = record.avatarSeed.ifBlank { record.name },
+                                fallbackStyleId = record.avatarStyle,
+                                fallbackColorPresetId = record.avatarColorPreset
+                            ).styleId
+                        }
+                        if (record.avatarColorPreset.isNotBlank()) {
+                            selectedColorPresetId = AvatarSeedCodec.parse(
+                                rawSeed = record.avatarSeed.ifBlank { record.name },
+                                fallbackStyleId = record.avatarStyle,
+                                fallbackColorPresetId = record.avatarColorPreset
+                            ).colorPresetId
+                        }
+                        if (record.avatarSeed.isNotBlank()) {
+                            val parsedRemote = AvatarSeedCodec.parse(
+                                rawSeed = record.avatarSeed,
+                                fallbackStyleId = record.avatarStyle.ifBlank { selectedAvatarStyleId },
+                                fallbackColorPresetId = record.avatarColorPreset.ifBlank { selectedColorPresetId }
+                            )
+                            selectedGenderId = parsedRemote.gender.id
+                            if (parsedRemote.seedKey.isNotBlank() && parsedRemote.seedKey != record.name) {
+                                customSeedKey = parsedRemote.seedKey
+                            }
                         }
                     }
                 }
@@ -407,6 +413,7 @@ fun SplitMateCloudOtpOnboardingScreen(
             upiId = resolvedUpi,
             avatarStyleId = selectedAvatarStyleId,
             avatarColorPresetId = selectedColorPresetId,
+            optionalPin4 = enteredPin4,
             avatarGender = selectedGender.id,
             customSeedKey = finalSeedKey
         ) { ok, msg ->
@@ -424,17 +431,47 @@ fun SplitMateCloudOtpOnboardingScreen(
         }
     }
 
-    var showSmsPermissionRecoveryCard by remember { mutableStateOf(false) }
-
-    val otpNotificationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        showSmsPermissionRecoveryCard = !granted
-        val res = viewModel.requestPhoneOtp(context, onboardingPhone)
-        if (res != null) {
-            otpFeedbackMessage = null
+    // Google Play Services OS Hardware SIM Verification Launcher (Zero Manifest Permissions)
+    val googleSimVerificationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        val verifiedPhone = PhoneOtpAuthManager.extractVerifiedSimPhoneFromIntent(context, result.data)
+        if (verifiedPhone != null) {
+            onboardingPhone = verifiedPhone
+            simVerifiedPhone10 = verifiedPhone
+            val hardwareToken = PhoneOtpAuthManager.issueHardwareSimVerifiedToken(context, verifiedPhone)
+            if (hardwareToken != null) {
+                val resolvedName = onboardingName.trim().ifBlank {
+                    discoveredProfile?.name?.takeIf { it.isNotBlank() } ?: "Explorer"
+                }
+                val resolvedUpi = onboardingUpi.trim().ifBlank {
+                    discoveredProfile?.upiVpa?.takeIf { it.isNotBlank() } ?: "$verifiedPhone@upi"
+                }
+                val finalSeedKey = customSeedKey.ifBlank { resolvedName }
+                viewModel.verifyPhoneOtpAndSyncCloud(
+                    context = context,
+                    rawPhone = verifiedPhone,
+                    enteredOtp = hardwareToken,
+                    userName = resolvedName,
+                    upiId = resolvedUpi,
+                    avatarStyleId = selectedAvatarStyleId,
+                    avatarColorPresetId = selectedColorPresetId,
+                    optionalPin4 = enteredPin4,
+                    avatarGender = selectedGender.id,
+                    customSeedKey = finalSeedKey
+                ) { ok, msg ->
+                    otpFeedbackMessage = if (ok) {
+                        "Hardware SIM +91 $verifiedPhone verified by Google Play Services"
+                    } else {
+                        msg
+                    }
+                    if (ok) {
+                        onCompleteToDashboard()
+                    }
+                }
+            }
         } else {
-            otpFeedbackMessage = "Please enter a valid 10-digit Indian mobile number (starts with 6-9)."
+            otpFeedbackMessage = "SIM selection cancelled. Tap 'Verify SIM with Google' or use your 4-Digit Security PIN."
         }
     }
 
@@ -525,6 +562,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                             Surface(
                                 onClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    hasUserCustomizedAvatar = true
                                     val base = onboardingName.trim().ifBlank { "Explorer" }
                                     customSeedKey = "${base}_${(100..999).random()}"
                                 },
@@ -644,6 +682,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                                             onClick = {
                                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                                 hasUserManuallySelectedGender = true
+                                                hasUserCustomizedAvatar = true
                                                 selectedGenderId = genderOption.id
                                             },
                                             shape = SegmentedButtonDefaults.itemShape(
@@ -687,6 +726,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                                         Surface(
                                             onClick = {
                                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                hasUserCustomizedAvatar = true
                                                 selectedAvatarStyleId = styleSpec.id
                                             },
                                             shape = SplitMateTheme.RadiusBadge,
@@ -749,6 +789,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                                         Surface(
                                             onClick = {
                                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                hasUserCustomizedAvatar = true
                                                 selectedColorPresetId = preset.id
                                             },
                                             shape = SplitMateTheme.RadiusBadge,
@@ -848,7 +889,77 @@ fun SplitMateCloudOtpOnboardingScreen(
                             }
                     )
 
-                    // Send 6-Digit OTP + Zero-Permission Native SMS Composer Row
+                    // 4-Digit Account Security PIN (Protects Cloud Profile & Multi-Device Recovery)
+                    OutlinedTextField(
+                        value = enteredPin4,
+                        onValueChange = { rawPin ->
+                            enteredPin4 = rawPin.filter { it.isDigit() }.take(4)
+                        },
+                        label = {
+                            Text(
+                                text = if (discoveredProfile != null) {
+                                    "4-Digit Account Security PIN (To Unlock +91 $normalizedPhone10)"
+                                } else {
+                                    "4-Digit Account Security PIN (Protects Cloud Profile)"
+                                },
+                                fontFamily = SplitMateTheme.FontRounded
+                            )
+                        },
+                        placeholder = { Text("4-digit secret PIN") },
+                        leadingIcon = {
+                            Icon(Icons.Rounded.Lock, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
+                        },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        singleLine = true,
+                        shape = SplitMateTheme.RadiusInput,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // Method 1 Primary Hardware Authentication: Google Play Services OS SIM Verification Sheet (0 Permissions)
+                    Button(
+                        onClick = {
+                            PhoneOtpAuthManager.requestGoogleSimVerificationIntent(
+                                context = context,
+                                onIntentSenderReady = { senderRequest ->
+                                    googleSimVerificationLauncher.launch(senderRequest)
+                                },
+                                onFailure = { err ->
+                                    otpFeedbackMessage = err
+                                }
+                            )
+                        },
+                        enabled = !uiState.isCloudSyncing,
+                        shape = SplitMateTheme.RadiusButton,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF365314),
+                            contentColor = Color(0xFFFAF6F0)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.SimCard,
+                            contentDescription = null,
+                            tint = Color(0xFFD7E8B6),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (simVerifiedPhone10.isNotBlank()) {
+                                "Hardware SIM Verified (+91 $simVerifiedPhone10)"
+                            } else {
+                                "Verify Physical SIM with Google (Recommended)"
+                            },
+                            fontFamily = SplitMateTheme.FontRounded,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 14.sp,
+                            color = Color(0xFFFAF6F0)
+                        )
+                    }
+
+                    // Secondary Authentication Row: 4-Digit Account Security PIN Unlock / Registration + Primary-Device Push
                     val canResendNow = remainingResendSec <= 0
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -857,24 +968,69 @@ fun SplitMateCloudOtpOnboardingScreen(
                     ) {
                         FilledTonalButton(
                             onClick = {
-                                val needsNotifPerm = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
-                                    ContextCompat.checkSelfPermission(
-                                        context,
-                                        Manifest.permission.POST_NOTIFICATIONS
-                                    ) != PackageManager.PERMISSION_GRANTED
-                                if (!needsNotifPerm) {
-                                    showSmsPermissionRecoveryCard = false
-                                    val res = viewModel.requestPhoneOtp(context, onboardingPhone)
-                                    if (res != null) {
-                                        otpFeedbackMessage = null
-                                    } else {
-                                        otpFeedbackMessage = "Please enter a valid 10-digit Indian mobile number (starts with 6-9)."
+                                val resolvedName = onboardingName.trim().ifBlank {
+                                    discoveredProfile?.name?.takeIf { it.isNotBlank() } ?: "Explorer"
+                                }
+                                val resolvedUpi = onboardingUpi.trim().ifBlank {
+                                    discoveredProfile?.upiVpa?.takeIf { it.isNotBlank() } ?: "$normalizedPhone10@upi"
+                                }
+                                val finalSeedKey = customSeedKey.ifBlank { resolvedName }
+                                if (discoveredProfile != null && discoveredProfile.pinHash.isNotBlank()) {
+                                    // Unlock existing cloud profile using secret 4-Digit Account Security PIN
+                                    viewModel.verifyPinAndRestoreCloud(
+                                        context = context,
+                                        rawPhone = onboardingPhone,
+                                        enteredPin4 = enteredPin4,
+                                        fallbackUserName = resolvedName,
+                                        fallbackUpiId = resolvedUpi,
+                                        avatarStyleId = selectedAvatarStyleId,
+                                        avatarColorPresetId = selectedColorPresetId
+                                    ) { ok, msg ->
+                                        otpFeedbackMessage = msg
+                                        if (ok) {
+                                            // If user customized their avatar on the Signup screen, persist their new avatar choice too
+                                            if (hasUserCustomizedAvatar) {
+                                                val customEncoded = AvatarSeedCodec.encode(
+                                                    seedKey = finalSeedKey,
+                                                    gender = selectedGender,
+                                                    styleId = selectedAvatarStyleId,
+                                                    colorPresetId = selectedColorPresetId
+                                                )
+                                                viewModel.updateUserProfile(
+                                                    newName = resolvedName,
+                                                    newPhone = normalizedPhone10,
+                                                    newSeedOrCurrency = customEncoded,
+                                                    newUpiId = resolvedUpi
+                                                )
+                                            }
+                                            onCompleteToDashboard()
+                                        }
                                     }
                                 } else {
-                                    otpNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    // Brand-new cloud account creation protected by the user's 4-Digit Account Security PIN
+                                    val simToken = PhoneOtpAuthManager.issueHardwareSimVerifiedToken(context, normalizedPhone10)
+                                    if (simToken != null) {
+                                        viewModel.verifyPhoneOtpAndSyncCloud(
+                                            context = context,
+                                            rawPhone = onboardingPhone,
+                                            enteredOtp = simToken,
+                                            userName = resolvedName,
+                                            upiId = resolvedUpi,
+                                            avatarStyleId = selectedAvatarStyleId,
+                                            avatarColorPresetId = selectedColorPresetId,
+                                            optionalPin4 = enteredPin4,
+                                            avatarGender = selectedGender.id,
+                                            customSeedKey = finalSeedKey
+                                        ) { ok, msg ->
+                                            otpFeedbackMessage = msg
+                                            if (ok) {
+                                                onCompleteToDashboard()
+                                            }
+                                        }
+                                    }
                                 }
                             },
-                            enabled = isValidPhone10 && canResendNow,
+                            enabled = isValidPhone10 && enteredPin4.length == 4 && !uiState.isCloudSyncing,
                             shape = SplitMateTheme.RadiusButton,
                             colors = ButtonDefaults.filledTonalButtonColors(
                                 containerColor = Color(0xFFD7E8B6),
@@ -885,113 +1041,53 @@ fun SplitMateCloudOtpOnboardingScreen(
                                 .height(46.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Rounded.NotificationsActive,
+                                imageVector = Icons.Rounded.LockOpen,
                                 contentDescription = null,
                                 tint = Color(0xFF365314),
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(17.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = when {
-                                    !canResendNow -> "Resend in ${remainingResendSec}s"
-                                    uiState.isOtpChallengeActive -> "Resend 6-Digit OTP"
-                                    else -> "Send 6-Digit OTP"
-                                },
+                                text = if (discoveredProfile != null) "Unlock with 4-Digit PIN" else "Save with 4-Digit PIN",
                                 fontFamily = SplitMateTheme.FontRounded,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 13.5.sp,
+                                fontSize = 13.sp,
                                 color = Color(0xFF365314)
                             )
                         }
 
-                        if (isValidPhone10) {
+                        if (isValidPhone10 && discoveredProfile != null) {
                             OutlinedButton(
                                 onClick = {
-                                    PhoneOtpAuthManager.openZeroPermissionSmsComposer(
-                                        context = context,
-                                        rawPhone = onboardingPhone
-                                    ) { statusMsg ->
-                                        otpFeedbackMessage = statusMsg
+                                    if (canResendNow) {
+                                        viewModel.requestPhoneOtp(context, onboardingPhone)
                                     }
                                 },
+                                enabled = canResendNow,
                                 shape = SplitMateTheme.RadiusButton,
                                 border = BorderStroke(1.dp, Color(0xFF416913).copy(alpha = 0.5f)),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                                 modifier = Modifier.height(46.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Rounded.Sms,
+                                    imageVector = Icons.Rounded.PhonelinkLock,
                                     contentDescription = null,
                                     tint = Color(0xFF365314),
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "SMS App",
+                                    text = if (!canResendNow) "${remainingResendSec}s" else "Primary Phone Code",
                                     fontFamily = SplitMateTheme.FontRounded,
                                     fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 12.5.sp,
+                                    fontSize = 12.sp,
                                     color = Color(0xFF365314)
                                 )
                             }
                         }
                     }
 
-                    // Inline M3 Notification / SMS Fallback Card if POST_NOTIFICATIONS was denied
-                    AnimatedVisibility(visible = showSmsPermissionRecoveryCard) {
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = SplitMateTheme.TerracottaSurface,
-                            border = BorderStroke(1.dp, Color(0xFFE06B52).copy(alpha = 0.45f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Notifications Disabled",
-                                        fontFamily = SplitMateTheme.FontRounded,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = SplitMateTheme.TerracottaText
-                                    )
-                                    Text(
-                                        text = "Enable Notifications in App Settings or tap 'SMS App' to receive your 6-digit verification code.",
-                                        fontFamily = SplitMateTheme.FontRounded,
-                                        fontSize = 11.sp,
-                                        color = SplitMateTheme.TextSecondary
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                TextButton(
-                                    onClick = {
-                                        runCatching {
-                                            val settingsIntent = Intent(
-                                                android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                                Uri.fromParts("package", context.packageName, null)
-                                            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                            context.startActivity(settingsIntent)
-                                        }
-                                    }
-                                ) {
-                                    Text(
-                                        text = "App Settings",
-                                        fontFamily = SplitMateTheme.FontRounded,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 12.sp,
-                                        color = SplitMateTheme.TerracottaText
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // 6-Cell Segmented OTP Box Input (Zero on-screen OTP leak, Zero 4-Digit PIN)
+                    // 6-Cell Segmented OTP Box Input (For Cross-Device Primary Phone Code Verification)
                     if (uiState.isOtpChallengeActive || enteredOtpCode.isNotEmpty()) {
                         Column(
                             modifier = Modifier
@@ -1011,7 +1107,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                                 )
                                 Text(
                                     text = uiState.otpDeliveryStatusText.ifBlank {
-                                        "Enter the 6-digit verification code for +91 $normalizedPhone10"
+                                        "Enter the 6-digit sync key from your primary verified device for +91 $normalizedPhone10"
                                     },
                                     fontFamily = SplitMateTheme.FontRounded,
                                     fontSize = 12.sp,
@@ -1071,6 +1167,8 @@ fun SplitMateCloudOtpOnboardingScreen(
                                 feedback.contains("Invalid", ignoreCase = true) ||
                                 feedback.contains("Incorrect", ignoreCase = true) ||
                                 feedback.contains("Please", ignoreCase = true) ||
+                                feedback.contains("unavailable", ignoreCase = true) ||
+                                feedback.contains("cancelled", ignoreCase = true) ||
                                 feedback.contains("expired", ignoreCase = true)
                             ) {
                                 Color(0xFFE06B52)
