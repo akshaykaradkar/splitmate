@@ -236,15 +236,18 @@ fun classifyGroupExpenseForTripHub(expense: ExpenseEntity): TripHubBookingCatego
         Regex("""\btrain\s+\d{5}\b""").containsMatchIn(lower)
     val hasExplicitAirlineOrFlightNo = Regex("""\b(indigo|air india|akasa|spicejet|vistara|airasia|alliance air|star air|fly91|emirates|qatar|lufthansa)\b""").containsMatchIn(lower) ||
         Regex("""\b(6e|ai|ix|qp|sg|uk|i5|9i|s5)[\s\-]?\d{2,4}\b""").containsMatchIn(lower)
+    val hasSixCharFlightPnr = parsedTicket?.pnr?.let { it.length == 6 && it.any { ch -> ch.isLetter() } } == true
     val isTrainPdfMislabelledAsFlight = rawTitle.startsWith("Flight", ignoreCase = true) &&
         parsedTicket?.trainOrFlightNo.isNullOrBlank() &&
         !hasExplicitAirlineOrFlightNo &&
+        !hasSixCharFlightPnr &&
         (rawTitle.startsWith("Flight  (") || rawTitle.startsWith("Flight ("))
+    val sanitizedLowerForTrain = lower.replace("air india express", "air india")
 
     if (hasTenDigitPnr ||
         hasFiveDigitTrainNo ||
         isTrainPdfMislabelledAsFlight ||
-        Regex("""\b(train|irctc|express|shatabdi|rajdhani|vande bharat|vande|duronto|sleeper|berth|coach|3a|2a|1a|3e|2s)\b""").containsMatchIn(lower)
+        (!hasExplicitAirlineOrFlightNo && !hasSixCharFlightPnr && Regex("""\b(train|irctc|express|shatabdi|rajdhani|vande bharat|vande|duronto|sleeper|berth|coach|3a|2a|1a|3e|2s)\b""").containsMatchIn(sanitizedLowerForTrain))
     ) {
         return TripHubBookingCategory.TRAIN
     }
@@ -1736,30 +1739,16 @@ private fun TripHubOverviewFeed(
             when (category) {
                 TripHubBookingCategory.TRAIN -> {
                     val legNumber = trainLegNumberById[expense.expenseId] ?: 1
-                    val isPrimaryLeg = expense.expenseId == firstTrainExpenseId || legNumber == 1
-                    if (isPrimaryLeg) {
-                        DeepGreenTrainTicketCard(
-                            expense = expense,
-                            legNumber = 1,
-                            groupMembers = groupMembers,
-                            allSplits = allSplits,
-                            activePerspectiveMember = activePerspectiveMember,
-                            onOpenTrainPnrReviewClick = onOpenTrainPnrReviewClick,
-                            onInspectBerthChart = onInspectBerthChart,
-                            modifier = itemModifier
-                        )
-                    } else {
-                        ReturnTransitTrainCard(
-                            expense = expense,
-                            legNumber = legNumber,
-                            groupMembers = groupMembers,
-                            allSplits = allSplits,
-                            activePerspectiveMember = activePerspectiveMember,
-                            onOpenTrainPnrReviewClick = onOpenTrainPnrReviewClick,
-                            onInspectBerthChart = onInspectBerthChart,
-                            modifier = itemModifier
-                        )
-                    }
+                    DeepGreenTrainTicketCard(
+                        expense = expense,
+                        legNumber = legNumber,
+                        groupMembers = groupMembers,
+                        allSplits = allSplits,
+                        activePerspectiveMember = activePerspectiveMember,
+                        onOpenTrainPnrReviewClick = onOpenTrainPnrReviewClick,
+                        onInspectBerthChart = onInspectBerthChart,
+                        modifier = itemModifier
+                    )
                 }
 
                 TripHubBookingCategory.FLIGHT -> {
@@ -2010,7 +1999,7 @@ fun DeepGreenTrainTicketCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "UPCOMING DEPARTURE",
+                    text = if (legNumber <= 1) "UPCOMING DEPARTURE" else "RETURN / TRANSIT LEG $legNumber",
                     fontFamily = FigtreeFontFamily,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 11.sp,
@@ -2561,7 +2550,7 @@ fun ReturnTransitTrainCard(
 ) {
     val context = LocalContext.current
     val localView = LocalView.current
-    var expandAsFullGreenCard by remember { mutableStateOf(false) }
+    var expandAsFullGreenCard by remember { mutableStateOf(true) }
 
     if (expandAsFullGreenCard) {
         DeepGreenTrainTicketCard(
@@ -2939,12 +2928,18 @@ fun PeriwinkleFlightBookingCard(
     val localView = LocalView.current
 
     val parsedTicket = remember(expense.title) { extractTravelTicketFromTitle(expense.title) }
-    val pnrCode = remember(expense.title, parsedTicket) {
-        parsedTicket?.pnr?.takeIf { it.isNotBlank() }
-            ?: PnrNetworkRepository.normalizePnrKey(expense.title)
+    val flightResult = remember(context, expense, groupMembers, allSplits) {
+        PnrNetworkRepository.reconstructFlightTicketFromExpense(
+            context = context,
+            expense = expense,
+            groupMembers = groupMembers,
+            allSplits = allSplits
+        )
     }
-    val flightResult = remember(context, pnrCode) {
-        if (pnrCode.length == 6) PnrNetworkRepository.loadConfirmedFlightTicketResult(context, pnrCode) else null
+    val pnrCode = remember(flightResult, parsedTicket, expense.title) {
+        flightResult.pnr.takeIf { it.isNotBlank() }
+            ?: parsedTicket?.pnr?.takeIf { it.isNotBlank() }
+            ?: PnrNetworkRepository.normalizePnrKey(expense.title)
     }
     val splitBreakdown = remember(expense, groupMembers, allSplits) {
         SplitMateViewModel.resolveExpenseSplitBreakdown(expense, groupMembers, allSplits)
@@ -2953,14 +2948,16 @@ fun PeriwinkleFlightBookingCard(
         groupMembers.find { it.memberId == expense.payerId }
     }
 
-    val originIata = flightResult?.originIata?.ifBlank { parsedTicket?.fromStation.orEmpty() }
-        ?: parsedTicket?.fromStation?.ifBlank { "ORG" } ?: "ORG"
-    val destIata = flightResult?.destinationIata?.ifBlank { parsedTicket?.toStation.orEmpty() }
-        ?: parsedTicket?.toStation?.ifBlank { "DST" } ?: "DST"
-    val originCity = flightResult?.originCity?.ifBlank { originIata } ?: originIata
-    val destCity = flightResult?.destinationCity?.ifBlank { destIata } ?: destIata
+    val originIata = flightResult.originIata.ifBlank {
+        parsedTicket?.fromStation?.ifBlank { "ORG" } ?: "ORG"
+    }
+    val destIata = flightResult.destinationIata.ifBlank {
+        parsedTicket?.toStation?.ifBlank { "DST" } ?: "DST"
+    }
+    val originCity = flightResult.originCity.ifBlank { originIata }
+    val destCity = flightResult.destinationCity.ifBlank { destIata }
     val flightHeader = when {
-        flightResult != null && flightResult.flightNumber.isNotBlank() ->
+        flightResult.flightNumber.isNotBlank() ->
             "${flightResult.airlineName} ${flightResult.flightNumber}".trim()
         parsedTicket != null && parsedTicket.trainOrFlightNo.isNotBlank() ->
             "${parsedTicket.trainOrCarrierName} ${parsedTicket.trainOrFlightNo}".trim()
@@ -2970,7 +2967,7 @@ fun PeriwinkleFlightBookingCard(
         resolveExpenseSchedule(context, expense)
     }
     val loggedDateLabel = remember(expenseSchedule, flightResult) {
-        val depTime = flightResult?.departureTime?.takeIf { it.isNotBlank() }
+        val depTime = flightResult.departureTime.takeIf { it.isNotBlank() }
         if (depTime != null && !expenseSchedule.shortDateLabel.contains(depTime)) {
             "${expenseSchedule.shortDateLabel} · $depTime"
         } else {
@@ -3010,6 +3007,10 @@ fun PeriwinkleFlightBookingCard(
         }
 
         Surface(
+            onClick = {
+                performCrispTactileHaptic(context, localView, heavy = false)
+                onOpenFlightReviewClick("EXPENSE:${expense.expenseId}")
+            },
             shape = RoundedCornerShape(26.dp),
             color = TripHubTokens.CardSurface,
             border = BorderStroke(1.dp, TripHubTokens.CardBorder),
@@ -3182,7 +3183,7 @@ fun PeriwinkleFlightBookingCard(
                     Surface(
                         onClick = {
                             performCrispTactileHaptic(context, localView, heavy = false)
-                            onOpenFlightReviewClick(pnrCode)
+                            onOpenFlightReviewClick("EXPENSE:${expense.expenseId}")
                         },
                         shape = CircleShape,
                         color = TripHubTokens.PeriwinkleBoxBg,
@@ -4409,7 +4410,7 @@ private fun TripHubPlanTimelineView(
 @Composable
 private fun TripHubTravelWalletView(
     classifiedExpenses: List<Pair<ExpenseEntity, TripHubBookingCategory>>,
-    firstTrainExpenseId: String?,
+    @Suppress("UNUSED_PARAMETER") firstTrainExpenseId: String?,
     groupMembers: List<GroupMemberEntity>,
     allSplits: List<ExpenseSplitEntity>,
     activePerspectiveMember: GroupMemberEntity?,
@@ -4516,30 +4517,16 @@ private fun TripHubTravelWalletView(
             when (category) {
                 TripHubBookingCategory.TRAIN -> {
                     val legNumber = trainLegNumberById[expense.expenseId] ?: 1
-                    val isPrimaryLeg = expense.expenseId == firstTrainExpenseId || legNumber == 1
-                    if (isPrimaryLeg) {
-                        DeepGreenTrainTicketCard(
-                            expense = expense,
-                            legNumber = 1,
-                            groupMembers = groupMembers,
-                            allSplits = allSplits,
-                            activePerspectiveMember = activePerspectiveMember,
-                            onOpenTrainPnrReviewClick = onOpenTrainPnrReviewClick,
-                            onInspectBerthChart = onInspectBerthChart,
-                            modifier = itemModifier
-                        )
-                    } else {
-                        ReturnTransitTrainCard(
-                            expense = expense,
-                            legNumber = legNumber,
-                            groupMembers = groupMembers,
-                            allSplits = allSplits,
-                            activePerspectiveMember = activePerspectiveMember,
-                            onOpenTrainPnrReviewClick = onOpenTrainPnrReviewClick,
-                            onInspectBerthChart = onInspectBerthChart,
-                            modifier = itemModifier
-                        )
-                    }
+                    DeepGreenTrainTicketCard(
+                        expense = expense,
+                        legNumber = legNumber,
+                        groupMembers = groupMembers,
+                        allSplits = allSplits,
+                        activePerspectiveMember = activePerspectiveMember,
+                        onOpenTrainPnrReviewClick = onOpenTrainPnrReviewClick,
+                        onInspectBerthChart = onInspectBerthChart,
+                        modifier = itemModifier
+                    )
                 }
 
                 TripHubBookingCategory.FLIGHT -> {

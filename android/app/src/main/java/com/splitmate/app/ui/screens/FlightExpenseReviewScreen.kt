@@ -514,6 +514,7 @@ fun FlightExpenseReviewScreen(
     onBackClick: () -> Unit = {},
     onConfirmAndAddToLedger: (totalAirfare: Long) -> Unit = {}
 ) {
+    val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -919,13 +920,23 @@ fun FlightExpenseReviewScreen(
                                 isCommittingBoardingPass = true
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 playBoardingPassTearAndStampOneShot(isAudioSensoryEnabled)
-                                val parsedTicket = extractedTicket.toParsedTravelTicket().copy(
-                                    coachAndSeats = "${extractedTicket.cabinClass.ifBlank { if (extractedTicket.isTrainPdfTicket) "3A" else "Economy" }} · ${selectedMemberIds.size} Pax"
-                                )
+                                val baseParsedTicket = extractedTicket.toParsedTravelTicket()
+                                val cabinLabel = extractedTicket.cabinClass.ifBlank { if (extractedTicket.isTrainPdfTicket) "3A" else "Economy" }
+                                val paxSeatSummary = baseParsedTicket.coachAndSeats.takeIf { it.isNotBlank() && !it.equals(cabinLabel, ignoreCase = true) }
+                                val enrichedSeats = if (!paxSeatSummary.isNullOrBlank()) {
+                                    "$cabinLabel · $paxSeatSummary"
+                                } else {
+                                    "$cabinLabel · ${selectedMemberIds.size} Pax"
+                                }
+                                val parsedTicket = baseParsedTicket.copy(coachAndSeats = enrichedSeats)
                                 val defaultVehicleWord = if (extractedTicket.isTrainPdfTicket) "Train" else "Flight"
                                 val formattedTitle = formatTravelExpenseTitle(
                                     baseCategory = "${extractedTicket.airlineName.ifBlank { defaultVehicleWord }} ${extractedTicket.flightNumber} (${extractedTicket.originIata} - ${extractedTicket.destinationIata})",
                                     ticket = parsedTicket
+                                )
+                                PnrNetworkRepository.saveConfirmedFlightTicketToVault(
+                                    context = context,
+                                    result = extractedTicket.copy(totalFarePaise = totalAirfarePaise)
                                 )
                                 commitScope.launch {
                                     commitTearProgress.animateTo(1f, tween(125, easing = FastOutLinearInEasing))

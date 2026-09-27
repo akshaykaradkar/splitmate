@@ -176,19 +176,22 @@ fun formatTravelExpenseTitle(baseCategory: String, ticket: ParsedTravelTicket): 
     if (!ticket.hasTicketMetadata) return cleanBase.ifBlank { "Travel Ticket" }
 
     val pnrTrim = ticket.pnr.trim()
+    val combinedTextWithoutAirIndiaExpress = "$cleanBase ${ticket.trainOrFlightNo} ${ticket.trainOrCarrierName} ${ticket.coachAndSeats}"
+        .replace("Air India Express", "Air India", ignoreCase = true)
+    val hasExplicitAirlineOrFlightNo = Regex("""^(6E|AI|IX|QP|SG|UK|I5|9I|S5)[\s\-]?\d{2,4}$""", RegexOption.IGNORE_CASE).matches(ticket.trainOrFlightNo.trim()) ||
+        cleanBase.contains("IndiGo", ignoreCase = true) ||
+        cleanBase.contains("Air India", ignoreCase = true) ||
+        cleanBase.contains("Akasa", ignoreCase = true) ||
+        cleanBase.contains("SpiceJet", ignoreCase = true) ||
+        cleanBase.contains("Vistara", ignoreCase = true)
     val isExplicitTrain = (pnrTrim.length == 10 && pnrTrim.all { it.isDigit() }) ||
         Regex("""^\d{5}\b""").containsMatchIn(ticket.trainOrFlightNo.trim()) ||
-        Regex("""\b(train|irctc|express|rajdhani|shatabdi|vande|duronto|sleeper|berth|3a|2a|1a|3e)\b""", RegexOption.IGNORE_CASE)
-            .containsMatchIn("$cleanBase ${ticket.trainOrFlightNo} ${ticket.trainOrCarrierName} ${ticket.coachAndSeats}")
+        (!hasExplicitAirlineOrFlightNo && Regex("""\b(train|irctc|express|rajdhani|shatabdi|vande|duronto|sleeper|berth|3a|2a|1a|3e)\b""", RegexOption.IGNORE_CASE)
+            .containsMatchIn(combinedTextWithoutAirIndiaExpress))
     val isFlightTicket = !isExplicitTrain && (
         (pnrTrim.length == 6 && pnrTrim.any { it.isLetter() }) ||
-            Regex("""^(6E|AI|IX|QP|SG|UK|I5|9I|S5)[\s\-]?\d{2,4}$""", RegexOption.IGNORE_CASE).matches(ticket.trainOrFlightNo.trim()) ||
-            (!cleanBase.contains("Train", ignoreCase = true) && cleanBase.contains("Flight", ignoreCase = true)) ||
-            cleanBase.contains("IndiGo", ignoreCase = true) ||
-            cleanBase.contains("Air India", ignoreCase = true) ||
-            cleanBase.contains("Akasa", ignoreCase = true) ||
-            cleanBase.contains("SpiceJet", ignoreCase = true) ||
-            cleanBase.contains("Vistara", ignoreCase = true)
+            hasExplicitAirlineOrFlightNo ||
+            (!cleanBase.contains("Train", ignoreCase = true) && cleanBase.contains("Flight", ignoreCase = true))
     )
 
     val parts = mutableListOf<String>()
@@ -267,7 +270,7 @@ fun extractTravelTicketFromTitle(title: String): ParsedTravelTicket? {
                     .replace("Flight", "")
                     .replace("Train", "")
                     .trim()
-                val numMatch = Regex("""^(\d{5}|[A-Z0-9]{2}[\s\-]\d{2,4})\s*(.*)$""", RegexOption.IGNORE_CASE).find(cleanFirst)
+                val numMatch = Regex("""^(\d{5}|[A-Z0-9]{2}[\s\-]?\d{2,4})\s*(.*)$""", RegexOption.IGNORE_CASE).find(cleanFirst)
                 if (numMatch != null) {
                     trainNo = numMatch.groupValues[1].trim()
                     trainName = numMatch.groupValues[2].trim()
@@ -280,13 +283,17 @@ fun extractTravelTicketFromTitle(title: String): ParsedTravelTicket? {
     if (seats.contains("WL", ignoreCase = true) && status == "CNF") status = "WL"
     if (seats.contains("RAC", ignoreCase = true) && status == "CNF") status = "RAC"
 
+    val hasFlightIndicator = (pnr.length == 6 && pnr.any { it.isLetter() }) ||
+        Regex("""^(6E|AI|IX|QP|SG|UK|I5|9I|S5)[\s\-]?\d{2,4}$""", RegexOption.IGNORE_CASE).matches(trainNo) ||
+        Regex("""\b(indigo|air india|akasa|spicejet|vistara)\b""", RegexOption.IGNORE_CASE).containsMatchIn(title)
+    val sanitizedTitleForTrainCheck = "$title $seats".replace("Air India Express", "Air India", ignoreCase = true)
     val isExplicitTrain = (pnr.length == 10 && pnr.all { it.isDigit() }) ||
         Regex("""^\d{5}\b""").containsMatchIn(trainNo) ||
-        Regex("""\b(train|irctc|express|rajdhani|shatabdi|vande|duronto|sleeper|berth|3a|2a|1a|3e)\b""", RegexOption.IGNORE_CASE)
-            .containsMatchIn("$title $seats")
+        (!hasFlightIndicator && Regex("""\b(train|irctc|express|rajdhani|shatabdi|vande|duronto|sleeper|berth|3a|2a|1a|3e)\b""", RegexOption.IGNORE_CASE)
+            .containsMatchIn(sanitizedTitleForTrainCheck))
     val isFlight = !isExplicitTrain && (
-        (pnr.length == 6 && pnr.any { it.isLetter() }) ||
-            Regex("""^[A-Z0-9]{2}[\s\-]\d{2,4}$""", RegexOption.IGNORE_CASE).matches(trainNo)
+        hasFlightIndicator ||
+            Regex("""^[A-Z0-9]{2}[\s\-]?\d{2,4}$""", RegexOption.IGNORE_CASE).matches(trainNo)
     )
 
     val rawFirstSegment = segments.firstOrNull()

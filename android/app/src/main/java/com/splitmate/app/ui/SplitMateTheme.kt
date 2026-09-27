@@ -1782,7 +1782,6 @@ fun isFlightTicketExpense(
     val cleanPnr = parsedTicket?.pnr?.trim().orEmpty()
     if ((cleanPnr.length == 10 && cleanPnr.all { it.isDigit() }) ||
         Regex("""\b\d{10}\b""").containsMatchIn(title) ||
-        Regex("""\b(train|irctc|express|rajdhani|shatabdi|vande|duronto|sleeper|berth|3a|2a|1a|3e)\b""", RegexOption.IGNORE_CASE).containsMatchIn(title) ||
         Regex("""^\d{5}\b""").containsMatchIn(parsedTicket?.trainOrFlightNo?.trim().orEmpty())
     ) {
         return false
@@ -1790,11 +1789,17 @@ fun isFlightTicketExpense(
     if (cleanPnr.length == 6 && cleanPnr.all { it.isLetterOrDigit() } && cleanPnr.any { it.isLetter() }) {
         return true
     }
+    val hasExplicitAirlineOrFlightNo = Regex("""\b(indigo|air india|akasa|spicejet|vistara|airasia|alliance air|star air|fly91|emirates|qatar|lufthansa)\b""", RegexOption.IGNORE_CASE).containsMatchIn(title) ||
+        Regex("""\b(6e|ai|ix|qp|sg|uk|i5|9i|s5)[\s\-]?\d{2,4}\b""", RegexOption.IGNORE_CASE).containsMatchIn(title)
+    if (hasExplicitAirlineOrFlightNo) {
+        return true
+    }
+    val sanitizedForTrain = title.replace("Air India Express", "Air India", ignoreCase = true)
+    if (Regex("""\b(train|irctc|express|rajdhani|shatabdi|vande|duronto|sleeper|berth|3a|2a|1a|3e)\b""", RegexOption.IGNORE_CASE).containsMatchIn(sanitizedForTrain)) {
+        return false
+    }
     val lower = title.replace(Regex("""train/flight|flight/train""", RegexOption.IGNORE_CASE), "train").lowercase()
-    return lower.contains("flight") || lower.contains("airfare") || lower.contains("indigo") ||
-        lower.contains("air india") || lower.contains("akasa") || lower.contains("spicejet") ||
-        lower.contains("vistara") || lower.contains("airport") ||
-        Regex("""\b(6e|ai|ix|qp|sg|uk)[\s\-]?\d{2,4}\b""", RegexOption.IGNORE_CASE).containsMatchIn(title)
+    return lower.contains("flight") || lower.contains("airfare") || lower.contains("airport")
 }
 
 fun resolveExpenseCategoryIcon(title: String): ImageVector {

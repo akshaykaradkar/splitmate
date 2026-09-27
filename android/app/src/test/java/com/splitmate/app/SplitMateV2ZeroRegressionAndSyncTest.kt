@@ -1493,5 +1493,102 @@ class SplitMateV2ZeroRegressionAndSyncTest {
         assertTrue(meMember.isCurrentUser, "Local current user member must remain isCurrentUser=true")
         assertEquals(customSeed, meMember.avatarSeed, "Current user member must sync the exact 4-token signup avatarSeed")
     }
+
+    @Test
+    @DisplayName("20. Phase 3 Guard 9: Flight Ticket Boarding Pass Reconstruction & Full DeepGreenTrainTicketCard for All Train Legs")
+    fun testPhase3Guard9FlightTicketReconstructionAndFullGreenTrainCardForAllLegs() {
+        // 1. Verify normalizePnrKey extracts explicit PNR and never matches English words like FLIGHT or INDIGO
+        assertEquals(
+            "K8M2XP",
+            com.splitmate.app.data.PnrNetworkRepository.normalizePnrKey(
+                "Flight 6E 5124 IndiGo (BOM-GOI | 28 Sep | 14:30 | 2A, 3A | PNR: K8M2XP)"
+            )
+        )
+        val noPnrTitleNormalized = com.splitmate.app.data.PnrNetworkRepository.normalizePnrKey(
+            "Flight IndiGo Mumbai to Goa"
+        )
+        assertFalse(
+            noPnrTitleNormalized == "FLIGHT" || noPnrTitleNormalized == "INDIGO" || noPnrTitleNormalized == "MUMBAI",
+            "normalizePnrKey must never return 6-letter English words like FLIGHT/INDIGO/MUMBAI as a PNR"
+        )
+
+        // 2. Verify flight expenses with aircraft seats (1A, 2A, 3A) or compact flight numbers (6E5124) are classified as FLIGHT
+        val compactFlightTitle = com.splitmate.app.ui.formatTravelExpenseTitle(
+            baseCategory = "Flight",
+            ticket = com.splitmate.app.ui.ParsedTravelTicket(
+                pnr = "K8M2XP",
+                trainOrFlightNo = "6E5124",
+                trainOrCarrierName = "IndiGo",
+                fromStation = "BOM",
+                toStation = "GOI",
+                departureDate = "28 Sep",
+                departureTime = "14:30",
+                coachAndSeats = "2A, 3A"
+            )
+        )
+        assertTrue(compactFlightTitle.startsWith("Flight "), "6E5124 must format with 'Flight ' prefix: $compactFlightTitle")
+        val parsedCompactFlight = com.splitmate.app.ui.extractTravelTicketFromTitle(compactFlightTitle)
+        assertNotNull(parsedCompactFlight, "extractTravelTicketFromTitle must parse compact flight title")
+        assertTrue(
+            com.splitmate.app.ui.isFlightTicketExpense(compactFlightTitle, parsedCompactFlight),
+            "Flight with seats 2A, 3A must be classified as a Flight ticket, never a 2A/3A AC Train coach"
+        )
+
+        val flightExpense = com.splitmate.app.data.ExpenseEntity(
+            expenseId = "exp_flight_cloud_1",
+            groupId = "g_goa",
+            title = compactFlightTitle,
+            payerId = "m_akshay",
+            baseSubtotalCents = 940_000L,
+            taxCents = 0L,
+            tipCents = 0L,
+            totalAmountCents = 940_000L,
+            lockedMultiplier = 1.0,
+            unassignedBaseCents = 0L,
+            currencyCode = "INR",
+            lockedExchangeRate = 1.0,
+            expenseCategory = "FLIGHT",
+            travelPnr = "K8M2XP",
+            providerName = "IndiGo"
+        )
+        assertEquals(
+            com.splitmate.app.ui.screens.TripHubBookingCategory.FLIGHT,
+            com.splitmate.app.ui.screens.classifyGroupExpenseForTripHub(flightExpense),
+            "Flight expense must be classified as TripHubBookingCategory.FLIGHT"
+        )
+
+        // 3. Reconstruct UniversalFlightTicketResult from Cloud-synced ExpenseEntity without local SharedPreferences vault
+        val groupMembers = listOf(
+            com.splitmate.app.data.GroupMemberEntity("m_akshay", "g_goa", "Akshay", "Akshay", true),
+            com.splitmate.app.data.GroupMemberEntity("m_rohan", "g_goa", "Rohan", "Rohan", false)
+        )
+        val splits = listOf(
+            com.splitmate.app.data.ExpenseSplitEntity("s_1", "exp_flight_cloud_1", "m_akshay", 470_000L, 470_000L),
+            com.splitmate.app.data.ExpenseSplitEntity("s_2", "exp_flight_cloud_1", "m_rohan", 470_000L, 470_000L)
+        )
+        val reconstructed = com.splitmate.app.data.PnrNetworkRepository.reconstructFlightTicketFromExpense(
+            context = null,
+            expense = flightExpense,
+            groupMembers = groupMembers,
+            allSplits = splits
+        )
+        assertEquals("K8M2XP", reconstructed.pnr)
+        assertEquals("IndiGo", reconstructed.airlineName)
+        assertEquals("BOM", reconstructed.originIata)
+        assertEquals("Mumbai", reconstructed.originCity)
+        assertEquals("GOI", reconstructed.destinationIata)
+        assertEquals(940_000L, reconstructed.totalFarePaise)
+        assertEquals(2, reconstructed.passengers.size)
+        assertEquals("2A", reconstructed.passengers[0].seatNumber)
+        assertEquals("3A", reconstructed.passengers[1].seatNumber)
+
+        // 4. Verify TripHomeScreen renders DeepGreenTrainTicketCard for all train legs (no collapsed second train card)
+        val srcMain = resolveSrcMainDir()
+        val tripHomeSource = java.io.File(srcMain, "java/com/splitmate/app/ui/screens/TripHomeScreen.kt").readText(Charsets.UTF_8)
+        assertFalse(
+            tripHomeSource.contains("if (isPrimaryLeg)"),
+            "TripHomeScreen.kt must render DeepGreenTrainTicketCard for all train legs without hiding leg 2+ behind ReturnTransitTrainCard"
+        )
+    }
 }
 

@@ -1312,52 +1312,34 @@ fun SplitMateMainDashboardScaffold(
         }
     }
 
+    fun openFlightTicketReview(pnrOrExpenseKey: String) {
+        activeFlightTicketResult = com.splitmate.app.data.PnrNetworkRepository.resolveOrReconstructFlightTicket(
+            context = context,
+            pnrOrExpenseKey = pnrOrExpenseKey,
+            expenses = uiState.expenses,
+            members = uiState.members,
+            splits = uiState.splits,
+            preferredGroupId = uiState.openedGroupDetailId ?: uiState.activeGroupId
+        )
+    }
+
     fun openPnrOrFlightTicket(pnrRaw: String) {
+        if (pnrRaw.startsWith("EXPENSE:", ignoreCase = true)) {
+            val expId = pnrRaw.substringAfter(":").trim()
+            val matchingExp = uiState.expenses.find { it.expenseId == expId }
+            if (matchingExp == null || isFlightTicketExpense(matchingExp.title) || matchingExp.expenseCategory.equals("FLIGHT", ignoreCase = true)) {
+                openFlightTicketReview(pnrRaw)
+                return
+            }
+        }
         val normalized = com.splitmate.app.data.PnrNetworkRepository.normalizePnrKey(pnrRaw)
-        if (normalized.length == 6) {
-            val cachedFlight = com.splitmate.app.data.PnrNetworkRepository.loadConfirmedFlightTicketResult(context, normalized)
-            if (cachedFlight != null) {
-                activeFlightTicketResult = cachedFlight
-                return
-            }
-            val persistedSnap = com.splitmate.app.data.PnrNetworkRepository.loadPersistedPnrSnapshot(context, normalized)
-            if (persistedSnap != null) {
-                activeFlightTicketResult = com.splitmate.app.data.UniversalFlightTicketExtractor.UniversalFlightTicketResult(
-                    pnr = normalized,
-                    otaBookingId = "PNR-$normalized",
-                    airlineCode = persistedSnap.trainNo.substringBefore(" "),
-                    airlineName = persistedSnap.trainName,
-                    flightNumber = persistedSnap.trainNo,
-                    originIata = persistedSnap.fromStation,
-                    originCity = persistedSnap.fromStationName,
-                    originAirportName = persistedSnap.fromStationName,
-                    destinationIata = persistedSnap.toStation,
-                    destinationCity = persistedSnap.toStationName,
-                    destinationAirportName = persistedSnap.toStationName,
-                    travelDate = persistedSnap.departureTime.substringBefore("•").trim(),
-                    bookingDate = "",
-                    departureTime = persistedSnap.departureTime.substringAfter("•", persistedSnap.departureTime).trim(),
-                    arrivalTime = persistedSnap.arrivalTime,
-                    durationText = persistedSnap.durationText,
-                    cabinClass = persistedSnap.travelClass.substringBefore("•").trim().ifBlank { "Economy" },
-                    fareType = persistedSnap.quotaText,
-                    cabinBaggage = "7 Kgs",
-                    checkInBaggage = "15 Kgs",
-                    passengers = persistedSnap.structuredPassengers.map { sp ->
-                        com.splitmate.app.data.UniversalFlightTicketExtractor.ExtractedFlightPassenger(
-                            fullName = sp.passengerNumber,
-                            seatNumber = sp.currentStatus.substringAfter("/", "-").trim(),
-                            eTicketOrPnr = normalized
-                        )
-                    },
-                    matchedGroupMembers = emptyList(),
-                    totalFarePaise = persistedSnap.totalFareRupees.toLong() * 100L,
-                    discountSavedPaise = 0L,
-                    paymentMethod = "UPI",
-                    extractionDurationMs = 0L
-                )
-                return
-            }
+        val matchingFlightExpense = uiState.expenses.firstOrNull { exp ->
+            (isFlightTicketExpense(exp.title) || exp.expenseCategory.equals("FLIGHT", ignoreCase = true)) &&
+                (exp.expenseId == pnrRaw || (normalized.isNotBlank() && exp.title.contains(normalized, ignoreCase = true)))
+        }
+        if (normalized.length == 6 || matchingFlightExpense != null) {
+            openFlightTicketReview(pnrRaw)
+            return
         }
         activeReviewPnr = pnrRaw
         showPnrReviewScreen = true
@@ -2821,7 +2803,7 @@ fun LedgersDashboardScreen(
                                         flightPnrExpensesInGroup.forEach { (exp, ticket) ->
                                             val formattedFare = "₹${String.format(Locale.US, "%.0f", exp.totalAmountCents / 100.0)}"
                                             Surface(
-                                                onClick = { onOpenPnrWithTicket(ticket.pnr) },
+                                                onClick = { onOpenPnrWithTicket("EXPENSE:${exp.expenseId}") },
                                                 shape = SplitMateTheme.RadiusBadge,
                                                 color = if (SplitMateTheme.isDark) Color(0xFF24214A) else Color(0xFFFFFFFF),
                                                 border = BorderStroke(1.dp, if (SplitMateTheme.isDark) Color(0xFF4E48A6) else Color(0xFFA5B4FC))
@@ -3016,7 +2998,9 @@ fun LedgersDashboardScreen(
                                     totalAmountDisplay = formattedTotal,
                                     perPersonShareDisplay = perPersonShare,
                                     onInspectTactilePass = {
-                                        if (parsedTicketInGroup.pnr.isNotBlank()) {
+                                        if (isFlightCard || expense.expenseCategory.equals("FLIGHT", ignoreCase = true)) {
+                                            onOpenPnrWithTicket("EXPENSE:${expense.expenseId}")
+                                        } else if (parsedTicketInGroup.pnr.isNotBlank()) {
                                             onOpenPnrWithTicket(parsedTicketInGroup.pnr)
                                         } else {
                                             onNavigateToPnrSplit()
@@ -6671,12 +6655,14 @@ fun AuditVaultScreen(
                     )
                 }
 
-                if (parsedTravelTicket != null && parsedTravelTicket.pnr.isNotBlank()) {
+                if (parsedTravelTicket != null && (parsedTravelTicket.pnr.isNotBlank() || isFlightTicketExpense(selectedExp.title, parsedTravelTicket))) {
                     Spacer(modifier = Modifier.height(14.dp))
                     Button(
                         onClick = {
                             val gId = selectedExp.groupId
-                            val pnrCode = parsedTravelTicket.pnr
+                            val isFlightSel = isFlightTicketExpense(selectedExp.title, parsedTravelTicket) ||
+                                selectedExp.expenseCategory.equals("FLIGHT", ignoreCase = true)
+                            val pnrCode = if (isFlightSel) "EXPENSE:${selectedExp.expenseId}" else parsedTravelTicket.pnr
                             selectedExpenseForDetailSheet = null
                             onOpenPnrWithTicket(gId, pnrCode)
                         },
@@ -6696,7 +6682,7 @@ fun AuditVaultScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Open Full Boarding Pass (PNR ${parsedTravelTicket.pnr})",
+                            text = if (parsedTravelTicket.pnr.isNotBlank()) "Open Full Boarding Pass (PNR ${parsedTravelTicket.pnr})" else "Open Full Boarding Pass",
                             fontFamily = SplitMateTheme.FontRounded,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 13.sp,

@@ -292,18 +292,32 @@ fun SplitMateAppNavHost(
 
     fun openPnrOrFlightTicket(pnrRaw: String) {
         val normalized = PnrNetworkRepository.normalizePnrKey(pnrRaw)
-        if (normalized.length == 6) {
-            val resolvedFlight = resolveFlightTicketByPnr(context, normalized)
-            if (resolvedFlight != null) {
-                dashboardTravelPassMode = ActiveTravelPassMode.FLIGHT
-                navigateTo(
-                    SplitMateRoute.FlightPdfReview(
-                        pnrCode = normalized,
-                        extractedTicket = resolvedFlight
-                    )
+        val isExplicitExpenseFlight = pnrRaw.startsWith("EXPENSE:", ignoreCase = true) && run {
+            val expId = pnrRaw.substringAfter(":").trim()
+            val exp = uiState.expenses.find { it.expenseId == expId }
+            exp == null || com.splitmate.app.ui.isFlightTicketExpense(exp.title) || exp.expenseCategory.equals("FLIGHT", ignoreCase = true)
+        }
+        val matchingFlightExpense = uiState.expenses.firstOrNull { exp ->
+            (com.splitmate.app.ui.isFlightTicketExpense(exp.title) || exp.expenseCategory.equals("FLIGHT", ignoreCase = true)) &&
+                (exp.expenseId == pnrRaw || (normalized.isNotBlank() && exp.title.contains(normalized, ignoreCase = true)))
+        }
+        if (isExplicitExpenseFlight || normalized.length == 6 || matchingFlightExpense != null) {
+            val resolvedFlight = PnrNetworkRepository.resolveOrReconstructFlightTicket(
+                context = context,
+                pnrOrExpenseKey = pnrRaw,
+                expenses = uiState.expenses,
+                members = uiState.members,
+                splits = uiState.splits,
+                preferredGroupId = uiState.openedGroupDetailId ?: uiState.activeGroupId
+            )
+            dashboardTravelPassMode = ActiveTravelPassMode.FLIGHT
+            navigateTo(
+                SplitMateRoute.FlightPdfReview(
+                    pnrCode = resolvedFlight.pnr.ifBlank { normalized },
+                    extractedTicket = resolvedFlight
                 )
-                return
-            }
+            )
+            return
         }
         dashboardTravelPassMode = ActiveTravelPassMode.TRAIN
         navigateTo(SplitMateRoute.TrainPnrReview(initialPnr = pnrRaw))
@@ -490,9 +504,29 @@ fun SplitMateAppNavHost(
                     // 4. FLIGHT E-TICKET REVIEW (3D Foldable Boarding Pass)
                     // ==========================================================
                     is SplitMateRoute.FlightPdfReview -> {
-                        val resolvedTicket = remember(targetScreen.pnrCode, targetScreen.extractedTicket) {
+                        val resolvedTicket = remember(
+                            targetScreen.pnrCode,
+                            targetScreen.extractedTicket,
+                            uiState.expenses,
+                            uiState.members,
+                            uiState.splits,
+                            uiState.openedGroupDetailId,
+                            uiState.activeGroupId
+                        ) {
                             targetScreen.extractedTicket
                                 ?: resolveFlightTicketByPnr(context, targetScreen.pnrCode)
+                                ?: if (targetScreen.pnrCode.isNotBlank()) {
+                                    PnrNetworkRepository.resolveOrReconstructFlightTicket(
+                                        context = context,
+                                        pnrOrExpenseKey = targetScreen.pnrCode,
+                                        expenses = uiState.expenses,
+                                        members = uiState.members,
+                                        splits = uiState.splits,
+                                        preferredGroupId = uiState.openedGroupDetailId ?: uiState.activeGroupId
+                                    )
+                                } else {
+                                    null
+                                }
                         }
                         if (resolvedTicket != null) {
                             FlightExpenseReviewScreen(

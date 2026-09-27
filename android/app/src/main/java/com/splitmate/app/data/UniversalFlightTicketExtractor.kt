@@ -222,6 +222,12 @@ object UniversalFlightTicketExtractor {
         "DL" to "Delta Air Lines"
     )
 
+    fun resolveAirlineName(airlineCode: String): String? =
+        IataAirlineRegistry[airlineCode.trim().uppercase(Locale.US)]
+
+    fun resolveAirportInfo(iataCode: String): AirportInfo? =
+        IataAirportRegistry[iataCode.trim().uppercase(Locale.US)]
+
     private val CarrierCodesLookingLikeSeats = setOf("6E", "9I", "S5", "I5", "G8", "G9")
 
     // =========================================================================
