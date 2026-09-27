@@ -317,6 +317,8 @@ private val TicketShortDateNoYearPatterns = listOf(
     "MMM d"
 )
 
+private val resolvedScheduleCache = java.util.concurrent.ConcurrentHashMap<String, ResolvedExpenseSchedule>()
+
 /**
  * Resolves the actual travel/departure date & time from a Train PNR or Flight Boarding Pass PDF
  * (via `PnrNetworkRepository` vault or `ParsedTravelTicket` title metadata), falling back to
@@ -326,6 +328,9 @@ fun resolveExpenseSchedule(
     context: Context?,
     expense: ExpenseEntity
 ): ResolvedExpenseSchedule {
+    val cacheKey = "${expense.expenseId}_${expense.title.hashCode()}_${expense.scheduledAtEpochMs}_${expense.createdAt}"
+    resolvedScheduleCache[cacheKey]?.let { return it }
+
     val explicitEpoch = expense.scheduledAtEpochMs
     if (explicitEpoch != null && explicitEpoch > 0L) {
         val dateObj = Date(explicitEpoch)
@@ -338,7 +343,7 @@ fun resolveExpenseSchedule(
             fullDateLabel = fullDate,
             timeLabel = timeStr,
             hasExplicitTicketDate = true
-        )
+        ).also { resolvedScheduleCache[cacheKey] = it }
     }
 
     val parsedTicket = extractTravelTicketFromTitle(expense.title)
@@ -475,7 +480,7 @@ fun resolveExpenseSchedule(
         fullDateLabel = fullStr,
         timeLabel = timeStr,
         hasExplicitTicketDate = parsedDateMillis != null
-    )
+    ).also { resolvedScheduleCache[cacheKey] = it }
 }
 
 @Composable
@@ -1922,11 +1927,14 @@ fun DeepGreenTrainTicketCard(
         if (pnrDigits.isNotBlank()) loadPersistedPnrSnapshot(context, pnrDigits) else null
     }
 
-    val splitBreakdown = remember(expense, groupMembers, allSplits) {
+    val expenseSplits = remember(expense.expenseId, allSplits) {
+        allSplits.filter { it.expenseId == expense.expenseId }
+    }
+    val splitBreakdown = remember(expense, groupMembers, expenseSplits) {
         SplitMateViewModel.resolveExpenseSplitBreakdown(
             expense = expense,
             groupMembers = groupMembers,
-            allSplits = allSplits,
+            allSplits = expenseSplits,
             currencySymbol = "₹"
         )
     }
@@ -2048,9 +2056,7 @@ fun DeepGreenTrainTicketCard(
             shape = RoundedCornerShape(26.dp),
             color = TripHubTokens.CardSurface,
             border = BorderStroke(1.dp, TripHubTokens.CardBorder),
-            modifier = Modifier
-                .fillMaxWidth()
-                .animateContentSize(animationSpec = DesignSystemBindings.tactileSpring())
+            modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 // UPPER DEEP FOREST GREEN SECTION
@@ -2574,8 +2580,11 @@ fun ReturnTransitTrainCard(
     val snapshot = remember(context, pnrDigits) {
         if (pnrDigits.isNotBlank()) loadPersistedPnrSnapshot(context, pnrDigits) else null
     }
-    val splitBreakdown = remember(expense, groupMembers, allSplits) {
-        SplitMateViewModel.resolveExpenseSplitBreakdown(expense, groupMembers, allSplits)
+    val expenseSplits = remember(expense.expenseId, allSplits) {
+        allSplits.filter { it.expenseId == expense.expenseId }
+    }
+    val splitBreakdown = remember(expense, groupMembers, expenseSplits) {
+        SplitMateViewModel.resolveExpenseSplitBreakdown(expense, groupMembers, expenseSplits)
     }
     val payer = remember(groupMembers, expense.payerId) {
         groupMembers.find { it.memberId == expense.payerId }
@@ -2634,9 +2643,7 @@ fun ReturnTransitTrainCard(
             shape = RoundedCornerShape(24.dp),
             color = TripHubTokens.CardSurface,
             border = BorderStroke(1.dp, TripHubTokens.CardBorder),
-            modifier = Modifier
-                .fillMaxWidth()
-                .animateContentSize(animationSpec = DesignSystemBindings.tactileSpring())
+            modifier = Modifier.fillMaxWidth()
         ) {
             Column(
                 modifier = Modifier
@@ -2928,12 +2935,15 @@ fun PeriwinkleFlightBookingCard(
     val localView = LocalView.current
 
     val parsedTicket = remember(expense.title) { extractTravelTicketFromTitle(expense.title) }
-    val flightResult = remember(context, expense, groupMembers, allSplits) {
+    val expenseSplits = remember(expense.expenseId, allSplits) {
+        allSplits.filter { it.expenseId == expense.expenseId }
+    }
+    val flightResult = remember(context, expense, groupMembers, expenseSplits) {
         PnrNetworkRepository.reconstructFlightTicketFromExpense(
             context = context,
             expense = expense,
             groupMembers = groupMembers,
-            allSplits = allSplits
+            allSplits = expenseSplits
         )
     }
     val pnrCode = remember(flightResult, parsedTicket, expense.title) {
@@ -2941,8 +2951,8 @@ fun PeriwinkleFlightBookingCard(
             ?: parsedTicket?.pnr?.takeIf { it.isNotBlank() }
             ?: PnrNetworkRepository.normalizePnrKey(expense.title)
     }
-    val splitBreakdown = remember(expense, groupMembers, allSplits) {
-        SplitMateViewModel.resolveExpenseSplitBreakdown(expense, groupMembers, allSplits)
+    val splitBreakdown = remember(expense, groupMembers, expenseSplits) {
+        SplitMateViewModel.resolveExpenseSplitBreakdown(expense, groupMembers, expenseSplits)
     }
     val payer = remember(groupMembers, expense.payerId) {
         groupMembers.find { it.memberId == expense.payerId }
@@ -3239,8 +3249,11 @@ fun LodgingBookingCard(
     var showSplitDrawer by remember { mutableStateOf(false) }
 
     val cleanTitle = remember(expense.title) { cleanDisplayExpenseTitle(expense.title) }
-    val splitBreakdown = remember(expense, groupMembers, allSplits) {
-        SplitMateViewModel.resolveExpenseSplitBreakdown(expense, groupMembers, allSplits)
+    val expenseSplits = remember(expense.expenseId, allSplits) {
+        allSplits.filter { it.expenseId == expense.expenseId }
+    }
+    val splitBreakdown = remember(expense, groupMembers, expenseSplits) {
+        SplitMateViewModel.resolveExpenseSplitBreakdown(expense, groupMembers, expenseSplits)
     }
     val payer = remember(groupMembers, expense.payerId) {
         groupMembers.find { it.memberId == expense.payerId }
@@ -3296,9 +3309,7 @@ fun LodgingBookingCard(
             shape = RoundedCornerShape(24.dp),
             color = TripHubTokens.CardSurface,
             border = BorderStroke(1.dp, TripHubTokens.CardBorder),
-            modifier = Modifier
-                .fillMaxWidth()
-                .animateContentSize(animationSpec = DesignSystemBindings.tactileSpring())
+            modifier = Modifier.fillMaxWidth()
         ) {
             Column(
                 modifier = Modifier
@@ -3606,8 +3617,11 @@ fun GroundMobilityBookingCard(
     var showSplitDrawer by remember { mutableStateOf(false) }
 
     val cleanTitle = remember(expense.title) { cleanDisplayExpenseTitle(expense.title) }
-    val splitBreakdown = remember(expense, groupMembers, allSplits) {
-        SplitMateViewModel.resolveExpenseSplitBreakdown(expense, groupMembers, allSplits)
+    val expenseSplits = remember(expense.expenseId, allSplits) {
+        allSplits.filter { it.expenseId == expense.expenseId }
+    }
+    val splitBreakdown = remember(expense, groupMembers, expenseSplits) {
+        SplitMateViewModel.resolveExpenseSplitBreakdown(expense, groupMembers, expenseSplits)
     }
     val payer = remember(groupMembers, expense.payerId) {
         groupMembers.find { it.memberId == expense.payerId }
@@ -3660,9 +3674,7 @@ fun GroundMobilityBookingCard(
             shape = RoundedCornerShape(22.dp),
             color = TripHubTokens.CardSurface,
             border = BorderStroke(1.dp, TripHubTokens.CardBorder),
-            modifier = Modifier
-                .fillMaxWidth()
-                .animateContentSize(animationSpec = DesignSystemBindings.tactileSpring())
+            modifier = Modifier.fillMaxWidth()
         ) {
             Column(
                 modifier = Modifier
@@ -3820,8 +3832,11 @@ fun GeneralSharedExpenseCard(
     var expanded by remember { mutableStateOf(false) }
 
     val cleanTitle = remember(expense.title) { cleanDisplayExpenseTitle(expense.title) }
-    val splitBreakdown = remember(expense, groupMembers, allSplits) {
-        SplitMateViewModel.resolveExpenseSplitBreakdown(expense, groupMembers, allSplits)
+    val expenseSplits = remember(expense.expenseId, allSplits) {
+        allSplits.filter { it.expenseId == expense.expenseId }
+    }
+    val splitBreakdown = remember(expense, groupMembers, expenseSplits) {
+        SplitMateViewModel.resolveExpenseSplitBreakdown(expense, groupMembers, expenseSplits)
     }
     val payer = remember(groupMembers, expense.payerId) {
         groupMembers.find { it.memberId == expense.payerId }
@@ -3838,7 +3853,7 @@ fun GeneralSharedExpenseCard(
         shape = RoundedCornerShape(22.dp),
         color = TripHubTokens.CardSurface,
         border = BorderStroke(1.dp, TripHubTokens.CardBorder),
-        modifier = modifier.animateContentSize(animationSpec = DesignSystemBindings.tactileSpring())
+        modifier = modifier
     ) {
         Column(
             modifier = Modifier
@@ -5005,12 +5020,6 @@ private fun TripHubPeoplePerspectiveView(
             }
 
             Surface(
-                onClick = {
-                    if (!isMe) {
-                        performCrispTactileHaptic(context, localView, heavy = false)
-                        viewModel.claimGroupMemberPerspective(groupId, member.memberId)
-                    }
-                },
                 shape = RoundedCornerShape(22.dp),
                 color = TripHubTokens.CardSurface,
                 border = BorderStroke(

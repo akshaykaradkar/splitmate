@@ -639,7 +639,8 @@ object CloudGroupSyncRepository {
         val localPreferredSeed = localUserAvatarSeed.takeIf { it.isNotBlank() }
             ?: localDoc.members.firstOrNull { m ->
                 val normPhone = PhoneIdentityValidator.extractMemberPhone10(m.userPhone, m.upiId)
-                (normLocalPhone.length == 10 && normPhone == normLocalPhone) || m.isCurrentUser
+                (normLocalPhone.length == 10 && normPhone == normLocalPhone) ||
+                    (normPhone.isEmpty() && m.isCurrentUser && m.memberId.endsWith("_me"))
             }?.avatarSeed?.takeIf { it.contains("|") }.orEmpty()
 
         val memberMap = linkedMapOf<String, GroupMemberEntity>()
@@ -683,10 +684,12 @@ object CloudGroupSyncRepository {
                 (normPhone == normLocalPhone && normLocalPhone.length == 10) ||
                     (normPhone.isEmpty() && m.memberId in localMeMemberIds)
             }
+            val shouldApplyLocalSeed = (normLocalPhone.length == 10 && normPhone == normLocalPhone) ||
+                (normPhone.isEmpty() && isMe && m.memberId.endsWith("_me"))
             m.copy(
                 userPhone = normPhone.ifBlank { m.userPhone },
                 isCurrentUser = isMe,
-                avatarSeed = if (isMe && localPreferredSeed.isNotBlank()) localPreferredSeed else m.avatarSeed
+                avatarSeed = if (shouldApplyLocalSeed && localPreferredSeed.isNotBlank()) localPreferredSeed else m.avatarSeed
             )
         }
 
@@ -748,10 +751,12 @@ object CloudGroupSyncRepository {
                 !isRemoteOnly -> normPhone.isEmpty() && m.isCurrentUser
                 else -> false
             }
+            val shouldApplyLocalSeed = (normLocalPhone.length == 10 && normPhone == normLocalPhone) ||
+                (normPhone.isEmpty() && isMe && m.memberId.endsWith("_me"))
             m.copy(
                 userPhone = normPhone.ifBlank { m.userPhone },
                 isCurrentUser = isMe,
-                avatarSeed = if (isMe && localUserAvatarSeed.isNotBlank()) localUserAvatarSeed else m.avatarSeed
+                avatarSeed = if (shouldApplyLocalSeed && localUserAvatarSeed.isNotBlank()) localUserAvatarSeed else m.avatarSeed
             )
         }
         return doc.copy(
@@ -829,12 +834,23 @@ object CloudGroupSyncRepository {
         val localAvatarSeed = localProfile?.avatarSeed?.takeIf { it.isNotBlank() }.orEmpty()
 
         val localGroup = dao.getGroupById(groupId)
+        var rawGroupMembers: List<GroupMemberEntity>? = null
         var localDoc: CloudGroupLedgerDocument? = null
 
         if (localGroup != null) {
-            val members = dao.getMembersForGroup(groupId).map { m ->
+            val loadedMembers = dao.getMembersForGroup(groupId)
+            rawGroupMembers = loadedMembers
+            val groupAlreadyHasLocalPhone = normLocalPhone.length == 10 && loadedMembers.any {
+                PhoneIdentityValidator.extractMemberPhone10(it.userPhone, it.upiId) == normLocalPhone
+            }
+            val members = loadedMembers.map { m ->
                 val extractedPhone = PhoneIdentityValidator.extractMemberPhone10(m.userPhone, m.upiId)
-                val finalPhone = if (m.isCurrentUser && extractedPhone.isBlank() && normLocalPhone.length == 10) {
+                val isTrueLocalOwner = !groupAlreadyHasLocalPhone &&
+                    m.isCurrentUser &&
+                    extractedPhone.isBlank() &&
+                    normLocalPhone.length == 10 &&
+                    (m.memberId.endsWith("_me") || (localUserName.isNotBlank() && m.name.trim().equals(localUserName.trim(), ignoreCase = true)))
+                val finalPhone = if (isTrueLocalOwner) {
                     normLocalPhone
                 } else {
                     extractedPhone.ifBlank { m.userPhone }
@@ -874,22 +890,45 @@ object CloudGroupSyncRepository {
             localUserAvatarSeed = localAvatarSeed
         )
 
-        // Delete any local expenses that were tombstoned in cloud
+        // Delete any local expenses that were tombstoned in cloud (only if present locally or newly tombstoned)
+        val localExpIds = localDoc?.expenses?.map { it.expenseId }?.toSet().orEmpty()
         mergedDoc.deletedExpenseIds.keys.forEach { deletedExpId ->
-            dao.deleteSplitsForExpense(deletedExpId)
-            dao.deleteExpense(deletedExpId)
+            if (localDoc == null || deletedExpId in localExpIds || additionalTombstones.containsKey(deletedExpId)) {
+                dao.deleteSplitsForExpense(deletedExpId)
+                dao.deleteExpense(deletedExpId)
+            }
         }
 
-        // Write merged state to Room using @Upsert (never triggers ON DELETE CASCADE)
-        dao.insertGroup(mergedDoc.group)
-        dao.insertMembers(mergedDoc.members)
-        mergedDoc.expenses.forEach { dao.insertExpense(it) }
-        dao.insertExpenseSplits(mergedDoc.splits)
-        mergedDoc.settlements.forEach { dao.insertSettlement(it) }
+        // Write merged state to Room using @Upsert ONLY for rows that actually changed
+        if (localGroup == null || localGroup != mergedDoc.group) {
+            dao.insertGroup(mergedDoc.group)
+        }
+        if (rawGroupMembers == null || rawGroupMembers != mergedDoc.members) {
+            dao.insertMembers(mergedDoc.members)
+        }
+        val localExpMap = localDoc?.expenses?.associateBy { it.expenseId }.orEmpty()
+        mergedDoc.expenses.filter { localExpMap[it.expenseId] != it }.forEach {
+            dao.insertExpense(it)
+        }
+        val localSplitMap = localDoc?.splits?.associateBy { it.splitId }.orEmpty()
+        val changedSplits = mergedDoc.splits.filter { localSplitMap[it.splitId] != it }
+        if (changedSplits.isNotEmpty()) {
+            dao.insertExpenseSplits(changedSplits)
+        }
+        val localSettleMap = localDoc?.settlements?.associateBy { it.settlementId }.orEmpty()
+        mergedDoc.settlements.filter { localSettleMap[it.settlementId] != it }.forEach {
+            dao.insertSettlement(it)
+        }
 
         if (context != null) {
-            PnrNetworkRepository.importFlightVaultJsonByPnr(context, mergedDoc.flightVaultByPnr)
-            PnrNetworkRepository.importTrainSnapshotJsonByPnr(context, mergedDoc.trainSnapshotByPnr)
+            val newFlights = mergedDoc.flightVaultByPnr.filter { (k, v) -> localDoc?.flightVaultByPnr?.get(k) != v }
+            if (newFlights.isNotEmpty()) {
+                PnrNetworkRepository.importFlightVaultJsonByPnr(context, newFlights)
+            }
+            val newTrains = mergedDoc.trainSnapshotByPnr.filter { (k, v) -> localDoc?.trainSnapshotByPnr?.get(k) != v }
+            if (newTrains.isNotEmpty()) {
+                PnrNetworkRepository.importTrainSnapshotJsonByPnr(context, newTrains)
+            }
         }
 
         val nowMs = System.currentTimeMillis()

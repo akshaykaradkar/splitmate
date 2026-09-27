@@ -110,8 +110,11 @@ data class SplitMateUiState(
         get() = currentUserSeed
 
     fun isMemberOnline(member: GroupMemberEntity, nowMs: Long = System.currentTimeMillis()): Boolean {
-        if (member.isCurrentUser) return true
+        val myPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(userPhone)
         val mPhone10 = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(member.userPhone, member.upiId)
+        if (myPhone10.length == 10 && mPhone10 == myPhone10) return true
+        if (myPhone10.isEmpty() && member.isCurrentUser && member.memberId.endsWith("_me")) return true
+        if (mPhone10.length != 10) return false
         return com.splitmate.app.data.CloudGroupSyncRepository.isPhoneOnlineNow(mPhone10, memberPresenceByPhone, nowMs)
     }
 
@@ -180,20 +183,101 @@ data class SplitMateUiState(
     val activeGroupMembers: List<GroupMemberEntity>
         get() {
             val targetGroupId = activeGroup?.groupId ?: activeGroupId
-            val userPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(userPhone)
-            return members.filter { it.groupId == targetGroupId }.map { m ->
-                val isMe = m.isCurrentUser || (
-                    userPhone10.length == 10 &&
-                        com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(m.userPhone, m.upiId) == userPhone10
-                    )
-                if (isMe && currentUserSeed.isNotBlank()) {
-                    m.copy(avatarSeed = currentUserSeed, isCurrentUser = true)
-                } else {
-                    m
-                }
-            }
+            return syncLocalOwnerAvatarSeeds(
+                members = members.filter { it.groupId == targetGroupId },
+                rawLocalPhone = userPhone,
+                currentUserName = currentUserName,
+                currentUserSeed = currentUserSeed
+            )
         }
 }
+
+internal fun isTrueDeviceOwnerMember(
+    member: GroupMemberEntity,
+    groupHasPhoneMatchedOwner: Boolean,
+    userPhone10: String,
+    currentUserName: String
+): Boolean {
+    val memberPhone10 = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(member.userPhone, member.upiId)
+    if (userPhone10.length == 10 && memberPhone10 == userPhone10) {
+        return true
+    }
+    if (groupHasPhoneMatchedOwner || memberPhone10.isNotEmpty()) {
+        return false
+    }
+    if (member.memberId.endsWith("_me") || member.memberId == "m_1" || member.memberId == "m_1_apt") {
+        return true
+    }
+    return member.isCurrentUser &&
+        currentUserName.isNotBlank() &&
+        member.name.trim().equals(currentUserName.trim(), ignoreCase = true)
+}
+
+internal fun isTrueDeviceOwnerMember(
+    member: GroupMemberEntity,
+    rawLocalPhone: String,
+    fallbackPhone: String = ""
+): Boolean {
+    val userPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(rawLocalPhone)
+        .ifEmpty { com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(fallbackPhone) }
+    val memberPhone10 = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(member.userPhone, member.upiId)
+    if (userPhone10.length == 10 && memberPhone10 == userPhone10) {
+        return true
+    }
+    if (memberPhone10.isNotEmpty()) {
+        return false
+    }
+    return member.memberId.endsWith("_me") ||
+        member.memberId == "m_1" ||
+        member.memberId == "m_1_apt"
+}
+
+internal fun syncLocalOwnerAvatarSeeds(
+    members: List<GroupMemberEntity>,
+    rawLocalPhone: String,
+    currentUserName: String,
+    currentUserSeed: String
+): List<GroupMemberEntity> {
+    if (currentUserSeed.isBlank() || members.isEmpty()) return members
+    val userPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(rawLocalPhone)
+    val groupsWithPhoneMatch = if (userPhone10.length == 10) {
+        members.filter {
+            com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(it.userPhone, it.upiId) == userPhone10
+        }.map { it.groupId }.toSet()
+    } else {
+        emptySet()
+    }
+    val groupsWithAnyCurrentUser = members.filter { it.isCurrentUser }.map { it.groupId }.toSet()
+    return members.map { m ->
+        val isTrueOwner = isTrueDeviceOwnerMember(
+            member = m,
+            groupHasPhoneMatchedOwner = m.groupId in groupsWithPhoneMatch,
+            userPhone10 = userPhone10,
+            currentUserName = currentUserName
+        )
+        if (isTrueOwner) {
+            val nextIsCurrentUser = if (m.groupId in groupsWithAnyCurrentUser) m.isCurrentUser else true
+            if (m.avatarSeed != currentUserSeed || m.isCurrentUser != nextIsCurrentUser) {
+                m.copy(avatarSeed = currentUserSeed, isCurrentUser = nextIsCurrentUser)
+            } else {
+                m
+            }
+        } else {
+            m
+        }
+    }
+}
+
+internal fun syncLocalOwnerAvatarSeeds(
+    members: List<GroupMemberEntity>,
+    currentUserSeed: String,
+    rawLocalPhone: String
+): List<GroupMemberEntity> = syncLocalOwnerAvatarSeeds(
+    members = members,
+    rawLocalPhone = rawLocalPhone,
+    currentUserName = "",
+    currentUserSeed = currentUserSeed
+)
 
 fun defaultSeedCurrencies(): List<CurrencyRateEntity> = listOf(
     CurrencyRateEntity("INR", "Indian Rupee", "₹", 1.0, baseCurrency = "INR")
@@ -287,7 +371,12 @@ class SplitMateViewModel(
             val sym = "₹"
             val nowMs = System.currentTimeMillis()
             joinedGroups.map { group ->
-                val groupMembers = state.members.filter { it.groupId == group.groupId }
+                val groupMembers = syncLocalOwnerAvatarSeeds(
+                    members = state.members.filter { it.groupId == group.groupId },
+                    rawLocalPhone = state.userPhone,
+                    currentUserName = state.currentUserName,
+                    currentUserSeed = state.currentUserSeed
+                )
                 val groupExpenses = state.expenses.filter { it.groupId == group.groupId }
                 val groupExpenseIds = groupExpenses.map { it.expenseId }.toSet()
                 val groupSplits = state.splits.filter { groupExpenseIds.contains(it.expenseId) }
@@ -315,9 +404,7 @@ class SplitMateViewModel(
                 }
                 val pillText = "${groupMembers.size} $memberNoun · $activityDetail"
                 val visibleMembers = groupMembers.take(4)
-                val visibleSeeds = visibleMembers.map { m ->
-                    if (m.isCurrentUser && state.currentUserSeed.isNotBlank()) state.currentUserSeed else m.avatarSeed
-                }
+                val visibleSeeds = visibleMembers.map { m -> m.avatarSeed }
                 val visibleOnlineFlags = visibleMembers.map { m -> state.isMemberOnline(m, nowMs) }
                 val onlineFriendsInGroup = state.onlineFriendsCount(group.groupId, nowMs)
                 val rem = (groupMembers.size - visibleSeeds.size).coerceAtLeast(0)
@@ -372,18 +459,10 @@ class SplitMateViewModel(
                     transfer = tr,
                     fromMemberId = tr.fromMemberId,
                     fromName = if (fromMember?.isCurrentUser == true) "You" else tr.fromName,
-                    fromSeed = if (fromMember?.isCurrentUser == true && state.currentUserSeed.isNotBlank()) {
-                        state.currentUserSeed
-                    } else {
-                        fromMember?.avatarSeed ?: tr.fromName
-                    },
+                    fromSeed = fromMember?.avatarSeed ?: tr.fromName,
                     toMemberId = tr.toMemberId,
                     toName = if (toMember?.isCurrentUser == true) "You" else tr.toName,
-                    toSeed = if (toMember?.isCurrentUser == true && state.currentUserSeed.isNotBlank()) {
-                        state.currentUserSeed
-                    } else {
-                        toMember?.avatarSeed ?: tr.toName
-                    },
+                    toSeed = toMember?.avatarSeed ?: tr.toName,
                     upiId = "",
                     cleanPhone = if (hasPhoneLinked) clean10Phone else "",
                     hasLinkedPhone = hasPhoneLinked,
@@ -665,17 +744,12 @@ class SplitMateViewModel(
                                 defaultGender = curr.avatarGender
                             )
                             val profPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(profile.userPhone)
-                            val syncedMembers = curr.members.map { m ->
-                                val isMe = m.isCurrentUser || (
-                                    profPhone10.length == 10 &&
-                                        com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(m.userPhone, m.upiId) == profPhone10
-                                    )
-                                if (isMe && profile.avatarSeed.isNotBlank()) {
-                                    m.copy(avatarSeed = profile.avatarSeed, isCurrentUser = true)
-                                } else {
-                                    m
-                                }
-                            }
+                            val syncedMembers = syncLocalOwnerAvatarSeeds(
+                                members = curr.members,
+                                rawLocalPhone = profile.userPhone,
+                                currentUserName = profile.name,
+                                currentUserSeed = profile.avatarSeed
+                            )
                             curr.copy(
                                 hasRegisteredProfile = profile.name.isNotBlank() || curr.hasRegisteredProfile,
                                 currentUserName = profile.name,
@@ -711,18 +785,12 @@ class SplitMateViewModel(
             launch {
                 roomDao.observeAllMembers().collect { members ->
                     _uiState.update { curr ->
-                        val userPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(curr.userPhone)
-                        val syncedMembers = members.map { m ->
-                            val isMe = m.isCurrentUser || (
-                                userPhone10.length == 10 &&
-                                    com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(m.userPhone, m.upiId) == userPhone10
-                                )
-                            if (isMe && curr.currentUserSeed.isNotBlank()) {
-                                m.copy(avatarSeed = curr.currentUserSeed, isCurrentUser = true)
-                            } else {
-                                m
-                            }
-                        }
+                        val syncedMembers = syncLocalOwnerAvatarSeeds(
+                            members = members,
+                            rawLocalPhone = curr.userPhone,
+                            currentUserName = curr.currentUserName,
+                            currentUserSeed = curr.currentUserSeed
+                        )
                         curr.copy(members = syncedMembers)
                     }
                 }
@@ -873,8 +941,12 @@ class SplitMateViewModel(
                         phone10 = cleanPhone
                     )
                     val postSyncMembersToUpdate = d.getAllGroups().flatMap { g ->
-                        d.getMembersForGroup(g.groupId).mapNotNull { m ->
-                            if (m.isCurrentUser || com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(m.userPhone, m.upiId) == cleanPhone) {
+                        val gMembers = d.getMembersForGroup(g.groupId)
+                        val hasPhoneMatch = cleanPhone.length == 10 && gMembers.any {
+                            com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(it.userPhone, it.upiId) == cleanPhone
+                        }
+                        gMembers.mapNotNull { m ->
+                            if (isTrueDeviceOwnerMember(m, hasPhoneMatch, cleanPhone, cleanName)) {
                                 m.copy(name = cleanName, avatarSeed = cleanSeed, upiId = resolvedUpi, userPhone = cleanPhone, isCurrentUser = true)
                             } else null
                         }
@@ -1403,7 +1475,7 @@ class SplitMateViewModel(
             resolvedPinHash = state.pinHash
 
             val updatedMembers = state.members.map { m ->
-                if (m.isCurrentUser) {
+                if (isTrueDeviceOwnerMember(m, cleanPhone, state.userPhone)) {
                     m.copy(
                         name = cleanName,
                         avatarSeed = updatedSeed,
@@ -1414,7 +1486,7 @@ class SplitMateViewModel(
                     m
                 }
             }
-            updatedCurrentUserMembers = updatedMembers.filter { it.isCurrentUser }
+            updatedCurrentUserMembers = updatedMembers.filter { isTrueDeviceOwnerMember(it, cleanPhone, state.userPhone) }
             state.copy(
                 currentUserName = cleanName,
                 currentUserSeed = updatedSeed,
@@ -1476,7 +1548,9 @@ class SplitMateViewModel(
         val profile = d.getUserProfile()
         val allGroups = d.getAllGroups()
         val allMembers = allGroups.flatMap { d.getMembersForGroup(it.groupId) }
-        val allExpenses = allGroups.flatMap { d.getExpensesForGroup(it.groupId) }
+        val allExpenses = allGroups
+            .flatMap { d.getExpensesForGroup(it.groupId) }
+            .sortedWith(compareByDescending<ExpenseEntity> { it.createdAt }.thenByDescending { it.expenseId })
         val allSplits = allGroups.flatMap { d.getSplitsForGroup(it.groupId) }
         val allSettlements = allGroups.flatMap { d.getSettlementsForGroup(it.groupId) }
         _uiState.update { curr ->
@@ -1501,17 +1575,7 @@ class SplitMateViewModel(
             }
             val resolvedSeed = profile?.avatarSeed ?: curr.currentUserSeed
             val resolvedPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(profile?.userPhone ?: curr.userPhone)
-            val syncedAllMembers = allMembers.map { m ->
-                val isMe = m.isCurrentUser || (
-                    resolvedPhone10.length == 10 &&
-                        com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(m.userPhone, m.upiId) == resolvedPhone10
-                    )
-                if (isMe && resolvedSeed.isNotBlank()) {
-                    m.copy(avatarSeed = resolvedSeed, isCurrentUser = true)
-                } else {
-                    m
-                }
-            }
+            val syncedAllMembers = syncLocalOwnerAvatarSeeds(allMembers, resolvedSeed, resolvedPhone10)
             val mergedPresence = if (summary != null && summary.memberPresenceByPhone.isNotEmpty()) {
                 val combined = curr.memberPresenceByPhone.toMutableMap()
                 summary.memberPresenceByPhone.forEach { (phone, ts) ->
@@ -1747,7 +1811,7 @@ class SplitMateViewModel(
                 )
                 val postSyncMembersToUpdate = d.getAllGroups().flatMap { g ->
                     d.getMembersForGroup(g.groupId).mapNotNull { m ->
-                        if (m.isCurrentUser || com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(m.userPhone) == phone10) {
+                        if (isTrueDeviceOwnerMember(m, phone10, localProfile?.userPhone.orEmpty())) {
                             m.copy(name = resolvedName, avatarSeed = updatedSeed, upiId = resolvedUpi, userPhone = phone10, isCurrentUser = true)
                         } else null
                     }
@@ -1763,7 +1827,7 @@ class SplitMateViewModel(
             } else {
                 _uiState.update { curr ->
                     val updatedMembers = curr.members.map { m ->
-                        if (m.isCurrentUser || com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(m.userPhone) == phone10) {
+                        if (isTrueDeviceOwnerMember(m, phone10, curr.userPhone)) {
                             m.copy(name = resolvedName, avatarSeed = updatedSeed, upiId = resolvedUpi, userPhone = phone10, isCurrentUser = true)
                         } else m
                     }
@@ -1844,7 +1908,7 @@ class SplitMateViewModel(
 
         _uiState.update { state ->
             val updatedMembers = state.members.map { m ->
-                if (m.isCurrentUser || (phone10.length == 10 && com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(m.userPhone) == phone10)) {
+                if (isTrueDeviceOwnerMember(m, phone10, state.userPhone)) {
                     m.copy(
                         name = cleanName,
                         avatarSeed = updatedSeed,
@@ -1856,7 +1920,7 @@ class SplitMateViewModel(
                     m
                 }
             }
-            updatedCurrentUserMembers = updatedMembers.filter { it.isCurrentUser }
+            updatedCurrentUserMembers = updatedMembers.filter { isTrueDeviceOwnerMember(it, phone10, state.userPhone) }
             state.copy(
                 hasRegisteredProfile = true,
                 currentUserName = cleanName,
@@ -1984,7 +2048,7 @@ class SplitMateViewModel(
             )
             val postSyncMembersToUpdate = d.getAllGroups().flatMap { g ->
                 d.getMembersForGroup(g.groupId).mapNotNull { m ->
-                    if (m.isCurrentUser || com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(m.userPhone) == phone10) {
+                    if (isTrueDeviceOwnerMember(m, phone10, existingProfile?.userPhone.orEmpty())) {
                         m.copy(name = effectiveName, avatarSeed = effectiveSeed, upiId = effectiveUpi, userPhone = phone10, isCurrentUser = true)
                     } else null
                 }

@@ -58,6 +58,11 @@ object PnrNetworkRepository {
     private val lruFlightResultCache = object : LinkedHashMap<String, UniversalFlightTicketExtractor.UniversalFlightTicketResult>(MAX_CACHE_ENTRIES, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, UniversalFlightTicketExtractor.UniversalFlightTicketResult>?): Boolean = size > MAX_CACHE_ENTRIES
     }
+    private val reconstructedFlightByExpenseCache = object : LinkedHashMap<String, UniversalFlightTicketExtractor.UniversalFlightTicketResult>(MAX_CACHE_ENTRIES, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, UniversalFlightTicketExtractor.UniversalFlightTicketResult>?): Boolean = size > MAX_CACHE_ENTRIES
+    }
+    private val missingFlightResultPnrs = java.util.Collections.synchronizedSet(HashSet<String>())
+    private val missingSnapshotPnrs = java.util.Collections.synchronizedSet(HashSet<String>())
     private val lastSyncEpochMsCache = object : LinkedHashMap<String, Long>(MAX_CACHE_ENTRIES, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?): Boolean = size > MAX_CACHE_ENTRIES
     }
@@ -76,12 +81,23 @@ object PnrNetworkRepository {
     fun importFlightVaultJsonByPnr(context: Context, map: Map<String, String>) {
         if (map.isEmpty()) return
         val prefs = EncryptedPrefsProvider.getPnrVaultPrefs(context)
+        var hasChanges = false
         val editor = prefs.edit()
         map.forEach { (pnr, json) ->
-            editor.putString("flight_result_json_$pnr", json)
-            recordAndEvictLruIfNeeded(prefs, editor, pnr)
+            val cleanPnr = normalizePnrKey(pnr).ifBlank { pnr }
+            missingFlightResultPnrs.remove(cleanPnr)
+            if (prefs.getString("flight_result_json_$cleanPnr", null) != json) {
+                synchronized(lruFlightResultCache) {
+                    lruFlightResultCache.remove(cleanPnr)
+                }
+                editor.putString("flight_result_json_$cleanPnr", json)
+                recordAndEvictLruIfNeeded(prefs, editor, cleanPnr)
+                hasChanges = true
+            }
         }
-        editor.apply()
+        if (hasChanges) {
+            editor.apply()
+        }
     }
 
     fun exportAllTrainSnapshotJsonByPnr(context: Context): Map<String, String> {
@@ -95,12 +111,23 @@ object PnrNetworkRepository {
     fun importTrainSnapshotJsonByPnr(context: Context, map: Map<String, String>) {
         if (map.isEmpty()) return
         val prefs = EncryptedPrefsProvider.getPnrVaultPrefs(context)
+        var hasChanges = false
         val editor = prefs.edit()
         map.forEach { (pnr, json) ->
-            editor.putString("snapshot_json_$pnr", json)
-            recordAndEvictLruIfNeeded(prefs, editor, pnr)
+            val cleanPnr = normalizePnrKey(pnr).ifBlank { pnr }
+            missingSnapshotPnrs.remove(cleanPnr)
+            if (prefs.getString("snapshot_json_$cleanPnr", null) != json) {
+                synchronized(lruSnapshotCache) {
+                    lruSnapshotCache.remove(cleanPnr)
+                }
+                editor.putString("snapshot_json_$cleanPnr", json)
+                recordAndEvictLruIfNeeded(prefs, editor, cleanPnr)
+                hasChanges = true
+            }
         }
-        editor.apply()
+        if (hasChanges) {
+            editor.apply()
+        }
     }
 
     private const val MAX_VAULT_ENTRIES = 75
@@ -213,6 +240,7 @@ object PnrNetworkRepository {
     ): LivePnrStatusSnapshot? {
         val cleanPnr = normalizePnrKey(result.pnr)
         if ((cleanPnr.length != 6 && cleanPnr.length != 10) || !result.isValidFlightTicket) return null
+        missingFlightResultPnrs.remove(cleanPnr)
         synchronized(lruFlightResultCache) {
             lruFlightResultCache[cleanPnr] = result
         }
@@ -255,10 +283,13 @@ object PnrNetworkRepository {
                         }
                     })
                 }
+                val newJson = flightObj.toString()
                 val prefs = EncryptedPrefsProvider.getPnrVaultPrefs(context)
-                val editor = prefs.edit().putString("flight_result_json_$cleanPnr", flightObj.toString())
-                recordAndEvictLruIfNeeded(prefs, editor, cleanPnr)
-                editor.apply()
+                if (prefs.getString("flight_result_json_$cleanPnr", null) != newJson) {
+                    val editor = prefs.edit().putString("flight_result_json_$cleanPnr", newJson)
+                    recordAndEvictLruIfNeeded(prefs, editor, cleanPnr)
+                    editor.apply()
+                }
             }
         }
         val paxStatuses = if (result.passengers.isNotEmpty()) {
@@ -324,10 +355,15 @@ object PnrNetworkRepository {
         synchronized(lruFlightResultCache) {
             lruFlightResultCache[cleanPnr]?.let { return it }
         }
+        if (missingFlightResultPnrs.contains(cleanPnr)) return null
         if (context == null) return null
         return runCatching {
             val prefs = EncryptedPrefsProvider.getPnrVaultPrefs(context)
-            val rawJson = prefs.getString("flight_result_json_$cleanPnr", null) ?: return@runCatching null
+            val rawJson = prefs.getString("flight_result_json_$cleanPnr", null)
+            if (rawJson == null) {
+                missingFlightResultPnrs.add(cleanPnr)
+                return@runCatching null
+            }
             val obj = JSONObject(rawJson)
             val paxArr = obj.optJSONArray("passengers") ?: JSONArray()
             val passengers = (0 until paxArr.length()).mapNotNull { i ->
@@ -391,6 +427,11 @@ object PnrNetworkRepository {
         groupMembers: List<GroupMemberEntity>,
         allSplits: List<ExpenseSplitEntity>
     ): UniversalFlightTicketExtractor.UniversalFlightTicketResult {
+        val expenseCacheKey = "${expense.expenseId}_${expense.title.hashCode()}_${expense.totalAmountCents}_${groupMembers.size}"
+        synchronized(reconstructedFlightByExpenseCache) {
+            reconstructedFlightByExpenseCache[expenseCacheKey]?.let { return it }
+        }
+
         val parsed = extractTravelTicketFromTitle(expense.title)
         val rawPnr = expense.travelPnr.trim().takeIf { it.isNotBlank() }
             ?: parsed?.pnr?.trim()?.takeIf { it.isNotBlank() }
@@ -398,9 +439,18 @@ object PnrNetworkRepository {
             ?: ""
 
         if (rawPnr.length == 6) {
-            loadConfirmedFlightTicketResult(context, rawPnr)?.let { return it }
+            loadConfirmedFlightTicketResult(context, rawPnr)?.let {
+                synchronized(reconstructedFlightByExpenseCache) {
+                    reconstructedFlightByExpenseCache[expenseCacheKey] = it
+                }
+                return it
+            }
             loadPersistedPnrSnapshot(context, rawPnr)?.let { snap ->
-                return snapshotToFlightTicketResult(rawPnr, snap)
+                val fromSnap = snapshotToFlightTicketResult(rawPnr, snap)
+                synchronized(reconstructedFlightByExpenseCache) {
+                    reconstructedFlightByExpenseCache[expenseCacheKey] = fromSnap
+                }
+                return fromSnap
             }
         }
 
@@ -543,6 +593,9 @@ object PnrNetworkRepository {
             paymentMethod = "UPI",
             extractionDurationMs = 1L
         )
+        synchronized(reconstructedFlightByExpenseCache) {
+            reconstructedFlightByExpenseCache[expenseCacheKey] = reconstructed
+        }
         saveConfirmedFlightTicketToVault(context, reconstructed)
         return reconstructed
     }
@@ -687,9 +740,14 @@ object PnrNetworkRepository {
         synchronized(lruSnapshotCache) {
             lruSnapshotCache[cleanPnr]?.let { return it }
         }
+        if (missingSnapshotPnrs.contains(cleanPnr)) return null
         if (context == null) return null
         val prefs = EncryptedPrefsProvider.getPnrVaultPrefs(context)
-        val rawJson = prefs.getString("snapshot_json_$cleanPnr", null) ?: return null
+        val rawJson = prefs.getString("snapshot_json_$cleanPnr", null)
+        if (rawJson == null) {
+            missingSnapshotPnrs.add(cleanPnr)
+            return null
+        }
         val savedSyncMs = prefs.getLong("last_sync_$cleanPnr", 0L)
         if (savedSyncMs > 0L) {
             synchronized(lastSyncEpochMsCache) {
@@ -755,6 +813,7 @@ object PnrNetworkRepository {
         runCatching {
             val cleanPnr = normalizePnrKey(snapshot.pnr)
             if ((cleanPnr.length != 10 && cleanPnr.length != 6) || !snapshot.isLiveVerified) return
+            missingSnapshotPnrs.remove(cleanPnr)
             val now = System.currentTimeMillis()
             synchronized(lruSnapshotCache) {
                 lruSnapshotCache[cleanPnr] = snapshot

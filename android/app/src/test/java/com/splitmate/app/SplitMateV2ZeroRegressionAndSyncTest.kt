@@ -1746,6 +1746,195 @@ class SplitMateV2ZeroRegressionAndSyncTest {
         assertFalse(quickExpenseScreens.contains("\"+UPI\""), "QuickExpenseAndGuideScreens.kt must not render '+UPI' badge")
         assertFalse(tripHomeScreens.contains("Pay via UPI"), "TripHomeScreen.kt must not render 'Pay via UPI' button")
     }
+
+    @Test
+    @DisplayName("22. v2.1.4 Guard: People Tab Identity Preservation, Online Status Accuracy, O(1) Schedule Cache & Deterministic Activity Order")
+    fun testV214RcaBugFixesPeopleIdentityScrollPerfAndDeterministicOrder() = runTest(testDispatcher) {
+        val srcMain = resolveSrcMainDir()
+        val tripHomeSource = java.io.File(srcMain, "java/com/splitmate/app/ui/screens/TripHomeScreen.kt").readText(Charsets.UTF_8)
+        val daoSource = java.io.File(srcMain, "java/com/splitmate/app/data/SplitMateDao.kt").readText(Charsets.UTF_8)
+
+        // 1. Bug 1 Guard: TripHomeScreen.kt (TripHubPeoplePerspectiveView) must NOT call claimGroupMemberPerspective on row click
+        assertFalse(
+            tripHomeSource.contains("claimGroupMemberPerspective"),
+            "TripHomeScreen.kt must NEVER call claimGroupMemberPerspective when clicking a member row in the People tab"
+        )
+
+        // 2. Bug 1 Guard: SplitMateUiState.isMemberOnline must NEVER mark an offline friend online just because isCurrentUser == true
+        val nowMs = 1_800_000_000_000L
+        val uiState = com.splitmate.app.ui.SplitMateUiState(
+            userPhone = "9876543210",
+            memberPresenceByPhone = mapOf(
+                "9123456789" to (nowMs - 10_000L), // Active 10s ago -> ONLINE
+                "9988776655" to (nowMs - 150_000L) // Active 150s ago -> OFFLINE (>90s TTL)
+            )
+        )
+        val ownerMember = com.splitmate.app.data.GroupMemberEntity(
+            memberId = "g1_me",
+            groupId = "g1",
+            name = "Akshay",
+            avatarSeed = "Akshay|Male|open-peeps|Buckwheat",
+            isCurrentUser = false, // Even if perspective temporarily inspected someone else
+            userPhone = "9876543210"
+        )
+        val inspectedOfflineFriendNoPhone = com.splitmate.app.data.GroupMemberEntity(
+            memberId = "g1_f0",
+            groupId = "g1",
+            name = "Vikram",
+            avatarSeed = "Vikram|Male|adventurer|Terracotta",
+            isCurrentUser = true, // Temporarily inspected perspective!
+            userPhone = ""
+        )
+        val inspectedOfflineFriendExpiredPhone = com.splitmate.app.data.GroupMemberEntity(
+            memberId = "g1_f1",
+            groupId = "g1",
+            name = "Priya",
+            avatarSeed = "Priya|Female|lorelei|Sage",
+            isCurrentUser = true, // Temporarily inspected perspective!
+            userPhone = "9988776655"
+        )
+        val onlineFriend = com.splitmate.app.data.GroupMemberEntity(
+            memberId = "g1_f2",
+            groupId = "g1",
+            name = "Rohan",
+            avatarSeed = "Rohan|Male|micah|Periwinkle",
+            isCurrentUser = false,
+            userPhone = "9123456789"
+        )
+
+        assertTrue(
+            uiState.isMemberOnline(ownerMember, nowMs),
+            "True device owner (matching 10-digit userPhone) must always be reported online"
+        )
+        assertFalse(
+            uiState.isMemberOnline(inspectedOfflineFriendNoPhone, nowMs),
+            "Offline friend without phone must NEVER be reported online even when isCurrentUser == true"
+        )
+        assertFalse(
+            uiState.isMemberOnline(inspectedOfflineFriendExpiredPhone, nowMs),
+            "Friend with expired presence (>90s TTL) must NEVER be reported online even when isCurrentUser == true"
+        )
+        assertTrue(
+            uiState.isMemberOnline(onlineFriend, nowMs),
+            "Friend with active presence heartbeat within 90s TTL must be reported online"
+        )
+
+        // 3. Bug 1 Guard: Perspective inspection + profile update must NEVER overwrite friend's avatarSeed or userPhone
+        val vm = SplitMateViewModel(dao = null, ioDispatcher = testDispatcher)
+        vm.completeOnboarding(
+            name = "Akshay",
+            countryName = "India",
+            currencyCode = "INR",
+            currencySymbol = "₹",
+            avatarSeed = "Akshay|Male|open-peeps|Buckwheat",
+            userPhone = "9876543210"
+        )
+        vm.createNewGroup(
+            name = "Gokarna Trek",
+            currencyCode = "INR",
+            friendNamesCsv = "Sneha, Rohan"
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val gId = vm.uiState.value.activeGroupId
+        val snehaBefore = vm.uiState.value.members.first { it.groupId == gId && it.name == "Sneha" }
+        val originalSnehaSeed = snehaBefore.avatarSeed
+
+        // Simulate temporary perspective switch via TripSyncAndPerspectiveSheet
+        vm.claimGroupMemberPerspective(gId, snehaBefore.memberId)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Now update local owner's profile & avatar settings
+        vm.updateUserProfile(
+            newName = "Akshay K",
+            newPhone = "9876543210",
+            newSeedOrCurrency = "adventurer|Terracotta|Male|AkshayK",
+            newUpiId = "9876543210@upi"
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val snehaAfter = vm.uiState.value.members.first { it.memberId == snehaBefore.memberId }
+        val akshayAfter = vm.uiState.value.members.first { it.groupId == gId && it.memberId.endsWith("_me") }
+        assertEquals(
+            "Sneha",
+            snehaAfter.name,
+            "Friend Sneha's name must NEVER be overwritten with local user's name after perspective inspection"
+        )
+        assertEquals(
+            originalSnehaSeed,
+            snehaAfter.avatarSeed,
+            "Friend Sneha's avatarSeed must NEVER be overwritten with local user's avatarSeed"
+        )
+        assertEquals(
+            "",
+            snehaAfter.userPhone,
+            "Friend Sneha's blank userPhone must NEVER be overwritten with local user's phone"
+        )
+        assertEquals(
+            "Akshay K",
+            akshayAfter.name,
+            "True device owner's member row must receive the updated profile name"
+        )
+
+        // 4. Bug 2 Guard: O(1) memoization of resolveExpenseSchedule & reconstructFlightTicketFromExpense
+        val sampleFlightExpense = com.splitmate.app.data.ExpenseEntity(
+            expenseId = "exp_flight_1",
+            groupId = gId,
+            title = "Flight 6E 204 (BOM -> GOI) [PNR:A1B2C3] | 28 Sep 2026 09:30 AM",
+            payerId = akshayAfter.memberId,
+            baseSubtotalCents = 840_000L,
+            taxCents = 0L,
+            tipCents = 0L,
+            totalAmountCents = 840_000L,
+            lockedMultiplier = 1.0,
+            unassignedBaseCents = 0L,
+            currencyCode = "INR",
+            lockedExchangeRate = 1.0,
+            createdAt = 1_790_000_000_000L,
+            expenseCategory = "FLIGHT",
+            travelPnr = "A1B2C3"
+        )
+        val sched1 = com.splitmate.app.ui.screens.resolveExpenseSchedule(null, sampleFlightExpense)
+        val sched2 = com.splitmate.app.ui.screens.resolveExpenseSchedule(null, sampleFlightExpense)
+        org.junit.jupiter.api.Assertions.assertSame(
+            sched1,
+            sched2,
+            "resolveExpenseSchedule must return the memoized ResolvedExpenseSchedule instance in O(1) without re-running Regex/SimpleDateFormat"
+        )
+
+        val groupMembers = vm.uiState.value.members.filter { it.groupId == gId }
+        val flight1 = com.splitmate.app.data.PnrNetworkRepository.reconstructFlightTicketFromExpense(
+            context = null,
+            expense = sampleFlightExpense,
+            groupMembers = groupMembers,
+            allSplits = emptyList()
+        )
+        val flight2 = com.splitmate.app.data.PnrNetworkRepository.reconstructFlightTicketFromExpense(
+            context = null,
+            expense = sampleFlightExpense,
+            groupMembers = groupMembers,
+            allSplits = emptyList()
+        )
+        org.junit.jupiter.api.Assertions.assertSame(
+            flight1,
+            flight2,
+            "reconstructFlightTicketFromExpense must return the memoized UniversalFlightTicketResult instance on repeated scroll frames"
+        )
+
+        // 5. Bug 3 Guard: Deterministic Chronological Expense Ordering (ORDER BY createdAt DESC, expenseId DESC)
+        assertTrue(
+            daoSource.contains("SELECT * FROM expenses ORDER BY createdAt DESC, expenseId DESC"),
+            "SplitMateDao.observeAllExpenses() must enforce ORDER BY createdAt DESC, expenseId DESC"
+        )
+        assertTrue(
+            daoSource.contains("SELECT * FROM expenses WHERE groupId = :groupId ORDER BY createdAt DESC, expenseId DESC"),
+            "SplitMateDao.getExpensesForGroup() must enforce ORDER BY createdAt DESC, expenseId DESC"
+        )
+        assertTrue(
+            daoSource.contains("SELECT * FROM expense_groups ORDER BY createdAt DESC, groupId ASC"),
+            "SplitMateDao.getAllGroups() must enforce ORDER BY createdAt DESC, groupId ASC"
+        )
+    }
 }
 
 

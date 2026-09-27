@@ -181,13 +181,13 @@ fun SplitMateApp(viewModel: SplitMateViewModel) {
     }
     SplitMateTheme.isDark = uiState.isDarkTheme
 
-    // Automatic fault-tolerant background Cloud Sync & Online Presence heartbeat (every 20s while app is open)
+    // Automatic fault-tolerant background Cloud Sync & Online Presence heartbeat (every 45s while app is open)
     LaunchedEffect(uiState.userPhone, uiState.hasRegisteredProfile) {
         val cleanPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianMobile(uiState.userPhone)
         if (uiState.hasRegisteredProfile && cleanPhone.length == 10) {
             while (true) {
                 viewModel.performSilentAutoCloudSync(context)
-                kotlinx.coroutines.delay(20_000L)
+                kotlinx.coroutines.delay(45_000L)
             }
         }
     }
@@ -6430,11 +6430,12 @@ fun AuditVaultScreen(
     var editingExpenseEntity by remember { mutableStateOf<com.splitmate.app.data.ExpenseEntity?>(null) }
 
     val filteredExpenses = remember(uiState.expenses, selectedGroupFilterId) {
-        if (selectedGroupFilterId == null) {
+        val base = if (selectedGroupFilterId == null) {
             uiState.expenses
         } else {
             uiState.expenses.filter { it.groupId == selectedGroupFilterId }
         }
+        base.sortedWith(compareByDescending<com.splitmate.app.data.ExpenseEntity> { it.createdAt }.thenByDescending { it.expenseId })
     }
 
     // Group expenses chronologically by day with friendly labels ("Today · 25 Sep", "Yesterday · 24 Sep", etc.)

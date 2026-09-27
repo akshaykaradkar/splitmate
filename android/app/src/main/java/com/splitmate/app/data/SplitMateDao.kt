@@ -20,10 +20,10 @@ interface SplitMateDao {
     suspend fun upsertCurrencyRates(rates: List<CurrencyRateEntity>)
 
     // --- Groups & Members ---
-    @Query("SELECT * FROM expense_groups ORDER BY createdAt DESC")
+    @Query("SELECT * FROM expense_groups ORDER BY createdAt DESC, groupId ASC")
     fun observeGroups(): Flow<List<ExpenseGroupEntity>>
 
-    @Query("SELECT * FROM expense_groups")
+    @Query("SELECT * FROM expense_groups ORDER BY createdAt DESC, groupId ASC")
     suspend fun getAllGroups(): List<ExpenseGroupEntity>
 
     @Query("SELECT * FROM expense_groups WHERE groupId = :groupId LIMIT 1")
@@ -48,7 +48,7 @@ interface SplitMateDao {
     suspend fun updateMemberProfile(memberId: String, name: String, upiId: String, avatarSeed: String)
 
     // --- Expenses & Splits ---
-    @Query("SELECT * FROM expenses ORDER BY createdAt DESC")
+    @Query("SELECT * FROM expenses ORDER BY createdAt DESC, expenseId DESC")
     fun observeAllExpenses(): Flow<List<ExpenseEntity>>
 
     @Query("SELECT * FROM expense_splits")
@@ -94,7 +94,7 @@ interface SplitMateDao {
     @Query("SELECT * FROM settlements ORDER BY settledAt DESC")
     fun observeAllSettlements(): Flow<List<SettlementEntity>>
 
-    @Query("SELECT * FROM expenses WHERE groupId = :groupId")
+    @Query("SELECT * FROM expenses WHERE groupId = :groupId ORDER BY createdAt DESC, expenseId DESC")
     suspend fun getExpensesForGroup(groupId: String): List<ExpenseEntity>
 
     @Query("SELECT * FROM expense_splits WHERE expenseId IN (SELECT expenseId FROM expenses WHERE groupId = :groupId)")
