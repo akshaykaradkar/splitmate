@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.provider.ContactsContract
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -453,199 +454,261 @@ fun OpenPeepsHeroStage(
     phone: String,
     selectedStyleId: String,
     selectedColorPresetId: String,
+    selectedGenderIdentity: String = "Male",
     modifier: Modifier = Modifier
 ) {
-    val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition(label = "hero_breathing")
-    val breatheY1 by infiniteTransition.animateFloat(
+    val context = LocalContext.current
+    val infiniteTransition = rememberInfiniteTransition(label = "hero_crew_breathing")
+    val breatheBack by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = -8f,
-        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            animation = androidx.compose.animation.core.tween(2000, easing = androidx.compose.animation.core.FastOutSlowInEasing),
-            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        targetValue = -5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
         ),
-        label = "breathe_1"
+        label = "breathe_back"
     )
-    val breatheY2 by infiniteTransition.animateFloat(
+    val breatheHero by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = -12f,
-        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            animation = androidx.compose.animation.core.tween(2200, easing = androidx.compose.animation.core.FastOutSlowInEasing, delayMillis = 300),
-            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        targetValue = -7f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2100, easing = FastOutSlowInEasing, delayMillis = 200),
+            repeatMode = RepeatMode.Reverse
         ),
-        label = "breathe_2"
+        label = "breathe_hero"
     )
-    val breatheY3 by infiniteTransition.animateFloat(
+    val breatheFront by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = -10f,
-        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            animation = androidx.compose.animation.core.tween(2400, easing = androidx.compose.animation.core.FastOutSlowInEasing, delayMillis = 600),
-            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        targetValue = -4f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2600, easing = FastOutSlowInEasing, delayMillis = 450),
+            repeatMode = RepeatMode.Reverse
         ),
-        label = "breathe_3"
+        label = "breathe_front"
     )
+
+    val heroSvgAsset = remember(selectedGenderIdentity) {
+        when (selectedGenderIdentity.lowercase()) {
+            "female" -> "file:///android_asset/peeps/peep_hero_female.svg"
+            "neutral" -> "file:///android_asset/peeps/peep_hero_neutral.svg"
+            else -> "file:///android_asset/peeps/peep_hero_male.svg"
+        }
+    }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(260.dp),
+            .height(252.dp),
         contentAlignment = Alignment.BottomCenter
     ) {
-        // Layer 1: Organic Buckwheat radial blob backdrop + floor shadow
-        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+        // Layer 1: Warm Editorial Overlapping Terracotta & Sage Arched Stage
+        androidx.compose.foundation.Canvas(
+            modifier = Modifier
+                .width(328.dp)
+                .height(244.dp)
+                .align(Alignment.BottomCenter)
+        ) {
             val w = size.width
             val h = size.height
-            
-            // Floor shadow ellipse
+
+            // Soft ground shadow beneath the 5-person travel crew
             drawOval(
-                color = Color(0xFFEDE7DF),
-                topLeft = androidx.compose.ui.geometry.Offset(w * 0.1f, h * 0.85f),
-                size = androidx.compose.ui.geometry.Size(w * 0.8f, h * 0.15f)
+                color = Color(0xFFE6DEC8),
+                topLeft = androidx.compose.ui.geometry.Offset(w * 0.04f, h * 0.86f),
+                size = androidx.compose.ui.geometry.Size(w * 0.92f, h * 0.13f)
             )
 
-            // Organic Blobs
-            val pathSage = androidx.compose.ui.graphics.Path().apply {
-                moveTo(w * 0.2f, h * 0.8f)
-                quadraticBezierTo(w * 0.1f, h * 0.4f, w * 0.3f, h * 0.2f)
-                quadraticBezierTo(w * 0.5f, h * 0.1f, w * 0.4f, h * 0.8f)
-                close()
-            }
-            drawPath(pathSage, Color(0xFFD7E8B6).copy(alpha = 0.6f))
-            
-            val pathPeach = androidx.compose.ui.graphics.Path().apply {
-                moveTo(w * 0.5f, h * 0.9f)
-                quadraticBezierTo(w * 0.8f, h * 0.3f, w * 0.7f, h * 0.15f)
-                quadraticBezierTo(w * 0.9f, h * 0.5f, w * 0.8f, h * 0.85f)
-                close()
-            }
-            drawPath(pathPeach, Color(0xFFFED8C8).copy(alpha = 0.6f))
+            // Main Arch Container Backdrop (Warm Cream Stone #F3ECE1)
+            val archLeft = w * 0.08f
+            val archWidth = w * 0.84f
+            val archTop = h * 0.03f
+            val archHeight = h * 0.89f
+            drawRoundRect(
+                color = Color(0xFFF3ECE1),
+                topLeft = androidx.compose.ui.geometry.Offset(archLeft, archTop),
+                size = androidx.compose.ui.geometry.Size(archWidth, archHeight),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(archWidth * 0.48f, archWidth * 0.48f)
+            )
 
+            // Left Overlapping Warm Terracotta / Peach Sunset Arch (#E5987D)
+            val terracottaPath = androidx.compose.ui.graphics.Path().apply {
+                moveTo(archLeft, h * 0.88f)
+                lineTo(archLeft, h * 0.36f)
+                cubicTo(
+                    archLeft, h * 0.08f,
+                    w * 0.38f, h * 0.02f,
+                    w * 0.56f, h * 0.18f
+                )
+                cubicTo(
+                    w * 0.44f, h * 0.42f,
+                    w * 0.36f, h * 0.68f,
+                    w * 0.34f, h * 0.88f
+                )
+                close()
+            }
+            drawPath(terracottaPath, color = Color(0xFFE5987D))
+
+            // Right Overlapping Soft Sage Arch (#D7E8B6)
+            val sagePath = androidx.compose.ui.graphics.Path().apply {
+                moveTo(archLeft + archWidth, h * 0.88f)
+                lineTo(archLeft + archWidth, h * 0.38f)
+                cubicTo(
+                    archLeft + archWidth, h * 0.10f,
+                    w * 0.64f, h * 0.04f,
+                    w * 0.46f, h * 0.22f
+                )
+                cubicTo(
+                    w * 0.58f, h * 0.44f,
+                    w * 0.64f, h * 0.68f,
+                    w * 0.66f, h * 0.88f
+                )
+                close()
+            }
+            drawPath(sagePath, color = Color(0xFFD7E8B6))
+
+            // Warm Peach Inner Sun Glow (#FED8C8) behind the Center Hero
             drawCircle(
-                color = Color(0xFFDCE3FD).copy(alpha = 0.5f),
-                radius = w * 0.15f,
-                center = androidx.compose.ui.geometry.Offset(w * 0.5f, h * 0.5f)
+                color = Color(0xFFFED8C8).copy(alpha = 0.75f),
+                radius = w * 0.22f,
+                center = androidx.compose.ui.geometry.Offset(w * 0.50f, h * 0.44f)
+            )
+
+            // Crisp Editorial Arch Rim Stroke (#23201E)
+            drawRoundRect(
+                color = Color(0xFF23201E).copy(alpha = 0.18f),
+                topLeft = androidx.compose.ui.geometry.Offset(archLeft, archTop),
+                size = androidx.compose.ui.geometry.Size(archWidth, archHeight),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(archWidth * 0.48f, archWidth * 0.48f),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3.5f)
+            )
+
+            // Stage Horizon Floor Line
+            drawLine(
+                color = Color(0xFF23201E).copy(alpha = 0.22f),
+                start = androidx.compose.ui.geometry.Offset(w * 0.06f, h * 0.92f),
+                end = androidx.compose.ui.geometry.Offset(w * 0.94f, h * 0.92f),
+                strokeWidth = 3f
             )
         }
 
-        // Layer 2 & 3: The 4 flanking full-body Open-Peeps + Center Hero
-        Row(
+        // Layer 2 (Back Tier): Standing Friends Flanking the Center Hero
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy((-18).dp, Alignment.CenterHorizontally),
-            verticalAlignment = Alignment.Bottom
+                .width(336.dp)
+                .fillMaxHeight(),
+            contentAlignment = Alignment.BottomCenter
         ) {
-            // Far Left: Standing 4
+            // Back-Left Traveler (Sun Hat & Peach Shirt)
             coil.compose.AsyncImage(
-                model = coil.request.ImageRequest.Builder(LocalContext.current)
-                    .data("file:///android_asset/peeps/peep_standing_4.svg")
-                    .decoderFactory(coil.decode.SvgDecoder.Factory())
-                    .build(),
-                contentDescription = null,
+                model = remember(context) {
+                    coil.request.ImageRequest.Builder(context)
+                        .data("file:///android_asset/peeps/peep_standing_4.svg")
+                        .decoderFactory(coil.decode.SvgDecoder.Factory())
+                        .build()
+                },
+                contentDescription = "Travel crew friend standing left",
                 modifier = Modifier
-                    .width(60.dp)
-                    .height(140.dp)
-                    .graphicsLayer { translationY = breatheY1 }
+                    .width(92.dp)
+                    .height(184.dp)
+                    .align(Alignment.BottomCenter)
+                    .offset(x = (-72).dp, y = (-20).dp)
+                    .graphicsLayer { translationY = breatheBack }
+                    .zIndex(1f)
             )
-            // Mid Left: Sitting 2
+
+            // Back-Right Traveler (Bearded Friend & Terracotta Straps)
             coil.compose.AsyncImage(
-                model = coil.request.ImageRequest.Builder(LocalContext.current)
-                    .data("file:///android_asset/peeps/peep_sitting_2.svg")
-                    .decoderFactory(coil.decode.SvgDecoder.Factory())
-                    .build(),
-                contentDescription = null,
+                model = remember(context) {
+                    coil.request.ImageRequest.Builder(context)
+                        .data("file:///android_asset/peeps/peep_standing_8.svg")
+                        .decoderFactory(coil.decode.SvgDecoder.Factory())
+                        .build()
+                },
+                contentDescription = "Travel crew friend standing right",
                 modifier = Modifier
-                    .width(70.dp)
-                    .height(160.dp)
-                    .graphicsLayer { translationY = breatheY2 }
+                    .width(92.dp)
+                    .height(184.dp)
+                    .align(Alignment.BottomCenter)
+                    .offset(x = 72.dp, y = (-20).dp)
+                    .graphicsLayer { translationY = breatheBack }
+                    .zIndex(1f)
             )
-            
-            // Layer 3: Center Hero
+
+            // Layer 3 (Center Focal Point): Full-Body Standing Hero ("YOU")
+            // Morphs smoothly with spring physics when toggling Male / Female / Neutral
             Box(
                 modifier = Modifier
-                    .width(100.dp)
-                    .height(200.dp)
-                    .graphicsLayer { translationY = breatheY3 }
-                    .zIndex(3f),
-                contentAlignment = Alignment.TopCenter
+                    .width(122.dp)
+                    .height(222.dp)
+                    .align(Alignment.BottomCenter)
+                    .offset(y = (-8).dp)
+                    .graphicsLayer { translationY = breatheHero }
+                    .zIndex(2f),
+                contentAlignment = Alignment.BottomCenter
             ) {
-                // Sitting 14 body
-                coil.compose.AsyncImage(
-                    model = coil.request.ImageRequest.Builder(LocalContext.current)
-                        .data("file:///android_asset/peeps/peep_sitting_14.svg")
-                        .decoderFactory(coil.decode.SvgDecoder.Factory())
-                        .build(),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(top = 40.dp)
-                )
-                // Live Reacting Avatar Head
-                SplitMateCharacterAvatar(
-                    name = name,
-                    phone = phone,
-                    size = 86.dp,
-                    styleId = selectedStyleId,
-                    colorPresetId = selectedColorPresetId,
-                    highlighted = true,
-                    modifier = Modifier.offset(y = (-10).dp)
-                )
-                
-                // "YOU" Badge
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF365314),
-                    modifier = Modifier.align(Alignment.BottomCenter).offset(y = 10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.VerifiedUser,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(12.dp)
+                androidx.compose.animation.AnimatedContent(
+                    targetState = heroSvgAsset,
+                    transitionSpec = {
+                        (androidx.compose.animation.fadeIn(animationSpec = tween(220)) +
+                            androidx.compose.animation.scaleIn(
+                                initialScale = 0.88f,
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                    stiffness = Spring.StiffnessMediumLow
+                                )
+                            )).togetherWith(
+                            androidx.compose.animation.fadeOut(animationSpec = tween(150)) +
+                                androidx.compose.animation.scaleOut(targetScale = 0.92f)
                         )
-                        Text(
-                            text = "YOU",
-                            color = Color.White,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    },
+                    label = "center_hero_gender_morph"
+                ) { assetUri ->
+                    coil.compose.AsyncImage(
+                        model = coil.request.ImageRequest.Builder(context)
+                            .data(assetUri)
+                            .decoderFactory(coil.decode.SvgDecoder.Factory())
+                            .build(),
+                        contentDescription = "Your full-body travel character",
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
             }
 
-            // Mid Right: Sitting 10 (Flipped)
+            // Layer 4 (Front Tier): Seated Foreground Friends Framing the Stage Base
+            // Front-Left Seated Traveler
             coil.compose.AsyncImage(
-                model = coil.request.ImageRequest.Builder(LocalContext.current)
-                    .data("file:///android_asset/peeps/peep_sitting_10.svg")
-                    .decoderFactory(coil.decode.SvgDecoder.Factory())
-                    .build(),
-                contentDescription = null,
+                model = remember(context) {
+                    coil.request.ImageRequest.Builder(context)
+                        .data("file:///android_asset/peeps/peep_sitting_2.svg")
+                        .decoderFactory(coil.decode.SvgDecoder.Factory())
+                        .build()
+                },
+                contentDescription = "Travel crew friend seated left",
                 modifier = Modifier
-                    .width(70.dp)
-                    .height(160.dp)
-                    .graphicsLayer { 
-                        scaleX = -1f 
-                        translationY = breatheY2
-                    }
+                    .width(102.dp)
+                    .height(152.dp)
+                    .align(Alignment.BottomCenter)
+                    .offset(x = (-94).dp, y = 2.dp)
+                    .graphicsLayer { translationY = breatheFront }
+                    .zIndex(3f)
             )
-            // Far Right: Standing 8 (Flipped)
+
+            // Front-Right Seated Traveler
             coil.compose.AsyncImage(
-                model = coil.request.ImageRequest.Builder(LocalContext.current)
-                    .data("file:///android_asset/peeps/peep_standing_8.svg")
-                    .decoderFactory(coil.decode.SvgDecoder.Factory())
-                    .build(),
-                contentDescription = null,
+                model = remember(context) {
+                    coil.request.ImageRequest.Builder(context)
+                        .data("file:///android_asset/peeps/peep_sitting_10.svg")
+                        .decoderFactory(coil.decode.SvgDecoder.Factory())
+                        .build()
+                },
+                contentDescription = "Travel crew friend seated right",
                 modifier = Modifier
-                    .width(60.dp)
-                    .height(140.dp)
-                    .graphicsLayer { 
-                        scaleX = -1f 
-                        translationY = breatheY1
-                    }
+                    .width(102.dp)
+                    .height(152.dp)
+                    .align(Alignment.BottomCenter)
+                    .offset(x = 94.dp, y = 2.dp)
+                    .graphicsLayer { translationY = breatheFront }
+                    .zIndex(3f)
             )
         }
     }
