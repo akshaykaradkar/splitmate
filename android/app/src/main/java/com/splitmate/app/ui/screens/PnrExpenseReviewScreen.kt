@@ -23,6 +23,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -600,7 +601,7 @@ fun PnrExpenseReviewScreen(
                                 val toCode = manualToStationInput.ifBlank { snapshot.toStation }.ifBlank { "DST" }.uppercase(Locale.US)
                                 val chartText = if (snapshot.chartPrepared) "Chart Prepared" else "Chart Not Prepared"
                                 val formattedTitle = formatTravelExpenseTitle(
-                                    baseCategory = "${snapshot.trainName.ifBlank { "Train Ticket" }} ($fromCode → $toCode)",
+                                    baseCategory = "${snapshot.trainName.ifBlank { "Train Ticket" }} ($fromCode - $toCode)",
                                     ticket = ParsedTravelTicket(
                                         pnr = snapshot.pnr,
                                         trainOrFlightNo = "${snapshot.trainNo} ${snapshot.trainName}".trim().ifBlank { "IRCTC Express" },
@@ -849,14 +850,25 @@ fun PnrExpenseReviewScreen(
                             color = TactilePaperPassTokens.AmberChartBg,
                             border = androidx.compose.foundation.BorderStroke(1.dp, TactilePaperPassTokens.AmberChartBorder)
                         ) {
-                            Text(
-                                text = "Enter Ticket Details Manually →",
-                                fontFamily = FigtreeFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = TactilePaperPassTokens.AmberChartText,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "Enter Ticket Details Manually",
+                                    fontFamily = FigtreeFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = TactilePaperPassTokens.AmberChartText
+                                )
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                                    contentDescription = null,
+                                    tint = TactilePaperPassTokens.AmberChartText,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -1412,14 +1424,33 @@ fun TactilePaperBoardingPass(
                         letterSpacing = 0.8.sp,
                         color = TactilePaperPassTokens.InkMuted
                     )
-                    Text(
-                        text = "BOOKING → LIVE STATUS",
-                        fontFamily = FigtreeFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
-                        letterSpacing = 0.8.sp,
-                        color = TactilePaperPassTokens.InkMuted
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Text(
+                            text = "BOOKING",
+                            fontFamily = FigtreeFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            letterSpacing = 0.8.sp,
+                            color = TactilePaperPassTokens.InkMuted
+                        )
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                            contentDescription = null,
+                            tint = TactilePaperPassTokens.InkMuted,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Text(
+                            text = "LIVE STATUS",
+                            fontFamily = FigtreeFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            letterSpacing = 0.8.sp,
+                            color = TactilePaperPassTokens.InkMuted
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -1502,14 +1533,26 @@ fun TactilePaperBoardingPass(
                                     if (pax.isConfirmed) TactilePaperPassTokens.SageConfirmedBorder else TactilePaperPassTokens.TerracottaWaitlistBorder
                                 )
                             ) {
-                                Text(
-                                    text = "→ ${pax.currentStatus}",
-                                    fontFamily = FigtreeFontFamily,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 12.sp,
-                                    color = if (pax.isConfirmed) TactilePaperPassTokens.SageConfirmedText else TactilePaperPassTokens.TerracottaWaitlistText,
-                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
-                                )
+                                val statusColor = if (pax.isConfirmed) TactilePaperPassTokens.SageConfirmedText else TactilePaperPassTokens.TerracottaWaitlistText
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                                        contentDescription = null,
+                                        tint = statusColor,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Text(
+                                        text = pax.currentStatus,
+                                        fontFamily = FigtreeFontFamily,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 12.sp,
+                                        color = statusColor
+                                    )
+                                }
                             }
                         }
                     }

@@ -1,96 +1,116 @@
 package com.splitmate.app.ui
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.sizeIn
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import com.splitmate.app.SplitMateTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Calculate
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
-import coil.decode.SvgDecoder
-import coil.request.CachePolicy
-import coil.request.ImageRequest
-import com.splitmate.app.R
 
 /**
- * Dynamic DiceBear Open-Peeps SVG Avatar (`https://api.dicebear.com/9.x/open-peeps/svg?seed={seed}`)
- * decoded natively via Coil + SvgDecoder.Factory() and cached indefinitely to disk, with
- * local Vector Drawable (`R.drawable.ic_avatar_placeholder`) fallback.
+ * Dynamic DiceBear 9.x SVG Avatar wrapper (`DiceBearAvatar`) delegated to
+ * `SplitMateCharacterAvatar` with Coil disk/memory caching and offline monogram fallback.
  */
 @Composable
 fun DiceBearAvatar(
     seed: String,
-    contentDescription: String,
+    @Suppress("UNUSED_PARAMETER") contentDescription: String = "",
     size: Dp = 40.dp,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    val svgUrl = buildDiceBearOpenPeepsUrl(seed)
-
-    val request = ImageRequest.Builder(context)
-        .data(svgUrl)
-        .decoderFactory(SvgDecoder.Factory())
-        .diskCacheKey("dicebear_peep_$svgUrl")
-        .memoryCacheKey("dicebear_peep_$svgUrl")
-        .diskCachePolicy(CachePolicy.ENABLED)
-        .memoryCachePolicy(CachePolicy.ENABLED)
-        .crossfade(true)
-        .build()
-
-    AsyncImage(
-        model = request,
-        contentDescription = contentDescription,
-        placeholder = painterResource(id = R.drawable.ic_avatar_placeholder),
-        error = painterResource(id = R.drawable.ic_avatar_placeholder),
-        fallback = painterResource(id = R.drawable.ic_avatar_placeholder),
-        contentScale = ContentScale.Crop,
+    SplitMateCharacterAvatar(
+        name = seed,
+        size = size,
         modifier = modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(BuckwheatSageContainer, CircleShape)
-            .border(1.dp, BuckwheatBorder, CircleShape)
     )
 }
 
+/**
+ * Shared Buckwheat Material 3 Expressive OutlinedTextField (`SplitMateTextField`)
+ * with full IME action (`ImeAction.Next` / `ImeAction.Done`) and `KeyboardActions` support
+ * so keyboard navigation never steals or drops focus unexpectedly.
+ */
+@Composable
+fun SplitMateTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String? = null,
+    placeholder: String? = null,
+    leadingIcon: (@Composable () -> Unit)? = null,
+    trailingIcon: (@Composable () -> Unit)? = null,
+    prefix: (@Composable () -> Unit)? = null,
+    suffix: (@Composable () -> Unit)? = null,
+    supportingText: (@Composable () -> Unit)? = null,
+    isError: Boolean = false,
+    enabled: Boolean = true,
+    readOnly: Boolean = false,
+    singleLine: Boolean = true,
+    maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    capitalization: KeyboardCapitalization = KeyboardCapitalization.None,
+    imeAction: ImeAction = ImeAction.Next,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    visualTransformation: VisualTransformation = VisualTransformation.None
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier,
+        enabled = enabled,
+        readOnly = readOnly,
+        label = label?.let {
+            {
+                Text(
+                    text = it,
+                    fontFamily = FigtreeFontFamily,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        },
+        placeholder = placeholder?.let {
+            {
+                Text(
+                    text = it,
+                    fontFamily = FigtreeFontFamily,
+                    color = SplitMateTheme.TextSecondary
+                )
+            }
+        },
+        leadingIcon = leadingIcon,
+        trailingIcon = trailingIcon,
+        prefix = prefix,
+        suffix = suffix,
+        supportingText = supportingText,
+        isError = isError,
+        visualTransformation = visualTransformation,
+        keyboardOptions = KeyboardOptions(
+            capitalization = capitalization,
+            keyboardType = keyboardType,
+            imeAction = imeAction
+        ),
+        keyboardActions = keyboardActions,
+        singleLine = singleLine,
+        maxLines = maxLines,
+        shape = RoundedCornerShape(16.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = SplitMateTheme.PrimaryDark,
+            unfocusedTextColor = SplitMateTheme.PrimaryDark,
+            focusedBorderColor = SplitMateTheme.PrimaryDark,
+            unfocusedBorderColor = SplitMateTheme.BorderLight,
+            focusedContainerColor = SplitMateTheme.SurfaceWhite,
+            unfocusedContainerColor = SplitMateTheme.SurfaceWhite,
+            cursorColor = SplitMateTheme.PrimaryDark
+        )
+    )
+}

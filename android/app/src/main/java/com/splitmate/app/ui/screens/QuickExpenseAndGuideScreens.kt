@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.automirrored.rounded.Backspace
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.*
@@ -245,7 +246,7 @@ fun QuickExpenseScreen(
         }
         var draftTitle by remember {
             mutableStateOf(
-                if (expenseCategoryTitle.contains("PNR:") || expenseCategoryTitle.contains("\uD83D\uDE86")) "Train / PNR Ticket"
+                if (expenseCategoryTitle.contains("PNR:") || expenseCategoryTitle.contains("Train", ignoreCase = true)) "Train / PNR Ticket"
                 else expenseCategoryTitle
             )
         }
@@ -377,7 +378,10 @@ fun QuickExpenseScreen(
                 }
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(presetCategories) { (catLabel, catIcon) ->
                             val isSelected = draftTitle.equals(catLabel, ignoreCase = true)
@@ -466,14 +470,25 @@ fun QuickExpenseScreen(
                                 shape = QuickExpenseThemeTokens.RadiusPill,
                                 color = Color(0xFFD7E8B6)
                             ) {
-                                Text(
-                                    text = "Open →",
-                                    fontFamily = SplitMateBrandFontFamily,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 11.sp,
-                                    color = Color(0xFF1B2E0B),
-                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Text(
+                                        text = "Open",
+                                        fontFamily = SplitMateBrandFontFamily,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF1B2E0B)
+                                    )
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                                        contentDescription = null,
+                                        tint = Color(0xFF1B2E0B),
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -759,6 +774,8 @@ fun QuickExpenseScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
+                    .consumeWindowInsets(innerPadding)
+                    .imePadding()
                     .padding(horizontal = 16.dp, vertical = 2.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceBetween
@@ -1324,7 +1341,7 @@ fun QuickExpenseScreen(
                                             Spacer(modifier = Modifier.width(4.dp))
                                             Text(
                                                 text = if (memberCount > 0) {
-                                                    "$currencySymbol${formatPaiseForSplitBadge(perPersonPaise)}/ea · 0.00¢ Drift"
+                                                    "$currencySymbol${formatPaiseForSplitBadge(perPersonPaise)}/person · Exact Split"
                                                 } else {
                                                     "Pick ≥1"
                                                 },
@@ -1360,7 +1377,7 @@ fun QuickExpenseScreen(
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 Text(
-                                                    text = "Remainder +${payerExtraPaise}p held on Payer",
+                                                    text = "Extra +${payerExtraPaise}p rounded to Payer",
                                                     fontFamily = SplitMateBrandFontFamily,
                                                     fontSize = 11.sp,
                                                     fontWeight = FontWeight.Bold,
@@ -1370,14 +1387,25 @@ fun QuickExpenseScreen(
                                                     shape = QuickExpenseThemeTokens.RadiusPill,
                                                     color = Color(0xFFE06B52)
                                                 ) {
-                                                    Text(
-                                                        text = "Split Remainder Equally →",
-                                                        fontFamily = SplitMateBrandFontFamily,
-                                                        fontSize = 10.sp,
-                                                        fontWeight = FontWeight.ExtraBold,
-                                                        color = Color.White,
-                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                                    )
+                                                    Row(
+                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = "Split Remainder Equally",
+                                                            fontFamily = SplitMateBrandFontFamily,
+                                                            fontSize = 10.sp,
+                                                            fontWeight = FontWeight.ExtraBold,
+                                                            color = Color.White
+                                                        )
+                                                        Icon(
+                                                            imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                                                            contentDescription = null,
+                                                            tint = Color.White,
+                                                            modifier = Modifier.size(11.dp)
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
@@ -1399,14 +1427,32 @@ fun QuickExpenseScreen(
                                                         scaleY = 1f + kotlin.math.sin(t * Math.PI.toFloat()) * 0.28f
                                                     }
                                             ) {
-                                                Text(
-                                                    text = "+${payerExtraPaise}p → Payer",
-                                                    fontFamily = SplitMateBrandFontFamily,
-                                                    fontSize = 10.sp,
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    color = Color(0xFF365314),
-                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                                )
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "+${payerExtraPaise}p",
+                                                        fontFamily = SplitMateBrandFontFamily,
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        color = Color(0xFF365314)
+                                                    )
+                                                    Icon(
+                                                        imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                                                        contentDescription = null,
+                                                        tint = Color(0xFF365314),
+                                                        modifier = Modifier.size(11.dp)
+                                                    )
+                                                    Text(
+                                                        text = "Payer",
+                                                        fontFamily = SplitMateBrandFontFamily,
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        color = Color(0xFF365314)
+                                                    )
+                                                }
                                             }
                                         }
                                     }

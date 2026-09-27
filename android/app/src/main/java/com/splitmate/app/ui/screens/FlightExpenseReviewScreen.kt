@@ -357,7 +357,7 @@ internal fun BoardingPassCommitStampOverlay(
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
-                                text = "LOGGED · 0.00¢ DRIFT",
+                                text = "TICKET SAVED",
                                 fontFamily = SplitMateTheme.FontDisplay,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 15.sp,
@@ -795,7 +795,7 @@ fun FlightExpenseReviewScreen(
                                 )
                                 Spacer(modifier = Modifier.width(5.dp))
                                 Text(
-                                    text = "Confirmed Offline Vault · ${activeGroup?.name ?: "Trip Group"}",
+                                    text = "Saved for Offline Access · ${activeGroup?.name ?: "Trip Group"}",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = FlightPassTokens.StatusGreenText,
@@ -924,7 +924,7 @@ fun FlightExpenseReviewScreen(
                                 )
                                 val defaultVehicleWord = if (extractedTicket.isTrainPdfTicket) "Train" else "Flight"
                                 val formattedTitle = formatTravelExpenseTitle(
-                                    baseCategory = "${extractedTicket.airlineName.ifBlank { defaultVehicleWord }} ${extractedTicket.flightNumber} (${extractedTicket.originIata} → ${extractedTicket.destinationIata})",
+                                    baseCategory = "${extractedTicket.airlineName.ifBlank { defaultVehicleWord }} ${extractedTicket.flightNumber} (${extractedTicket.originIata} - ${extractedTicket.destinationIata})",
                                     ticket = parsedTicket
                                 )
                                 commitScope.launch {
@@ -1019,7 +1019,7 @@ fun FlightExpenseReviewScreen(
                         if (extractedTicket.fareType.isNotBlank()) {
                             append(" · ${extractedTicket.fareType}")
                         } else {
-                            append(" · Offline Vault Locked")
+                            append(" · Saved Offline")
                         }
                         append(" · ${uiPassengers.size} Traveller${if (uiPassengers.size > 1) "s" else ""}")
                     }
@@ -1149,13 +1149,24 @@ fun FlightExpenseReviewScreen(
                                         border = BorderStroke(1.dp, FlightPassTokens.SkyBlueBorder),
                                         modifier = Modifier.minimumInteractiveComponentSize()
                                     ) {
-                                        Text(
-                                            text = "Change Payer ▾",
-                                            fontSize = 10.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = FlightPassTokens.SkyBlueText,
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                        )
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                        ) {
+                                            Text(
+                                                text = "Change Payer",
+                                                fontSize = 10.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = FlightPassTokens.SkyBlueText
+                                            )
+                                            Icon(
+                                                imageVector = Icons.Rounded.KeyboardArrowDown,
+                                                contentDescription = null,
+                                                tint = FlightPassTokens.SkyBlueText,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1186,13 +1197,24 @@ fun FlightExpenseReviewScreen(
                                         border = BorderStroke(1.dp, FlightPassTokens.SkyBlueBorder),
                                         modifier = Modifier.minimumInteractiveComponentSize()
                                     ) {
-                                        Text(
-                                            text = "Paid by: $payerMemberName ▾",
-                                            fontSize = 10.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = FlightPassTokens.SkyBlueText,
-                                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
-                                        )
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                        ) {
+                                            Text(
+                                                text = "Paid by: $payerMemberName",
+                                                fontSize = 10.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = FlightPassTokens.SkyBlueText
+                                            )
+                                            Icon(
+                                                imageVector = Icons.Rounded.KeyboardArrowDown,
+                                                contentDescription = null,
+                                                tint = FlightPassTokens.SkyBlueText,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
                                     }
                                     DropdownMenu(
                                         expanded = showPayerDropdown,
@@ -1241,7 +1263,7 @@ fun FlightExpenseReviewScreen(
                                     border = BorderStroke(1.dp, FlightPassTokens.StatusGreenBorder)
                                 ) {
                                     Text(
-                                        text = "0.00¢ Drift",
+                                        text = "Exact Split",
                                         fontSize = 10.5.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = FlightPassTokens.StatusGreenText,
@@ -1412,8 +1434,8 @@ fun FlightExpenseReviewScreen(
                                                     Text(
                                                         text = when {
                                                             !member.isSelected -> "Tap to include in flight split"
-                                                            absorbedPlusOnePaise && member.isPayer -> "Payer's Share · +₹0.01 Largest Remainder (0.00¢ drift)"
-                                                            absorbedPlusOnePaise -> "Owes $payerMemberName · +₹0.01 Largest Remainder (0.00¢ drift)"
+                                                            absorbedPlusOnePaise && member.isPayer -> "Payer's Share · +₹0.01 rounding adjustment"
+                                                            absorbedPlusOnePaise -> "Owes $payerMemberName · +₹0.01 rounding adjustment"
                                                             member.isPayer -> "Payer's Share"
                                                             else -> "Owes $payerMemberName · via UPI Request"
                                                         },
@@ -1471,16 +1493,16 @@ fun FlightExpenseReviewScreen(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
-                                        text = "Offline Vault & UPI Reminders Ready",
+                                        text = "Saved for Offline Access",
                                         fontSize = 12.5.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = FlightPassTokens.PrimaryDark
                                     )
                                     Text(
                                         text = if (nonPayerNames.isNotEmpty()) {
-                                            "PNR $pnrCode is locked offline forever. ${nonPayerNames.joinToString(", ")} will owe $payerMemberName once confirmed."
+                                            "Boarding pass $pnrCode is saved on your phone for instant offline access. ${nonPayerNames.joinToString(", ")} will owe $payerMemberName once confirmed."
                                         } else {
-                                            "PNR $pnrCode is locked in your Offline Vault forever (0 internet needed for return trip)."
+                                            "Boarding pass $pnrCode is saved on your phone for instant offline access."
                                         },
                                         fontSize = 11.sp,
                                         color = FlightPassTokens.TextSecondary
@@ -1497,7 +1519,7 @@ fun FlightExpenseReviewScreen(
                 stampScale = commitStampScale.value,
                 stampAlpha = commitStampAlpha.value,
                 accentColor = FlightPassTokens.AviationNavy,
-                stampSubLabel = "${extractedTicket.originIata} → ${extractedTicket.destinationIata} · PNR $pnrCode"
+                stampSubLabel = "${extractedTicket.originIata} - ${extractedTicket.destinationIata} · PNR $pnrCode"
             )
             }
         }
@@ -1577,8 +1599,8 @@ fun PaperSensoryFeedbackBanner(
 @Composable
 fun PnrSyncStatusBanner(
     pnr: String,
-    subtitleText: String = "Direct PDF Sync · Offline Vault",
-    rightStatusLabel: String = "Offline Locked"
+    subtitleText: String = "Saved for Offline Access",
+    rightStatusLabel: String = "Saved Offline"
 ) {
     var energyState by remember(pnr) {
         mutableStateOf(com.splitmate.app.ui.components.Gm3EnergyState.ANTICIPATING)

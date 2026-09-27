@@ -18,7 +18,8 @@ data class CloudUserProfileRecord(
     val avatarStyle: String,
     val avatarColorPreset: String,
     val pinHash: String,
-    val updatedAtEpochMs: Long
+    val updatedAtEpochMs: Long,
+    val avatarSeed: String = ""
 )
 
 data class CloudPhoneGroupIndexEntry(
@@ -67,6 +68,7 @@ object CloudGroupSyncRepository {
             put("avatarColorPreset", record.avatarColorPreset)
             put("pinHash", record.pinHash)
             put("updatedAtEpochMs", record.updatedAtEpochMs)
+            put("avatarSeed", record.avatarSeed)
         }.toString()
     }
 
@@ -83,7 +85,8 @@ object CloudGroupSyncRepository {
                 avatarStyle = obj.optString("avatarStyle", "open-peeps"),
                 avatarColorPreset = obj.optString("avatarColorPreset", "Buckwheat"),
                 pinHash = obj.optString("pinHash", ""),
-                updatedAtEpochMs = obj.optLong("updatedAtEpochMs", 0L)
+                updatedAtEpochMs = obj.optLong("updatedAtEpochMs", 0L),
+                avatarSeed = obj.optString("avatarSeed", "")
             )
         } catch (_: Exception) {
             null
@@ -524,11 +527,12 @@ object CloudGroupSyncRepository {
     fun mergeGroupLedgerDocuments(
         localDoc: CloudGroupLedgerDocument?,
         remoteDoc: CloudGroupLedgerDocument?,
-        localUserPhone10: String
+        localUserPhone10: String,
+        localUserAvatarSeed: String = ""
     ): CloudGroupLedgerDocument {
         if (localDoc == null && remoteDoc == null) throw IllegalArgumentException("Both docs null")
-        if (localDoc == null) return adjustMembersForLocalUser(remoteDoc!!, localUserPhone10)
-        if (remoteDoc == null) return adjustMembersForLocalUser(localDoc, localUserPhone10)
+        if (localDoc == null) return adjustMembersForLocalUser(remoteDoc!!, localUserPhone10, localUserAvatarSeed)
+        if (remoteDoc == null) return adjustMembersForLocalUser(localDoc, localUserPhone10, localUserAvatarSeed)
 
         val mergedDeletedExpenseIds = mutableMapOf<String, Long>()
         (localDoc.deletedExpenseIds.keys + remoteDoc.deletedExpenseIds.keys).forEach { id ->
@@ -577,6 +581,12 @@ object CloudGroupSyncRepository {
                 }
             }
 
+        val localPreferredSeed = localUserAvatarSeed.takeIf { it.isNotBlank() }
+            ?: localDoc.members.firstOrNull { m ->
+                val normPhone = PhoneIdentityValidator.normalizeIndianPhone10(m.userPhone)
+                (localUserPhone10.length == 10 && normPhone == localUserPhone10) || m.isCurrentUser
+            }?.avatarSeed?.takeIf { it.contains("|") }.orEmpty()
+
         val memberMap = linkedMapOf<String, GroupMemberEntity>()
         val allMembersWithDocTime = localDoc.members.map { it to localDoc.updatedAtEpochMs } +
             remoteDoc.members.map { it to remoteDoc.updatedAtEpochMs }
@@ -598,9 +608,13 @@ object CloudGroupSyncRepository {
                 }
             }
         }
-        val mergedMembers = memberMap.values.map { member ->
-            val normPhone = PhoneIdentityValidator.normalizeIndianPhone10(member.userPhone)
-            member.copy(isCurrentUser = (normPhone == localUserPhone10 && localUserPhone10.length == 10))
+        val mergedMembers = memberMap.values.map { m ->
+            val normPhone = PhoneIdentityValidator.normalizeIndianPhone10(m.userPhone)
+            val isMe = (normPhone == localUserPhone10 && localUserPhone10.length == 10)
+            m.copy(
+                isCurrentUser = isMe,
+                avatarSeed = if (isMe && localPreferredSeed.isNotBlank()) localPreferredSeed else m.avatarSeed
+            )
         }
 
         val mergedFlights = localDoc.flightVaultByPnr.toMutableMap()
@@ -623,12 +637,17 @@ object CloudGroupSyncRepository {
 
     private fun adjustMembersForLocalUser(
         doc: CloudGroupLedgerDocument,
-        localUserPhone10: String
+        localUserPhone10: String,
+        localUserAvatarSeed: String = ""
     ): CloudGroupLedgerDocument {
         if (localUserPhone10.length != 10) return doc
-        val adjustedMembers = doc.members.map {
-            val normPhone = PhoneIdentityValidator.normalizeIndianPhone10(it.userPhone)
-            it.copy(isCurrentUser = (normPhone == localUserPhone10))
+        val adjustedMembers = doc.members.map { m ->
+            val normPhone = PhoneIdentityValidator.normalizeIndianPhone10(m.userPhone)
+            val isMe = (normPhone == localUserPhone10)
+            m.copy(
+                isCurrentUser = isMe,
+                avatarSeed = if (isMe && localUserAvatarSeed.isNotBlank()) localUserAvatarSeed else m.avatarSeed
+            )
         }
         return doc.copy(members = adjustedMembers)
     }
@@ -649,7 +668,8 @@ object CloudGroupSyncRepository {
             avatarStyle = avatarStyle,
             avatarColorPreset = avatarColorPreset,
             pinHash = profile.pinHash,
-            updatedAtEpochMs = System.currentTimeMillis()
+            updatedAtEpochMs = System.currentTimeMillis(),
+            avatarSeed = profile.avatarSeed
         )
         return pushNtfySnapshot(topic, encodeUserProfileRecord(record))
     }
@@ -660,6 +680,18 @@ object CloudGroupSyncRepository {
         val topic = "splitmate_v2_u_$normPhone"
         val json = fetchNtfySnapshot(topic) ?: return null
         return decodeUserProfileRecord(json)
+    }
+
+    suspend fun pushCrossDeviceOtpChallengeToVerifiedPrimary(
+        phone10: String,
+        encryptedChallengeJson: String
+    ): Boolean {
+        val normPhone = PhoneIdentityValidator.normalizeIndianPhone10(phone10)
+        if (normPhone.isEmpty() || encryptedChallengeJson.isBlank()) return false
+        val existingProfile = fetchUserProfileFromCloud(normPhone) ?: return false
+        if (existingProfile.pinHash.isBlank()) return false
+        val topic = "splitmate_v2_otp_push_$normPhone"
+        return pushNtfySnapshot(topic, encryptedChallengeJson)
     }
 
     suspend fun pushPhoneIndexEntry(entry: CloudPhoneGroupIndexEntry, targetPhone10: String): Boolean {
@@ -680,6 +712,9 @@ object CloudGroupSyncRepository {
         val topic = "splitmate_v2_grp_${sanitizeTopicKey(groupId)}"
         val remoteJson = fetchNtfySnapshot(topic)
         val remoteDoc = if (remoteJson != null) decodeGroupLedgerDocument(remoteJson) else null
+
+        val localProfile = dao.getUserProfile()
+        val localAvatarSeed = localProfile?.avatarSeed?.takeIf { it.isNotBlank() }.orEmpty()
 
         val localGroup = dao.getGroupById(groupId)
         var localDoc: CloudGroupLedgerDocument? = null
@@ -708,7 +743,12 @@ object CloudGroupSyncRepository {
 
         if (localDoc == null && remoteDoc == null) return null
 
-        val mergedDoc = mergeGroupLedgerDocuments(localDoc, remoteDoc, localUserPhone10)
+        val mergedDoc = mergeGroupLedgerDocuments(
+            localDoc = localDoc,
+            remoteDoc = remoteDoc,
+            localUserPhone10 = localUserPhone10,
+            localUserAvatarSeed = localAvatarSeed
+        )
 
         // Delete any local expenses that were tombstoned in cloud
         mergedDoc.deletedExpenseIds.keys.forEach { deletedExpId ->

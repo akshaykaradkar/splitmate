@@ -492,7 +492,8 @@ fun TripHubMemberAvatar(
         modifier = Modifier
             .size(size)
             .clip(CircleShape)
-            .background(backgroundColor),
+            .background(backgroundColor)
+            .border(1.5.dp, TripHubTokens.CardSurface, CircleShape),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -3396,7 +3397,7 @@ fun LodgingBookingCard(
                                 color = TripHubTokens.TextSecondary
                             )
                             Text(
-                                text = "${splitBreakdown.splittingMembersCount} Travelers (0.00¢ Drift)",
+                                text = "${splitBreakdown.splittingMembersCount} Travelers · Exact Split",
                                 style = TextStyle(
                                     fontFamily = SplitMateTnumMonospace,
                                     fontWeight = FontWeight.Bold,
@@ -4053,7 +4054,7 @@ private fun EmptyTripHubStateCard(
             )
 
             Text(
-                text = "Log an IRCTC 10-digit Train PNR, upload a Flight Boarding Pass PDF, or add a Hotel, Rental, Cab, or Shared Expense. Cards and category filters materialize automatically from your real Room ledger.",
+                text = "Log an IRCTC 10-digit Train PNR, upload a Flight Boarding Pass PDF, or add a Hotel, Rental, Cab, or Shared Expense. Cards and category filters appear automatically as you add trip expenses.",
                 fontFamily = FigtreeFontFamily,
                 fontWeight = FontWeight.Medium,
                 fontSize = 13.sp,
@@ -4655,14 +4656,14 @@ private fun TripHubMoneySettlementView(
                             }
                             Column {
                                 Text(
-                                    text = "Greedy Debt Simplification",
+                                    text = "Smart Settle Up",
                                     fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 16.sp,
                                     color = TripHubTokens.TextPrimary
                                 )
                                 Text(
-                                    text = "${simplifiedTransfers.size} optimal ${if (simplifiedTransfers.size == 1) "transfer" else "transfers"} · 0.00¢ drift",
+                                    text = "${simplifiedTransfers.size} optimal ${if (simplifiedTransfers.size == 1) "transfer" else "transfers"} · Exact to the last paisa",
                                     style = TextStyle(
                                         fontFamily = SplitMateTnumMonospace,
                                         fontWeight = FontWeight.Medium,
@@ -4685,7 +4686,7 @@ private fun TripHubMoneySettlementView(
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Info,
-                                contentDescription = "Max-Heap Graph Inspector",
+                                contentDescription = "How payments were simplified",
                                 tint = TripHubTokens.PositiveSageText,
                                 modifier = Modifier.size(22.dp)
                             )
@@ -4703,14 +4704,14 @@ private fun TripHubMoneySettlementView(
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Text(
-                                    text = "Max-Priority Queue Simplification (O(V log V))",
+                                    text = "Combined into the fewest possible payments",
                                     fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 12.sp,
                                     color = TripHubTokens.TextPrimary
                                 )
                                 Text(
-                                    text = "Partitions travelers into Creditor Max-Heap (V+) and Debtor Max-Heap (V-), matching largest creditor with largest debtor in each step to eliminate cyclic debts in at most N - 1 transfers.",
+                                    text = "Automatically combines everyone's shared expenses so your group settles up with the fewest possible direct payments.",
                                     fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.Medium,
                                     fontSize = 12.sp,
@@ -4758,7 +4759,7 @@ private fun TripHubMoneySettlementView(
                                 color = TripHubTokens.TextPrimary
                             )
                             Text(
-                                text = "Every traveler's net balance is reconciled to zero paise drift.",
+                                text = "Every traveler's balance is settled to the exact paisa.",
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Medium,
                                 fontSize = 12.sp,

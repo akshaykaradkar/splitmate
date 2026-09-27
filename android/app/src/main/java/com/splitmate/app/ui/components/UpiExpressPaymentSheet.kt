@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -675,6 +676,7 @@ fun UpiExpressPaymentSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 28.dp),
@@ -859,7 +861,7 @@ fun UpiExpressPaymentSheet(
                                 color = SplitMateTheme.PrimaryDark
                             )
                             Text(
-                                text = "Auto-fills exact VPA & pays",
+                                text = "Opens UPI app with amount pre-filled",
                                 fontFamily = FigtreeFontFamily,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -1143,18 +1145,29 @@ fun UpiExpressPaymentSheet(
                             }
                         }
                         Column {
-                            Text(
-                                text = "Pay ${transferModel.formattedDisplayAmount} with Google Pay →",
-                                fontFamily = FigtreeFontFamily,
-                                fontWeight = FontWeight.Black,
-                                fontSize = 15.5.sp,
-                                color = SplitMateTheme.ScreenBg
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "Pay ${transferModel.formattedDisplayAmount} with Google Pay",
+                                    fontFamily = FigtreeFontFamily,
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 15.5.sp,
+                                    color = SplitMateTheme.ScreenBg
+                                )
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                                    contentDescription = null,
+                                    tint = SplitMateTheme.ScreenBg,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
                             Text(
                                 text = if (cleanExactVpa.isNotBlank()) {
-                                    "1-Tap Google Pay → $cleanExactVpa (Pre-filled ₹ & MPIN)"
+                                    "Opens Google Pay to $cleanExactVpa with amount pre-filled"
                                 } else if (clean10Phone.length == 10) {
-                                    "1-Tap Google Pay → $clean10Phone@ybl (From Phone Number)"
+                                    "Opens Google Pay to $clean10Phone@ybl with amount pre-filled"
                                 } else {
                                     "Pick Phone from Contacts or Scan QR above for 1-Tap Google Pay"
                                 },

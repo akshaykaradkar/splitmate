@@ -19,7 +19,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Edit
@@ -132,7 +134,9 @@ fun EditLoggedExpenseDialog(
         text = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
             ) {
                 Text(
                     text = "Quick Category Switch:",
@@ -311,7 +315,7 @@ fun EditLoggedExpenseDialog(
                         OutlinedTextField(
                             value = routeFromTo,
                             onValueChange = { routeFromTo = it },
-                            label = { Text("From → To", fontSize = 10.sp) },
+                            label = { Text("From - To", fontSize = 10.sp) },
                             singleLine = true,
                             modifier = Modifier.weight(1f)
                         )
@@ -331,8 +335,8 @@ fun EditLoggedExpenseDialog(
                 onClick = {
                     val parsedRupees = editedAmountStr.toDoubleOrNull() ?: (expense.totalAmountCents / 100.0)
                     val finalTitle = if (includeTravelTicket && (pnrNumber.isNotBlank() || trainOrFlightNo.isNotBlank() || coachAndSeats.isNotBlank())) {
-                        val parsedFrom = routeFromTo.substringBefore("→").substringBefore("-").trim()
-                        val parsedTo = routeFromTo.substringAfter("→", routeFromTo.substringAfter("-", "")).trim()
+                        val parsedFrom = routeFromTo.substringBefore("-").trim()
+                        val parsedTo = routeFromTo.substringAfter("-", "").trim()
                         val parsedTicket = ParsedTravelTicket(
                             pnr = pnrNumber.trim(),
                             trainOrFlightNo = trainOrFlightNo.trim(),
@@ -430,7 +434,7 @@ fun OverlappingAvatarStack(avatars: List<String>, remainingCount: Int = 0) {
                     .size(28.dp)
                     .clip(CircleShape)
                     .background(SplitMateTheme.SurfaceMuted)
-                    .border(2.dp, Color.White, CircleShape),
+                    .border(2.dp, SplitMateTheme.SurfaceWhite, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Text("+$remainingCount", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = SplitMateTheme.PrimaryDark)

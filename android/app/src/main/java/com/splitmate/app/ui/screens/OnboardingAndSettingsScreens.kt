@@ -11,6 +11,8 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -41,11 +43,17 @@ import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.splitmate.app.R
 import com.splitmate.app.SplitMateTheme
+import com.splitmate.app.ui.AvatarGender
+import com.splitmate.app.ui.AvatarSeedCodec
 import com.splitmate.app.ui.DesignSystemBindings
+import com.splitmate.app.ui.SplitMateAvatarColorPresets
 import com.splitmate.app.ui.SplitMateBrandFontFamily
+import com.splitmate.app.ui.SplitMateCharacterAvatar
+import com.splitmate.app.ui.SplitMateDiceBearStyles
 import com.splitmate.app.ui.SplitMateDisplayFontFamily
 import com.splitmate.app.ui.buildDiceBearOpenPeepsUrl
 import com.splitmate.app.ui.extractInitialsFromNameOrSeed
+import com.splitmate.app.ui.inferGenderFromFirstName
 
 // ==============================================================================
 // SPLITMATE M3 EXPRESSIVE THEME TOKENS & SHAPES (GM3 DARK ELEVATION COMPLIANT)
@@ -103,8 +111,18 @@ fun OnboardingSetupScreen(
     var nameText by remember { mutableStateOf("") }
     var phoneText by remember { mutableStateOf("") }
     var randomSeedSuffix by remember { mutableStateOf(101) }
-    var selectedPresentationStyle by remember { mutableStateOf("Masculine") }
+    var selectedGender by remember { mutableStateOf(AvatarGender.NEUTRAL) }
+    var hasUserManuallySelectedGender by remember { mutableStateOf(false) }
     val selectedCurrency = SupportedCurrencies[0] // Strictly locked to INR (₹)
+
+    LaunchedEffect(nameText, hasUserManuallySelectedGender) {
+        if (!hasUserManuallySelectedGender && nameText.isNotBlank()) {
+            val inferred = inferGenderFromFirstName(nameText)
+            if (inferred != null) {
+                selectedGender = inferred
+            }
+        }
+    }
 
     val screenBg by animateColorAsState(
         targetValue = SplitMateThemeTokens.ScreenBg,
@@ -135,11 +153,13 @@ fun OnboardingSetupScreen(
     val effectiveSeed = remember(nameText, randomSeedSuffix) {
         if (nameText.isBlank()) "Explorer_$randomSeedSuffix" else "${nameText.trim()}_$randomSeedSuffix"
     }
-    val diceBearSvgUrl = remember(effectiveSeed, selectedPresentationStyle) {
-        buildDiceBearOpenPeepsUrl(effectiveSeed, selectedPresentationStyle)
-    }
-    val cleanInitials = remember(nameText) {
-        extractInitialsFromNameOrSeed(nameText.ifBlank { "Explorer" })
+    val compositeSeed = remember(effectiveSeed, selectedGender) {
+        AvatarSeedCodec.encode(
+            seedKey = effectiveSeed,
+            gender = selectedGender,
+            styleId = "open-peeps",
+            colorPresetId = "PastelWall"
+        )
     }
 
     Scaffold(
@@ -149,6 +169,8 @@ fun OnboardingSetupScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .consumeWindowInsets(innerPadding)
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -209,53 +231,23 @@ fun OnboardingSetupScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Avatar Preview (112dp circular placeholder with clean initials fallback & live DiceBear SVG)
+                // Avatar Preview
                 Box(
                     modifier = Modifier
                         .size(112.dp)
                         .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    SplitMateThemeTokens.AccentSage,
-                                    SplitMateThemeTokens.TerracottaSurface
-                                )
-                            )
-                        )
-                        .border(3.dp, cardBg, CircleShape)
-                        .shadow(elevation = 10.dp, shape = CircleShape)
                         .clickable { randomSeedSuffix = (100..999).random() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(102.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFE9F2D8)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = cleanInitials,
-                            fontFamily = SplitMateDisplayFontFamily,
-                            fontSize = 26.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = SplitMateThemeTokens.SageText
-                        )
-                        AsyncImage(
-                            model = ImageRequest.Builder(context)
-                                .data(diceBearSvgUrl)
-                                .decoderFactory(SvgDecoder.Factory())
-                                .crossfade(true)
-                                .build(),
-                            placeholder = painterResource(id = R.drawable.ic_avatar_placeholder),
-                            error = painterResource(id = R.drawable.ic_avatar_placeholder),
-                            contentDescription = "DiceBear Avatar",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(CircleShape)
-                        )
-                    }
+                    SplitMateCharacterAvatar(
+                        name = compositeSeed,
+                        phone = phoneText,
+                        size = 106.dp,
+                        styleId = "open-peeps",
+                        colorPresetId = "PastelWall",
+                        gender = selectedGender,
+                        highlighted = true
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))
@@ -270,13 +262,13 @@ fun OnboardingSetupScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Input 1: Presentation Style Toggle (Masculine, Feminine, Neutral)
+                // Input 1: Presentation Style Toggle (Male, Female, Neutral)
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.Start
                 ) {
                     Text(
-                        text = "Avatar Presentation Style",
+                        text = "Character Presentation",
                         fontFamily = SplitMateBrandFontFamily,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
@@ -296,12 +288,13 @@ fun OnboardingSetupScreen(
                                 .padding(4.dp),
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            listOf("Masculine", "Feminine", "Neutral").forEach { style ->
-                                val isSelected = selectedPresentationStyle == style
+                            AvatarGender.entries.forEach { genderOption ->
+                                val isSelected = selectedGender == genderOption
                                 Surface(
                                     onClick = {
                                         com.splitmate.app.ui.performCrispTactileHaptic(context, heavy = false)
-                                        selectedPresentationStyle = style
+                                        hasUserManuallySelectedGender = true
+                                        selectedGender = genderOption
                                     },
                                     shape = SplitMateThemeTokens.RadiusPill,
                                     color = if (isSelected) primaryText else Color.Transparent,
@@ -311,7 +304,7 @@ fun OnboardingSetupScreen(
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
                                         Text(
-                                            text = style,
+                                            text = genderOption.label,
                                             fontFamily = SplitMateBrandFontFamily,
                                             fontSize = 13.sp,
                                             fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
@@ -404,7 +397,12 @@ fun OnboardingSetupScreen(
                         com.splitmate.app.ui.performCrispTactileHaptic(context, heavy = true)
                         val finalName = if (nameText.isBlank()) "Explorer" else nameText.trim()
                         val finalPhone = phoneText.trim()
-                        val styledSeed = "$effectiveSeed|$selectedPresentationStyle"
+                        val styledSeed = AvatarSeedCodec.encode(
+                            seedKey = effectiveSeed,
+                            gender = selectedGender,
+                            styleId = "open-peeps",
+                            colorPresetId = "PastelWall"
+                        )
                         onCompleteProfile(finalName, finalPhone, selectedCurrency, styledSeed)
                     },
                     shape = SplitMateThemeTokens.RadiusPill,
@@ -483,15 +481,23 @@ fun UserSettingsScreen(
     var includeUpiInWhatsApp by remember { mutableStateOf(prefs.getBoolean("pref_whatsapp_upi", true)) }
     var hapticsEnabled by remember { mutableStateOf(prefs.getBoolean("pref_haptics", true)) }
 
-    val initialStyle = remember(avatarSeed) {
-        val part = avatarSeed.substringAfter('|', "Masculine")
-        if (part in listOf("Masculine", "Feminine", "Neutral")) part else "Masculine"
+    val parsedInitialDescriptor = remember(avatarSeed, userName) {
+        AvatarSeedCodec.parse(
+            rawSeed = avatarSeed.ifBlank { userName },
+            fallbackStyleId = "open-peeps",
+            fallbackColorPresetId = "PastelWall"
+        )
     }
-    val initialSeedSuffix = remember(avatarSeed) {
-        val basePart = avatarSeed.substringBefore('|')
-        if (basePart.contains('_')) basePart.substringAfterLast('_') else ""
+    val initialSeedSuffix = remember(parsedInitialDescriptor.seedKey) {
+        if (parsedInitialDescriptor.seedKey.contains('_')) {
+            parsedInitialDescriptor.seedKey.substringAfterLast('_')
+        } else {
+            ""
+        }
     }
-    var selectedStyle by remember(initialStyle) { mutableStateOf(initialStyle) }
+    var selectedGender by remember(parsedInitialDescriptor.gender) { mutableStateOf(parsedInitialDescriptor.gender) }
+    var selectedStyleId by remember(parsedInitialDescriptor.styleId) { mutableStateOf(parsedInitialDescriptor.styleId) }
+    var selectedColorPresetId by remember(parsedInitialDescriptor.colorPresetId) { mutableStateOf(parsedInitialDescriptor.colorPresetId) }
     var currentSeedSuffix by remember(initialSeedSuffix) { mutableStateOf(initialSeedSuffix) }
 
     val screenBg by animateColorAsState(
@@ -525,22 +531,23 @@ fun UserSettingsScreen(
         label = "SettingsBorderColor"
     )
 
-    val effectiveSeed = remember(editedName, currentSeedSuffix, selectedStyle, avatarSeed, userName) {
+    val effectiveSeedKey = remember(editedName, currentSeedSuffix, parsedInitialDescriptor.seedKey, userName) {
         val cleanEdited = editedName.trim().ifEmpty { "Explorer" }
-        val basePart = if (cleanEdited == userName.trim() && currentSeedSuffix == initialSeedSuffix && avatarSeed.isNotBlank()) {
-            avatarSeed.substringBefore('|').ifBlank { cleanEdited }
+        if (cleanEdited == userName.trim() && currentSeedSuffix == initialSeedSuffix && parsedInitialDescriptor.seedKey.isNotBlank()) {
+            parsedInitialDescriptor.seedKey
         } else if (currentSeedSuffix.isNotBlank()) {
             "${cleanEdited}_$currentSeedSuffix"
         } else {
             cleanEdited
         }
-        "$basePart|$selectedStyle"
     }
-    val diceBearSvgUrl = remember(effectiveSeed) {
-        buildDiceBearOpenPeepsUrl(effectiveSeed)
-    }
-    val cleanInitials = remember(editedName) {
-        extractInitialsFromNameOrSeed(editedName.ifBlank { userName })
+    val effectiveSeed = remember(effectiveSeedKey, selectedGender, selectedStyleId, selectedColorPresetId) {
+        AvatarSeedCodec.encode(
+            seedKey = effectiveSeedKey,
+            gender = selectedGender,
+            styleId = selectedStyleId,
+            colorPresetId = selectedColorPresetId
+        )
     }
 
     Scaffold(
@@ -578,11 +585,13 @@ fun UserSettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .consumeWindowInsets(innerPadding)
+                .imePadding()
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(top = 8.dp, bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Section 1: User Profile Name, UPI ID & Avatar Presentation Style
+            // Section 1: User Profile Name, UPI ID & Full 4-Token Avatar Studio
             item {
                 Column {
                     Text(
@@ -610,43 +619,40 @@ fun UserSettingsScreen(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(84.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        Brush.radialGradient(
-                                            colors = listOf(
-                                                SplitMateThemeTokens.AccentSage,
-                                                Color(0xFFB5DC82)
-                                            )
-                                        )
-                                    )
-                                    .border(3.dp, cardBg, CircleShape)
-                                    .shadow(elevation = 6.dp, shape = CircleShape)
+                                    .size(92.dp)
                                     .clickable { currentSeedSuffix = (100..999).random().toString() },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    text = cleanInitials,
-                                    fontFamily = SplitMateDisplayFontFamily,
-                                    fontSize = 22.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = SplitMateThemeTokens.SageText
+                                SplitMateCharacterAvatar(
+                                    name = effectiveSeed,
+                                    phone = editedPhone,
+                                    size = 86.dp,
+                                    styleId = selectedStyleId,
+                                    colorPresetId = selectedColorPresetId,
+                                    gender = selectedGender,
+                                    highlighted = true
                                 )
-                                AsyncImage(
-                                    model = ImageRequest.Builder(context)
-                                        .data(diceBearSvgUrl)
-                                        .decoderFactory(SvgDecoder.Factory())
-                                        .crossfade(true)
-                                        .build(),
-                                    contentDescription = "Profile Avatar",
-                                    contentScale = ContentScale.Crop,
+                                Surface(
+                                    onClick = { currentSeedSuffix = (100..999).random().toString() },
+                                    shape = CircleShape,
+                                    color = Color(0xFF365314),
+                                    border = BorderStroke(1.5.dp, Color(0xFFFAF6F0)),
                                     modifier = Modifier
-                                        .fillMaxSize()
-                                        .clip(CircleShape)
-                                )
+                                        .size(28.dp)
+                                        .align(Alignment.BottomEnd)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Casino,
+                                            contentDescription = "Shuffle Look",
+                                            tint = Color(0xFFD7E8B6),
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                    }
+                                }
                             }
                             Text(
-                                text = "Tap avatar to randomize look",
+                                text = "Tap avatar to shuffle look",
                                 fontFamily = SplitMateBrandFontFamily,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium,
@@ -757,9 +763,10 @@ fun UserSettingsScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
 
+                            // A. Character Presentation (Male, Female, Neutral)
                             Column(modifier = Modifier.fillMaxWidth()) {
                                 Text(
-                                    text = "Avatar Presentation Style",
+                                    text = "Character Presentation",
                                     fontFamily = SplitMateBrandFontFamily,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
@@ -779,10 +786,10 @@ fun UserSettingsScreen(
                                             .padding(4.dp),
                                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
-                                        listOf("Masculine", "Feminine", "Neutral").forEach { style ->
-                                            val isSelected = selectedStyle == style
+                                        AvatarGender.entries.forEach { genderOption ->
+                                            val isSelected = selectedGender == genderOption
                                             Surface(
-                                                onClick = { selectedStyle = style },
+                                                onClick = { selectedGender = genderOption },
                                                 shape = SplitMateThemeTokens.RadiusPill,
                                                 color = if (isSelected) textPrimary else Color.Transparent,
                                                 modifier = Modifier
@@ -791,7 +798,7 @@ fun UserSettingsScreen(
                                             ) {
                                                 Box(contentAlignment = Alignment.Center) {
                                                     Text(
-                                                        text = style,
+                                                        text = genderOption.label,
                                                         fontFamily = SplitMateBrandFontFamily,
                                                         fontSize = 13.sp,
                                                         fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
@@ -804,12 +811,139 @@ fun UserSettingsScreen(
                                 }
                             }
 
+                            // B. 13 Curated Character Art Styles (Static Preview Seeds)
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "Character Art Style",
+                                    fontFamily = SplitMateBrandFontFamily,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = textSecondary,
+                                    modifier = Modifier.padding(start = 4.dp)
+                                )
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    items(SplitMateDiceBearStyles, key = { it.id }) { styleSpec ->
+                                        val isSelected = selectedStyleId == styleSpec.id
+                                        val staticChipSeed = "StylePreview_${styleSpec.id}|${selectedGender.id}|${styleSpec.id}|$selectedColorPresetId"
+                                        Surface(
+                                            onClick = { selectedStyleId = styleSpec.id },
+                                            shape = RoundedCornerShape(16.dp),
+                                            color = if (isSelected) Color(0xFF365314) else cardBg,
+                                            border = BorderStroke(
+                                                width = if (isSelected) 1.5.dp else 1.dp,
+                                                color = if (isSelected) Color(0xFF416913) else borderColor
+                                            )
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                SplitMateCharacterAvatar(
+                                                    name = staticChipSeed,
+                                                    phone = "",
+                                                    size = 28.dp,
+                                                    styleId = styleSpec.id,
+                                                    colorPresetId = selectedColorPresetId,
+                                                    gender = selectedGender,
+                                                    highlighted = isSelected
+                                                )
+                                                Column {
+                                                    Text(
+                                                        text = styleSpec.label,
+                                                        fontFamily = SplitMateBrandFontFamily,
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        color = if (isSelected) Color(0xFFFAF6F0) else textPrimary
+                                                    )
+                                                    Text(
+                                                        text = styleSpec.subtitle,
+                                                        fontFamily = SplitMateBrandFontFamily,
+                                                        fontSize = 10.sp,
+                                                        color = if (isSelected) Color(0xFFD7E8B6) else textSecondary
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // C. 12 Curated Backdrop Color Palettes
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "Backdrop Palette",
+                                    fontFamily = SplitMateBrandFontFamily,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = textSecondary,
+                                    modifier = Modifier.padding(start = 4.dp)
+                                )
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    items(SplitMateAvatarColorPresets, key = { it.id }) { preset ->
+                                        val isSelected = selectedColorPresetId == preset.id
+                                        Surface(
+                                            onClick = { selectedColorPresetId = preset.id },
+                                            shape = RoundedCornerShape(16.dp),
+                                            color = if (isSelected) preset.primaryBgColor else cardBg,
+                                            border = BorderStroke(
+                                                width = if (isSelected) 2.dp else 1.dp,
+                                                color = if (isSelected) preset.accentRingColor else borderColor
+                                            )
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(16.dp)
+                                                        .clip(CircleShape)
+                                                        .background(
+                                                            Brush.linearGradient(
+                                                                colors = listOf(preset.primaryBgColor, preset.secondarySwatchColor)
+                                                            )
+                                                        )
+                                                        .border(1.5.dp, preset.accentRingColor, CircleShape)
+                                                )
+                                                Text(
+                                                    text = preset.label,
+                                                    fontFamily = SplitMateBrandFontFamily,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                                    color = if (isSelected) Color(0xFF23201E) else textPrimary
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             Button(
                                 onClick = {
                                     val clean = editedName.trim().ifEmpty { "Explorer" }
                                     val cleanPhone = editedPhone.trim()
                                     val cleanUpi = editedUpiId.trim()
-                                    onUpdateUserProfile(clean, cleanPhone, "$clean|$selectedStyle")
+                                    val encodedSeed = AvatarSeedCodec.encode(
+                                        seedKey = effectiveSeedKey,
+                                        gender = selectedGender,
+                                        styleId = selectedStyleId,
+                                        colorPresetId = selectedColorPresetId
+                                    )
+                                    onUpdateUserProfile(clean, cleanPhone, encodedSeed)
                                     onUpdateUpiId(cleanUpi)
                                     Toast.makeText(context, "Saved Profile & UPI Handle", Toast.LENGTH_SHORT).show()
                                 },
@@ -834,11 +968,11 @@ fun UserSettingsScreen(
                 }
             }
 
-            // Section 2: Split Engine & WhatsApp Preferences
+            // Section 2: Sharing & Trip Preferences
             item {
                 Column {
                     Text(
-                        text = "Split Engine & Trip Tools",
+                        text = "Sharing & Trip Preferences",
                         fontFamily = SplitMateDisplayFontFamily,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.ExtraBold,
@@ -889,7 +1023,7 @@ fun UserSettingsScreen(
                                 icon = Icons.Rounded.Share,
                                 iconBg = if (isDarkTheme) Color(0xFF282552) else Color(0xFFEEF2FF),
                                 iconTint = if (isDarkTheme) Color(0xFFDCE3FD) else Color(0xFF3730A3),
-                                title = "Export & Share Trip Ledger Summary",
+                                title = "Export & Share Trip Summary",
                                 subtitle = "Share a clean WhatsApp/Clipboard summary of all group balances & expenses ($activeGroupsCount active groups)",
                                 titleColor = textPrimary,
                                 subtitleColor = textSecondary,
@@ -910,7 +1044,7 @@ fun UserSettingsScreen(
                                             putExtra(android.content.Intent.EXTRA_TEXT, summaryText)
                                         }
                                         context.startActivity(
-                                            android.content.Intent.createChooser(shareIntent, "Share Trip Ledger Summary")
+                                            android.content.Intent.createChooser(shareIntent, "Share Trip Summary")
                                                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                                         )
                                     }
@@ -921,12 +1055,12 @@ fun UserSettingsScreen(
                 }
             }
 
-            // Section 3: Appearance & Tactile Feedback
+            // Section 3: Appearance & Haptics
             item {
                 val settingsLocalView = androidx.compose.ui.platform.LocalView.current
                 Column {
                     Text(
-                        text = "Appearance & Tactile Physics",
+                        text = "Appearance & Haptics",
                         fontFamily = SplitMateDisplayFontFamily,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.ExtraBold,
@@ -946,7 +1080,7 @@ fun UserSettingsScreen(
                                 icon = if (isDarkTheme) Icons.Rounded.DarkMode else Icons.Rounded.LightMode,
                                 iconBg = if (isDarkTheme) Color(0xFF282552) else Color(0xFFEEF2FF),
                                 iconTint = if (isDarkTheme) Color(0xFFDCE3FD) else Color(0xFF3730A3),
-                                title = "Dark Theme (Warm Espresso #181512)",
+                                title = "Dark Mode (Warm Espresso)",
                                 subtitle = "Switch between Buckwheat Cream Light and Warm Espresso Night canvas",
                                 titleColor = textPrimary,
                                 subtitleColor = textSecondary,

@@ -158,7 +158,7 @@ object UniversalFlightTicketExtractor {
                     cabinBaggage.takeIf { it.isNotBlank() }?.let { "Cabin: $it" },
                     checkInBaggage.takeIf { it.isNotBlank() }?.let { "Check-in: $it" }
                 ).joinToString(" • ").ifBlank { "Flight $flightNumber" },
-                liveTrainLocationRadar = "Flight $flightNumber ($originIata ➔ $destinationIata)",
+                liveTrainLocationRadar = "Flight $flightNumber ($originIata -> $destinationIata)",
                 confirmationProbability = "100% Confirmed",
                 sourceLabel = "Universal E-Ticket Extractor (${extractionDurationMs}ms)",
                 isLiveVerified = true,
@@ -169,9 +169,9 @@ object UniversalFlightTicketExtractor {
         fun buildCleanExpenseTitle(): String {
             val carrierAndNo = listOf(airlineName, flightNumber).filter { it.isNotBlank() }.joinToString(" ").trim()
             val routePart = if (originIata.isNotBlank() && destinationIata.isNotBlank()) {
-                "$originIata ➔ $destinationIata"
+                "$originIata -> $destinationIata"
             } else if (originCity.isNotBlank() && destinationCity.isNotBlank()) {
-                "$originCity ➔ $destinationCity"
+                "$originCity -> $destinationCity"
             } else ""
             val pnrPart = if (pnr.isNotBlank()) "PNR: $pnr" else ""
             return listOf(carrierAndNo.trim(), routePart, pnrPart)
@@ -353,8 +353,8 @@ object UniversalFlightTicketExtractor {
     private val BookingIdRegex = Regex("""(?:Booking\s*ID|Reference\s*ID|Order\s*ID|Invoice\s*No)\s*[:\-]?\s*([A-Z0-9\-]{10,28})""", RegexOption.IGNORE_CASE)
     private val DirectPnrRegex = Regex("""\b(?:Airline\s+PNR|Reservation\s+No\.?\s*\(?PNR\)?|PNR|Booking\s+Ref(?:erence)?\b|Record\s+Locator\b)(?:\s*\/\s*(?:Airline\s+)?PNR)?\)?\s*[:\-]\s*\n?\s*([A-Z0-9]{6})\b""", RegexOption.IGNORE_CASE)
     private val SixCharTokenRegex = Regex("""\b([A-Z0-9]{6})\b""")
-    private val RouteChainRegex = Regex("""\b([A-Z]{3})(?:\s*(?:->|→|➔|-|–|—|\s+to\s+)\s*([A-Z]{3}))+\b""")
-    private val RouteDelimiterSplitRegex = Regex("""\s*(?:->|→|➔|-|–|—|\s+to\s+)\s*""")
+    private val RouteChainRegex = Regex("""\b([A-Z]{3})(?:\s*(?:->|→|\u2794|-|–|—|\s+to\s+)\s*([A-Z]{3}))+\b""")
+    private val RouteDelimiterSplitRegex = Regex("""\s*(?:->|→|\u2794|-|–|—|\s+to\s+)\s*""")
     private val TimeIataRegex = Regex("""(?:\b([A-Z]{3})\s+\d{2}:\d{2}\b|\b\d{2}:\d{2}(?:\s*hrs)?\s+([A-Z]{3})\b)""")
     private val ThreeLetterWordRegex = Regex("""\b([A-Z]{3})\b""")
     private val CityHeaderRegex = Regex("""^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*[-–]\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)$""")

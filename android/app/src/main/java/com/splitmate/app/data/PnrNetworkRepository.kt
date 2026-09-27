@@ -672,7 +672,7 @@ object PnrNetworkRepository {
             durationText = "",
             quotaText = "GN",
             coachPositionHint = "100% Confirmed · Permanently Locked in Offline Vault",
-            liveTrainLocationRadar = "Route: $originCode ➔ $destCode",
+            liveTrainLocationRadar = "Route: $originCode -> $destCode",
             confirmationProbability = "100% Confirmed · 0 Internet Needed",
             sourceLabel = "Confirmed Offline Vault (Permanent CNF · 0 Internet Used)",
             isLiveVerified = true,

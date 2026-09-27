@@ -65,12 +65,22 @@ import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import com.splitmate.app.data.ExpenseGroupEntity
 import com.splitmate.app.data.GroupMemberEntity
 import com.splitmate.app.data.PhoneIdentityValidator
+import com.splitmate.app.data.PhoneOtpAuthManager
 import com.splitmate.app.ui.ContactPickerBottomSheet
 import com.splitmate.app.ui.DesignSystemBindings
 import com.splitmate.app.ui.GroupCategoryIcons
@@ -91,6 +101,7 @@ import com.splitmate.app.ui.components.UpiExpressPaymentSheet
 import com.splitmate.app.ui.screens.QuickExpenseScreen
 import com.splitmate.app.ui.screens.UserSettingsScreen
 import com.splitmate.app.ui.toSmartTitleCase
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -249,29 +260,79 @@ fun SplitMateApp(viewModel: SplitMateViewModel) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun SplitMateCloudOtpOnboardingScreen(
     viewModel: SplitMateViewModel,
     onCompleteToDashboard: () -> Unit
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+    val coroutineScope = rememberCoroutineScope()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    val initialDescriptor = remember(uiState.avatarSeed, uiState.avatarStyleId, uiState.avatarColorPresetId) {
+        AvatarSeedCodec.parse(
+            rawSeed = uiState.avatarSeed.ifBlank { uiState.currentUserName },
+            fallbackStyleId = uiState.avatarStyleId.ifBlank { "open-peeps" },
+            fallbackColorPresetId = uiState.avatarColorPresetId.ifBlank { "PastelWall" }
+        )
+    }
 
     var onboardingName by rememberSaveable { mutableStateOf(uiState.currentUserName.takeIf { it != "Explorer" }.orEmpty()) }
     var onboardingPhone by rememberSaveable { mutableStateOf(uiState.userPhone) }
     var onboardingUpi by rememberSaveable { mutableStateOf(uiState.userUpiId) }
-    var selectedAvatarStyleId by rememberSaveable { mutableStateOf(uiState.avatarStyleId.ifBlank { "open-peeps" }) }
-    var selectedColorPresetId by rememberSaveable { mutableStateOf(uiState.avatarColorPresetId.ifBlank { "Buckwheat" }) }
+    var selectedAvatarStyleId by rememberSaveable { mutableStateOf(initialDescriptor.styleId) }
+    var selectedColorPresetId by rememberSaveable { mutableStateOf(initialDescriptor.colorPresetId) }
+    var selectedGenderId by rememberSaveable { mutableStateOf(initialDescriptor.gender.id) }
+    var hasUserManuallySelectedGender by rememberSaveable { mutableStateOf(false) }
+    var customSeedKey by rememberSaveable {
+        mutableStateOf(
+            initialDescriptor.seedKey.takeIf {
+                it.isNotBlank() && it != "Explorer" && it != uiState.currentUserName
+            }.orEmpty()
+        )
+    }
+    var isStudioExpanded by rememberSaveable { mutableStateOf(false) }
     var enteredOtpCode by rememberSaveable { mutableStateOf("") }
-    var optionalPin4 by rememberSaveable { mutableStateOf("") }
     var otpFeedbackMessage by remember { mutableStateOf<String?>(null) }
-    var showForgotPinResetNotice by remember { mutableStateOf(false) }
+
+    val selectedGender = remember(selectedGenderId) { AvatarGender.fromId(selectedGenderId) }
+
+    // 300ms debounce on the live studio avatar seed so rapid typing does not flood network SVG requests
+    var debouncedStudioName by remember { mutableStateOf(onboardingName) }
+    LaunchedEffect(onboardingName) {
+        delay(300L)
+        debouncedStudioName = onboardingName
+    }
+
+    // Auto-infer gender from first name when typing unless the user explicitly selected a gender segment
+    LaunchedEffect(onboardingName, hasUserManuallySelectedGender) {
+        if (!hasUserManuallySelectedGender && onboardingName.isNotBlank()) {
+            val inferred = inferGenderFromFirstName(onboardingName)
+            if (inferred != null && inferred.id != selectedGenderId) {
+                selectedGenderId = inferred.id
+            }
+        }
+    }
 
     val normalizedPhone10 = remember(onboardingPhone) {
         PhoneIdentityValidator.normalizeIndianPhone10(onboardingPhone)
     }
     val isValidPhone10 = remember(normalizedPhone10) {
         PhoneIdentityValidator.isValidIndianMobile10(normalizedPhone10)
+    }
+
+    val effectiveSeedKey = remember(customSeedKey, debouncedStudioName) {
+        customSeedKey.ifBlank { debouncedStudioName.trim().ifBlank { "You" } }
+    }
+    val compositeLiveSeed = remember(effectiveSeedKey, selectedGender, selectedAvatarStyleId, selectedColorPresetId) {
+        AvatarSeedCodec.encode(
+            seedKey = effectiveSeedKey,
+            gender = selectedGender,
+            styleId = selectedAvatarStyleId,
+            colorPresetId = selectedColorPresetId
+        )
     }
 
     LaunchedEffect(normalizedPhone10, isValidPhone10) {
@@ -285,13 +346,133 @@ fun SplitMateCloudOtpOnboardingScreen(
                         onboardingUpi = record.upiVpa
                     }
                     if (record.avatarStyle.isNotBlank()) {
-                        selectedAvatarStyleId = record.avatarStyle
+                        selectedAvatarStyleId = AvatarSeedCodec.parse(
+                            rawSeed = record.avatarSeed.ifBlank { record.name },
+                            fallbackStyleId = record.avatarStyle,
+                            fallbackColorPresetId = record.avatarColorPreset
+                        ).styleId
                     }
                     if (record.avatarColorPreset.isNotBlank()) {
-                        selectedColorPresetId = record.avatarColorPreset
+                        selectedColorPresetId = AvatarSeedCodec.parse(
+                            rawSeed = record.avatarSeed.ifBlank { record.name },
+                            fallbackStyleId = record.avatarStyle,
+                            fallbackColorPresetId = record.avatarColorPreset
+                        ).colorPresetId
+                    }
+                    if (record.avatarSeed.isNotBlank()) {
+                        val parsedRemote = AvatarSeedCodec.parse(
+                            rawSeed = record.avatarSeed,
+                            fallbackStyleId = record.avatarStyle.ifBlank { selectedAvatarStyleId },
+                            fallbackColorPresetId = record.avatarColorPreset.ifBlank { selectedColorPresetId }
+                        )
+                        selectedGenderId = parsedRemote.gender.id
+                        if (parsedRemote.seedKey.isNotBlank() && parsedRemote.seedKey != record.name) {
+                            customSeedKey = parsedRemote.seedKey
+                        }
                     }
                 }
             }
+        }
+    }
+
+    val discoveredProfile = uiState.discoveredCloudProfile?.takeIf { it.phone10 == normalizedPhone10 }
+
+    // 30-second resend countdown timer driven by uiState.otpResendAvailableAtEpochMs
+    var remainingResendSec by remember { mutableIntStateOf(0) }
+    LaunchedEffect(uiState.otpResendAvailableAtEpochMs) {
+        while (true) {
+            val diffMs = uiState.otpResendAvailableAtEpochMs - System.currentTimeMillis()
+            if (diffMs <= 0L) {
+                remainingResendSec = 0
+                break
+            }
+            remainingResendSec = ((diffMs + 999L) / 1000L).toInt()
+            delay(1000L)
+        }
+    }
+
+    val submitOtpVerification: (String) -> Unit = { codeToVerify ->
+        val resolvedName = onboardingName.trim().ifBlank {
+            discoveredProfile?.name?.takeIf { it.isNotBlank() } ?: "Explorer"
+        }
+        val resolvedUpi = onboardingUpi.trim().ifBlank {
+            discoveredProfile?.upiVpa?.takeIf { it.isNotBlank() } ?: "$normalizedPhone10@upi"
+        }
+        val finalSeedKey = customSeedKey.ifBlank { resolvedName }
+        viewModel.verifyPhoneOtpAndSyncCloud(
+            context = context,
+            rawPhone = onboardingPhone,
+            enteredOtp = codeToVerify,
+            userName = resolvedName,
+            upiId = resolvedUpi,
+            avatarStyleId = selectedAvatarStyleId,
+            avatarColorPresetId = selectedColorPresetId,
+            avatarGender = selectedGender.id,
+            customSeedKey = finalSeedKey
+        ) { ok, msg ->
+            otpFeedbackMessage = msg
+            if (ok) {
+                onCompleteToDashboard()
+            }
+        }
+    }
+
+    // Auto-submit immediately when the 6th digit is entered during an active OTP challenge
+    LaunchedEffect(enteredOtpCode, uiState.isOtpChallengeActive) {
+        if (enteredOtpCode.length == 6 && uiState.isOtpChallengeActive && !uiState.isCloudSyncing) {
+            submitOtpVerification(enteredOtpCode)
+        }
+    }
+
+    var showSmsPermissionRecoveryCard by remember { mutableStateOf(false) }
+
+    val otpSmsPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val smsGranted = permissions[Manifest.permission.SEND_SMS] == true ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
+        if (PhoneOtpAuthManager.checkHardwareSimMatchesPhone10(context, onboardingPhone)) {
+            showSmsPermissionRecoveryCard = false
+            otpFeedbackMessage = "Device SIM verified (+91 $normalizedPhone10). Syncing trips..."
+            submitOtpVerification("SIM_VERIFIED")
+        } else {
+            showSmsPermissionRecoveryCard = !smsGranted
+            val res = viewModel.requestPhoneOtp(context, onboardingPhone)
+            if (res != null) {
+                otpFeedbackMessage = null
+            } else {
+                otpFeedbackMessage = "Please enter a valid 10-digit Indian mobile number (starts with 6-9)."
+            }
+        }
+    }
+
+    val simVerifyPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        if (PhoneOtpAuthManager.checkHardwareSimMatchesPhone10(context, onboardingPhone)) {
+            showSmsPermissionRecoveryCard = false
+            otpFeedbackMessage = "Device SIM verified (+91 $normalizedPhone10). Syncing trips..."
+            submitOtpVerification("SIM_VERIFIED")
+        } else {
+            val res = viewModel.requestPhoneOtp(context, onboardingPhone)
+            otpFeedbackMessage = if (res != null) {
+                "Carrier SIM number hidden by OS. Sent 6-digit verification code for +91 ${res.phone10}."
+            } else {
+                "Please enter a valid 10-digit Indian mobile number."
+            }
+        }
+    }
+
+    val nameBringIntoViewRequester = remember { BringIntoViewRequester() }
+    val phoneBringIntoViewRequester = remember { BringIntoViewRequester() }
+    val otpBringIntoViewRequester = remember { BringIntoViewRequester() }
+
+    val isImeVisible = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
+
+    LaunchedEffect(uiState.isOtpChallengeActive) {
+        if (uiState.isOtpChallengeActive) {
+            delay(120L)
+            otpBringIntoViewRequester.bringIntoView()
         }
     }
 
@@ -302,180 +483,340 @@ fun SplitMateCloudOtpOnboardingScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .consumeWindowInsets(innerPadding)
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 14.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Brand Pill
-            Surface(
-                shape = SplitMateTheme.RadiusBadge,
-                color = Color(0xFFD7E8B6),
-                border = BorderStroke(1.dp, Color(0xFF416913).copy(alpha = 0.35f))
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.CloudDone,
-                        contentDescription = null,
-                        tint = Color(0xFF365314),
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        text = "Zero-Config Cloud Sync & Phone Identity",
-                        fontFamily = SplitMateTheme.FontRounded,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF365314)
-                    )
-                }
-            }
-
             Text(
                 text = "Welcome to SplitMate",
                 fontFamily = SplitMateTheme.FontDisplay,
-                fontSize = 28.sp,
+                fontSize = 26.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = SplitMateTheme.PrimaryDark,
                 textAlign = TextAlign.Center
             )
 
-            // 1. Hybrid 5-Character Open-Peeps Hero Stage (~48 KB Local Assets + Live DiceBear 9.x Center Avatar)
+            // 1. Hybrid 5-Character Open-Peeps Hero Stage (Compacts automatically when IME or OTP challenge is active)
             OpenPeepsHeroStage(
-                name = onboardingName.ifBlank { "You" },
+                name = compositeLiveSeed,
                 phone = onboardingPhone,
                 selectedStyleId = selectedAvatarStyleId,
-                selectedColorPresetId = selectedColorPresetId
+                selectedColorPresetId = selectedColorPresetId,
+                isCompactMode = isImeVisible || uiState.isOtpChallengeActive
             )
 
-            // 2. DiceBear 9.x Avatar Style Strip (7 Styles)
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+            // 2. Unified M3 Expressive "Identity & Avatar Studio" Bento Card (28.dp corner radius)
+            val selectedStyleSpec = remember(selectedAvatarStyleId) {
+                SplitMateDiceBearStyles.find { it.id == selectedAvatarStyleId } ?: SplitMateDiceBearStyles.first()
+            }
+            val selectedPresetSpec = remember(selectedColorPresetId) {
+                SplitMateAvatarColorPresets.find { it.id == selectedColorPresetId } ?: SplitMateAvatarColorPresets.first()
+            }
+
+            Card(
+                shape = RoundedCornerShape(28.dp),
+                colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, SplitMateTheme.BorderLight, RoundedCornerShape(28.dp))
+                    .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
             ) {
-                Text(
-                    text = "Character Art Style",
-                    fontFamily = SplitMateTheme.FontRounded,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = SplitMateTheme.PrimaryDark
-                )
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    items(SplitMateDiceBearStyles, key = { it.id }) { styleSpec ->
-                        val isSelected = selectedAvatarStyleId == styleSpec.id
-                        Surface(
-                            onClick = { selectedAvatarStyleId = styleSpec.id },
-                            shape = SplitMateTheme.RadiusBadge,
-                            color = if (isSelected) Color(0xFF365314) else SplitMateTheme.SurfaceWhite,
-                            border = BorderStroke(
-                                width = if (isSelected) 1.5.dp else 1.dp,
-                                color = if (isSelected) Color(0xFF416913) else SplitMateTheme.BorderLight
-                            )
+                    // Studio Header Row: 76.dp Live Avatar Medallion + Shuffle Badge + Customize Look Toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier.size(80.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            SplitMateCharacterAvatar(
+                                name = compositeLiveSeed,
+                                phone = onboardingPhone,
+                                size = 76.dp,
+                                styleId = selectedAvatarStyleId,
+                                colorPresetId = selectedColorPresetId,
+                                gender = selectedGender,
+                                highlighted = true
+                            )
+                            Surface(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    val base = onboardingName.trim().ifBlank { "Explorer" }
+                                    customSeedKey = "${base}_${(100..999).random()}"
+                                },
+                                shape = CircleShape,
+                                color = Color(0xFF365314),
+                                border = BorderStroke(1.5.dp, Color(0xFFFAF6F0)),
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .align(Alignment.BottomEnd)
+                                    .testTag("RegistrationShuffleAvatarButton")
                             ) {
-                                SplitMateCharacterAvatar(
-                                    name = onboardingName.ifBlank { "You" },
-                                    phone = onboardingPhone,
-                                    size = 26.dp,
-                                    styleId = styleSpec.id,
-                                    colorPresetId = selectedColorPresetId,
-                                    highlighted = isSelected
-                                )
-                                Column {
-                                    Text(
-                                        text = styleSpec.label,
-                                        fontFamily = SplitMateTheme.FontRounded,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = if (isSelected) Color(0xFFFAF6F0) else SplitMateTheme.PrimaryDark
-                                    )
-                                    Text(
-                                        text = styleSpec.subtitle,
-                                        fontFamily = SplitMateTheme.FontRounded,
-                                        fontSize = 10.sp,
-                                        color = if (isSelected) Color(0xFFD7E8B6) else SplitMateTheme.TextSecondary
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Casino,
+                                        contentDescription = "Shuffle Look",
+                                        tint = Color(0xFFD7E8B6),
+                                        modifier = Modifier.size(15.dp)
                                     )
                                 }
                             }
                         }
-                    }
-                }
-            }
 
-            // 3. Avatar Color Preset Strip (5 Buckwheat & Expressive Presets)
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text(
-                    text = "Backdrop Palette Preset",
-                    fontFamily = SplitMateTheme.FontRounded,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = SplitMateTheme.PrimaryDark
-                )
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    items(SplitMateAvatarColorPresets, key = { it.id }) { preset ->
-                        val isSelected = selectedColorPresetId == preset.id
-                        Surface(
-                            onClick = { selectedColorPresetId = preset.id },
-                            shape = SplitMateTheme.RadiusBadge,
-                            color = if (isSelected) preset.primaryBgColor else SplitMateTheme.SurfaceWhite,
-                            border = BorderStroke(
-                                width = if (isSelected) 2.dp else 1.dp,
-                                color = if (isSelected) preset.accentRingColor else SplitMateTheme.BorderLight
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = onboardingName.trim().ifBlank { "Your Travel Identity" },
+                                fontFamily = SplitMateTheme.FontDisplay,
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = SplitMateTheme.PrimaryDark,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
-                        ) {
+                            Text(
+                                text = "${selectedStyleSpec.label} · ${selectedPresetSpec.label} · ${selectedGender.label}",
+                                fontFamily = SplitMateTheme.FontRounded,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = SplitMateTheme.TextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
                             Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(14.dp)
-                                        .clip(CircleShape)
-                                        .background(preset.primaryBgColor)
-                                        .border(1.5.dp, preset.accentRingColor, CircleShape)
-                                )
-                                Text(
-                                    text = preset.label,
-                                    fontFamily = SplitMateTheme.FontRounded,
-                                    fontSize = 12.sp,
-                                    fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                    color = Color(0xFF23201E)
-                                )
+                                Surface(
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        isStudioExpanded = !isStudioExpanded
+                                    },
+                                    shape = SplitMateTheme.RadiusBadge,
+                                    color = if (isStudioExpanded) Color(0xFF365314) else SplitMateTheme.SurfaceMuted,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (isStudioExpanded) Color(0xFF416913) else SplitMateTheme.BorderLight
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Palette,
+                                            contentDescription = null,
+                                            tint = if (isStudioExpanded) Color(0xFFD7E8B6) else SplitMateTheme.PrimaryDark,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Text(
+                                            text = if (isStudioExpanded) "Done" else "Customize Look",
+                                            fontFamily = SplitMateTheme.FontRounded,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = if (isStudioExpanded) Color(0xFFFAF6F0) else SplitMateTheme.PrimaryDark
+                                        )
+                                        Icon(
+                                            imageVector = if (isStudioExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                                            contentDescription = null,
+                                            tint = if (isStudioExpanded) Color(0xFFD7E8B6) else SplitMateTheme.PrimaryDark,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
-                }
-            }
 
-            // 4. Profile & +91 Mobile Identity Card
-            Card(
-                shape = SplitMateTheme.RadiusCard,
-                colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusCard)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
+                    // Collapsible Avatar Studio Drawer (3 Gender Segments + 13 Styles + 12 Pastel & Vibrant Palettes)
+                    AnimatedVisibility(
+                        visible = isStudioExpanded,
+                        enter = expandVertically(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy)) + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(SplitMateTheme.SurfaceMuted.copy(alpha = 0.65f))
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            // A. Gender Identity 3-Segment Selector
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(
+                                    text = "Character Presentation",
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SplitMateTheme.PrimaryDark
+                                )
+                                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                                    AvatarGender.entries.forEachIndexed { index, genderOption ->
+                                        val isGenderSelected = selectedGender == genderOption
+                                        SegmentedButton(
+                                            selected = isGenderSelected,
+                                            onClick = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                hasUserManuallySelectedGender = true
+                                                selectedGenderId = genderOption.id
+                                            },
+                                            shape = SegmentedButtonDefaults.itemShape(
+                                                index = index,
+                                                count = AvatarGender.entries.size
+                                            ),
+                                            colors = SegmentedButtonDefaults.colors(
+                                                activeContainerColor = Color(0xFF365314),
+                                                activeContentColor = Color(0xFFFAF6F0),
+                                                inactiveContainerColor = SplitMateTheme.SurfaceWhite,
+                                                inactiveContentColor = SplitMateTheme.PrimaryDark
+                                            )
+                                        ) {
+                                            Text(
+                                                text = genderOption.label,
+                                                fontFamily = SplitMateTheme.FontRounded,
+                                                fontSize = 12.sp,
+                                                fontWeight = if (isGenderSelected) FontWeight.ExtraBold else FontWeight.SemiBold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // B. 13 Curated DiceBear 9.x Character Art Styles (Static Preview Seeds -> Zero Network Thrashing)
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(
+                                    text = "Character Art Style (13 Curated)",
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SplitMateTheme.PrimaryDark
+                                )
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    items(SplitMateDiceBearStyles, key = { it.id }) { styleSpec ->
+                                        val isSelected = selectedAvatarStyleId == styleSpec.id
+                                        val staticChipSeed = "StylePreview_${styleSpec.id}|${selectedGender.id}|${styleSpec.id}|$selectedColorPresetId"
+                                        Surface(
+                                            onClick = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                selectedAvatarStyleId = styleSpec.id
+                                            },
+                                            shape = SplitMateTheme.RadiusBadge,
+                                            color = if (isSelected) Color(0xFF365314) else SplitMateTheme.SurfaceWhite,
+                                            border = BorderStroke(
+                                                width = if (isSelected) 1.5.dp else 1.dp,
+                                                color = if (isSelected) Color(0xFF416913) else SplitMateTheme.BorderLight
+                                            )
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                SplitMateCharacterAvatar(
+                                                    name = staticChipSeed,
+                                                    phone = "",
+                                                    size = 28.dp,
+                                                    styleId = styleSpec.id,
+                                                    colorPresetId = selectedColorPresetId,
+                                                    gender = selectedGender,
+                                                    highlighted = isSelected
+                                                )
+                                                Column {
+                                                    Text(
+                                                        text = styleSpec.label,
+                                                        fontFamily = SplitMateTheme.FontRounded,
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        color = if (isSelected) Color(0xFFFAF6F0) else SplitMateTheme.PrimaryDark
+                                                    )
+                                                    Text(
+                                                        text = styleSpec.subtitle,
+                                                        fontFamily = SplitMateTheme.FontRounded,
+                                                        fontSize = 10.sp,
+                                                        color = if (isSelected) Color(0xFFD7E8B6) else SplitMateTheme.TextSecondary
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // C. 12 Curated Backdrop Color Palettes (Two-Tone Swatch Circles)
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(
+                                    text = "Backdrop Palette (12 Pastel & Expressive)",
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SplitMateTheme.PrimaryDark
+                                )
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    items(SplitMateAvatarColorPresets, key = { it.id }) { preset ->
+                                        val isSelected = selectedColorPresetId == preset.id
+                                        Surface(
+                                            onClick = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                selectedColorPresetId = preset.id
+                                            },
+                                            shape = SplitMateTheme.RadiusBadge,
+                                            color = if (isSelected) preset.primaryBgColor else SplitMateTheme.SurfaceWhite,
+                                            border = BorderStroke(
+                                                width = if (isSelected) 2.dp else 1.dp,
+                                                color = if (isSelected) preset.accentRingColor else SplitMateTheme.BorderLight
+                                            )
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(16.dp)
+                                                        .clip(CircleShape)
+                                                        .background(
+                                                            Brush.linearGradient(
+                                                                colors = listOf(preset.primaryBgColor, preset.secondarySwatchColor)
+                                                            )
+                                                        )
+                                                        .border(1.5.dp, preset.accentRingColor, CircleShape)
+                                                )
+                                                Text(
+                                                    text = preset.label,
+                                                    fontFamily = SplitMateTheme.FontRounded,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                                    color = if (isSelected) Color(0xFF23201E) else SplitMateTheme.PrimaryDark
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = SplitMateTheme.BorderLight)
+
+                    // Form Inputs with BringIntoViewRequester so soft keyboard never occludes active fields
                     OutlinedTextField(
                         value = onboardingName,
                         onValueChange = { onboardingName = it },
@@ -486,7 +827,17 @@ fun SplitMateCloudOtpOnboardingScreen(
                         },
                         singleLine = true,
                         shape = SplitMateTheme.RadiusInput,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .bringIntoViewRequester(nameBringIntoViewRequester)
+                            .onFocusEvent { state ->
+                                if (state.isFocused) {
+                                    coroutineScope.launch {
+                                        delay(120L)
+                                        nameBringIntoViewRequester.bringIntoView()
+                                    }
+                                }
+                            }
                     )
 
                     OutlinedTextField(
@@ -509,316 +860,239 @@ fun SplitMateCloudOtpOnboardingScreen(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                         singleLine = true,
                         shape = SplitMateTheme.RadiusInput,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    OutlinedTextField(
-                        value = onboardingUpi,
-                        onValueChange = { onboardingUpi = it },
-                        label = { Text("UPI ID (Optional - Auto-linked if blank)", fontFamily = SplitMateTheme.FontRounded) },
-                        placeholder = { Text(if (isValidPhone10) "$normalizedPhone10@upi" else "yourname@okaxis") },
-                        leadingIcon = {
-                            Icon(Icons.Rounded.AccountBalanceWallet, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
-                        },
-                        singleLine = true,
-                        shape = SplitMateTheme.RadiusInput,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    // Send 6-Digit OTP Button
-                    FilledTonalButton(
-                        onClick = {
-                            val res = viewModel.requestPhoneOtp(context, onboardingPhone)
-                            if (res != null) {
-                                otpFeedbackMessage = "6-digit OTP generated for +91 ${res.phone10}"
-                            } else {
-                                otpFeedbackMessage = "Please enter a valid 10-digit Indian mobile number (starts with 6-9)."
-                            }
-                        },
-                        enabled = isValidPhone10,
-                        shape = SplitMateTheme.RadiusButton,
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = Color(0xFFD7E8B6),
-                            contentColor = Color(0xFF365314)
-                        ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(46.dp)
+                            .bringIntoViewRequester(phoneBringIntoViewRequester)
+                            .onFocusEvent { state ->
+                                if (state.isFocused) {
+                                    coroutineScope.launch {
+                                        delay(120L)
+                                        phoneBringIntoViewRequester.bringIntoView()
+                                    }
+                                }
+                            }
+                    )
+
+                    // Send 6-Digit OTP + 1-Tap Hardware SIM Verification Row
+                    val canResendNow = remainingResendSec <= 0
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Sms,
-                            contentDescription = null,
-                            tint = Color(0xFF365314),
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = if (uiState.pendingOtpCodeForBanner != null) "Resend 6-Digit OTP" else "Send 6-Digit OTP",
-                            fontFamily = SplitMateTheme.FontRounded,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 14.sp,
-                            color = Color(0xFF365314)
-                        )
+                        FilledTonalButton(
+                            onClick = {
+                                val hasSmsPerm = ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.SEND_SMS
+                                ) == PackageManager.PERMISSION_GRANTED
+                                if (hasSmsPerm) {
+                                    showSmsPermissionRecoveryCard = false
+                                    val res = viewModel.requestPhoneOtp(context, onboardingPhone)
+                                    if (res != null) {
+                                        otpFeedbackMessage = null
+                                    } else {
+                                        otpFeedbackMessage = "Please enter a valid 10-digit Indian mobile number (starts with 6-9)."
+                                    }
+                                } else {
+                                    otpSmsPermissionLauncher.launch(
+                                        arrayOf(
+                                            Manifest.permission.SEND_SMS,
+                                            Manifest.permission.READ_PHONE_NUMBERS
+                                        )
+                                    )
+                                }
+                            },
+                            enabled = isValidPhone10 && canResendNow,
+                            shape = SplitMateTheme.RadiusButton,
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = Color(0xFFD7E8B6),
+                                contentColor = Color(0xFF365314)
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(46.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Sms,
+                                contentDescription = null,
+                                tint = Color(0xFF365314),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = when {
+                                    !canResendNow -> "Resend in ${remainingResendSec}s"
+                                    uiState.isOtpChallengeActive -> "Resend 6-Digit OTP"
+                                    else -> "Send 6-Digit OTP"
+                                },
+                                fontFamily = SplitMateTheme.FontRounded,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 13.5.sp,
+                                color = Color(0xFF365314)
+                            )
+                        }
+
+                        if (isValidPhone10) {
+                            OutlinedButton(
+                                onClick = {
+                                    if (PhoneOtpAuthManager.checkHardwareSimMatchesPhone10(context, onboardingPhone)) {
+                                        showSmsPermissionRecoveryCard = false
+                                        otpFeedbackMessage = "Device SIM verified (+91 $normalizedPhone10). Syncing trips..."
+                                        submitOtpVerification("SIM_VERIFIED")
+                                    } else {
+                                        simVerifyPermissionLauncher.launch(
+                                            arrayOf(
+                                                Manifest.permission.READ_PHONE_NUMBERS,
+                                                Manifest.permission.READ_PHONE_STATE
+                                            )
+                                        )
+                                    }
+                                },
+                                shape = SplitMateTheme.RadiusButton,
+                                border = BorderStroke(1.dp, Color(0xFF416913).copy(alpha = 0.5f)),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                                modifier = Modifier.height(46.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.SimCard,
+                                    contentDescription = null,
+                                    tint = Color(0xFF365314),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Instant SIM",
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 12.5.sp,
+                                    color = Color(0xFF365314)
+                                )
+                            }
+                        }
                     }
 
-                    // 5. In-App Simulated SMS OTP Banner (#D7E8B6 Sage surface, #365314 text) + 1-Tap Auto-Fill OTP
-                    val activeOtpBannerCode = uiState.pendingOtpCodeForBanner
-                    if (!activeOtpBannerCode.isNullOrBlank()) {
+                    // Inline M3 Permission Recovery Card if SEND_SMS / READ_PHONE_NUMBERS was denied
+                    AnimatedVisibility(visible = showSmsPermissionRecoveryCard) {
                         Surface(
-                            shape = SplitMateTheme.RadiusPanel,
-                            color = Color(0xFFD7E8B6),
-                            border = BorderStroke(1.5.dp, Color(0xFF416913)),
+                            shape = RoundedCornerShape(16.dp),
+                            color = SplitMateTheme.TerracottaSurface,
+                            border = BorderStroke(1.dp, Color(0xFFE06B52).copy(alpha = 0.45f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.MarkChatRead,
-                                        contentDescription = null,
-                                        tint = Color(0xFF365314),
-                                        modifier = Modifier.size(20.dp)
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "SMS / SIM Permission Needed",
+                                        fontFamily = SplitMateTheme.FontRounded,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = SplitMateTheme.TerracottaText
                                     )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column {
-                                        Text(
-                                            text = "SMS OTP for +91 ${uiState.pendingOtpPhone10}: $activeOtpBannerCode",
-                                            fontFamily = SplitMateTheme.FontDisplay,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            fontSize = 13.sp,
-                                            color = Color(0xFF365314)
-                                        )
-                                        Text(
-                                            text = "Tap Auto-Fill to verify & restore cloud groups",
-                                            fontFamily = SplitMateTheme.FontRounded,
-                                            fontSize = 11.sp,
-                                            color = Color(0xFF365314).copy(alpha = 0.85f)
-                                        )
-                                    }
+                                    Text(
+                                        text = "Allow SMS or Phone permission in App Settings to receive your 6-digit verification code on this SIM.",
+                                        fontFamily = SplitMateTheme.FontRounded,
+                                        fontSize = 11.sp,
+                                        color = SplitMateTheme.TextSecondary
+                                    )
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Surface(
-                                    onClick = { enteredOtpCode = activeOtpBannerCode },
-                                    shape = SplitMateTheme.RadiusBadge,
-                                    color = Color(0xFF365314)
-                                ) {
-                                    Text(
-                                        text = "Auto-Fill OTP",
-                                        fontFamily = SplitMateTheme.FontRounded,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 11.sp,
-                                        color = Color(0xFFFAF6F0),
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    val discoveredProfile = uiState.discoveredCloudProfile?.takeIf { it.phone10 == normalizedPhone10 }
-                    val hasRemotePin = discoveredProfile?.pinHash?.isNotBlank() == true
-
-                    // 5b. Returning User Fast 4-Digit Recovery PIN Unlock (if cloud profile already has a PIN)
-                    if (isValidPhone10 && hasRemotePin && uiState.pendingOtpCodeForBanner == null && enteredOtpCode.isEmpty()) {
-                        Surface(
-                            shape = SplitMateTheme.RadiusPanel,
-                            color = Color(0xFFF4EFE6),
-                            border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text(
-                                    text = "Welcome back, ${discoveredProfile?.name ?: "Explorer"}! Enter your 4-digit Recovery PIN to restore your cloud ledgers (or tap Send 6-Digit OTP above).",
-                                    fontFamily = SplitMateTheme.FontRounded,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = SplitMateTheme.PrimaryDark
-                                )
-                                OutlinedTextField(
-                                    value = optionalPin4,
-                                    onValueChange = { optionalPin4 = it.filter { ch -> ch.isDigit() }.take(4) },
-                                    label = { Text("4-Digit Recovery PIN", fontFamily = SplitMateTheme.FontRounded) },
-                                    placeholder = { Text("Enter 4-digit PIN") },
-                                    leadingIcon = {
-                                        Icon(Icons.Rounded.Pin, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
-                                    },
-                                    visualTransformation = PasswordVisualTransformation(),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                                    singleLine = true,
-                                    shape = SplitMateTheme.RadiusInput,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                                Button(
+                                TextButton(
                                     onClick = {
-                                        viewModel.verifyPinAndRestoreCloud(
-                                            context = context,
-                                            rawPhone = onboardingPhone,
-                                            enteredPin4 = optionalPin4,
-                                            fallbackUserName = onboardingName,
-                                            fallbackUpiId = onboardingUpi,
-                                            avatarStyleId = selectedAvatarStyleId,
-                                            avatarColorPresetId = selectedColorPresetId
-                                        ) { ok, msg ->
-                                            otpFeedbackMessage = msg
-                                            if (ok) {
-                                                onCompleteToDashboard()
-                                            }
+                                        runCatching {
+                                            val settingsIntent = Intent(
+                                                android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                                Uri.fromParts("package", context.packageName, null)
+                                            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            context.startActivity(settingsIntent)
                                         }
-                                    },
-                                    enabled = optionalPin4.length == 4 && !uiState.isCloudSyncing,
-                                    shape = SplitMateTheme.RadiusButton,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFF365314),
-                                        contentColor = Color(0xFFFAF6F0)
-                                    ),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(48.dp)
+                                    }
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.LockOpen,
-                                        contentDescription = null,
-                                        tint = Color(0xFFFAF6F0),
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = if (uiState.isCloudSyncing) "Restoring Cloud Ledgers..." else "Unlock with 4-Digit PIN & Restore",
+                                        text = "App Settings",
                                         fontFamily = SplitMateTheme.FontRounded,
                                         fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 14.sp,
-                                        color = Color(0xFFFAF6F0)
+                                        fontSize = 12.sp,
+                                        color = SplitMateTheme.TerracottaText
                                     )
                                 }
                             }
                         }
                     }
 
-                    // 6. 6-Digit OTP Input + Optional 4-Digit Recovery PIN
-                    if (uiState.pendingOtpCodeForBanner != null || enteredOtpCode.isNotEmpty()) {
-                        OutlinedTextField(
-                            value = enteredOtpCode,
-                            onValueChange = { enteredOtpCode = it.filter { ch -> ch.isDigit() }.take(6) },
-                            label = { Text("Enter 6-Digit OTP", fontFamily = SplitMateTheme.FontRounded) },
-                            placeholder = { Text("6-digit verification code") },
-                            leadingIcon = {
-                                Icon(Icons.Rounded.LockClock, contentDescription = null, tint = Color(0xFF416913))
-                            },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                            singleLine = true,
-                            shape = SplitMateTheme.RadiusInput,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        OutlinedTextField(
-                            value = optionalPin4,
-                            onValueChange = { optionalPin4 = it.filter { ch -> ch.isDigit() }.take(4) },
-                            label = { Text("Optional 4-Digit Recovery PIN (Protects Cloud Sync)", fontFamily = SplitMateTheme.FontRounded) },
-                            placeholder = { Text("4-digit PIN (optional)") },
-                            leadingIcon = {
-                                Icon(Icons.Rounded.Pin, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
-                            },
-                            visualTransformation = PasswordVisualTransformation(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                            singleLine = true,
-                            shape = SplitMateTheme.RadiusInput,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = if (showForgotPinResetNotice) {
-                                    "Enter a new 4-digit PIN above — verifying OTP will reset your PIN."
-                                } else {
-                                    "Forgot PIN? Re-verify with OTP to overwrite PIN"
-                                },
-                                fontFamily = SplitMateTheme.FontRounded,
-                                fontSize = 11.sp,
-                                color = SplitMateTheme.TextSecondary,
-                                modifier = Modifier.weight(1f)
-                            )
-                            TextButton(
-                                onClick = {
-                                    showForgotPinResetNotice = true
-                                    if (uiState.isPhoneVerified && isValidPhone10 && optionalPin4.length == 4) {
-                                        viewModel.resetPinAfterOtpVerified(normalizedPhone10, optionalPin4)
-                                        otpFeedbackMessage = "Recovery PIN updated for +91 $normalizedPhone10"
-                                    }
-                                }
-                            ) {
-                                Text(
-                                    text = "Reset PIN",
-                                    fontFamily = SplitMateTheme.FontRounded,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color(0xFF416913)
-                                )
-                            }
-                        }
-
-                        Button(
-                            onClick = {
-                                val resolvedName = onboardingName.trim().ifBlank {
-                                    discoveredProfile?.name?.takeIf { it.isNotBlank() } ?: "Explorer"
-                                }
-                                val resolvedUpi = onboardingUpi.trim().ifBlank {
-                                    discoveredProfile?.upiVpa?.takeIf { it.isNotBlank() } ?: "$normalizedPhone10@upi"
-                                }
-                                viewModel.verifyPhoneOtpAndSyncCloud(
-                                    context = context,
-                                    rawPhone = onboardingPhone,
-                                    enteredOtp = enteredOtpCode,
-                                    userName = resolvedName,
-                                    upiId = resolvedUpi,
-                                    avatarStyleId = selectedAvatarStyleId,
-                                    avatarColorPresetId = selectedColorPresetId,
-                                    optionalPin4 = optionalPin4
-                                ) { ok, msg ->
-                                    otpFeedbackMessage = msg
-                                    if (ok) {
-                                        onCompleteToDashboard()
-                                    }
-                                }
-                            },
-                            enabled = enteredOtpCode.length == 6 && !uiState.isCloudSyncing,
-                            shape = SplitMateTheme.RadiusButton,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF365314),
-                                contentColor = Color(0xFFFAF6F0)
-                            ),
+                    // 6-Cell Segmented OTP Box Input (Zero on-screen OTP leak, Zero 4-Digit PIN)
+                    if (uiState.isOtpChallengeActive || enteredOtpCode.isNotEmpty()) {
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(54.dp)
+                                .bringIntoViewRequester(otpBringIntoViewRequester),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Rounded.VerifiedUser,
-                                contentDescription = null,
-                                tint = Color(0xFFFAF6F0),
-                                modifier = Modifier.size(18.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.MarkChatRead,
+                                    contentDescription = null,
+                                    tint = Color(0xFF416913),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = uiState.otpDeliveryStatusText.ifBlank {
+                                        "Enter the 6-digit verification code for +91 $normalizedPhone10"
+                                    },
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = SplitMateTheme.TextSecondary
+                                )
+                            }
+
+                            OtpSixDigitSegmentedField(
+                                otpValue = enteredOtpCode,
+                                onOtpChange = { newVal ->
+                                    enteredOtpCode = newVal
+                                    if (newVal.length == 6) {
+                                        submitOtpVerification(newVal)
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = if (uiState.isCloudSyncing) "Syncing Cloud Ledgers..." else "Verify OTP & Sync Cloud",
-                                fontFamily = SplitMateTheme.FontRounded,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 15.sp,
-                                color = Color(0xFFFAF6F0)
-                            )
+
+                            Button(
+                                onClick = { submitOtpVerification(enteredOtpCode) },
+                                enabled = enteredOtpCode.length == 6 && !uiState.isCloudSyncing,
+                                shape = SplitMateTheme.RadiusButton,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF365314),
+                                    contentColor = Color(0xFFFAF6F0)
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(54.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.VerifiedUser,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFAF6F0),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (uiState.isCloudSyncing) "Syncing Shared Trips..." else "Verify & Sync Trips",
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 15.sp,
+                                    color = Color(0xFFFAF6F0)
+                                )
+                            }
                         }
                     }
 
@@ -832,7 +1106,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                                 feedback.contains("Invalid", ignoreCase = true) ||
                                 feedback.contains("Incorrect", ignoreCase = true) ||
                                 feedback.contains("Please", ignoreCase = true) ||
-                                feedback.contains("No 4-digit", ignoreCase = true)
+                                feedback.contains("expired", ignoreCase = true)
                             ) {
                                 Color(0xFFE06B52)
                             } else {
@@ -847,7 +1121,13 @@ fun SplitMateCloudOtpOnboardingScreen(
             OutlinedButton(
                 onClick = {
                     val resolvedName = onboardingName.trim().ifBlank { "Explorer" }
-                    val styledSeed = "$resolvedName|$selectedAvatarStyleId|$selectedColorPresetId"
+                    val finalSeedKey = customSeedKey.ifBlank { resolvedName }
+                    val styledSeed = AvatarSeedCodec.encode(
+                        seedKey = finalSeedKey,
+                        gender = selectedGender,
+                        styleId = selectedAvatarStyleId,
+                        colorPresetId = selectedColorPresetId
+                    )
                     viewModel.completeOnboarding(
                         name = resolvedName,
                         countryName = "India",
@@ -881,6 +1161,88 @@ fun SplitMateCloudOtpOnboardingScreen(
             }
         }
     }
+}
+
+/**
+ * M3 Expressive 6-Cell Segmented OTP Input (`48.dp × 54.dp` tactile cells, `14.dp` radius)
+ * with clipboard paste support, backspace cell navigation, and tabular numerals (`tnum`).
+ */
+@Composable
+fun OtpSixDigitSegmentedField(
+    otpValue: String,
+    onOtpChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val focusRequester = remember { FocusRequester() }
+    val sanitized = otpValue.filter { it.isDigit() }.take(6)
+
+    BasicTextField(
+        value = sanitized,
+        onValueChange = { rawInput ->
+            val digitsOnly = rawInput.filter { it.isDigit() }.take(6)
+            onOtpChange(digitsOnly)
+        },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+        singleLine = true,
+        modifier = modifier
+            .focusRequester(focusRequester)
+            .testTag("OtpSixDigitSegmentedField"),
+        decorationBox = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                for (index in 0 until 6) {
+                    val charStr = sanitized.getOrNull(index)?.toString().orEmpty()
+                    val isFilled = charStr.isNotEmpty()
+                    val isCurrentActiveCell = sanitized.length == index || (sanitized.length == 6 && index == 5)
+                    
+                    val scale by animateFloatAsState(
+                        targetValue = if (isCurrentActiveCell) 1.04f else 1.0f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessLow
+                        ),
+                        label = "OtpCellScale"
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (isFilled) {
+                            Color(0xFFD7E8B6).copy(alpha = if (SplitMateTheme.isDark) 0.22f else 0.45f)
+                        } else {
+                            SplitMateTheme.SurfaceMuted
+                        },
+                        border = BorderStroke(
+                            width = if (isCurrentActiveCell) 2.dp else 1.dp,
+                            color = when {
+                                isCurrentActiveCell -> Color(0xFF416913)
+                                isFilled -> Color(0xFF416913).copy(alpha = 0.6f)
+                                else -> SplitMateTheme.BorderLight
+                            }
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .widthIn(min = 44.dp, max = 52.dp)
+                            .height(54.dp)
+                            .scale(scale)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = charStr,
+                                fontFamily = SplitMateTheme.FontDisplay,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 20.sp,
+                                color = SplitMateTheme.PrimaryDark,
+                                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    )
 }
 
 @Composable
@@ -1297,6 +1659,8 @@ fun SplitMateMainDashboardScaffold(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .consumeWindowInsets(innerPadding)
+                .imePadding()
         ) {
             if (isMediumOrExpandedWindow && currentTab != SplitMateTab.SPLIT) {
                 NavigationRail(
@@ -2063,13 +2427,24 @@ fun LedgersDashboardScreen(
                             )
                             val firstEditable = groupMembers.firstOrNull { !it.isCurrentUser }
                             if (firstEditable != null) {
-                                Text(
-                                    text = "Manage All →",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = SplitMateTheme.SageText,
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp),
                                     modifier = Modifier.clickable { editingFriend = firstEditable }
-                                )
+                                ) {
+                                    Text(
+                                        text = "Manage All",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = SplitMateTheme.SageText
+                                    )
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                                        contentDescription = null,
+                                        tint = SplitMateTheme.SageText,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                }
                             }
                         }
                         Spacer(modifier = Modifier.height(8.dp))
@@ -2263,7 +2638,7 @@ fun LedgersDashboardScreen(
                 var rawHorizontalDragPx by remember { mutableFloatStateOf(0f) }
                 val travelPassHaptic = LocalHapticFeedback.current
 
-                // Bidirectional drag progress (0°..175° regardless of whether user swipes ← Left or → Right)
+                // Bidirectional drag progress (0°..175° regardless of whether user swipes <- Left or -> Right)
                 val dragProgressDeg = (kotlin.math.abs(rawHorizontalDragPx) * 0.68f).coerceIn(0f, 175f)
                 val targetFlipDeg = if (isFlightSide) {
                     (180f - dragProgressDeg).coerceIn(0f, 180f)
@@ -2470,11 +2845,17 @@ fun LedgersDashboardScreen(
                                                         modifier = Modifier.size(13.dp)
                                                     )
                                                     Text(
-                                                        text = "PNR ${ticket.pnr} (${ticket.fromStation.ifBlank { "ORG" }}→${ticket.toStation.ifBlank { "DST" }} · $formattedFare) ↗",
+                                                        text = "PNR ${ticket.pnr} (${ticket.fromStation.ifBlank { "ORG" }} - ${ticket.toStation.ifBlank { "DST" }} · $formattedFare)",
                                                         fontFamily = SplitMateTheme.FontRounded,
                                                         fontWeight = FontWeight.Bold,
                                                         fontSize = 11.sp,
                                                         color = SplitMateTheme.PrimaryDark
+                                                    )
+                                                    Icon(
+                                                        imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
+                                                        contentDescription = null,
+                                                        tint = SplitMateTheme.SageText,
+                                                        modifier = Modifier.size(12.dp)
                                                     )
                                                 }
                                             }
@@ -2618,11 +2999,17 @@ fun LedgersDashboardScreen(
                                                         modifier = Modifier.size(13.dp)
                                                     )
                                                     Text(
-                                                        text = "FLIGHT ${ticket.pnr} (${ticket.fromStation.ifBlank { "ORG" }}→${ticket.toStation.ifBlank { "DST" }} · $formattedFare) ↗",
+                                                        text = "FLIGHT ${ticket.pnr} (${ticket.fromStation.ifBlank { "ORG" }} - ${ticket.toStation.ifBlank { "DST" }} · $formattedFare)",
                                                         fontFamily = SplitMateTheme.FontRounded,
                                                         fontWeight = FontWeight.Bold,
                                                         fontSize = 11.sp,
                                                         color = if (SplitMateTheme.isDark) Color(0xFFE6EAFF) else Color(0xFF1F1C4D)
+                                                    )
+                                                    Icon(
+                                                        imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
+                                                        contentDescription = null,
+                                                        tint = if (SplitMateTheme.isDark) Color(0xFFA5B4FC) else Color(0xFF3730A3),
+                                                        modifier = Modifier.size(12.dp)
                                                     )
                                                 }
                                             }
@@ -2758,16 +3145,28 @@ fun LedgersDashboardScreen(
                                         style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
                                         color = if (isMePayer) SplitMateTheme.SageText else SplitMateTheme.TerracottaText
                                     )
-                                    Text(
-                                        text = if (isExpanded) "Hide split ▲" else "View split ▼",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isFlightCard) {
-                                            if (SplitMateTheme.isDark) Color(0xFFA5B4FC) else Color(0xFF3730A3)
-                                        } else {
-                                            SplitMateTheme.SageText
-                                        }
-                                    )
+                                    val splitToggleTint = if (isFlightCard) {
+                                        if (SplitMateTheme.isDark) Color(0xFFA5B4FC) else Color(0xFF3730A3)
+                                    } else {
+                                        SplitMateTheme.SageText
+                                    }
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        Text(
+                                            text = if (isExpanded) "Hide split" else "View split",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = splitToggleTint
+                                        )
+                                        Icon(
+                                            imageVector = if (isExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                                            contentDescription = null,
+                                            tint = splitToggleTint,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
                                 }
                             }
 
@@ -2867,7 +3266,7 @@ fun LedgersDashboardScreen(
                                         text = when {
                                             isFlightCard -> "Flight Pass"
                                             parsedTicketInGroup != null -> "Train Pass"
-                                            else -> "Shared Ledger Entry"
+                                            else -> "Shared Expense"
                                         },
                                         fontFamily = SplitMateTheme.FontRounded,
                                         fontSize = 11.sp,
@@ -2964,7 +3363,6 @@ fun LedgersDashboardScreen(
     }
     var upgradePhoneInput by rememberSaveable(uiState.userPhone) { mutableStateOf(uiState.userPhone) }
     var upgradeOtpInput by rememberSaveable { mutableStateOf("") }
-    var upgradeOptionalPin4 by rememberSaveable { mutableStateOf("") }
     var showUpgradeOtpExpanded by rememberSaveable { mutableStateOf(false) }
     var upgradeFeedbackMsg by remember { mutableStateOf<String?>(null) }
     var isDeclinedDrawerExpanded by rememberSaveable { mutableStateOf(false) }
@@ -3096,7 +3494,7 @@ fun LedgersDashboardScreen(
                             .clickable(onClick = onAvatarSettingsClick)
                     ) {
                         SplitMateCharacterAvatar(
-                            name = uiState.currentUserName.ifBlank { "You" },
+                            name = uiState.avatarSeed.ifBlank { uiState.currentUserName.ifBlank { "You" } },
                             phone = uiState.userPhone,
                             size = 38.dp,
                             styleId = uiState.avatarStyleId,
@@ -3190,7 +3588,7 @@ fun LedgersDashboardScreen(
                             }
                         }
 
-                        if (showUpgradeOtpExpanded || uiState.pendingOtpCodeForBanner != null) {
+                        if (showUpgradeOtpExpanded || uiState.isOtpChallengeActive) {
                             OutlinedTextField(
                                 value = upgradePhoneInput,
                                 onValueChange = { upgradePhoneInput = it },
@@ -3222,80 +3620,40 @@ fun LedgersDashboardScreen(
                                 Text("Send 6-Digit OTP", fontWeight = FontWeight.ExtraBold)
                             }
 
-                            val bannerCode = uiState.pendingOtpCodeForBanner
-                            if (!bannerCode.isNullOrBlank()) {
-                                Surface(
-                                    shape = SplitMateTheme.RadiusPanel,
-                                    color = Color(0xFFD7E8B6),
-                                    border = BorderStroke(1.dp, Color(0xFF416913)),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = "SMS OTP for +91 ${uiState.pendingOtpPhone10}: $bannerCode",
-                                            fontFamily = SplitMateTheme.FontDisplay,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            fontSize = 12.sp,
-                                            color = Color(0xFF365314),
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        Surface(
-                                            onClick = { upgradeOtpInput = bannerCode },
-                                            shape = SplitMateTheme.RadiusBadge,
-                                            color = Color(0xFF365314)
-                                        ) {
-                                            Text(
-                                                text = "Auto-Fill OTP",
-                                                fontFamily = SplitMateTheme.FontRounded,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                fontSize = 11.sp,
-                                                color = Color(0xFFFAF6F0),
-                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                            )
-                                        }
-                                    }
-                                }
+                            if (uiState.otpDeliveryStatusText.isNotBlank()) {
+                                Text(
+                                    text = uiState.otpDeliveryStatusText,
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = SplitMateTheme.TextSecondary
+                                )
                             }
 
-                            OutlinedTextField(
-                                value = upgradeOtpInput,
-                                onValueChange = { upgradeOtpInput = it.filter { ch -> ch.isDigit() }.take(6) },
-                                label = { Text("6-Digit OTP") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                                singleLine = true,
-                                shape = SplitMateTheme.RadiusInput,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            OutlinedTextField(
-                                value = upgradeOptionalPin4,
-                                onValueChange = { upgradeOptionalPin4 = it.filter { ch -> ch.isDigit() }.take(4) },
-                                label = { Text("Optional 4-Digit Recovery PIN (Protects Cloud Sync)") },
-                                visualTransformation = PasswordVisualTransformation(),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                                singleLine = true,
-                                shape = SplitMateTheme.RadiusInput,
+                            OtpSixDigitSegmentedField(
+                                otpValue = upgradeOtpInput,
+                                onOtpChange = { upgradeOtpInput = it },
                                 modifier = Modifier.fillMaxWidth()
                             )
 
                             Button(
                                 onClick = {
                                     val clean10 = PhoneIdentityValidator.normalizeIndianPhone10(upgradePhoneInput)
+                                    val parsedDescriptor = AvatarSeedCodec.parse(
+                                        rawSeed = uiState.avatarSeed.ifBlank { uiState.currentUserName },
+                                        fallbackStyleId = uiState.avatarStyleId,
+                                        fallbackColorPresetId = uiState.avatarColorPresetId
+                                    )
                                     viewModel.verifyPhoneOtpAndSyncCloud(
                                         context = context,
                                         rawPhone = upgradePhoneInput,
                                         enteredOtp = upgradeOtpInput,
                                         userName = uiState.currentUserName.ifBlank { "Akshay" },
                                         upiId = uiState.userUpiId.ifBlank { "$clean10@upi" },
-                                        avatarStyleId = uiState.avatarStyleId,
-                                        avatarColorPresetId = uiState.avatarColorPresetId,
-                                        optionalPin4 = upgradeOptionalPin4
+                                        avatarStyleId = parsedDescriptor.styleId,
+                                        avatarColorPresetId = parsedDescriptor.colorPresetId,
+                                        avatarGender = parsedDescriptor.gender.id,
+                                        customSeedKey = parsedDescriptor.seedKey
                                     ) { ok, msg ->
                                         upgradeFeedbackMsg = msg
                                         if (ok) {
@@ -3313,7 +3671,10 @@ fun LedgersDashboardScreen(
                             ) {
                                 Icon(Icons.Rounded.CloudDone, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Verify OTP & Sync Cloud", fontWeight = FontWeight.ExtraBold)
+                                Text(
+                                    text = if (uiState.isCloudSyncing) "Syncing Shared Trips..." else "Verify & Sync Trips",
+                                    fontWeight = FontWeight.ExtraBold
+                                )
                             }
 
                             upgradeFeedbackMsg?.let { msg ->
@@ -3508,7 +3869,14 @@ fun LedgersDashboardScreen(
                                 ) {
                                     Icon(Icons.Rounded.TaskAlt, contentDescription = null, tint = SplitMateTheme.PrimaryDark, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Settle Up →", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.PrimaryDark, fontWeight = FontWeight.Bold)
+                                    Text("Settle Up", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.PrimaryDark, fontWeight = FontWeight.Bold)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                                        contentDescription = null,
+                                        tint = SplitMateTheme.PrimaryDark,
+                                        modifier = Modifier.size(15.dp)
+                                    )
                                 }
                             }
                         }
@@ -3659,7 +4027,7 @@ fun LedgersDashboardScreen(
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "No active trips. Tap + New Group to create your first ledger!",
+                            text = "No active trips yet. Tap + New Group to start splitting!",
                             fontFamily = SplitMateTheme.FontDisplay,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.ExtraBold,
@@ -3669,7 +4037,7 @@ fun LedgersDashboardScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Pick members directly from Android Contacts with automatic UPI routing.",
+                            text = "Add friends from Contacts for 1-tap UPI payments.",
                             fontFamily = SplitMateTheme.FontRounded,
                             fontSize = 12.sp,
                             color = SplitMateTheme.TextSecondary,
@@ -4221,7 +4589,7 @@ fun LedgersDashboardScreen(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "Create Ledger Group",
+                                text = "Create Group",
                                 fontSize = 19.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = SplitMateTheme.PrimaryDark
@@ -4874,7 +5242,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                         color = SplitMateTheme.PrimaryDark
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    // Tiny unobtrusive ⓘ icon next to Settle Up — hides the Max-Heap Graph Inspector until tapped
+                                    // Info icon next to Settle Up — toggles the payment simplification diagram
                                     Surface(
                                         onClick = { showMaxHeapGraphInspector = !showMaxHeapGraphInspector },
                                         shape = RoundedCornerShape(inspectorCornerRadius),
@@ -4931,13 +5299,13 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
                                         Text(
-                                            text = "Raw Pairwise Web ($rawPairwiseIouCount edges)",
+                                            text = "Before: $rawPairwiseIouCount separate payments",
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = SplitMateTheme.TerracottaText
                                         )
                                         Text(
-                                            text = "Max-Heap Minimum Cash Flow ($simplifiedTransferCount)",
+                                            text = "Simplified: $simplifiedTransferCount direct payments",
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = SplitMateTheme.SageText
@@ -6385,13 +6753,24 @@ fun AuditVaultScreen(
                                     style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = if (parsedTravelTicket != null) "Boarding Pass ↗" else "Details ›",
-                                    fontFamily = SplitMateTheme.FontRounded,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = SplitMateTheme.TextSecondary
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Text(
+                                        text = if (parsedTravelTicket != null) "Boarding Pass" else "Details",
+                                        fontFamily = SplitMateTheme.FontRounded,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = SplitMateTheme.TextSecondary
+                                    )
+                                    Icon(
+                                        imageVector = if (parsedTravelTicket != null) Icons.AutoMirrored.Rounded.OpenInNew else Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                                        contentDescription = null,
+                                        tint = SplitMateTheme.TextSecondary,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -6492,11 +6871,17 @@ fun AuditVaultScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Open Full Boarding Pass (PNR ${parsedTravelTicket.pnr}) ↗",
+                            text = "Open Full Boarding Pass (PNR ${parsedTravelTicket.pnr})",
                             fontFamily = SplitMateTheme.FontRounded,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 13.sp,
                             style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
+                            contentDescription = null,
+                            modifier = Modifier.size(15.dp)
                         )
                     }
                 }

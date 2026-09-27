@@ -96,12 +96,18 @@ data class SplitMateUiState(
     val pinHash: String = "",
     val avatarStyleId: String = "open-peeps",
     val avatarColorPresetId: String = "Buckwheat",
-    val pendingOtpCodeForBanner: String? = null,
+    val avatarGender: String = "Neutral",
     val pendingOtpPhone10: String = "",
+    val isOtpChallengeActive: Boolean = false,
+    val otpDeliveryStatusText: String = "",
+    val otpResendAvailableAtEpochMs: Long = 0L,
     val isCloudSyncing: Boolean = false,
     val cloudRestoreSummary: com.splitmate.app.data.CloudRestoreSummary? = null,
     val discoveredCloudProfile: com.splitmate.app.data.CloudUserProfileRecord? = null
 ) {
+    val avatarSeed: String
+        get() = currentUserSeed
+
     val pendingInviteGroups: List<ExpenseGroupEntity>
         get() {
             val userPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(userPhone)
@@ -360,17 +366,95 @@ class SplitMateViewModel(
         }
     }
 
+    private data class ParsedAvatarSeedDescriptor(
+        val seedKey: String,
+        val gender: String,
+        val styleId: String,
+        val presetId: String
+    )
+
+    private fun normalizeAvatarGenderToken(raw: String, fallback: String = "Neutral"): String {
+        return when (raw.trim().lowercase(Locale.US)) {
+            "male", "masculine", "m", "man", "boy" -> "Male"
+            "female", "feminine", "f", "woman", "girl" -> "Female"
+            "neutral", "nonbinary", "any", "auto" -> "Neutral"
+            else -> when (fallback.trim().lowercase(Locale.US)) {
+                "male", "masculine" -> "Male"
+                "female", "feminine" -> "Female"
+                else -> "Neutral"
+            }
+        }
+    }
+
+    private fun parseAvatarDescriptorFromSeed(
+        seed: String,
+        defaultSeedKey: String = "Explorer",
+        defaultStyle: String = "open-peeps",
+        defaultPreset: String = "Buckwheat",
+        defaultGender: String = "Neutral"
+    ): ParsedAvatarSeedDescriptor {
+        val tokens = seed.split("|").map { it.trim() }.filter { it.isNotEmpty() }
+        val validStyles = setOf(
+            "open-peeps", "adventurer", "avataaars", "big-ears", "bottts",
+            "dylan", "fun-emoji", "lorelei", "micah", "miniavs",
+            "notionists", "personas", "toon-head"
+        )
+        val validPresets = setOf(
+            "Buckwheat", "PastelWall", "BoldPop", "Electric", "Terracotta", "Periwinkle",
+            "SageForest", "WarmAmber", "CoralPeach", "OceanMint", "BerryPlum",
+            "SlateMist", "RoseQuartz", "MidnightGold",
+            "WarmSand", "SageMeadow", "SunsetClay", "LavenderMist", "OceanBreeze",
+            "GoldenHour", "BerryBlush", "ForestCanopy", "SlateCloud", "CitrusZest",
+            "Rosewater", "CosmicIndigo"
+        )
+        val validGendersLower = setOf("male", "female", "neutral", "masculine", "feminine")
+
+        val resolvedStyle = tokens.firstOrNull { validStyles.contains(it) }
+            ?: defaultStyle.ifBlank { "open-peeps" }
+        val resolvedPreset = tokens.firstOrNull { validPresets.contains(it) }
+            ?: tokens.getOrNull(3)?.takeIf { !validStyles.contains(it) && !validGendersLower.contains(it.lowercase(Locale.US)) }
+            ?: defaultPreset.ifBlank { "Buckwheat" }
+        val resolvedGenderToken = tokens.firstOrNull { validGendersLower.contains(it.lowercase(Locale.US)) }
+            ?: defaultGender
+        val resolvedGender = normalizeAvatarGenderToken(resolvedGenderToken, defaultGender)
+        val candidateSeedKey = tokens.firstOrNull {
+            !validStyles.contains(it) &&
+                !validPresets.contains(it) &&
+                !validGendersLower.contains(it.lowercase(Locale.US))
+        } ?: defaultSeedKey.replace("|", " ").trim().ifBlank { "Explorer" }
+
+        return ParsedAvatarSeedDescriptor(
+            seedKey = candidateSeedKey.replace("|", " ").trim().ifBlank { "Explorer" },
+            gender = resolvedGender,
+            styleId = resolvedStyle,
+            presetId = resolvedPreset
+        )
+    }
+
+    private fun encodeCanonicalAvatarSeed(
+        seedKey: String,
+        gender: String,
+        styleId: String,
+        presetId: String
+    ): String {
+        val cleanKey = seedKey.replace("|", " ").trim().ifEmpty { "Explorer" }
+        val cleanGender = normalizeAvatarGenderToken(gender)
+        val cleanStyle = styleId.replace("|", "").trim().ifEmpty { "open-peeps" }
+        val cleanPreset = presetId.replace("|", "").trim().ifEmpty { "Buckwheat" }
+        return "$cleanKey|$cleanGender|$cleanStyle|$cleanPreset"
+    }
+
     private fun parseAvatarStyleAndPresetFromSeed(
         seed: String,
         defaultStyle: String = "open-peeps",
         defaultPreset: String = "Buckwheat"
     ): Pair<String, String> {
-        val tokens = seed.split("|").map { it.trim() }.filter { it.isNotEmpty() }
-        val validStyles = setOf("open-peeps", "adventurer", "dylan", "micah", "lorelei", "notionists", "toon-head")
-        val validPresets = setOf("Buckwheat", "BoldPop", "Electric", "Terracotta", "Periwinkle")
-        val resolvedStyle = tokens.firstOrNull { validStyles.contains(it) } ?: defaultStyle
-        val resolvedPreset = tokens.firstOrNull { validPresets.contains(it) } ?: defaultPreset
-        return resolvedStyle to resolvedPreset
+        val desc = parseAvatarDescriptorFromSeed(
+            seed = seed,
+            defaultStyle = defaultStyle,
+            defaultPreset = defaultPreset
+        )
+        return desc.styleId to desc.presetId
     }
 
     private fun createCleanProductionInitialState(): SplitMateUiState = SplitMateUiState(
@@ -471,14 +555,21 @@ class SplitMateViewModel(
                 val nextActiveGroup = curr.openedGroupDetailId?.takeIf { id -> initialGroups.any { it.groupId == id } }
                     ?: curr.activeGroupId.takeIf { id -> initialGroups.any { it.groupId == id } }
                     ?: initialGroups.firstOrNull()?.groupId.orEmpty()
-                val (initStyle, initPreset) = if (initialProfile != null) {
-                    parseAvatarStyleAndPresetFromSeed(
-                        initialProfile.avatarSeed,
-                        curr.avatarStyleId,
-                        curr.avatarColorPresetId
+                val initDesc = if (initialProfile != null) {
+                    parseAvatarDescriptorFromSeed(
+                        seed = initialProfile.avatarSeed,
+                        defaultSeedKey = initialProfile.name,
+                        defaultStyle = curr.avatarStyleId,
+                        defaultPreset = curr.avatarColorPresetId,
+                        defaultGender = curr.avatarGender
                     )
                 } else {
-                    curr.avatarStyleId to curr.avatarColorPresetId
+                    ParsedAvatarSeedDescriptor(
+                        seedKey = curr.currentUserName.ifBlank { "Explorer" },
+                        gender = curr.avatarGender,
+                        styleId = curr.avatarStyleId,
+                        presetId = curr.avatarColorPresetId
+                    )
                 }
                 curr.copy(
                     hasRegisteredProfile = initialProfile != null && initialProfile.isPhoneVerified && initialProfile.userPhone.length >= 10,
@@ -490,8 +581,9 @@ class SplitMateViewModel(
                     userPhone = initialProfile?.userPhone ?: curr.userPhone,
                     isPhoneVerified = initialProfile?.isPhoneVerified ?: curr.isPhoneVerified,
                     pinHash = initialProfile?.pinHash ?: curr.pinHash,
-                    avatarStyleId = initStyle,
-                    avatarColorPresetId = initPreset,
+                    avatarStyleId = initDesc.styleId,
+                    avatarColorPresetId = initDesc.presetId,
+                    avatarGender = initDesc.gender,
                     isDarkTheme = initialProfile?.isDarkTheme ?: curr.isDarkTheme,
                     groups = initialGroups,
                     activeGroupId = nextActiveGroup,
@@ -524,10 +616,12 @@ class SplitMateViewModel(
                 roomDao.observeUserProfile().collect { profile ->
                     if (profile != null) {
                         _uiState.update {
-                            val (pStyle, pPreset) = parseAvatarStyleAndPresetFromSeed(
-                                profile.avatarSeed,
-                                it.avatarStyleId,
-                                it.avatarColorPresetId
+                            val pDesc = parseAvatarDescriptorFromSeed(
+                                seed = profile.avatarSeed,
+                                defaultSeedKey = profile.name,
+                                defaultStyle = it.avatarStyleId,
+                                defaultPreset = it.avatarColorPresetId,
+                                defaultGender = it.avatarGender
                             )
                             it.copy(
                                 hasRegisteredProfile = (profile.isPhoneVerified && profile.userPhone.length >= 10) || it.hasRegisteredProfile,
@@ -539,8 +633,9 @@ class SplitMateViewModel(
                                 userPhone = profile.userPhone,
                                 isPhoneVerified = profile.isPhoneVerified,
                                 pinHash = profile.pinHash,
-                                avatarStyleId = pStyle,
-                                avatarColorPresetId = pPreset,
+                                avatarStyleId = pDesc.styleId,
+                                avatarColorPresetId = pDesc.presetId,
+                                avatarGender = pDesc.gender,
                                 isDarkTheme = profile.isDarkTheme
                             )
                         }
@@ -597,12 +692,24 @@ class SplitMateViewModel(
         avatarSeed: String = name,
         userPhone: String = ""
     ) {
-        val cleanName = name.trim().ifEmpty { "Explorer" }
-        val cleanSeed = avatarSeed.trim().ifEmpty { cleanName }
+        val cleanName = name.replace("|", " ").trim().ifEmpty { "Explorer" }
+        val currentState = _uiState.value
+        val parsedAvatar = parseAvatarDescriptorFromSeed(
+            seed = avatarSeed.trim().ifEmpty { cleanName },
+            defaultSeedKey = cleanName,
+            defaultStyle = currentState.avatarStyleId,
+            defaultPreset = currentState.avatarColorPresetId,
+            defaultGender = currentState.avatarGender
+        )
+        val cleanSeed = encodeCanonicalAvatarSeed(
+            seedKey = parsedAvatar.seedKey,
+            gender = parsedAvatar.gender,
+            styleId = parsedAvatar.styleId,
+            presetId = parsedAvatar.presetId
+        )
         val cleanHandle = cleanName.lowercase(Locale.US).replace(Regex("[^a-z0-9]"), "").ifEmpty { "explorer" }
         val defaultUpi = "$cleanHandle@okaxis"
         val cleanPhone = cleanIndianTenDigitPhone(userPhone)
-        val currentState = _uiState.value
         val resolvedUpi = currentState.userUpiId.ifBlank { defaultUpi }
         val profile = UserProfileEntity(
             profileId = "me",
@@ -641,7 +748,7 @@ class SplitMateViewModel(
                                 isCurrentUser = true,
                                 upiId = m.upiId.ifBlank { resolvedUpi },
                                 userPhone = m.userPhone.ifBlank { cleanPhone },
-                                avatarSeed = m.avatarSeed.ifBlank { cleanSeed }
+                                avatarSeed = cleanSeed
                             )
                         } else if (m.isCurrentUser) {
                             m.copy(isCurrentUser = false)
@@ -680,6 +787,9 @@ class SplitMateViewModel(
                 activeCurrencyCode = currencyCode,
                 userUpiId = resolvedUpi,
                 userPhone = cleanPhone,
+                avatarStyleId = parsedAvatar.styleId,
+                avatarColorPresetId = parsedAvatar.presetId,
+                avatarGender = parsedAvatar.gender,
                 members = updatedMembersByGroup,
                 statusBannerMessage = "Welcome $cleanName"
             )
@@ -1106,7 +1216,7 @@ class SplitMateViewModel(
     }
 
     fun updateUserProfile(newName: String, newPhone: String, newSeedOrCurrency: String, newUpiId: String? = null) {
-        val cleanName = newName.trim().ifEmpty { "Akshay" }
+        val cleanName = newName.replace("|", " ").trim().ifEmpty { "Akshay" }
         val cleanPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(newPhone)
         var resolvedSeed = ""
         var resolvedUpi = ""
@@ -1119,24 +1229,43 @@ class SplitMateViewModel(
         var updatedCurrentUserMembers = emptyList<GroupMemberEntity>()
 
         _uiState.update { state ->
-            val styleFromArg = if (newSeedOrCurrency.contains('|')) {
-                newSeedOrCurrency.substringAfter('|', "Masculine")
-            } else {
-                state.currentUserSeed.substringAfter('|', "Masculine")
-            }
-            val (parsedStyle, parsedPreset) = parseAvatarStyleAndPresetFromSeed(
-                newSeedOrCurrency,
-                state.avatarStyleId,
-                state.avatarColorPresetId
+            val currentDesc = parseAvatarDescriptorFromSeed(
+                seed = state.currentUserSeed,
+                defaultSeedKey = state.currentUserName.ifBlank { cleanName },
+                defaultStyle = state.avatarStyleId,
+                defaultPreset = state.avatarColorPresetId,
+                defaultGender = state.avatarGender
             )
-            val updatedSeed = "$cleanName|$styleFromArg"
+            val parsedArg = parseAvatarDescriptorFromSeed(
+                seed = newSeedOrCurrency.ifBlank { state.currentUserSeed },
+                defaultSeedKey = cleanName,
+                defaultStyle = currentDesc.styleId,
+                defaultPreset = currentDesc.presetId,
+                defaultGender = currentDesc.gender
+            )
+            val resolvedSeedKey = if (
+                newSeedOrCurrency.contains('|') &&
+                parsedArg.seedKey.isNotBlank() &&
+                parsedArg.seedKey != state.currentUserName &&
+                parsedArg.seedKey != "INR"
+            ) {
+                parsedArg.seedKey
+            } else {
+                cleanName
+            }
+            val updatedSeed = encodeCanonicalAvatarSeed(
+                seedKey = resolvedSeedKey,
+                gender = parsedArg.gender,
+                styleId = parsedArg.styleId,
+                presetId = parsedArg.presetId
+            )
             val finalUpi = newUpiId?.trim() ?: state.userUpiId
             resolvedSeed = updatedSeed
             resolvedUpi = finalUpi
             resolvedDark = state.isDarkTheme
             resolvedCountry = state.currentUserCountry
-            resolvedStyleId = parsedStyle
-            resolvedPresetId = parsedPreset
+            resolvedStyleId = parsedArg.styleId
+            resolvedPresetId = parsedArg.presetId
             resolvedIsPhoneVerified = state.isPhoneVerified
             resolvedPinHash = state.pinHash
 
@@ -1158,8 +1287,9 @@ class SplitMateViewModel(
                 currentUserSeed = updatedSeed,
                 userUpiId = finalUpi,
                 userPhone = cleanPhone,
-                avatarStyleId = parsedStyle,
-                avatarColorPresetId = parsedPreset,
+                avatarStyleId = parsedArg.styleId,
+                avatarColorPresetId = parsedArg.presetId,
+                avatarGender = parsedArg.gender,
                 activeCurrencyCode = "INR",
                 members = updatedMembers,
                 statusBannerMessage = "Saved profile & payment preferences"
@@ -1220,10 +1350,21 @@ class SplitMateViewModel(
             val nextActiveGroup = curr.openedGroupDetailId?.takeIf { id -> allGroups.any { it.groupId == id } }
                 ?: curr.activeGroupId.takeIf { id -> allGroups.any { it.groupId == id } }
                 ?: allGroups.firstOrNull()?.groupId.orEmpty()
-            val (pStyle, pPreset) = if (profile != null) {
-                parseAvatarStyleAndPresetFromSeed(profile.avatarSeed, curr.avatarStyleId, curr.avatarColorPresetId)
+            val pDesc = if (profile != null) {
+                parseAvatarDescriptorFromSeed(
+                    seed = profile.avatarSeed,
+                    defaultSeedKey = profile.name,
+                    defaultStyle = curr.avatarStyleId,
+                    defaultPreset = curr.avatarColorPresetId,
+                    defaultGender = curr.avatarGender
+                )
             } else {
-                curr.avatarStyleId to curr.avatarColorPresetId
+                ParsedAvatarSeedDescriptor(
+                    seedKey = curr.currentUserName.ifBlank { "Explorer" },
+                    gender = curr.avatarGender,
+                    styleId = curr.avatarStyleId,
+                    presetId = curr.avatarColorPresetId
+                )
             }
             curr.copy(
                 hasRegisteredProfile = (profile != null && profile.isPhoneVerified && profile.userPhone.length >= 10) || curr.hasRegisteredProfile,
@@ -1233,8 +1374,9 @@ class SplitMateViewModel(
                 userPhone = profile?.userPhone ?: curr.userPhone,
                 isPhoneVerified = profile?.isPhoneVerified ?: curr.isPhoneVerified,
                 pinHash = profile?.pinHash ?: curr.pinHash,
-                avatarStyleId = pStyle,
-                avatarColorPresetId = pPreset,
+                avatarStyleId = pDesc.styleId,
+                avatarColorPresetId = pDesc.presetId,
+                avatarGender = pDesc.gender,
                 groups = allGroups,
                 activeGroupId = nextActiveGroup,
                 members = allMembers,
@@ -1273,13 +1415,22 @@ class SplitMateViewModel(
         context: android.content.Context?,
         rawPhone: String
     ): com.splitmate.app.data.OtpDispatchResult? {
-        val res = com.splitmate.app.data.PhoneOtpAuthManager.sendOtp(context, rawPhone)
+        val res = com.splitmate.app.data.PhoneOtpAuthManager.sendOtp(context, rawPhone) { deliveryMsg ->
+            _uiState.update {
+                it.copy(
+                    otpDeliveryStatusText = deliveryMsg,
+                    statusBannerMessage = deliveryMsg
+                )
+            }
+        }
         if (res != null) {
             _uiState.update {
                 it.copy(
-                    pendingOtpCodeForBanner = res.generatedOtpCode,
                     pendingOtpPhone10 = res.phone10,
-                    statusBannerMessage = "6-digit OTP sent to +91 ${res.phone10}"
+                    isOtpChallengeActive = true,
+                    otpDeliveryStatusText = res.statusMessage,
+                    otpResendAvailableAtEpochMs = res.resendAvailableAtEpochMs,
+                    statusBannerMessage = res.statusMessage
                 )
             }
             lookupCloudProfileForPhone(res.phone10)
@@ -1342,16 +1493,29 @@ class SplitMateViewModel(
                 return@launch
             }
 
-            val resolvedName = remoteProfile?.name?.takeIf { it.isNotBlank() && it != "Explorer" }
+            val resolvedName = (remoteProfile?.name?.takeIf { it.isNotBlank() && it != "Explorer" }
                 ?: fallbackUserName.trim().takeIf { it.isNotBlank() }
                 ?: localProfile?.name?.takeIf { it.isNotBlank() }
-                ?: "Explorer"
+                ?: "Explorer").replace("|", " ").trim()
             val resolvedStyle = remoteProfile?.avatarStyle?.takeIf { it.isNotBlank() } ?: avatarStyleId
             val resolvedPreset = remoteProfile?.avatarColorPreset?.takeIf { it.isNotBlank() } ?: avatarColorPresetId
+            val parsedRemoteAvatar = parseAvatarDescriptorFromSeed(
+                seed = remoteProfile?.avatarSeed?.takeIf { it.isNotBlank() }
+                    ?: localProfile?.avatarSeed.orEmpty(),
+                defaultSeedKey = resolvedName,
+                defaultStyle = resolvedStyle,
+                defaultPreset = resolvedPreset,
+                defaultGender = _uiState.value.avatarGender
+            )
             val resolvedUpi = remoteProfile?.upiVpa?.takeIf { it.isNotBlank() }
                 ?: fallbackUpiId.trim().takeIf { it.isNotBlank() }
                 ?: "$phone10@upi"
-            val updatedSeed = "$resolvedName|Neutral|$resolvedStyle|$resolvedPreset"
+            val updatedSeed = encodeCanonicalAvatarSeed(
+                seedKey = parsedRemoteAvatar.seedKey.ifBlank { resolvedName },
+                gender = parsedRemoteAvatar.gender,
+                styleId = parsedRemoteAvatar.styleId,
+                presetId = parsedRemoteAvatar.presetId
+            )
 
             val d = dao
             if (d != null) {
@@ -1375,6 +1539,16 @@ class SplitMateViewModel(
                     dao = d,
                     phone10 = phone10
                 )
+                val postSyncMembersToUpdate = d.getAllGroups().flatMap { g ->
+                    d.getMembersForGroup(g.groupId).mapNotNull { m ->
+                        if (m.isCurrentUser || com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(m.userPhone) == phone10) {
+                            m.copy(name = resolvedName, avatarSeed = updatedSeed, upiId = resolvedUpi, userPhone = phone10, isCurrentUser = true)
+                        } else null
+                    }
+                }
+                if (postSyncMembersToUpdate.isNotEmpty()) {
+                    d.insertMembers(postSyncMembersToUpdate)
+                }
                 refreshStateFromDaoSnapshot(
                     d = d,
                     summary = summary,
@@ -1390,8 +1564,9 @@ class SplitMateViewModel(
                         userPhone = phone10,
                         isPhoneVerified = true,
                         pinHash = expectedPinHash,
-                        avatarStyleId = resolvedStyle,
-                        avatarColorPresetId = resolvedPreset,
+                        avatarStyleId = parsedRemoteAvatar.styleId,
+                        avatarColorPresetId = parsedRemoteAvatar.presetId,
+                        avatarGender = parsedRemoteAvatar.gender,
                         isCloudSyncing = false,
                         statusBannerMessage = "Welcome back $resolvedName (+91 $phone10)"
                     )
@@ -1412,9 +1587,11 @@ class SplitMateViewModel(
         avatarStyleId: String = "open-peeps",
         avatarColorPresetId: String = "Buckwheat",
         optionalPin4: String = "",
+        avatarGender: String = "",
+        customSeedKey: String = "",
         onResult: (Boolean, String) -> Unit = { _, _ -> }
     ) {
-        val verified = com.splitmate.app.data.PhoneOtpAuthManager.verifyOtp(rawPhone, enteredOtp)
+        val verified = com.splitmate.app.data.PhoneOtpAuthManager.verifyOtp(context, rawPhone, enteredOtp)
         if (!verified) {
             val errMsg = "Invalid or expired 6-digit OTP"
             _uiState.update { it.copy(statusBannerMessage = errMsg) }
@@ -1423,12 +1600,16 @@ class SplitMateViewModel(
         }
 
         val phone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(rawPhone)
-        val newPinHash = com.splitmate.app.data.PhoneOtpAuthManager.hashPin(phone10, optionalPin4)
-        val typedName = userName.trim()
+        val newPinHash = if (optionalPin4.trim().length >= 4) {
+            com.splitmate.app.data.PhoneOtpAuthManager.hashPin(phone10, optionalPin4)
+        } else {
+            com.splitmate.app.data.PhoneOtpAuthManager.getOrCreateDeviceOwnershipToken(context, phone10)
+        }
+        val typedName = userName.replace("|", " ").trim()
         val cleanName = typedName.ifEmpty {
             _uiState.value.discoveredCloudProfile?.name?.takeIf { it.isNotBlank() }
                 ?: _uiState.value.currentUserName.ifEmpty { "Explorer" }
-        }
+        }.replace("|", " ").trim()
         val cleanHandle = cleanName.lowercase(Locale.US).replace(Regex("[^a-z0-9]"), "").ifEmpty { "explorer" }
         val cleanUpi = upiId.trim().ifEmpty {
             _uiState.value.discoveredCloudProfile?.upiVpa?.takeIf { it.isNotBlank() }
@@ -1436,7 +1617,17 @@ class SplitMateViewModel(
                     if (phone10.length == 10) "${phone10}@upi" else "${cleanHandle}@okaxis"
                 }
         }
-        val updatedSeed = "$cleanName|Neutral|$avatarStyleId|$avatarColorPresetId"
+        val resolvedGender = normalizeAvatarGenderToken(
+            raw = avatarGender.ifBlank { _uiState.value.avatarGender },
+            fallback = _uiState.value.avatarGender
+        )
+        val resolvedSeedKey = customSeedKey.replace("|", " ").trim().ifEmpty { cleanName }
+        val updatedSeed = encodeCanonicalAvatarSeed(
+            seedKey = resolvedSeedKey,
+            gender = resolvedGender,
+            styleId = avatarStyleId,
+            presetId = avatarColorPresetId
+        )
         var updatedCurrentUserMembers = emptyList<GroupMemberEntity>()
 
         _uiState.update { state ->
@@ -1464,7 +1655,10 @@ class SplitMateViewModel(
                 pinHash = newPinHash.ifEmpty { state.discoveredCloudProfile?.pinHash ?: state.pinHash },
                 avatarStyleId = avatarStyleId,
                 avatarColorPresetId = avatarColorPresetId,
-                pendingOtpCodeForBanner = null,
+                avatarGender = resolvedGender,
+                isOtpChallengeActive = false,
+                otpDeliveryStatusText = "",
+                otpResendAvailableAtEpochMs = 0L,
                 isCloudSyncing = true,
                 members = updatedMembers,
                 statusBannerMessage = "Verified +91 $phone10"
@@ -1497,20 +1691,39 @@ class SplitMateViewModel(
             val remoteProfile = _uiState.value.discoveredCloudProfile?.takeIf { it.phone10 == phone10 }
                 ?: com.splitmate.app.data.CloudGroupSyncRepository.fetchUserProfileFromCloud(phone10)
             val existingProfile = d.getUserProfile()
-            val effectiveName = if (typedName.isNotEmpty() && typedName != "Explorer") {
+            val effectiveName = (if (typedName.isNotEmpty() && typedName != "Explorer") {
                 typedName
             } else {
                 remoteProfile?.name?.takeIf { it.isNotBlank() } ?: cleanName
-            }
+            }).replace("|", " ").trim()
             val effectiveStyle = if (avatarStyleId != "open-peeps" || remoteProfile == null) {
                 avatarStyleId
             } else {
                 remoteProfile.avatarStyle.ifBlank { avatarStyleId }
             }
-            val effectivePreset = if (avatarColorPresetId != "Buckwheat" || remoteProfile == null) {
+            val effectivePreset = if ((avatarColorPresetId != "Buckwheat" && avatarColorPresetId != "PastelWall") || remoteProfile == null) {
                 avatarColorPresetId
             } else {
                 remoteProfile.avatarColorPreset.ifBlank { avatarColorPresetId }
+            }
+            val parsedRemoteAvatar = if (remoteProfile != null && remoteProfile.avatarSeed.isNotBlank()) {
+                parseAvatarDescriptorFromSeed(
+                    seed = remoteProfile.avatarSeed,
+                    defaultSeedKey = effectiveName,
+                    defaultStyle = effectiveStyle,
+                    defaultPreset = effectivePreset,
+                    defaultGender = resolvedGender
+                )
+            } else null
+            val effectiveGender = if (avatarGender.isNotBlank() || parsedRemoteAvatar == null) {
+                resolvedGender
+            } else {
+                parsedRemoteAvatar.gender
+            }
+            val effectiveSeedKey = when {
+                customSeedKey.isNotBlank() -> customSeedKey.replace("|", " ").trim()
+                parsedRemoteAvatar != null && parsedRemoteAvatar.seedKey != remoteProfile?.name -> parsedRemoteAvatar.seedKey
+                else -> effectiveName
             }
             val effectiveUpi = if (upiId.trim().isNotEmpty()) {
                 upiId.trim()
@@ -1518,12 +1731,18 @@ class SplitMateViewModel(
                 remoteProfile?.upiVpa?.takeIf { it.isNotBlank() } ?: cleanUpi
             }
             val effectivePinHash = when {
-                newPinHash.isNotEmpty() -> newPinHash
+                optionalPin4.trim().length >= 4 && newPinHash.isNotEmpty() -> newPinHash
                 !remoteProfile?.pinHash.isNullOrBlank() -> remoteProfile!!.pinHash
                 !existingProfile?.pinHash.isNullOrBlank() -> existingProfile!!.pinHash
+                newPinHash.isNotEmpty() -> newPinHash
                 else -> ""
             }
-            val effectiveSeed = "$effectiveName|Neutral|$effectiveStyle|$effectivePreset"
+            val effectiveSeed = encodeCanonicalAvatarSeed(
+                seedKey = effectiveSeedKey,
+                gender = effectiveGender,
+                styleId = effectiveStyle,
+                presetId = effectivePreset
+            )
 
             val profileEntity = UserProfileEntity(
                 profileId = "me",
@@ -1555,6 +1774,16 @@ class SplitMateViewModel(
                 dao = d,
                 phone10 = phone10
             )
+            val postSyncMembersToUpdate = d.getAllGroups().flatMap { g ->
+                d.getMembersForGroup(g.groupId).mapNotNull { m ->
+                    if (m.isCurrentUser || com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(m.userPhone) == phone10) {
+                        m.copy(name = effectiveName, avatarSeed = effectiveSeed, upiId = effectiveUpi, userPhone = phone10, isCurrentUser = true)
+                    } else null
+                }
+            }
+            if (postSyncMembersToUpdate.isNotEmpty()) {
+                d.insertMembers(postSyncMembersToUpdate)
+            }
             refreshStateFromDaoSnapshot(
                 d = d,
                 summary = summary,

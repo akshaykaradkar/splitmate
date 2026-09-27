@@ -4,14 +4,21 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.provider.ContactsContract
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,10 +30,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import kotlinx.coroutines.launch
 import com.splitmate.app.SplitMateTheme
 import androidx.compose.ui.Alignment
@@ -35,6 +45,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.TextStyle
@@ -46,6 +57,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.splitmate.app.R
+import java.net.URLEncoder
+import java.util.Locale
 
 // ==============================================================================
 // CANONICAL BINDINGS TO THE 4 GOOGLE DESIGN SYSTEMS (`design_systems/`)
@@ -317,97 +330,642 @@ val SplitMateTypography = Typography(
 
 /**
  * Extracts strictly the first 1 or 2 uppercase letters of the person's ACTUAL NAME.
- * Never renders "Masculine", "Feminine", "Neutral", or numeric suffixes.
+ * Never renders "Masculine", "Feminine", "Neutral", "Male", "Female", or numeric suffixes.
  */
 fun extractInitialsFromNameOrSeed(rawNameOrSeed: String): String {
     val basePart = rawNameOrSeed
         .substringBefore("|")
         .substringBefore("_")
         .replace("(You)", "", ignoreCase = true)
-        .replace("Masculine", "", ignoreCase = true)
-        .replace("Feminine", "", ignoreCase = true)
-        .replace("Neutral", "", ignoreCase = true)
+        .replace(Regex("\\b(Masculine|Feminine|Neutral|Male|Female)\\b", RegexOption.IGNORE_CASE), "")
         .trim()
 
     val words = basePart.split(Regex("\\s+")).filter { it.isNotBlank() && it.first().isLetter() }
     return when {
         words.size >= 2 -> "${words[0].first().uppercaseChar()}${words[1].first().uppercaseChar()}"
-        words.size == 1 -> words[0].take(1).uppercase()
+        words.size == 1 -> words[0].take(1).uppercase(Locale.US)
         else -> basePart.firstOrNull { it.isLetter() }?.uppercaseChar()?.toString() ?: "S"
     }
 }
 
-/**
- * Builds a gender-aware DiceBear 9.x `open-peeps` SVG URL.
- */
-fun buildDiceBearOpenPeepsUrl(rawSeed: String, styleOverride: String? = null): String {
-    val parts = rawSeed.split("|")
-    val seedBase = parts.firstOrNull()?.trim()?.ifEmpty { "Explorer" } ?: "Explorer"
-    val style = (styleOverride ?: parts.getOrNull(1)?.trim() ?: "Neutral").lowercase()
-    val headParam = when (style) {
-        "masculine" -> "&head=flatTop,short1,short2,short3,short4,short5,pomp&maskProbability=0"
-        "feminine" -> "&head=long,longBangs,longCurly,bun,bun2,buns,bangs,mediumStraight&facialHairProbability=0&maskProbability=0"
-        else -> "&head=medium1,medium2,medium3,afro,twists,hatBeanie&facialHairProbability=0&maskProbability=0"
-    }
-    return "https://api.dicebear.com/9.x/open-peeps/svg?seed=${Uri.encode(seedBase)}&backgroundColor=d7e8b6,fed8c8,dce3fd$headParam"
-}
-
 // ==============================================================================
-// BLUSH OPEN-PEEPS & DICEBEAR AVATAR SYSTEM
+// BLUSH OPEN-PEEPS GROUP SCENES & OFFICIAL DICEBEAR 9.x AVATAR STUDIO ENGINE
 // ==============================================================================
 
-data class DiceBearStyleSpec(val id: String, val label: String, val subtitle: String)
-
-val SplitMateDiceBearStyles: List<DiceBearStyleSpec> = listOf(
-    DiceBearStyleSpec("open-peeps", "Open Peeps", "Hand-Drawn Ink"),
-    DiceBearStyleSpec("adventurer", "Adventurer", "Travel Crew"),
-    DiceBearStyleSpec("dylan", "Dylan", "Editorial Pop"),
-    DiceBearStyleSpec("micah", "Micah", "Warm Modern"),
-    DiceBearStyleSpec("lorelei", "Lorelei", "Expressive"),
-    DiceBearStyleSpec("notionists", "Notionists", "Minimalist"),
-    DiceBearStyleSpec("toon-head", "Toon Head", "2026 Cartoon")
+data class DiceBearStyleSpec(
+    val id: String,
+    val label: String,
+    val subtitle: String,
+    val creator: String = ""
 )
 
+val SplitMateDiceBearStyles: List<DiceBearStyleSpec> = listOf(
+    DiceBearStyleSpec("open-peeps", "Open Peeps", "Hand-Drawn Ink", "Pablo Stanley"),
+    DiceBearStyleSpec("adventurer", "Adventurer", "Travel Crew", "Lisa Wischofsky"),
+    DiceBearStyleSpec("avataaars", "Avataaars", "Classic Studio", "Pablo Stanley"),
+    DiceBearStyleSpec("big-ears", "Big Ears", "Playful Portrait", "The Visual Team"),
+    DiceBearStyleSpec("big-smile", "Big Smile", "Cheerful Grin", "Ashley Seo"),
+    DiceBearStyleSpec("croodles", "Croodles", "Sketch Doodle", "Vijay Verma"),
+    DiceBearStyleSpec("dylan", "Dylan", "Editorial Pop", "Natalia Spivak"),
+    DiceBearStyleSpec("lorelei", "Lorelei", "Expressive", "Lisa Wischofsky"),
+    DiceBearStyleSpec("micah", "Micah", "Warm Modern", "Micah Lanier"),
+    DiceBearStyleSpec("miniavs", "Miniavs", "Compact Minimal", "Webpixels"),
+    DiceBearStyleSpec("notionists", "Notionists", "Minimalist", "Zoish"),
+    DiceBearStyleSpec("personas", "Personas", "Modern Avatar", "Draftbit"),
+    DiceBearStyleSpec("toon-head", "Toon Head", "2026 Cartoon", "Johan Melin")
+)
+
+val AVATAR_STYLE_CATALOG: List<DiceBearStyleSpec> = SplitMateDiceBearStyles
+val DiceBearStyleCatalog: List<DiceBearStyleSpec> = SplitMateDiceBearStyles
+
 data class AvatarColorPresetSpec(
-    val id: String, 
-    val label: String, 
-    val hexCsv: String, 
-    val primaryBgColor: Color, 
-    val accentRingColor: Color
+    val id: String,
+    val label: String,
+    val hexCsv: String,
+    val primaryBgColor: Color,
+    val accentRingColor: Color,
+    val openPeepsExtras: String = "",
+    val universalExtras: String = "",
+    val secondarySwatchColor: Color = primaryBgColor
 )
 
 val SplitMateAvatarColorPresets: List<AvatarColorPresetSpec> = listOf(
-    AvatarColorPresetSpec("Buckwheat", "Buckwheat", "d7e8b6,fed8c8,dce3fd,f4efe6,fde68a", Color(0xFFD7E8B6), Color(0xFF365314)),
-    AvatarColorPresetSpec("BoldPop", "BoldPop", "ffbe0b,fb5607,ff006e,8338ec,3a86ff", Color(0xFFFFBE0B), Color(0xFF8338EC)),
-    AvatarColorPresetSpec("Electric", "Electric", "00f5d4,00bbf9,fee440,f15bb5,9b5de5", Color(0xFF00F5D4), Color(0xFF9B5DE5)),
-    AvatarColorPresetSpec("Terracotta", "Terracotta", "fed8c8,fce3d7,ee8564,fde68a,f4efe6", Color(0xFFFED8C8), Color(0xFFEE8564)),
-    AvatarColorPresetSpec("Periwinkle", "Periwinkle", "dce3fd,eef2ff,c7d2fe,d7e8b6,f4efe6", Color(0xFFDCE3FD), Color(0xFFC7D2FE))
+    AvatarColorPresetSpec(
+        id = "Bare",
+        label = "Bare",
+        hexCsv = "transparent",
+        primaryBgColor = Color(0xFFFAF6F0),
+        accentRingColor = Color(0xFF365314),
+        openPeepsExtras = "accessoriesProbability=0&maskProbability=0&facialHairProbability=0",
+        universalExtras = "",
+        secondarySwatchColor = Color(0xFFEDE7DF)
+    ),
+    AvatarColorPresetSpec(
+        id = "PastelWall",
+        label = "Pastel Wall",
+        hexCsv = "ffe3ea,e3edff,e2f5e9,fdf1d4,efe6ff",
+        primaryBgColor = Color(0xFFFFE3EA),
+        accentRingColor = Color(0xFF365314),
+        openPeepsExtras = "",
+        universalExtras = "backgroundColor=ffe3ea,e3edff,e2f5e9,fdf1d4,efe6ff",
+        secondarySwatchColor = Color(0xFFE3EDFF)
+    ),
+    AvatarColorPresetSpec(
+        id = "BoldPop",
+        label = "Bold Pop",
+        hexCsv = "ff8fab,ffb703,4cc9a7,4d96ff,b57bff",
+        primaryBgColor = Color(0xFFFF8FAB),
+        accentRingColor = Color(0xFF4D96FF),
+        openPeepsExtras = "",
+        universalExtras = "backgroundColor=ff8fab,ffb703,4cc9a7,4d96ff,b57bff",
+        secondarySwatchColor = Color(0xFFFFB703)
+    ),
+    AvatarColorPresetSpec(
+        id = "Sunrise",
+        label = "Sunrise",
+        hexCsv = "ffd9b0,ffa8bf",
+        primaryBgColor = Color(0xFFFFD9B0),
+        accentRingColor = Color(0xFFE06B52),
+        openPeepsExtras = "",
+        universalExtras = "backgroundColor=ffd9b0,ffa8bf&backgroundType=gradientLinear&backgroundRotation=135",
+        secondarySwatchColor = Color(0xFFFFA8BF)
+    ),
+    AvatarColorPresetSpec(
+        id = "Muted",
+        label = "Muted",
+        hexCsv = "ece7de",
+        primaryBgColor = Color(0xFFECE7DE),
+        accentRingColor = Color(0xFF6B705C),
+        openPeepsExtras = "clothingColor=6b705c,a5a58d,b98b73,7c9082,8e9aaf,9c6b58,8a7f6d&headContrastColor=2c1b18,4a312c,724133,a55728,b58143",
+        universalExtras = "backgroundColor=ece7de",
+        secondarySwatchColor = Color(0xFFA5A58D)
+    ),
+    AvatarColorPresetSpec(
+        id = "Electric",
+        label = "Electric",
+        hexCsv = "101216",
+        primaryBgColor = Color(0xFF101216),
+        accentRingColor = Color(0xFF00E5FF),
+        openPeepsExtras = "clothingColor=ff2e88,00e5ff,ffe600,7cff00,ff6a00,b400ff&headContrastColor=ff2e88,00e5ff,ffe600,7cff00,ff6a00,b400ff",
+        universalExtras = "backgroundColor=101216",
+        secondarySwatchColor = Color(0xFFFF2E88)
+    ),
+    AvatarColorPresetSpec(
+        id = "NightShift",
+        label = "Night Shift",
+        hexCsv = "262b36",
+        primaryBgColor = Color(0xFF262B36),
+        accentRingColor = Color(0xFF78E185),
+        openPeepsExtras = "clothingColor=fdea6b,78e185,9ddadb,ffcf77,e78276&headContrastColor=e8e1e1,ecdcbf,d6b370,f59797,b58143",
+        universalExtras = "backgroundColor=262b36",
+        secondarySwatchColor = Color(0xFFFDEA6B)
+    ),
+    AvatarColorPresetSpec(
+        id = "Sepia",
+        label = "Sepia",
+        hexCsv = "e3d2b4",
+        primaryBgColor = Color(0xFFE3D2B4),
+        accentRingColor = Color(0xFF7A5C43),
+        openPeepsExtras = "skinColor=d8b48c,c19a70,a37e58&headContrastColor=4a3526,5f4531,7a5c43&clothingColor=8a6a48,9c7c58,6f5433",
+        universalExtras = "backgroundColor=e3d2b4",
+        secondarySwatchColor = Color(0xFFC19A70)
+    ),
+    AvatarColorPresetSpec(
+        id = "Greyscale",
+        label = "Greyscale",
+        hexCsv = "ececee",
+        primaryBgColor = Color(0xFFECECEE),
+        accentRingColor = Color(0xFF48484A),
+        openPeepsExtras = "skinColor=dcdcde,b8b8bc,8e8e93&headContrastColor=2c2c2e,48484a,636366&clothingColor=6e6e73,8e8e93,aeaeb2",
+        universalExtras = "backgroundColor=ececee",
+        secondarySwatchColor = Color(0xFF8E8E93)
+    ),
+    AvatarColorPresetSpec(
+        id = "Duotone",
+        label = "Duotone",
+        hexCsv = "dfe3f5",
+        primaryBgColor = Color(0xFFDFE3F5),
+        accentRingColor = Color(0xFF3D4272),
+        openPeepsExtras = "skinColor=9aa2d2&headContrastColor=3d4272&clothingColor=6a71a8",
+        universalExtras = "backgroundColor=dfe3f5",
+        secondarySwatchColor = Color(0xFF6A71A8)
+    ),
+    AvatarColorPresetSpec(
+        id = "FullCast",
+        label = "Full Cast",
+        hexCsv = "faf5ee",
+        primaryBgColor = Color(0xFFFAF5EE),
+        accentRingColor = Color(0xFF365314),
+        openPeepsExtras = "accessoriesProbability=50&maskProbability=0",
+        universalExtras = "backgroundColor=faf5ee",
+        secondarySwatchColor = Color(0xFFD7E8B6)
+    ),
+    AvatarColorPresetSpec(
+        id = "CloseUp",
+        label = "Close Up",
+        hexCsv = "f2ede4",
+        primaryBgColor = Color(0xFFF2EDE4),
+        accentRingColor = Color(0xFF365314),
+        openPeepsExtras = "maskProbability=0",
+        universalExtras = "backgroundColor=f2ede4&scale=120",
+        secondarySwatchColor = Color(0xFFFED8C8)
+    )
 )
 
-fun buildDiceBearAvatarUrl(
-    name: String, 
-    phone: String = "", 
-    styleId: String = "open-peeps", 
-    colorPresetId: String = "Buckwheat", 
-    flip: Boolean = false
-): String {
-    val tokens = name.split("|").map { it.trim() }.filter { it.isNotEmpty() }
-    val validStyleIds = SplitMateDiceBearStyles.map { it.id }.toSet()
-    val validPresetIds = SplitMateAvatarColorPresets.map { it.id }.toSet()
-    val effectiveStyleId = tokens.firstOrNull { validStyleIds.contains(it) } ?: styleId
-    val effectivePresetId = tokens.firstOrNull { validPresetIds.contains(it) } ?: colorPresetId
-    val baseName = tokens.firstOrNull { !validStyleIds.contains(it) && !validPresetIds.contains(it) && it != "Neutral" && it != "Feminine" && it != "Masculine" }
-        ?: name.trim().ifEmpty { "Explorer" }
-    val cleanPhone10 = phone.filter { it.isDigit() }.takeLast(10)
-    val seed = if (cleanPhone10.length == 10) "${baseName}_$cleanPhone10" else baseName
-    val preset = SplitMateAvatarColorPresets.find { it.id == effectivePresetId } ?: SplitMateAvatarColorPresets.first()
-    val flipParam = if (flip) "&flip=true" else ""
-    return "https://api.dicebear.com/9.x/$effectiveStyleId/svg?seed=${Uri.encode(seed)}&backgroundColor=${preset.hexCsv}&backgroundType=gradientLinear&radius=50$flipParam"
+val AVATAR_COLOR_PRESETS: List<AvatarColorPresetSpec> = SplitMateAvatarColorPresets
+
+fun findAvatarColorPreset(
+    idOrLabel: String?,
+    fallbackIdOrLabel: String = "PastelWall"
+): AvatarColorPresetSpec {
+    val defaultPreset = SplitMateAvatarColorPresets.first { it.id == "PastelWall" }
+    val raw = idOrLabel?.trim().orEmpty()
+    if (raw.isEmpty()) {
+        return if (fallbackIdOrLabel != "PastelWall") findAvatarColorPreset(fallbackIdOrLabel, "PastelWall") else defaultPreset
+    }
+    val normalized = raw.replace(" ", "").replace("_", "").lowercase(Locale.US)
+    if (normalized in setOf("buckwheat", "classic", "terracotta", "periwinkle", "terracottasunset", "periwinkledream")) {
+        return defaultPreset
+    }
+    val matched = SplitMateAvatarColorPresets.find {
+        it.id.equals(raw, ignoreCase = true) ||
+            it.label.equals(raw, ignoreCase = true) ||
+            it.id.lowercase(Locale.US) == normalized
+    }
+    return matched ?: if (fallbackIdOrLabel != raw && fallbackIdOrLabel.isNotBlank()) {
+        SplitMateAvatarColorPresets.find {
+            it.id.equals(fallbackIdOrLabel, ignoreCase = true) ||
+                it.label.equals(fallbackIdOrLabel, ignoreCase = true)
+        } ?: defaultPreset
+    } else {
+        defaultPreset
+    }
 }
 
-// Preserve existing fallback and automatically decode composite styleId|colorPresetId seeds
+enum class AvatarGender(val id: String, val label: String) {
+    MALE("Male", "Male"),
+    FEMALE("Female", "Female"),
+    NEUTRAL("Neutral", "Neutral");
+
+    companion object {
+        fun fromId(raw: String?): AvatarGender {
+            return when (raw?.trim()?.lowercase(Locale.US)) {
+                "male", "masculine", "m" -> MALE
+                "female", "feminine", "f" -> FEMALE
+                else -> NEUTRAL
+            }
+        }
+    }
+}
+
+private val KNOWN_MALE_FIRST_NAMES = setOf(
+    "akshay", "rohan", "kabir", "rahul", "aarav", "vikram", "aditya", "arjun", "siddharth",
+    "karan", "amit", "raj", "dev", "sam", "alex", "john", "michael", "david", "aryan",
+    "nikhil", "varun", "manish", "suresh", "ramesh", "ankit", "abhishek", "pranav", "harsh",
+    "yash", "vishal", "kunal", "gaurav", "deepak", "sachin", "virat", "dhruv", "ishaan",
+    "reyansh", "vivaan", "krishna", "sai", "mohammed", "ali", "omar", "james", "robert",
+    "william", "daniel", "matthew", "joseph", "andrew", "ryan", "kevin", "brian", "jason",
+    "liam", "noah", "oliver", "lucas", "ethan", "logan", "jay", "neil", "tarun", "ashish",
+    "mayank", "tushar", "piyush", "naveen", "prashant", "sandeep", "sumit", "vivek", "alok",
+    "anand", "hemant", "kartik", "mohit", "nitin", "pankaj", "rajesh", "ravi", "sanjay",
+    "shashank", "shubham", "sourabh", "uday", "vaibhav", "vinay", "yogesh"
+)
+
+private val KNOWN_FEMALE_FIRST_NAMES = setOf(
+    "priya", "neha", "sneha", "ananya", "gauri", "maya", "pooja", "kavya", "divya",
+    "aishwarya", "riya", "kriti", "shreya", "nisha", "aditi", "sarah", "emma", "jessica",
+    "anya", "diya", "ishita", "meera", "nandini", "pallavi", "radhika", "sakshi", "tanvi",
+    "urvashi", "vidya", "zoya", "simran", "komal", "swati", "anjali", "deepika", "kareena",
+    "alia", "kiara", "shraddha", "kritika", "mansi", "nikita", "payal", "rachna", "richa",
+    "roshni", "sonali", "sunita", "rekha", "sushma", "archana", "bhavna", "chaitra", "damini",
+    "ekta", "fatima", "geeta", "hema", "indira", "janhvi", "kiran", "lakshmi", "madhuri",
+    "namrata", "ojaswi", "parul", "prachi", "preeti", "rani", "rashmi", "rupali", "sana",
+    "shilpa", "smita", "sonam", "supriya", "tara", "trisha", "uma", "vandana", "varsha",
+    "yamini", "olivia", "ava", "sophia", "isabella", "mia", "charlotte", "amelia", "harper",
+    "evelyn", "abigail", "emily", "elizabeth", "sofia", "avery", "ella", "scarlett", "grace",
+    "chloe", "victoria", "riley", "aria", "lily", "hannah", "layla", "zoe", "nora", "stella",
+    "natalie", "lucy", "anna", "samantha", "rachel", "lauren", "ashley", "megan", "amanda",
+    "melissa", "stephanie", "rebecca", "laura", "amy", "claire", "elena", "nina", "vera"
+)
+
+fun inferGenderFromFirstName(rawName: String): AvatarGender? {
+    val firstWord = rawName
+        .substringBefore("|")
+        .substringBefore("_")
+        .trim()
+        .split(Regex("\\s+"))
+        .firstOrNull()
+        ?.filter { it.isLetter() }
+        ?.lowercase(Locale.US)
+        .orEmpty()
+    if (firstWord.isEmpty()) return null
+    return when {
+        firstWord in KNOWN_FEMALE_FIRST_NAMES -> AvatarGender.FEMALE
+        firstWord in KNOWN_MALE_FIRST_NAMES -> AvatarGender.MALE
+        else -> null
+    }
+}
+
+data class ValidatedAvatarDescriptor(
+    val seedKey: String,
+    val gender: AvatarGender,
+    val styleId: String,
+    val colorPresetId: String
+) {
+    fun encode(): String = AvatarSeedCodec.encode(seedKey, gender.id, styleId, colorPresetId)
+}
+
+object AvatarSeedCodec {
+    private val validStyleIdsLower: Map<String, String> =
+        SplitMateDiceBearStyles.associate { it.id.lowercase(Locale.US) to it.id }
+
+    private val genderTokenSet = setOf("male", "female", "neutral", "masculine", "feminine")
+
+    private val presetTokenSet: Set<String> = buildSet {
+        SplitMateAvatarColorPresets.forEach {
+            add(it.id.lowercase(Locale.US))
+            add(it.label.lowercase(Locale.US))
+            add(it.label.replace(" ", "").lowercase(Locale.US))
+        }
+        addAll(listOf("buckwheat", "classic", "terracotta", "periwinkle", "bold_pop", "terracotta_sunset", "periwinkle_dream"))
+    }
+
+    fun sanitizeSeedKey(raw: String): String =
+        raw.replace("|", " ").trim().ifBlank { "Explorer" }
+
+    private fun resolveStyleId(candidate: String?, fallback: String = "open-peeps"): String {
+        val clean = candidate?.trim()?.lowercase(Locale.US).orEmpty()
+        return validStyleIdsLower[clean]
+            ?: validStyleIdsLower[fallback.trim().lowercase(Locale.US)]
+            ?: "open-peeps"
+    }
+
+    private fun isGenderToken(token: String): Boolean =
+        token.trim().lowercase(Locale.US) in genderTokenSet
+
+    private fun isStyleToken(token: String): Boolean =
+        validStyleIdsLower.containsKey(token.trim().lowercase(Locale.US))
+
+    private fun isPresetToken(token: String): Boolean =
+        presetTokenSet.contains(token.trim().lowercase(Locale.US)) ||
+            presetTokenSet.contains(token.trim().replace(" ", "").lowercase(Locale.US))
+
+    fun encode(
+        seedKey: String,
+        gender: String = "Neutral",
+        styleId: String = "open-peeps",
+        colorPresetId: String = "PastelWall"
+    ): String {
+        val cleanSeed = sanitizeSeedKey(seedKey)
+        val cleanGender = AvatarGender.fromId(gender).id
+        val cleanStyle = resolveStyleId(styleId)
+        val cleanPreset = findAvatarColorPreset(colorPresetId).id
+        return "$cleanSeed|$cleanGender|$cleanStyle|$cleanPreset"
+    }
+
+    fun encode(
+        seedKey: String,
+        gender: AvatarGender,
+        styleId: String = "open-peeps",
+        colorPresetId: String = "PastelWall"
+    ): String = encode(seedKey, gender.id, styleId, colorPresetId)
+
+    fun parse(
+        rawSeed: String,
+        fallbackStyleId: String = "open-peeps",
+        fallbackColorPresetId: String = "PastelWall",
+        fallbackGender: String = "Neutral"
+    ): ValidatedAvatarDescriptor {
+        val tokens = rawSeed.split("|").map { it.trim() }.filter { it.isNotEmpty() }
+        val defaultStyle = resolveStyleId(fallbackStyleId)
+        val defaultPreset = findAvatarColorPreset(fallbackColorPresetId).id
+        val defaultGender = AvatarGender.fromId(fallbackGender)
+
+        if (tokens.isEmpty()) {
+            return ValidatedAvatarDescriptor(
+                seedKey = "Explorer",
+                gender = defaultGender,
+                styleId = defaultStyle,
+                colorPresetId = defaultPreset
+            )
+        }
+
+        val seedKey = sanitizeSeedKey(tokens[0])
+        return when {
+            tokens.size >= 4 -> {
+                val g = if (isGenderToken(tokens[1])) AvatarGender.fromId(tokens[1]) else defaultGender
+                val s = resolveStyleId(tokens[2], defaultStyle)
+                val p = findAvatarColorPreset(tokens[3], defaultPreset).id
+                ValidatedAvatarDescriptor(seedKey, g, s, p)
+            }
+            tokens.size == 3 -> {
+                val t1 = tokens[1]
+                val t2 = tokens[2]
+                when {
+                    isGenderToken(t1) && isStyleToken(t2) -> ValidatedAvatarDescriptor(
+                        seedKey = seedKey,
+                        gender = AvatarGender.fromId(t1),
+                        styleId = resolveStyleId(t2, defaultStyle),
+                        colorPresetId = defaultPreset
+                    )
+                    isGenderToken(t1) && isPresetToken(t2) -> ValidatedAvatarDescriptor(
+                        seedKey = seedKey,
+                        gender = AvatarGender.fromId(t1),
+                        styleId = defaultStyle,
+                        colorPresetId = findAvatarColorPreset(t2, defaultPreset).id
+                    )
+                    else -> ValidatedAvatarDescriptor(
+                        seedKey = seedKey,
+                        gender = defaultGender,
+                        styleId = resolveStyleId(t1, defaultStyle),
+                        colorPresetId = findAvatarColorPreset(t2, defaultPreset).id
+                    )
+                }
+            }
+            tokens.size == 2 -> {
+                val t1 = tokens[1]
+                when {
+                    isGenderToken(t1) -> ValidatedAvatarDescriptor(
+                        seedKey = seedKey,
+                        gender = AvatarGender.fromId(t1),
+                        styleId = defaultStyle,
+                        colorPresetId = defaultPreset
+                    )
+                    isStyleToken(t1) -> ValidatedAvatarDescriptor(
+                        seedKey = seedKey,
+                        gender = defaultGender,
+                        styleId = resolveStyleId(t1, defaultStyle),
+                        colorPresetId = defaultPreset
+                    )
+                    isPresetToken(t1) -> ValidatedAvatarDescriptor(
+                        seedKey = seedKey,
+                        gender = defaultGender,
+                        styleId = defaultStyle,
+                        colorPresetId = findAvatarColorPreset(t1, defaultPreset).id
+                    )
+                    else -> ValidatedAvatarDescriptor(
+                        seedKey = seedKey,
+                        gender = defaultGender,
+                        styleId = defaultStyle,
+                        colorPresetId = defaultPreset
+                    )
+                }
+            }
+            else -> ValidatedAvatarDescriptor(
+                seedKey = seedKey,
+                gender = defaultGender,
+                styleId = defaultStyle,
+                colorPresetId = defaultPreset
+            )
+        }
+    }
+
+    fun parse(
+        rawSeed: String,
+        fallbackStyleId: String = "open-peeps",
+        fallbackColorPresetId: String = "PastelWall",
+        fallbackGender: AvatarGender
+    ): ValidatedAvatarDescriptor = parse(rawSeed, fallbackStyleId, fallbackColorPresetId, fallbackGender.id)
+}
+
+fun buildDiceBearAvatarUrl(
+    name: String,
+    phone: String = "",
+    styleId: String = "open-peeps",
+    colorPresetId: String = "PastelWall",
+    flip: Boolean = false,
+    gender: String = ""
+): String {
+    val cleanPhone10 = phone.filter { it.isDigit() }.takeLast(10)
+    val effectiveRawSeed = name.trim().ifEmpty {
+        if (cleanPhone10.length == 10) "Explorer_$cleanPhone10" else "Explorer"
+    }
+    val parsed = AvatarSeedCodec.parse(
+        rawSeed = effectiveRawSeed,
+        fallbackStyleId = styleId,
+        fallbackColorPresetId = colorPresetId,
+        fallbackGender = gender.ifBlank { "Neutral" }
+    )
+    val effectiveGender = if (gender.isNotBlank() && effectiveRawSeed.count { it == '|' } < 3) {
+        AvatarGender.fromId(gender)
+    } else {
+        parsed.gender
+    }
+    val preset = findAvatarColorPreset(parsed.colorPresetId)
+    val encodedSeed = URLEncoder.encode(parsed.seedKey, "UTF-8")
+
+    val queryPairs = linkedMapOf<String, String>()
+    queryPairs["seed"] = encodedSeed
+    queryPairs["radius"] = "50"
+    if (flip) {
+        queryPairs["flip"] = "true"
+    }
+
+    fun appendRawQueryPairs(rawQuery: String) {
+        if (rawQuery.isBlank()) return
+        rawQuery.split("&").forEach { pair ->
+            val key = pair.substringBefore("=").trim()
+            val value = pair.substringAfter("=", "").trim()
+            if (key.isNotEmpty() && value.isNotEmpty()) {
+                queryPairs[key] = value
+            }
+        }
+    }
+
+    // 1. Universal preset query parameters (backgroundColor, backgroundType, backgroundRotation, scale)
+    appendRawQueryPairs(preset.universalExtras)
+
+    // 2. Style-specific preset parameters strictly gated to open-peeps
+    if (parsed.styleId == "open-peeps") {
+        appendRawQueryPairs(preset.openPeepsExtras)
+    }
+
+    // 3. Schema-validated style-specific gender & happy expression parameters
+    when (parsed.styleId) {
+        "open-peeps" -> {
+            queryPairs["face"] = "smile,smileBig,smileLOL,smileTeethGap,lovingGrin1,lovingGrin2,cheeky,cute,calm,eatingHappy"
+            if (!queryPairs.containsKey("maskProbability")) {
+                queryPairs["maskProbability"] = "0"
+            }
+            when (effectiveGender) {
+                AvatarGender.MALE -> {
+                    queryPairs["head"] = "short1,short2,short3,short4,short5,pomp,flatTop,twists,dreads1"
+                }
+                AvatarGender.FEMALE -> {
+                    queryPairs["head"] = "long,longBangs,longCurly,bun,bun2,buns,medium1,medium2,medium3,mediumBangs,mediumBangs2,mediumBangs3,mediumStraight"
+                    queryPairs["facialHairProbability"] = "0"
+                }
+                AvatarGender.NEUTRAL -> {
+                    queryPairs["head"] = "medium1,medium2,medium3,afro,twists,hatBeanie,hatHip,short1,short2,bun,longCurly"
+                    if (!queryPairs.containsKey("facialHairProbability")) {
+                        queryPairs["facialHairProbability"] = "0"
+                    }
+                }
+            }
+        }
+        "adventurer" -> {
+            when (effectiveGender) {
+                AvatarGender.MALE -> {
+                    queryPairs["hair"] = "short01,short02,short03,short04,short05,short06,short07,short08,short09,short10,short11,short12,short13,short14,short15,short16,short17,short18,short19"
+                    queryPairs["earringsProbability"] = "0"
+                }
+                AvatarGender.FEMALE -> {
+                    queryPairs["hair"] = "long01,long02,long03,long04,long05,long06,long07,long08,long09,long10,long11,long12,long13,long14,long15,long16,long17,long18,long19,long20,long21,long22,long23,long24,long25,long26"
+                }
+                AvatarGender.NEUTRAL -> Unit
+            }
+        }
+        "avataaars" -> {
+            when (effectiveGender) {
+                AvatarGender.MALE -> {
+                    queryPairs["top"] = "shortFlat,shortRound,shortWaved,theCaesar,shaggy"
+                }
+                AvatarGender.FEMALE -> {
+                    queryPairs["top"] = "longButNotTooLong,straight01,straight02,curvy,bob,bun,miaWallace"
+                    queryPairs["facialHairProbability"] = "0"
+                }
+                AvatarGender.NEUTRAL -> {
+                    queryPairs["facialHairProbability"] = "0"
+                }
+            }
+        }
+        "personas" -> {
+            when (effectiveGender) {
+                AvatarGender.MALE -> {
+                    queryPairs["hair"] = "shortCombover,fade,buzzcut,curlyHighTop"
+                }
+                AvatarGender.FEMALE -> {
+                    queryPairs["hair"] = "long,extraLong,bobBangs,bobCut,curlyBun,straightBun,pigtails"
+                    queryPairs["facialHairProbability"] = "0"
+                }
+                AvatarGender.NEUTRAL -> {
+                    queryPairs["facialHairProbability"] = "0"
+                }
+            }
+        }
+        "micah" -> {
+            when (effectiveGender) {
+                AvatarGender.MALE -> {
+                    queryPairs["hair"] = "fonze,dannyPhantom,dougFunny,mrT"
+                    queryPairs["earringsProbability"] = "0"
+                }
+                AvatarGender.FEMALE -> {
+                    queryPairs["hair"] = "full,pixie"
+                    queryPairs["facialHairProbability"] = "0"
+                }
+                AvatarGender.NEUTRAL -> {
+                    queryPairs["facialHairProbability"] = "0"
+                }
+            }
+        }
+        "toon-head" -> {
+            when (effectiveGender) {
+                AvatarGender.MALE -> {
+                    queryPairs["hair"] = "spiky,undercut,sideComed"
+                    queryPairs["rearHairProbability"] = "0"
+                }
+                AvatarGender.FEMALE -> {
+                    queryPairs["hair"] = "bun"
+                    queryPairs["rearHairProbability"] = "100"
+                    queryPairs["beardProbability"] = "0"
+                }
+                AvatarGender.NEUTRAL -> {
+                    queryPairs["beardProbability"] = "0"
+                }
+            }
+        }
+        "dylan" -> {
+            if (effectiveGender == AvatarGender.FEMALE) {
+                queryPairs["facialHairProbability"] = "0"
+            }
+        }
+        "lorelei" -> {
+            if (effectiveGender == AvatarGender.FEMALE) {
+                queryPairs["beardProbability"] = "0"
+            } else if (effectiveGender == AvatarGender.MALE) {
+                queryPairs["earringsProbability"] = "0"
+            }
+        }
+        "notionists", "croodles" -> {
+            if (effectiveGender == AvatarGender.FEMALE) {
+                queryPairs["beardProbability"] = "0"
+            }
+        }
+    }
+
+    val queryString = queryPairs.entries.joinToString("&") { "${it.key}=${it.value}" }
+    return "https://api.dicebear.com/9.x/${parsed.styleId}/svg?$queryString"
+}
+
+fun buildDiceBearAvatarUrl(
+    name: String,
+    phone: String = "",
+    styleId: String = "open-peeps",
+    colorPresetId: String = "PastelWall",
+    flip: Boolean = false,
+    gender: AvatarGender
+): String = buildDiceBearAvatarUrl(
+    name = name,
+    phone = phone,
+    styleId = styleId,
+    colorPresetId = colorPresetId,
+    flip = flip,
+    gender = gender.id
+)
+
+/**
+ * Unified DiceBear SVG URL builder that delegates directly to [buildDiceBearAvatarUrl]
+ * so every avatar call site across the app renders the exact same 4-token character SVG.
+ */
+fun buildDiceBearOpenPeepsUrl(rawSeed: String, styleOverride: String? = null): String {
+    return buildDiceBearAvatarUrl(
+        name = rawSeed,
+        gender = styleOverride.orEmpty()
+    )
+}
+
 fun buildOpenPeepsAvatarSvgUrl(seed: String): String {
-    return buildDiceBearAvatarUrl(name = seed, styleId = "open-peeps", colorPresetId = "Buckwheat")
+    return buildDiceBearAvatarUrl(name = seed)
 }
 
 @Composable
@@ -416,17 +974,40 @@ fun SplitMateCharacterAvatar(
     phone: String = "",
     size: androidx.compose.ui.unit.Dp = 48.dp,
     styleId: String = "open-peeps",
-    colorPresetId: String = "Buckwheat",
+    colorPresetId: String = "PastelWall",
     highlighted: Boolean = false,
     flip: Boolean = false,
+    gender: String = "",
     modifier: Modifier = Modifier
 ) {
-    val preset = SplitMateAvatarColorPresets.find { it.id == colorPresetId } ?: SplitMateAvatarColorPresets.first()
-    val url = buildDiceBearAvatarUrl(name, phone, styleId, colorPresetId, flip)
-    
+    val parsed = remember(name, styleId, colorPresetId, gender) {
+        AvatarSeedCodec.parse(
+            rawSeed = name,
+            fallbackStyleId = styleId,
+            fallbackColorPresetId = colorPresetId,
+            fallbackGender = gender.ifBlank { "Neutral" }
+        )
+    }
+    val preset = remember(parsed.colorPresetId) {
+        findAvatarColorPreset(parsed.colorPresetId)
+    }
+    val url = remember(name, phone, styleId, colorPresetId, flip, gender) {
+        buildDiceBearAvatarUrl(
+            name = name,
+            phone = phone,
+            styleId = styleId,
+            colorPresetId = colorPresetId,
+            flip = flip,
+            gender = gender
+        )
+    }
+    val initials = remember(parsed.seedKey) {
+        extractInitialsFromNameOrSeed(parsed.seedKey)
+    }
+
     val ringColor = if (highlighted) preset.accentRingColor else SplitMateTheme.BorderLight
     val ringWidth = if (highlighted) 3.dp else 1.dp
-    
+
     Box(
         modifier = modifier
             .size(size)
@@ -435,218 +1016,253 @@ fun SplitMateCharacterAvatar(
             .border(ringWidth, ringColor, CircleShape),
         contentAlignment = Alignment.Center
     ) {
+        Text(
+            text = initials,
+            fontFamily = FigtreeFontFamily,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = (size.value * 0.34f).sp,
+            color = preset.accentRingColor.copy(alpha = 0.78f)
+        )
         coil.compose.AsyncImage(
             model = coil.request.ImageRequest.Builder(LocalContext.current)
                 .data(url)
                 .decoderFactory(coil.decode.SvgDecoder.Factory())
+                .diskCacheKey("dicebear_avatar_$url")
+                .memoryCacheKey("dicebear_avatar_$url")
+                .diskCachePolicy(coil.request.CachePolicy.ENABLED)
+                .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
                 .crossfade(true)
                 .build(),
-            contentDescription = "Avatar for $name",
-            modifier = Modifier.fillMaxSize()
+            contentDescription = "Avatar for ${parsed.seedKey}",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(CircleShape)
         )
     }
 }
 
 @Composable
-fun OpenPeepsHeroStage(
+fun SplitMateCharacterAvatar(
     name: String,
-    phone: String,
-    selectedStyleId: String,
-    selectedColorPresetId: String,
+    phone: String = "",
+    size: androidx.compose.ui.unit.Dp = 48.dp,
+    styleId: String = "open-peeps",
+    colorPresetId: String = "PastelWall",
+    gender: AvatarGender,
+    highlighted: Boolean = false,
+    flip: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition(label = "hero_breathing")
-    val breatheY1 by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = -8f,
-        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            animation = androidx.compose.animation.core.tween(2000, easing = androidx.compose.animation.core.FastOutSlowInEasing),
-            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
-        ),
-        label = "breathe_1"
+    SplitMateCharacterAvatar(
+        name = name,
+        phone = phone,
+        size = size,
+        styleId = styleId,
+        colorPresetId = colorPresetId,
+        highlighted = highlighted,
+        flip = flip,
+        gender = gender.id,
+        modifier = modifier
     )
-    val breatheY2 by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = -12f,
-        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            animation = androidx.compose.animation.core.tween(2200, easing = androidx.compose.animation.core.FastOutSlowInEasing, delayMillis = 300),
-            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
-        ),
-        label = "breathe_2"
+}
+
+data class OpenPeepsCrewSceneSpec(
+    val id: String,
+    val title: String,
+    val assetPath: String
+)
+
+val SplitMateCrewScenes: List<OpenPeepsCrewSceneSpec> = listOf(
+    OpenPeepsCrewSceneSpec(
+        id = "walk_crew",
+        title = "The Travel Walkers",
+        assetPath = "file:///android_asset/peeps/scenes/scene_walk_crew.svg"
+    ),
+    OpenPeepsCrewSceneSpec(
+        id = "bike_trip",
+        title = "The Bike Trip Crew",
+        assetPath = "file:///android_asset/peeps/scenes/scene_bike_trip.svg"
+    ),
+    OpenPeepsCrewSceneSpec(
+        id = "coffee_hangout",
+        title = "The Coffee & Hoodie Crew",
+        assetPath = "file:///android_asset/peeps/scenes/scene_coffee_hangout.svg"
+    ),
+    OpenPeepsCrewSceneSpec(
+        id = "weekend_squad",
+        title = "The Weekend Hangout",
+        assetPath = "file:///android_asset/peeps/scenes/scene_weekend_squad.svg"
+    ),
+    OpenPeepsCrewSceneSpec(
+        id = "roadtrip_busters",
+        title = "The Roadtrip Squad",
+        assetPath = "file:///android_asset/peeps/scenes/scene_roadtrip_busters.svg"
     )
-    val breatheY3 by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = -10f,
-        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            animation = androidx.compose.animation.core.tween(2400, easing = androidx.compose.animation.core.FastOutSlowInEasing, delayMillis = 600),
-            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+)
+
+@Composable
+fun OpenPeepsHeroStage(
+    @Suppress("UNUSED_PARAMETER") name: String = "",
+    @Suppress("UNUSED_PARAMETER") phone: String = "",
+    @Suppress("UNUSED_PARAMETER") selectedStyleId: String = "open-peeps",
+    @Suppress("UNUSED_PARAMETER") selectedColorPresetId: String = "PastelWall",
+    isCompactMode: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val localView = androidx.compose.ui.platform.LocalView.current
+    var activeSceneIndex by rememberSaveable { mutableIntStateOf(0) }
+    val activeScene = SplitMateCrewScenes[activeSceneIndex.coerceIn(0, SplitMateCrewScenes.lastIndex)]
+
+    val stageHeight by animateDpAsState(
+        targetValue = if (isCompactMode) 84.dp else 184.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium
         ),
-        label = "breathe_3"
+        label = "hero_stage_height"
     )
 
-    Box(
+    val infiniteTransition = rememberInfiniteTransition(label = "hero_scene_breathing")
+    val floatOffsetY by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = -4f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "scene_float_y"
+    )
+
+    Surface(
+        shape = RoundedCornerShape(28.dp),
+        color = Color(0xFFF4EFE6),
+        border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
         modifier = modifier
             .fillMaxWidth()
-            .height(260.dp),
-        contentAlignment = Alignment.BottomCenter
+            .height(stageHeight)
     ) {
-        // Layer 1: Organic Buckwheat radial blob backdrop + floor shadow
-        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-            val w = size.width
-            val h = size.height
-            
-            // Floor shadow ellipse
-            drawOval(
-                color = Color(0xFFEDE7DF),
-                topLeft = androidx.compose.ui.geometry.Offset(w * 0.1f, h * 0.85f),
-                size = androidx.compose.ui.geometry.Size(w * 0.8f, h * 0.15f)
-            )
-
-            // Organic Blobs
-            val pathSage = androidx.compose.ui.graphics.Path().apply {
-                moveTo(w * 0.2f, h * 0.8f)
-                quadraticBezierTo(w * 0.1f, h * 0.4f, w * 0.3f, h * 0.2f)
-                quadraticBezierTo(w * 0.5f, h * 0.1f, w * 0.4f, h * 0.8f)
-                close()
-            }
-            drawPath(pathSage, Color(0xFFD7E8B6).copy(alpha = 0.6f))
-            
-            val pathPeach = androidx.compose.ui.graphics.Path().apply {
-                moveTo(w * 0.5f, h * 0.9f)
-                quadraticBezierTo(w * 0.8f, h * 0.3f, w * 0.7f, h * 0.15f)
-                quadraticBezierTo(w * 0.9f, h * 0.5f, w * 0.8f, h * 0.85f)
-                close()
-            }
-            drawPath(pathPeach, Color(0xFFFED8C8).copy(alpha = 0.6f))
-
-            drawCircle(
-                color = Color(0xFFDCE3FD).copy(alpha = 0.5f),
-                radius = w * 0.15f,
-                center = androidx.compose.ui.geometry.Offset(w * 0.5f, h * 0.5f)
-            )
-        }
-
-        // Layer 2 & 3: The 4 flanking full-body Open-Peeps + Center Hero
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy((-18).dp, Alignment.CenterHorizontally),
-            verticalAlignment = Alignment.Bottom
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.BottomCenter
         ) {
-            // Far Left: Standing 4
-            coil.compose.AsyncImage(
-                model = coil.request.ImageRequest.Builder(LocalContext.current)
-                    .data("file:///android_asset/peeps/peep_standing_4.svg")
-                    .decoderFactory(coil.decode.SvgDecoder.Factory())
-                    .build(),
-                contentDescription = null,
+            // Layer 1: Warm Buckwheat organic backdrop blobs
+            androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                val w = size.width
+                val h = size.height
+
+                drawOval(
+                    color = Color(0xFFEDE7DF),
+                    topLeft = androidx.compose.ui.geometry.Offset(w * 0.08f, h * 0.84f),
+                    size = androidx.compose.ui.geometry.Size(w * 0.84f, h * 0.14f)
+                )
+
+                val pathSage = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(w * 0.14f, h * 0.86f)
+                    quadraticBezierTo(w * 0.06f, h * 0.35f, w * 0.28f, h * 0.18f)
+                    quadraticBezierTo(w * 0.48f, h * 0.08f, w * 0.44f, h * 0.86f)
+                    close()
+                }
+                drawPath(pathSage, Color(0xFFD7E8B6).copy(alpha = 0.55f))
+
+                val pathPeach = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(w * 0.52f, h * 0.88f)
+                    quadraticBezierTo(w * 0.82f, h * 0.24f, w * 0.72f, h * 0.14f)
+                    quadraticBezierTo(w * 0.92f, h * 0.48f, w * 0.86f, h * 0.86f)
+                    close()
+                }
+                drawPath(pathPeach, Color(0xFFFED8C8).copy(alpha = 0.55f))
+
+                drawCircle(
+                    color = Color(0xFFDCE3FD).copy(alpha = 0.48f),
+                    radius = w * 0.16f,
+                    center = androidx.compose.ui.geometry.Offset(w * 0.5f, h * 0.48f)
+                )
+            }
+
+            // Layer 2: Unobstructed Multi-Person Open Peeps Group Scene with M3 Spatial Spring Transition
+            AnimatedContent(
+                targetState = activeScene,
+                transitionSpec = {
+                    (fadeIn(animationSpec = tween(220)) +
+                        scaleIn(
+                            initialScale = 0.92f,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioLowBouncy,
+                                stiffness = Spring.StiffnessMediumLow
+                            )
+                        )).togetherWith(
+                        fadeOut(animationSpec = tween(150)) +
+                            scaleOut(targetScale = 0.95f)
+                    )
+                },
+                label = "crew_scene_transition",
                 modifier = Modifier
-                    .width(60.dp)
-                    .height(140.dp)
-                    .graphicsLayer { translationY = breatheY1 }
-            )
-            // Mid Left: Sitting 2
-            coil.compose.AsyncImage(
-                model = coil.request.ImageRequest.Builder(LocalContext.current)
-                    .data("file:///android_asset/peeps/peep_sitting_2.svg")
-                    .decoderFactory(coil.decode.SvgDecoder.Factory())
-                    .build(),
-                contentDescription = null,
-                modifier = Modifier
-                    .width(70.dp)
-                    .height(160.dp)
-                    .graphicsLayer { translationY = breatheY2 }
-            )
-            
-            // Layer 3: Center Hero
-            Box(
-                modifier = Modifier
-                    .width(100.dp)
-                    .height(200.dp)
-                    .graphicsLayer { translationY = breatheY3 }
-                    .zIndex(3f),
-                contentAlignment = Alignment.TopCenter
-            ) {
-                // Sitting 14 body
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp, vertical = if (isCompactMode) 4.dp else 8.dp)
+            ) { scene ->
                 coil.compose.AsyncImage(
-                    model = coil.request.ImageRequest.Builder(LocalContext.current)
-                        .data("file:///android_asset/peeps/peep_sitting_14.svg")
+                    model = coil.request.ImageRequest.Builder(context)
+                        .data(scene.assetPath)
                         .decoderFactory(coil.decode.SvgDecoder.Factory())
+                        .diskCacheKey("crew_scene_${scene.id}")
+                        .memoryCacheKey("crew_scene_${scene.id}")
+                        .diskCachePolicy(coil.request.CachePolicy.ENABLED)
+                        .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
+                        .crossfade(true)
                         .build(),
-                    contentDescription = null,
+                    contentDescription = scene.title,
+                    contentScale = ContentScale.Fit,
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(top = 40.dp)
+                        .graphicsLayer { translationY = floatOffsetY }
                 )
-                // Live Reacting Avatar Head
-                SplitMateCharacterAvatar(
-                    name = name,
-                    phone = phone,
-                    size = 86.dp,
-                    styleId = selectedStyleId,
-                    colorPresetId = selectedColorPresetId,
-                    highlighted = true,
-                    modifier = Modifier.offset(y = (-10).dp)
-                )
-                
-                // "YOU" Badge
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF365314),
-                    modifier = Modifier.align(Alignment.BottomCenter).offset(y = 10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.VerifiedUser,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Text(
-                            text = "YOU",
-                            color = Color.White,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
             }
 
-            // Mid Right: Sitting 10 (Flipped)
-            coil.compose.AsyncImage(
-                model = coil.request.ImageRequest.Builder(LocalContext.current)
-                    .data("file:///android_asset/peeps/peep_sitting_10.svg")
-                    .decoderFactory(coil.decode.SvgDecoder.Factory())
-                    .build(),
-                contentDescription = null,
+            // Layer 3: Top-Right M3 Expressive "Shuffle Crew" Pill (Zero Emojis)
+            Surface(
+                onClick = {
+                    performCrispTactileHaptic(context, localView, heavy = false)
+                    activeSceneIndex = (activeSceneIndex + 1) % SplitMateCrewScenes.size
+                },
+                shape = RoundedCornerShape(50),
+                color = Color(0xFFFAF6F0).copy(alpha = 0.94f),
+                border = BorderStroke(1.dp, Color(0xFF365314).copy(alpha = 0.28f)),
                 modifier = Modifier
-                    .width(70.dp)
-                    .height(160.dp)
-                    .graphicsLayer { 
-                        scaleX = -1f 
-                        translationY = breatheY2
-                    }
-            )
-            // Far Right: Standing 8 (Flipped)
-            coil.compose.AsyncImage(
-                model = coil.request.ImageRequest.Builder(LocalContext.current)
-                    .data("file:///android_asset/peeps/peep_standing_8.svg")
-                    .decoderFactory(coil.decode.SvgDecoder.Factory())
-                    .build(),
-                contentDescription = null,
-                modifier = Modifier
-                    .width(60.dp)
-                    .height(140.dp)
-                    .graphicsLayer { 
-                        scaleX = -1f 
-                        translationY = breatheY1
-                    }
-            )
+                    .align(Alignment.TopEnd)
+                    .padding(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Shuffle,
+                        contentDescription = "Shuffle crew scene",
+                        tint = Color(0xFF365314),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "Shuffle Crew",
+                        fontFamily = FigtreeFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        color = Color(0xFF23201E)
+                    )
+                    Text(
+                        text = "${activeSceneIndex + 1}/${SplitMateCrewScenes.size}",
+                        style = TextStyle(
+                            fontFamily = SplitMateTnumMonospace,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 10.sp,
+                            fontFeatureSettings = "tnum"
+                        ),
+                        color = Color(0xFF365314)
+                    )
+                }
+            }
         }
     }
 }
@@ -861,6 +1477,7 @@ fun ContactPickerBottomSheet(
                     .background(SplitMateTheme.ScreenBg)
                     .padding(horizontal = 20.dp)
                     .padding(bottom = 24.dp)
+                    .imePadding()
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1412,13 +2029,31 @@ fun CompactLedgerTicketStub(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(
-                            text = "$fromCode → $toCode",
-                            fontFamily = FigtreeFontFamily,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 13.sp,
-                            color = SplitMateTheme.PrimaryDark
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = fromCode,
+                                fontFamily = FigtreeFontFamily,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 13.sp,
+                                color = SplitMateTheme.PrimaryDark
+                            )
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                                contentDescription = null,
+                                tint = SplitMateTheme.PrimaryDark,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = toCode,
+                                fontFamily = FigtreeFontFamily,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 13.sp,
+                                color = SplitMateTheme.PrimaryDark
+                            )
+                        }
                         if (ticket.pnr.isNotBlank()) {
                             Surface(
                                 shape = RoundedCornerShape(6.dp),
@@ -1461,14 +2096,21 @@ fun CompactLedgerTicketStub(
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = "Paper Pass ↗",
+                            text = "Paper Pass",
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.Bold,
                             fontSize = 10.sp,
                             color = badgeText
+                        )
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
+                            contentDescription = null,
+                            tint = badgeText,
+                            modifier = Modifier.size(12.dp)
                         )
                     }
                 }

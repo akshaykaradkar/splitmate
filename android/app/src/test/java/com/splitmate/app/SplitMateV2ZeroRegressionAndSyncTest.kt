@@ -32,6 +32,7 @@ class SplitMateV2ZeroRegressionAndSyncTest {
     @BeforeEach
     fun setup() {
         Dispatchers.setMain(testDispatcher)
+        com.splitmate.app.data.PhoneOtpAuthManager.clearPendingOtpChallenge(null)
     }
 
     @AfterEach
@@ -573,14 +574,16 @@ class SplitMateV2ZeroRegressionAndSyncTest {
         assertNotNull(dispatch, "sendOtp must succeed for +91 98765 43210")
         val otpResult = dispatch!!
         assertEquals("9876543210", otpResult.phone10)
-        assertEquals(6, otpResult.generatedOtpCode.length, "OTP code must be 6 digits")
-        assertTrue(otpResult.generatedOtpCode.all { it.isDigit() }, "OTP code must be numeric")
+        val generatedCode = com.splitmate.app.data.PhoneOtpAuthManager.peekLastGeneratedOtpForTestOnly()
+        assertNotNull(generatedCode, "Test-only OTP peek must return generated 6-digit code")
+        assertEquals(6, generatedCode!!.length, "OTP code must be 6 digits")
+        assertTrue(generatedCode.all { it.isDigit() }, "OTP code must be numeric")
 
         // Verify failure after expiresAtEpochMs + 1
         assertFalse(
             com.splitmate.app.data.PhoneOtpAuthManager.verifyOtp(
                 rawPhone = "+91 98765 43210",
-                enteredCode = otpResult.generatedOtpCode,
+                enteredCode = generatedCode,
                 nowEpochMs = otpResult.expiresAtEpochMs + 1L
             ),
             "verifyOtp must fail when nowEpochMs > expiresAtEpochMs"
@@ -600,7 +603,7 @@ class SplitMateV2ZeroRegressionAndSyncTest {
         assertTrue(
             com.splitmate.app.data.PhoneOtpAuthManager.verifyOtp(
                 rawPhone = "09876543210",
-                enteredCode = otpResult.generatedOtpCode,
+                enteredCode = generatedCode,
                 nowEpochMs = otpResult.expiresAtEpochMs - 1_000L
             ),
             "verifyOtp must succeed with matching 6-digit OTP before expiry"
@@ -610,7 +613,7 @@ class SplitMateV2ZeroRegressionAndSyncTest {
         assertFalse(
             com.splitmate.app.data.PhoneOtpAuthManager.verifyOtp(
                 rawPhone = "9876543210",
-                enteredCode = otpResult.generatedOtpCode,
+                enteredCode = generatedCode,
                 nowEpochMs = otpResult.expiresAtEpochMs - 500L
             ),
             "Consumed OTP must not be reusable"
@@ -927,8 +930,9 @@ class SplitMateV2ZeroRegressionAndSyncTest {
         val dispatch = viewModel.requestPhoneOtp(context = null, rawPhone = "+91 98765 43210")
         assertNotNull(dispatch, "OTP dispatch must succeed for valid 10-digit Indian phone")
         assertEquals("9876543210", dispatch!!.phone10)
-        assertEquals(6, dispatch.generatedOtpCode.length)
-        assertEquals(dispatch.generatedOtpCode, viewModel.uiState.value.pendingOtpCodeForBanner)
+        val generatedCode = com.splitmate.app.data.PhoneOtpAuthManager.peekLastGeneratedOtpForTestOnly()!!
+        assertEquals(6, generatedCode.length)
+        assertTrue(viewModel.uiState.value.isOtpChallengeActive)
 
         // 2. Verify OTP and register with 4-digit Recovery PIN "4829", style "adventurer", preset "Electric"
         var otpResultOk = false
@@ -936,7 +940,7 @@ class SplitMateV2ZeroRegressionAndSyncTest {
         viewModel.verifyPhoneOtpAndSyncCloud(
             context = null,
             rawPhone = "9876543210",
-            enteredOtp = dispatch.generatedOtpCode,
+            enteredOtp = generatedCode,
             userName = "Akshay Karadkar",
             upiId = "akshay@okaxis",
             avatarStyleId = "adventurer",
@@ -1033,5 +1037,350 @@ class SplitMateV2ZeroRegressionAndSyncTest {
         assertNotNull(decodedDoc)
         assertEquals(20, decodedDoc!!.expenses.size)
         assertEquals("Taj Exotica Goa Resort & Spa", decodedDoc.expenses.first().providerName)
+    }
+
+    private fun resolveSrcMainDir(): java.io.File {
+        val candidates = listOf(
+            java.io.File("src/main"),
+            java.io.File("app/src/main"),
+            java.io.File("/usr/local/google/home/karadkar/splitmate/android/app/src/main")
+        )
+        return candidates.firstOrNull { it.exists() && it.isDirectory }
+            ?: error("Could not locate src/main directory from working directory ${java.io.File(".").absolutePath}")
+    }
+
+    @Test
+    @DisplayName("12. Phase 3 Guard 1: Zero Unicode Emojis & Zero Inline Dingbats Across All .kt & .svg Files")
+    fun testPhase3Guard1ZeroEmojisAndZeroInlineDingbatsAcrossCodebaseAndAssets() {
+        val srcMain = resolveSrcMainDir()
+        val kotlinDir = java.io.File(srcMain, "java")
+        val assetsDir = java.io.File(srcMain, "assets")
+        assertTrue(kotlinDir.exists(), "src/main/java must exist")
+        assertTrue(assetsDir.exists(), "src/main/assets must exist")
+
+        val forbiddenDingbats = setOf('➔', '▲', '▼', '▾', '⤾', '↗', '›')
+        val ktFiles = kotlinDir.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
+        val svgFiles = assetsDir.walkTopDown().filter { it.isFile && it.extension == "svg" }.toList()
+        assertTrue(ktFiles.isNotEmpty(), "Must scan non-empty list of .kt source files")
+        assertTrue(svgFiles.isNotEmpty(), "Must scan non-empty list of .svg asset files")
+
+        val violations = mutableListOf<String>()
+        for (file in ktFiles + svgFiles) {
+            val content = file.readText(Charsets.UTF_8)
+            var idx = 0
+            while (idx < content.length) {
+                val cp = content.codePointAt(idx)
+                val ch = content[idx]
+                if (cp in 0x1F300..0x1FAFF || cp in 0x2600..0x27BF || ch in forbiddenDingbats) {
+                    violations.add("${file.name}@offset($idx): U+${cp.toString(16).uppercase()}")
+                    break
+                }
+                idx += Character.charCount(cp)
+            }
+        }
+        assertTrue(
+            violations.isEmpty(),
+            "Zero emojis and zero inline dingbats allowed in src/main/java or src/main/assets, found: $violations"
+        )
+    }
+
+    @Test
+    @DisplayName("13. Phase 3 Guard 2: 5 Happy Open Peeps Group Scenes Present & Wheelchair/Prosthetic SVGs Deleted")
+    fun testPhase3Guard2HappyOpenPeepsGroupScenesAndDeletedSadPoses() {
+        val peepsDir = java.io.File(resolveSrcMainDir(), "assets/peeps")
+        val scenesDir = java.io.File(peepsDir, "scenes")
+        assertTrue(scenesDir.exists() && scenesDir.isDirectory, "assets/peeps/scenes directory must exist")
+
+        val deletedFiles = listOf(
+            "peep_sitting_14.svg",
+            "peep_standing_8.svg",
+            "peep_standing_4.svg"
+        )
+        for (deletedName in deletedFiles) {
+            val f = java.io.File(peepsDir, deletedName)
+            assertFalse(f.exists(), "Deprecated single-person SVG $deletedName must be deleted")
+        }
+
+        val requiredScenes = listOf(
+            "scene_walk_crew.svg",
+            "scene_bike_trip.svg",
+            "scene_coffee_hangout.svg",
+            "scene_weekend_squad.svg",
+            "scene_roadtrip_busters.svg"
+        )
+        for (sceneName in requiredScenes) {
+            val sceneFile = java.io.File(scenesDir, sceneName)
+            assertTrue(sceneFile.exists() && sceneFile.length() > 10_000L, "Scene SVG $sceneName must exist and be non-trivial")
+            val svgText = sceneFile.readText(Charsets.UTF_8)
+            val groupCount = Regex("<g\\b").findAll(svgText).count()
+            assertTrue(groupCount >= 4, "Multi-person scene $sceneName must contain multiple character <g> groups (found $groupCount)")
+            assertFalse(svgText.contains("wheelchair", ignoreCase = true), "$sceneName must not contain wheelchair pose")
+            assertFalse(svgText.contains("prosthetic", ignoreCase = true), "$sceneName must not contain prosthetic pose")
+        }
+    }
+
+    @Test
+    @DisplayName("14. Phase 3 Guard 3: 13 Official DiceBear Styles x 12 Presets x 3 Genders (468 URLs) Schema Safety & Name Inference")
+    fun testPhase3Guard3Official13Styles12Presets3GendersAnd468UrlSchemaSafety() {
+        val styles = com.splitmate.app.ui.SplitMateDiceBearStyles
+        val presets = com.splitmate.app.ui.SplitMateAvatarColorPresets
+        val genders = com.splitmate.app.ui.AvatarGender.entries
+
+        assertEquals(13, styles.size, "Must have exactly 13 official DiceBear 9.x character styles")
+        assertEquals(12, presets.size, "Must have exactly 12 official DiceBear color presets")
+        assertEquals(3, genders.size, "Must have exactly 3 AvatarGender options (Male, Female, Neutral)")
+
+        val expectedStyleIds = setOf(
+            "open-peeps", "adventurer", "avataaars", "big-ears", "big-smile",
+            "croodles", "dylan", "lorelei", "micah", "miniavs",
+            "notionists", "personas", "toon-head"
+        )
+        assertEquals(expectedStyleIds, styles.map { it.id }.toSet())
+
+        val openPeepsExclusiveKeys = listOf(
+            "face=",
+            "head=",
+            "clothingColor=",
+            "skinColor=",
+            "headContrastColor=",
+            "maskProbability="
+        )
+
+        var testedCombinations = 0
+        for (style in styles) {
+            for (preset in presets) {
+                for (gender in genders) {
+                    val encodedSeed = com.splitmate.app.ui.AvatarSeedCodec.encode(
+                        seedKey = "Akshay Karadkar",
+                        gender = gender,
+                        styleId = style.id,
+                        colorPresetId = preset.id
+                    )
+                    val url = com.splitmate.app.ui.buildDiceBearAvatarUrl(name = encodedSeed)
+                    assertTrue(
+                        url.startsWith("https://api.dicebear.com/9.x/${style.id}/svg?"),
+                        "URL must target DiceBear 9.x ${style.id} endpoint: $url"
+                    )
+                    if (style.id != "open-peeps") {
+                        for (forbiddenParam in openPeepsExclusiveKeys) {
+                            assertFalse(
+                                url.contains(forbiddenParam),
+                                "Non-open-peeps style '${style.id}' (preset=${preset.id}, gender=${gender.id}) must NEVER leak '$forbiddenParam' in URL: $url"
+                            )
+                        }
+                    } else {
+                        assertTrue(url.contains("face=smile"), "open-peeps URL must enforce smiling face whitelist: $url")
+                        assertTrue(url.contains("maskProbability=0"), "open-peeps URL must enforce maskProbability=0: $url")
+                    }
+                    if (gender == com.splitmate.app.ui.AvatarGender.FEMALE &&
+                        style.id in setOf("open-peeps", "avataaars", "personas", "micah", "dylan")
+                    ) {
+                        assertTrue(
+                            url.contains("facialHairProbability=0"),
+                            "Female avatar on ${style.id} must enforce facialHairProbability=0: $url"
+                        )
+                    }
+                    if (gender == com.splitmate.app.ui.AvatarGender.FEMALE &&
+                        style.id in setOf("toon-head", "lorelei", "notionists", "croodles")
+                    ) {
+                        assertTrue(
+                            url.contains("beardProbability=0"),
+                            "Female avatar on ${style.id} must enforce beardProbability=0: $url"
+                        )
+                    }
+                    testedCombinations++
+                }
+            }
+        }
+        assertEquals(468, testedCombinations, "Must validate all 13 x 12 x 3 = 468 combinations")
+
+        // Verify smart first-name gender inference
+        assertEquals(com.splitmate.app.ui.AvatarGender.MALE, com.splitmate.app.ui.inferGenderFromFirstName("Akshay Karadkar"))
+        assertEquals(com.splitmate.app.ui.AvatarGender.MALE, com.splitmate.app.ui.inferGenderFromFirstName("  rohan_482 "))
+        assertEquals(com.splitmate.app.ui.AvatarGender.FEMALE, com.splitmate.app.ui.inferGenderFromFirstName("Priya Sharma"))
+        assertEquals(com.splitmate.app.ui.AvatarGender.FEMALE, com.splitmate.app.ui.inferGenderFromFirstName("Sneha"))
+        assertEquals(null, com.splitmate.app.ui.inferGenderFromFirstName(""))
+        assertEquals(null, com.splitmate.app.ui.inferGenderFromFirstName("   "))
+        assertEquals(null, com.splitmate.app.ui.inferGenderFromFirstName("Explorer"))
+    }
+
+    @Test
+    @DisplayName("15. Phase 3 Guard 4: AvatarSeedCodec Pipe Injection Defense, 1-to-4 Token Parsing & URL Unification")
+    fun testPhase3Guard4AvatarSeedCodecPipeInjectionAnd4TokenUrlUnification() {
+        // 1. Pipe character injection defense + URL-encoding of seedKey
+        val maliciousName = "Akshay|Female|lorelei|Electric&evilParam=1"
+        val encoded4Token = com.splitmate.app.ui.AvatarSeedCodec.encode(
+            seedKey = maliciousName,
+            gender = com.splitmate.app.ui.AvatarGender.MALE,
+            styleId = "adventurer",
+            colorPresetId = "Sunrise"
+        )
+        assertEquals(
+            3,
+            encoded4Token.count { it == '|' },
+            "Encoded 4-token seed must contain strictly 3 pipe delimiters even when input name contains pipes: $encoded4Token"
+        )
+        val parsedMalicious = com.splitmate.app.ui.AvatarSeedCodec.parse(encoded4Token)
+        assertFalse(parsedMalicious.seedKey.contains("|"), "Sanitized seedKey must never contain pipe delimiter")
+        assertEquals(com.splitmate.app.ui.AvatarGender.MALE, parsedMalicious.gender)
+        assertEquals("adventurer", parsedMalicious.styleId)
+        assertEquals("Sunrise", parsedMalicious.colorPresetId)
+
+        val safeUrl = com.splitmate.app.ui.buildDiceBearAvatarUrl(name = encoded4Token)
+        assertFalse(safeUrl.contains("&evilParam=1"), "URL-encoding of seedKey must neutralize query parameter injection: $safeUrl")
+        assertTrue(safeUrl.contains("%26evilParam%3D1"), "Injected '&evilParam=1' must be percent-encoded inside seed=: $safeUrl")
+
+        // 2. Safe parsing of 1-token, 2-token, 3-token, and 4-token strings
+        val p1 = com.splitmate.app.ui.AvatarSeedCodec.parse("Rohan")
+        assertEquals("Rohan", p1.seedKey)
+        assertEquals(com.splitmate.app.ui.AvatarGender.NEUTRAL, p1.gender)
+        assertEquals("open-peeps", p1.styleId)
+        assertEquals("PastelWall", p1.colorPresetId)
+
+        val p2Gender = com.splitmate.app.ui.AvatarSeedCodec.parse("Priya|Female")
+        assertEquals("Priya", p2Gender.seedKey)
+        assertEquals(com.splitmate.app.ui.AvatarGender.FEMALE, p2Gender.gender)
+
+        val p2Style = com.splitmate.app.ui.AvatarSeedCodec.parse("Rohan|adventurer")
+        assertEquals("Rohan", p2Style.seedKey)
+        assertEquals("adventurer", p2Style.styleId)
+
+        val p3Legacy = com.splitmate.app.ui.AvatarSeedCodec.parse("Akshay|micah|Electric")
+        assertEquals("Akshay", p3Legacy.seedKey)
+        assertEquals("micah", p3Legacy.styleId)
+        assertEquals("Electric", p3Legacy.colorPresetId)
+
+        val p4Canonical = com.splitmate.app.ui.AvatarSeedCodec.parse("Sneha_777|Female|lorelei|BoldPop")
+        assertEquals("Sneha_777", p4Canonical.seedKey)
+        assertEquals(com.splitmate.app.ui.AvatarGender.FEMALE, p4Canonical.gender)
+        assertEquals("lorelei", p4Canonical.styleId)
+        assertEquals("BoldPop", p4Canonical.colorPresetId)
+
+        // 3. Unification between buildDiceBearAvatarUrl and buildDiceBearOpenPeepsUrl
+        val canonicalSeed = com.splitmate.app.ui.AvatarSeedCodec.encode(
+            seedKey = "Akshay_2026",
+            gender = com.splitmate.app.ui.AvatarGender.MALE,
+            styleId = "toon-head",
+            colorPresetId = "NightShift"
+        )
+        assertEquals(
+            com.splitmate.app.ui.buildDiceBearAvatarUrl(name = canonicalSeed),
+            com.splitmate.app.ui.buildDiceBearOpenPeepsUrl(rawSeed = canonicalSeed),
+            "buildDiceBearOpenPeepsUrl and buildDiceBearAvatarUrl must return identical SVG URLs for any 4-token seed"
+        )
+    }
+
+    @Test
+    @DisplayName("16. Phase 3 Guard 5: PhD OTP Security (Phone-Swap & 5-Attempt Lockout, DLT SMS, Zero Leak Banner) & 8-Field Cloud Profile Sync")
+    fun testPhase3Guard5PhdOtpHmacSecurityBruteForceLockoutDltSmsAnd8FieldCloudProfileSync() {
+        // 1. Verify OtpDispatchResult does not expose generatedOtpCode field
+        val dispatchFields = com.splitmate.app.data.OtpDispatchResult::class.java.declaredFields.map { it.name }
+        assertFalse(
+            "generatedOtpCode" in dispatchFields,
+            "OtpDispatchResult must not expose plaintext generatedOtpCode"
+        )
+
+        // 2. Verify pendingOtpCodeForBanner is completely removed from SplitMateViewModel.kt & SplitMateAppComposable.kt
+        val srcMain = resolveSrcMainDir()
+        val vmSource = java.io.File(srcMain, "java/com/splitmate/app/ui/SplitMateViewModel.kt").readText(Charsets.UTF_8)
+        val appComposableSource = java.io.File(srcMain, "java/com/splitmate/app/ui/SplitMateAppComposable.kt").readText(Charsets.UTF_8)
+        assertFalse(vmSource.contains("pendingOtpCodeForBanner"), "SplitMateViewModel.kt must not contain pendingOtpCodeForBanner")
+        assertFalse(appComposableSource.contains("pendingOtpCodeForBanner"), "SplitMateAppComposable.kt must not contain pendingOtpCodeForBanner")
+
+        // 3. Verify TRAI DLT-safe P2P SMS payload formatting
+        val dltSms = com.splitmate.app.data.PhoneOtpAuthManager.formatDltSafeSyncSmsMessage("482910")
+        assertEquals("SplitMate trip sync key: 482-910 (valid 5m)", dltSms)
+        assertFalse(dltSms.contains("OTP", ignoreCase = true), "DLT-safe SMS must not contain 'OTP' A2P trigger keyword")
+        assertFalse(dltSms.contains("verification code", ignoreCase = true), "DLT-safe SMS must not contain 'verification code'")
+
+        // 4. Verify phone-number-swap attack rejection
+        val dispatch = com.splitmate.app.data.PhoneOtpAuthManager.sendOtp(null, "9876543210")
+        assertNotNull(dispatch)
+        val validCode = com.splitmate.app.data.PhoneOtpAuthManager.peekLastGeneratedOtpForTestOnly()!!
+        assertFalse(
+            com.splitmate.app.data.PhoneOtpAuthManager.verifyOtp(
+                rawPhone = "9123456789",
+                enteredCode = validCode,
+                nowEpochMs = dispatch!!.expiresAtEpochMs - 10_000L
+            ),
+            "HMAC-SHA256 OTP bound to 9876543210 must be rejected if caller swaps phone to 9123456789"
+        )
+
+        // 5. Verify 5-attempt brute-force lockout destroys the active challenge
+        repeat(5) { attemptIdx ->
+            assertFalse(
+                com.splitmate.app.data.PhoneOtpAuthManager.verifyOtp(
+                    rawPhone = "9876543210",
+                    enteredCode = "00000$attemptIdx",
+                    nowEpochMs = dispatch.expiresAtEpochMs - 10_000L
+                ),
+                "Wrong OTP attempt #${attemptIdx + 1} must fail"
+            )
+        }
+        assertFalse(
+            com.splitmate.app.data.PhoneOtpAuthManager.verifyOtp(
+                rawPhone = "9876543210",
+                enteredCode = validCode,
+                nowEpochMs = dispatch.expiresAtEpochMs - 5_000L
+            ),
+            "After 5 failed attempts, even the genuine OTP code must be rejected due to brute-force lockout"
+        )
+
+        // 6. Verify 8-field CloudUserProfileRecord round-trip preserving 4-token avatarSeed + local member avatar preservation
+        val canonical4Token = com.splitmate.app.ui.AvatarSeedCodec.encode(
+            seedKey = "Akshay_999",
+            gender = com.splitmate.app.ui.AvatarGender.MALE,
+            styleId = "adventurer",
+            colorPresetId = "Electric"
+        )
+        val profileRecord = com.splitmate.app.data.CloudUserProfileRecord(
+            phone10 = "9876543210",
+            name = "Akshay Karadkar",
+            handle = "akshaykaradkar",
+            upiVpa = "9876543210@upi",
+            avatarStyle = "adventurer",
+            avatarColorPreset = "Electric",
+            pinHash = com.splitmate.app.data.PhoneOtpAuthManager.getOrCreateDeviceOwnershipToken(null, "9876543210"),
+            updatedAtEpochMs = 1790000000000L,
+            avatarSeed = canonical4Token
+        )
+        val encodedProfileJson = com.splitmate.app.data.CloudGroupSyncRepository.encodeUserProfileRecord(profileRecord)
+        val decodedProfile = com.splitmate.app.data.CloudGroupSyncRepository.decodeUserProfileRecord(encodedProfileJson)
+        assertNotNull(decodedProfile)
+        assertEquals(canonical4Token, decodedProfile!!.avatarSeed, "CloudUserProfileRecord must preserve full 4-token avatarSeed")
+        assertEquals("adventurer", decodedProfile.avatarStyle)
+        assertEquals("Electric", decodedProfile.avatarColorPreset)
+    }
+
+    @Test
+    @DisplayName("17. Phase 3 Guard 6: Adversarial Cooldown & Lockout Enforcement")
+    fun testPhase3Guard6AdversarialCooldownAndLockoutEnforcement() {
+        // 1. Verify 30-second cooldown on sendOtp
+        com.splitmate.app.data.PhoneOtpAuthManager.clearPendingOtpChallenge(null)
+        val initialDispatch = com.splitmate.app.data.PhoneOtpAuthManager.sendOtp(null, "9876543210")
+        assertNotNull(initialDispatch, "Initial sendOtp should succeed")
+
+        val immediateResend = com.splitmate.app.data.PhoneOtpAuthManager.sendOtp(null, "9876543210")
+        assertEquals(null, immediateResend, "Immediate resend within 30s cooldown must fail and return null")
+
+        // 2. Clear challenge to simulate cooldown expiry
+        com.splitmate.app.data.PhoneOtpAuthManager.clearPendingOtpChallenge(null)
+
+        // 3. Verify brute-force lockout prevents new OTP generation
+        val secondDispatch = com.splitmate.app.data.PhoneOtpAuthManager.sendOtp(null, "9876543210")
+        assertNotNull(secondDispatch)
+
+        // Simulate 5 failed attempts
+        repeat(5) {
+            com.splitmate.app.data.PhoneOtpAuthManager.verifyOtp(
+                rawPhone = "9876543210",
+                enteredCode = "00000$it",
+                nowEpochMs = secondDispatch!!.expiresAtEpochMs - 10_000L
+            )
+        }
+
+        // Now the user is locked out, the challenge hash was destroyed but attempts/expiry remain
+        val lockoutResend = com.splitmate.app.data.PhoneOtpAuthManager.sendOtp(null, "9876543210")
+        assertEquals(null, lockoutResend, "sendOtp must fail when user is in 5-attempt brute-force lockout")
     }
 }
