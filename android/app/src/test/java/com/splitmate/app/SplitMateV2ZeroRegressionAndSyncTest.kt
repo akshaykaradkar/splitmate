@@ -1590,5 +1590,162 @@ class SplitMateV2ZeroRegressionAndSyncTest {
             "TripHomeScreen.kt must render DeepGreenTrainTicketCard for all train legs without hiding leg 2+ behind ReturnTransitTrainCard"
         )
     }
+
+    @Test
+    @DisplayName("21. v2.1.3 Guard: 4 Phone Discovery Fixes, Remote-Only Perspective Attribution, Live Online Presence (90s TTL) & Zero UPI UI")
+    fun testV213PhoneDiscoveryFixesRemoteOnlyPerspectivePresenceAndZeroUpiUi() = runTest(testDispatcher) {
+        // 1. PhoneIdentityValidator.extractMemberPhone10 extracts valid 10-digit mobile from userPhone OR legacy upiId
+        assertEquals(
+            "9876543210",
+            com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10("+91 98765-43210", ""),
+            "Must normalize userPhone to 10-digit mobile"
+        )
+        assertEquals(
+            "9123456789",
+            com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10("", "9123456789@okaxis"),
+            "Must extract 10-digit mobile from legacy upiId when userPhone is blank"
+        )
+        assertEquals(
+            "",
+            com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10("", "sneha.kulkarni@oksbi"),
+            "Non-numeric handle without 10-digit mobile must return empty string"
+        )
+
+        // 2. Remote-only group discovery (localDoc == null on Friend B's phone):
+        //    Inviter (Akshay, isCurrentUser=true in cloud doc) must NEVER remain isCurrentUser=true on Friend B's phone!
+        val nowMs = 1_795_000_000_000L
+        val remoteDocFromAkshay = com.splitmate.app.data.CloudGroupLedgerDocument(
+            group = com.splitmate.app.data.ExpenseGroupEntity("g_ladakh", "Ladakh Bike Expedition", "INR"),
+            members = listOf(
+                com.splitmate.app.data.GroupMemberEntity(
+                    memberId = "m_akshay",
+                    groupId = "g_ladakh",
+                    name = "Akshay",
+                    avatarSeed = "Akshay|Male|adventurer|Buckwheat",
+                    isCurrentUser = true,
+                    upiId = "9876543210@upi",
+                    userPhone = "9876543210",
+                    inviteStatus = "JOINED"
+                ),
+                com.splitmate.app.data.GroupMemberEntity(
+                    memberId = "m_rohan",
+                    groupId = "g_ladakh",
+                    name = "Rohan",
+                    avatarSeed = "Rohan|Male|open-peeps|Terracotta",
+                    isCurrentUser = false,
+                    upiId = "9123456789@ybl",
+                    userPhone = "", // Stored only in legacy upiId before fix
+                    inviteStatus = "PENDING"
+                )
+            ),
+            expenses = emptyList(),
+            splits = emptyList(),
+            settlements = emptyList(),
+            deletedExpenseIds = emptyMap(),
+            flightVaultByPnr = emptyMap(),
+            trainSnapshotByPnr = emptyMap(),
+            updatedAtEpochMs = nowMs,
+            memberPresenceByPhone = mapOf(
+                "9876543210" to (nowMs - 15_000L), // Akshay active 15s ago -> ONLINE
+                "9988776655" to (nowMs - 120_000L) // Expired 120s ago -> OFFLINE
+            )
+        )
+
+        val mergedOnRohanNewPhone = com.splitmate.app.data.CloudGroupSyncRepository.mergeGroupLedgerDocuments(
+            localDoc = null,
+            remoteDoc = remoteDocFromAkshay,
+            localUserPhone10 = "9123456789",
+            localPresenceEpochMs = nowMs
+        )
+
+        val akshayOnRohanPhone = mergedOnRohanNewPhone.members.first { it.memberId == "m_akshay" }
+        val rohanOnRohanPhone = mergedOnRohanNewPhone.members.first { it.memberId == "m_rohan" }
+        assertFalse(
+            akshayOnRohanPhone.isCurrentUser,
+            "Remote inviter Akshay must NOT be marked isCurrentUser=true when imported onto Rohan's phone (localDoc == null)"
+        )
+        assertTrue(
+            rohanOnRohanPhone.isCurrentUser,
+            "Invited friend Rohan must be bound as isCurrentUser=true via extractMemberPhone10 even if phone was in upiId"
+        )
+        assertEquals(
+            "9123456789",
+            rohanOnRohanPhone.userPhone,
+            "Rohan's userPhone must be normalized to 10-digit mobile during merge"
+        )
+
+        // 3. Verify Live Online Presence 90s TTL and JSON round-trip
+        val encodedJson = com.splitmate.app.data.CloudGroupSyncRepository.encodeGroupLedgerDocument(mergedOnRohanNewPhone)
+        val roundTripped = com.splitmate.app.data.CloudGroupSyncRepository.decodeGroupLedgerDocument(encodedJson)!!
+        assertTrue(
+            com.splitmate.app.data.CloudGroupSyncRepository.isPhoneOnlineNow(
+                phone10 = "9876543210",
+                presenceMap = roundTripped.memberPresenceByPhone,
+                nowEpochMs = nowMs
+            ),
+            "Akshay (heartbeat 15s ago) must be reported online within 90s TTL"
+        )
+        assertTrue(
+            com.splitmate.app.data.CloudGroupSyncRepository.isPhoneOnlineNow(
+                phone10 = "9123456789",
+                presenceMap = roundTripped.memberPresenceByPhone,
+                nowEpochMs = nowMs
+            ),
+            "Rohan (just synced at nowMs) must be reported online"
+        )
+        assertFalse(
+            com.splitmate.app.data.CloudGroupSyncRepository.isPhoneOnlineNow(
+                phone10 = "9988776655",
+                presenceMap = roundTripped.memberPresenceByPhone,
+                nowEpochMs = nowMs
+            ),
+            "Member with heartbeat 120s ago (>90s TTL) must be reported offline"
+        )
+
+        // 4. Verify Offline-First Onboarding & Member Phone Editing in SplitMateViewModel
+        val offlineVm = SplitMateViewModel(dao = null, ioDispatcher = testDispatcher)
+        offlineVm.completeOnboarding(
+            name = "Akshay",
+            countryName = "India",
+            currencyCode = "INR",
+            currencySymbol = "₹",
+            avatarSeed = "Akshay|Male|open-peeps|Buckwheat",
+            userPhone = "9876543210"
+        )
+        offlineVm.createNewGroup(
+            name = "Spiti Offline Circuit",
+            currencyCode = "INR",
+            friendNamesCsv = "Rohan, 9123456789"
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val spitiGroupId = offlineVm.uiState.value.activeGroupId
+        val spitiMembers = offlineVm.uiState.value.members.filter { it.groupId == spitiGroupId }
+        val rohanMember = spitiMembers.first { it.name == "Rohan" }
+        offlineVm.updateFriendUpi(rohanMember.memberId, "Rohan", "+91 97654 32109", "Rohan|Male|adventurer|Terracotta")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val updatedRohan = offlineVm.uiState.value.members.first { it.memberId == rohanMember.memberId }
+        assertEquals(
+            "9765432109",
+            updatedRohan.userPhone,
+            "Editing a member's phone number must populate normalized 10-digit userPhone for cloud group discovery"
+        )
+        assertEquals(
+            "PENDING",
+            updatedRohan.inviteStatus,
+            "Adding a 10-digit phone to a member must set inviteStatus to PENDING so their invite appears on join"
+        )
+
+        // 5. Verify UPI UI strings are completely removed from UI screens
+        val srcMain = resolveSrcMainDir()
+        val onboardingScreens = java.io.File(srcMain, "java/com/splitmate/app/ui/screens/OnboardingAndSettingsScreens.kt").readText(Charsets.UTF_8)
+        val quickExpenseScreens = java.io.File(srcMain, "java/com/splitmate/app/ui/screens/QuickExpenseAndGuideScreens.kt").readText(Charsets.UTF_8)
+        val tripHomeScreens = java.io.File(srcMain, "java/com/splitmate/app/ui/screens/TripHomeScreen.kt").readText(Charsets.UTF_8)
+        assertFalse(onboardingScreens.contains("Your UPI ID"), "OnboardingAndSettingsScreens.kt must not contain 'Your UPI ID'")
+        assertFalse(quickExpenseScreens.contains("\"+UPI\""), "QuickExpenseAndGuideScreens.kt must not render '+UPI' badge")
+        assertFalse(tripHomeScreens.contains("Pay via UPI"), "TripHomeScreen.kt must not render 'Pay via UPI' button")
+    }
 }
+
 

@@ -163,6 +163,7 @@ enum class SplitMateTab(
 @Composable
 fun SplitMateApp(viewModel: SplitMateViewModel) {
     val context = LocalContext.current
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
     val prefs = remember { context.getSharedPreferences("splitmate_prefs", android.content.Context.MODE_PRIVATE) }
     val navController = rememberNavController()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -179,6 +180,33 @@ fun SplitMateApp(viewModel: SplitMateViewModel) {
         }
     }
     SplitMateTheme.isDark = uiState.isDarkTheme
+
+    // Automatic fault-tolerant background Cloud Sync & Online Presence heartbeat (every 20s while app is open)
+    LaunchedEffect(uiState.userPhone, uiState.hasRegisteredProfile) {
+        val cleanPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianMobile(uiState.userPhone)
+        if (uiState.hasRegisteredProfile && cleanPhone.length == 10) {
+            while (true) {
+                viewModel.performSilentAutoCloudSync(context)
+                kotlinx.coroutines.delay(20_000L)
+            }
+        }
+    }
+
+    // Immediate silent auto-sync whenever the app returns to foreground (ON_RESUME)
+    DisposableEffect(lifecycleOwner, uiState.userPhone, uiState.hasRegisteredProfile) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                val cleanPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianMobile(uiState.userPhone)
+                if (uiState.hasRegisteredProfile && cleanPhone.length == 10) {
+                    viewModel.performSilentAutoCloudSync(context)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     val startRoute = if (uiState.hasRegisteredProfile) "dashboard" else "onboarding"
 
@@ -244,7 +272,7 @@ fun SplitMateApp(viewModel: SplitMateViewModel) {
                 onExportLedgerText = {
                     buildString {
                         appendLine("SplitMate Trip & Ledger Summary")
-                        appendLine("User: ${uiState.currentUserName} (${uiState.userUpiId.ifBlank { "UPI not set" }})")
+                        appendLine("User: ${uiState.currentUserName} (${uiState.userPhone.ifBlank { "Offline Ledger" }})")
                         appendLine("Overall Net Position: $totalBalance")
                         appendLine("Active Groups (${uiState.groups.size}):")
                         uiState.groups.forEach { g ->
@@ -2271,6 +2299,7 @@ fun LedgersDashboardScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             items(groupMembers, key = { it.memberId }) { mbr ->
+                                val isMbrOnline = uiState.isMemberOnline(mbr)
                                 Surface(
                                     onClick = {
                                         if (!mbr.isCurrentUser) {
@@ -2291,7 +2320,8 @@ fun LedgersDashboardScreen(
                                             initials = mbr.avatarSeed,
                                             bg = SplitMateTheme.AccentSage,
                                             textColor = Color(0xFF23201E),
-                                            size = 30
+                                            size = 30,
+                                            isOnline = isMbrOnline
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Column {
@@ -2302,16 +2332,22 @@ fun LedgersDashboardScreen(
                                                 fontWeight = FontWeight.Bold,
                                                 color = SplitMateTheme.PrimaryDark
                                             )
-                                            val phone = mbr.upiId.substringBefore("@").replace(Regex("[^0-9]"), "")
+                                            val phone = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(mbr.userPhone, mbr.upiId)
                                             Text(
                                                 text = when {
                                                     isDeclinedMbr -> "Declined Invite"
+                                                    isMbrOnline -> "● Online now"
                                                     phone.length == 10 -> "+91 $phone"
                                                     mbr.isCurrentUser -> "Group Admin"
                                                     else -> "Tap to link phone"
                                                 },
                                                 fontSize = 10.sp,
-                                                color = if (!isDeclinedMbr && (phone.length == 10 || mbr.isCurrentUser)) SplitMateTheme.SageText else SplitMateTheme.TerracottaText
+                                                color = when {
+                                                    isDeclinedMbr -> SplitMateTheme.TerracottaText
+                                                    isMbrOnline -> Color(0xFF15803D)
+                                                    phone.length == 10 || mbr.isCurrentUser -> SplitMateTheme.SageText
+                                                    else -> SplitMateTheme.TerracottaText
+                                                }
                                             )
                                         }
                                     }
@@ -3247,30 +3283,53 @@ fun LedgersDashboardScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // 1-Tap Cloud Sync Pill Button
+                    val onlineFriendsTotal = remember(uiState.memberPresenceByPhone, uiState.members, uiState.userPhone) {
+                        uiState.onlineFriendsCount()
+                    }
+                    val hasCloudPhone = remember(uiState.userPhone) {
+                        com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianMobile(uiState.userPhone).length == 10
+                    }
+                    // Automatic Cloud Sync & Live Online Presence Pill
                     Surface(
                         onClick = { viewModel.syncAllGroupsWithCloud(context) },
                         shape = CircleShape,
-                        color = SplitMateTheme.SurfaceWhite,
-                        border = BorderStroke(1.dp, SplitMateTheme.BorderLight)
+                        color = if (onlineFriendsTotal > 0) Color(0xFFDCFCE7) else SplitMateTheme.SurfaceWhite,
+                        border = BorderStroke(
+                            1.dp,
+                            if (onlineFriendsTotal > 0) Color(0xFF22C55E).copy(alpha = 0.45f) else SplitMateTheme.BorderLight
+                        )
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Rounded.CloudSync,
-                                contentDescription = "Sync Cloud",
-                                tint = Color(0xFF416913),
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            if (onlineFriendsTotal > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF22C55E))
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Rounded.CloudDone,
+                                    contentDescription = "Auto-Sync Status",
+                                    tint = Color(0xFF416913),
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(5.dp))
                             Text(
-                                text = if (uiState.isCloudSyncing) "Syncing" else "Sync Cloud",
+                                text = when {
+                                    uiState.isCloudSyncing -> "Syncing"
+                                    onlineFriendsTotal > 0 -> "$onlineFriendsTotal Online"
+                                    hasCloudPhone -> "Auto-Sync"
+                                    else -> "Offline Ready"
+                                },
                                 fontFamily = SplitMateTheme.FontRounded,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = SplitMateTheme.PrimaryDark
+                                color = if (onlineFriendsTotal > 0) Color(0xFF15803D) else SplitMateTheme.PrimaryDark
                             )
                         }
                     }
@@ -3846,7 +3905,7 @@ fun LedgersDashboardScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Add friends from Contacts for 1-tap UPI payments.",
+                            text = "Works 100% offline. Add friends by mobile number for automatic cloud sync.",
                             fontFamily = SplitMateTheme.FontRounded,
                             fontSize = 12.sp,
                             color = SplitMateTheme.TextSecondary,
@@ -4002,15 +4061,50 @@ fun LedgersDashboardScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        OverlappingAvatarStack(groupCard.memberSeeds, remainingCount = groupCard.remainingCount)
-                        Text(
-                            text = groupCard.statusPillText,
-                            fontFamily = SplitMateTheme.FontRounded,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = SplitMateTheme.TextSecondary,
-                            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                        OverlappingAvatarStack(
+                            avatars = groupCard.memberSeeds,
+                            remainingCount = groupCard.remainingCount,
+                            onlineFlags = groupCard.memberOnlineFlags
                         )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            if (groupCard.onlineFriendsCount > 0) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color(0xFFDCFCE7)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .clip(CircleShape)
+                                                .background(Color(0xFF22C55E))
+                                        )
+                                        Text(
+                                            text = "${groupCard.onlineFriendsCount} Online",
+                                            fontFamily = SplitMateTheme.FontRounded,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = Color(0xFF15803D)
+                                        )
+                                    }
+                                }
+                            }
+                            Text(
+                                text = groupCard.statusPillText,
+                                fontFamily = SplitMateTheme.FontRounded,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = SplitMateTheme.TextSecondary,
+                                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                            )
+                        }
                     }
                 }
             }
@@ -4633,14 +4727,28 @@ fun LedgersDashboardScreen(
                                 ),
                                 modifier = Modifier.weight(1f)
                             )
-                            if (matchingDeviceContacts.isNotEmpty()) {
+                            if (matchingDeviceContacts.isNotEmpty() || contactSearchQuery.isNotBlank()) {
                                 FilledTonalButton(
                                     onClick = {
-                                        val topMatch = matchingDeviceContacts.first()
-                                        selectedMembers = selectedMembers + NewGroupMemberDraft(
-                                            name = topMatch.name,
-                                            cleanPhone = topMatch.cleanPhone
-                                        )
+                                        val topMatch = matchingDeviceContacts.firstOrNull()
+                                        if (topMatch != null) {
+                                            selectedMembers = selectedMembers + NewGroupMemberDraft(
+                                                name = topMatch.name,
+                                                cleanPhone = topMatch.cleanPhone
+                                            )
+                                        } else {
+                                            val typedPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianMobile(contactSearchQuery)
+                                            val rawName = contactSearchQuery.replace(Regex("[0-9+\\-()\\s]"), " ").trim()
+                                            val resolvedName = rawName.ifBlank {
+                                                if (typedPhone10.length == 10) "Friend (${typedPhone10.takeLast(4)})" else contactSearchQuery.trim()
+                                            }
+                                            if (resolvedName.isNotBlank()) {
+                                                selectedMembers = selectedMembers + NewGroupMemberDraft(
+                                                    name = resolvedName,
+                                                    cleanPhone = typedPhone10
+                                                )
+                                            }
+                                        }
                                         contactSearchQuery = ""
                                     },
                                     shape = SplitMateTheme.RadiusButton,
@@ -4650,12 +4758,12 @@ fun LedgersDashboardScreen(
                                     ),
                                     modifier = Modifier.height(52.dp)
                                 ) {
-                                    Icon(Icons.Rounded.PersonAdd, contentDescription = "Add Matched Contact", modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Rounded.PersonAdd, contentDescription = "Add Member", modifier = Modifier.size(18.dp))
                                 }
                             }
                         }
 
-                        // Live matching contact suggestions from the user's phonebook
+                        // Live matching contact suggestions from the user's phonebook (or direct add when not in phonebook)
                         if (contactSearchQuery.isNotBlank()) {
                             if (matchingDeviceContacts.isNotEmpty()) {
                                 Column(
@@ -4729,12 +4837,62 @@ fun LedgersDashboardScreen(
                                     }
                                 }
                             } else {
-                                Text(
-                                    text = "No matching contact in phonebook for \"$contactSearchQuery\"",
-                                    fontSize = 11.sp,
-                                    color = SplitMateTheme.TerracottaText,
-                                    modifier = Modifier.padding(horizontal = 4.dp)
-                                )
+                                val typedPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianMobile(contactSearchQuery)
+                                val rawName = contactSearchQuery.replace(Regex("[0-9+\\-()\\s]"), " ").trim()
+                                val resolvedName = rawName.ifBlank {
+                                    if (typedPhone10.length == 10) "Friend (${typedPhone10.takeLast(4)})" else contactSearchQuery.trim()
+                                }
+                                Surface(
+                                    onClick = {
+                                        if (resolvedName.isNotBlank()) {
+                                            selectedMembers = selectedMembers + NewGroupMemberDraft(
+                                                name = resolvedName,
+                                                cleanPhone = typedPhone10
+                                            )
+                                            contactSearchQuery = ""
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = SplitMateTheme.SurfaceMuted,
+                                    border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = if (typedPhone10.length == 10) {
+                                                    "Add $resolvedName (+91 $typedPhone10)"
+                                                } else {
+                                                    "Add \"$resolvedName\" as offline member"
+                                                },
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = SplitMateTheme.PrimaryDark
+                                            )
+                                            Text(
+                                                text = if (typedPhone10.length == 10) {
+                                                    "Auto-discovers group when they join with +91 $typedPhone10"
+                                                } else {
+                                                    "Works offline · You can link their 10-digit mobile number anytime"
+                                                },
+                                                fontSize = 10.sp,
+                                                color = SplitMateTheme.SageText
+                                            )
+                                        }
+                                        Text(
+                                            text = "+ Add",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = SplitMateTheme.SageText
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -4762,13 +4920,25 @@ fun LedgersDashboardScreen(
                         Button(
                             onClick = {
                                 val topMatch = matchingDeviceContacts.firstOrNull()
-                                val finalDrafts = if (topMatch != null) {
-                                    selectedMembers + NewGroupMemberDraft(
-                                        name = topMatch.name,
-                                        cleanPhone = topMatch.cleanPhone
-                                    )
-                                } else {
-                                    selectedMembers
+                                val finalDrafts = when {
+                                    topMatch != null -> {
+                                        selectedMembers + NewGroupMemberDraft(
+                                            name = topMatch.name,
+                                            cleanPhone = topMatch.cleanPhone
+                                        )
+                                    }
+                                    contactSearchQuery.isNotBlank() -> {
+                                        val typedPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianMobile(contactSearchQuery)
+                                        val rawName = contactSearchQuery.replace(Regex("[0-9+\\-()\\s]"), " ").trim()
+                                        val resolvedName = rawName.ifBlank {
+                                            if (typedPhone10.length == 10) "Friend (${typedPhone10.takeLast(4)})" else contactSearchQuery.trim()
+                                        }
+                                        selectedMembers + NewGroupMemberDraft(
+                                            name = resolvedName,
+                                            cleanPhone = typedPhone10
+                                        )
+                                    }
+                                    else -> selectedMembers
                                 }
                                 viewModel.createNewGroupWithContacts(
                                     name = groupNameInput,
@@ -4801,7 +4971,7 @@ fun LedgersDashboardScreen(
 }
 
 // ==============================================================================
-// TAB 3: SETTLE (Greedy Debt Simplification & Direct UPI + Direct WhatsApp Link)
+// TAB 3: SETTLE (Greedy Debt Simplification & Direct WhatsApp Reminder)
 // ==============================================================================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -4822,7 +4992,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
             viewModel.loadDeviceContacts(context)
             showContactLinkSheet = true
         } else {
-            Toast.makeText(context, "Contacts permission required to link phone for UPI", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Contacts permission required to link mobile number", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -4840,8 +5010,6 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
             directContactPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
         }
     }
-
-    // Removed unlicensed P2P UPI payment sheet per NPCI/Google Pay security policy to avoid user confusion
 
     var editingMemberInSettle by remember { mutableStateOf<GroupMemberEntity?>(null) }
     editingMemberInSettle?.let { targetMember ->
@@ -4880,7 +5048,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                     viewModel.updateFriendUpi(
                         memberId = memberToUpdate.memberId,
                         newName = memberToUpdate.name,
-                        newUpiId = "${picked.cleanPhone}@upi",
+                        newUpiId = picked.cleanPhone,
                         newAvatarSeed = memberToUpdate.avatarSeed
                     )
                 }
@@ -4947,7 +5115,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                 color = SplitMateTheme.PrimaryDark
             )
             Text(
-                text = "Simplified balances grouped by member with direct WhatsApp & UPI",
+                text = "Simplified balances grouped by member with 1-tap Mark Paid & WhatsApp reminders",
                 fontFamily = SplitMateTheme.FontRounded,
                 fontSize = 12.sp,
                 color = SplitMateTheme.TextSecondary
@@ -5442,7 +5610,10 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                         it.fromMemberId == leg.counterpartyMemberId && it.toMemberId == summary.memberId
                                     }
                                     val fromRoomMember = uiState.members.find { it.memberId == leg.counterpartyMemberId }
-                                    val debtorPhone = cleanIndianTenDigitPhone(fromRoomMember?.upiId?.substringBefore('@') ?: "")
+                                    val debtorPhone = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(
+                                        userPhone = fromRoomMember?.userPhone.orEmpty(),
+                                        upiId = fromRoomMember?.upiId.orEmpty()
+                                    )
 
                                     Surface(
                                         shape = RoundedCornerShape(14.dp),

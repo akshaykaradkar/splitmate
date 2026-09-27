@@ -591,11 +591,11 @@ fun UserSettingsScreen(
             contentPadding = PaddingValues(top = 8.dp, bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Section 1: User Profile Name, UPI ID & Full 4-Token Avatar Studio
+            // Section 1: User Profile Name, Mobile Number & Full 4-Token Avatar Studio
             item {
                 Column {
                     Text(
-                        text = "Profile, Avatar & UPI Handle",
+                        text = "Profile, Avatar & Mobile Number",
                         fontFamily = SplitMateDisplayFontFamily,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.ExtraBold,
@@ -697,7 +697,7 @@ fun UserSettingsScreen(
                                 onValueChange = { editedPhone = it },
                                 label = {
                                     Text(
-                                        text = "10-Digit Mobile Number",
+                                        text = "10-Digit Mobile Number (Optional for Cloud Backup)",
                                         fontFamily = SplitMateBrandFontFamily,
                                         fontWeight = FontWeight.SemiBold
                                     )
@@ -714,41 +714,6 @@ fun UserSettingsScreen(
                                 },
                                 singleLine = true,
                                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedTextColor = textPrimary,
-                                    unfocusedTextColor = textPrimary,
-                                    focusedContainerColor = mutedBg.copy(alpha = 0.4f),
-                                    unfocusedContainerColor = mutedBg.copy(alpha = 0.4f),
-                                    focusedBorderColor = textPrimary,
-                                    unfocusedBorderColor = borderColor,
-                                    focusedLabelColor = textPrimary,
-                                    unfocusedLabelColor = textSecondary
-                                ),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            OutlinedTextField(
-                                value = editedUpiId,
-                                onValueChange = { editedUpiId = it },
-                                label = {
-                                    Text(
-                                        text = "Your UPI ID / Phone (for WhatsApp Reminders)",
-                                        fontFamily = SplitMateBrandFontFamily,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                },
-                                placeholder = {
-                                    Text("e.g. akshay@okaxis or 9876543210@upi", fontFamily = SplitMateBrandFontFamily)
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Rounded.QrCode2,
-                                        contentDescription = null,
-                                        tint = textPrimary
-                                    )
-                                },
-                                singleLine = true,
                                 shape = RoundedCornerShape(16.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedTextColor = textPrimary,
@@ -936,7 +901,6 @@ fun UserSettingsScreen(
                                 onClick = {
                                     val clean = editedName.trim().ifEmpty { "Explorer" }
                                     val cleanPhone = editedPhone.trim()
-                                    val cleanUpi = editedUpiId.trim()
                                     val encodedSeed = AvatarSeedCodec.encode(
                                         seedKey = effectiveSeedKey,
                                         gender = selectedGender,
@@ -944,8 +908,7 @@ fun UserSettingsScreen(
                                         colorPresetId = selectedColorPresetId
                                     )
                                     onUpdateUserProfile(clean, cleanPhone, encodedSeed)
-                                    onUpdateUpiId(cleanUpi)
-                                    Toast.makeText(context, "Saved Profile & UPI Handle", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Saved Profile", Toast.LENGTH_SHORT).show()
                                 },
                                 shape = SplitMateThemeTokens.RadiusPill,
                                 colors = ButtonDefaults.buttonColors(
@@ -957,7 +920,7 @@ fun UserSettingsScreen(
                                     .height(46.dp)
                             ) {
                                 Text(
-                                    text = "Save Profile & UPI Handle",
+                                    text = "Save Profile",
                                     fontFamily = SplitMateBrandFontFamily,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 14.sp
@@ -989,37 +952,6 @@ fun UserSettingsScreen(
                     ) {
                         Column {
                             SettingsRowItem(
-                                icon = Icons.AutoMirrored.Rounded.Send,
-                                iconBg = SplitMateThemeTokens.AccentSage.copy(alpha = 0.45f),
-                                iconTint = SplitMateThemeTokens.SageText,
-                                title = "Include My UPI ID in WhatsApp Reminders",
-                                subtitle = "Embed your UPI handle in 1-tap WhatsApp settlement messages (INR ₹)",
-                                titleColor = textPrimary,
-                                subtitleColor = textSecondary,
-                                trailingContent = {
-                                    Switch(
-                                        checked = includeUpiInWhatsApp,
-                                        onCheckedChange = {
-                                            includeUpiInWhatsApp = it
-                                            prefs.edit().putBoolean("pref_whatsapp_upi", it).apply()
-                                        },
-                                        colors = SwitchDefaults.colors(
-                                            checkedThumbColor = Color.White,
-                                            checkedTrackColor = Color(0xFF416913),
-                                            uncheckedThumbColor = Color(0xFF23201E),
-                                            uncheckedTrackColor = mutedBg
-                                        )
-                                    )
-                                },
-                                onClick = {
-                                    includeUpiInWhatsApp = !includeUpiInWhatsApp
-                                    prefs.edit().putBoolean("pref_whatsapp_upi", includeUpiInWhatsApp).apply()
-                                }
-                            )
-
-                            HorizontalDivider(color = borderColor.copy(alpha = 0.5f))
-
-                            SettingsRowItem(
                                 icon = Icons.Rounded.Share,
                                 iconBg = if (isDarkTheme) Color(0xFF282552) else Color(0xFFEEF2FF),
                                 iconTint = if (isDarkTheme) Color(0xFFDCE3FD) else Color(0xFF3730A3),
@@ -1036,7 +968,7 @@ fun UserSettingsScreen(
                                 },
                                 onClick = {
                                     val summaryText = onExportLedgerText().ifBlank {
-                                        "SplitMate Trip Summary (${editedName.ifBlank { userName }})\nActive Groups: $activeGroupsCount\nUPI Handle: ${editedUpiId.ifBlank { "Not configured" }}"
+                                        "SplitMate Trip Summary (${editedName.ifBlank { userName }})\nActive Groups: $activeGroupsCount"
                                     }
                                     runCatching {
                                         val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {

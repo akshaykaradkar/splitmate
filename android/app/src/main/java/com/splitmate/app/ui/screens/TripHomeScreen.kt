@@ -88,6 +88,7 @@ import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -484,7 +485,8 @@ fun TripHubMemberAvatar(
     size: Dp = 42.dp,
     backgroundColor: Color,
     textColor: Color,
-    fontSize: TextUnit = 14.sp
+    fontSize: TextUnit = 14.sp,
+    isOnline: Boolean = false
 ) {
     val context = LocalContext.current
     val effectiveSeed = seedOrName.ifBlank { fallbackName }
@@ -503,35 +505,48 @@ fun TripHubMemberAvatar(
     val svgUrl = remember(effectiveSeed) { buildDiceBearOpenPeepsUrl(effectiveSeed) }
     val initials = remember(fallbackName) { extractInitialsFromNameOrSeed(fallbackName) }
 
-    Box(
-        modifier = Modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(presetBg)
-            .border(1.5.dp, TripHubTokens.CardSurface, CircleShape),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = initials,
-            fontFamily = FigtreeFontFamily,
-            fontWeight = FontWeight.ExtraBold,
-            fontSize = fontSize,
-            color = textColor
-        )
-        AsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(svgUrl)
-                .decoderFactory(SvgDecoder.Factory())
-                .diskCacheKey("dicebear_avatar_$svgUrl")
-                .memoryCacheKey("dicebear_avatar_$svgUrl")
-                .crossfade(true)
-                .build(),
-            contentDescription = fallbackName,
-            contentScale = ContentScale.Crop,
+    Box(modifier = Modifier.size(size)) {
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(CircleShape)
-        )
+                .background(presetBg)
+                .border(1.5.dp, TripHubTokens.CardSurface, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = initials,
+                fontFamily = FigtreeFontFamily,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = fontSize,
+                color = textColor
+            )
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(svgUrl)
+                    .decoderFactory(SvgDecoder.Factory())
+                    .diskCacheKey("dicebear_avatar_$svgUrl")
+                    .memoryCacheKey("dicebear_avatar_$svgUrl")
+                    .crossfade(true)
+                    .build(),
+                contentDescription = fallbackName,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape)
+            )
+        }
+        if (isOnline) {
+            val dotSize = if (size >= 40.dp) 12.dp else 9.dp
+            Box(
+                modifier = Modifier
+                    .size(dotSize)
+                    .align(Alignment.BottomEnd)
+                    .clip(CircleShape)
+                    .background(Color(0xFF22C55E))
+                    .border(1.5.dp, TripHubTokens.CardSurface, CircleShape)
+            )
+        }
     }
 }
 
@@ -800,7 +815,10 @@ fun TripHomeScreen(
     var showSyncAndPerspectiveSheet by remember { mutableStateOf(false) }
     var showAddBookingBottomSheet by remember { mutableStateOf(false) }
     var inspectedBerthChartSnapshot by remember { mutableStateOf<Pair<ExpenseEntity, LivePnrStatusSnapshot?>?>(null) }
-    var activeUpiSettlementTransfer by remember { mutableStateOf<SettlementTransferUiModel?>(null) }
+
+    val onlineFriendsCount = remember(uiState.memberPresenceByPhone, uiState.members, resolvedGroupId, uiState.userPhone) {
+        uiState.onlineFriendsCount(resolvedGroupId)
+    }
 
     // Category counts in Room (strictly > 0 for sub-filter chips)
     val categoryCounts: Map<TripHubBookingCategory, Int> = remember(classifiedExpenses) {
@@ -897,6 +915,7 @@ fun TripHomeScreen(
                 groupName = (group?.name ?: "Trip Hub").toSmartTitleCase(),
                 subtitle = dynamicTripSubtitle,
                 activePerspectiveMember = activePerspectiveMember,
+                onlineFriendsCount = onlineFriendsCount,
                 isSearchExpanded = isSearchExpanded,
                 searchQuery = searchQuery,
                 onSearchQueryChange = { searchQuery = it },
@@ -967,7 +986,7 @@ fun TripHomeScreen(
             val declinedMembersWithOpenSplits = remember(groupMembers, groupSplits) {
                 groupMembers.filter { m ->
                     m.inviteStatus.equals("DECLINED", ignoreCase = true) &&
-                        groupSplits.any { sp -> sp.memberId == m.memberId && sp.finalOwedCents > 0L }
+                        groupSplits.any { sp -> sp.finalOwedCents > 0L && sp.memberId == m.memberId }
                 }
             }
             declinedMembersWithOpenSplits.forEach { declinedMember ->
@@ -1105,9 +1124,6 @@ fun TripHomeScreen(
                         groupName = group?.name ?: "Trip Hub",
                         groupMembers = groupMembers,
                         netBalancesMap = netBalancesMap,
-                        onOpenUpiPaymentSheet = { transferUiModel ->
-                            activeUpiSettlementTransfer = transferUiModel
-                        },
                         onOpenSettleUpClick = onOpenSettleUpClick
                     )
                 }
@@ -1189,39 +1205,6 @@ fun TripHomeScreen(
             }
         )
     }
-
-    // =========================================================================
-    // MODAL 4: UPI EXPRESS PAYMENT SHEET (From `Money` Tab)
-    // =========================================================================
-    val currentUpiTransfer = activeUpiSettlementTransfer
-    if (currentUpiTransfer != null) {
-        val creditorMember = groupMembers.find { it.memberId == currentUpiTransfer.toMemberId }
-        UpiExpressPaymentSheet(
-            transferModel = currentUpiTransfer,
-            groupName = group?.name ?: "Trip Hub",
-            initialSavedUpiId = creditorMember?.upiId ?: currentUpiTransfer.upiId,
-            onSaveMemberUpi = { updatedUpi ->
-                if (creditorMember != null) {
-                    viewModel.updateFriendUpi(
-                        memberId = creditorMember.memberId,
-                        newName = creditorMember.name,
-                        newUpiId = updatedUpi,
-                        newAvatarSeed = creditorMember.avatarSeed
-                    )
-                }
-            },
-            onMarkSettled = {
-                viewModel.recordSettlement(
-                    groupId = resolvedGroupId,
-                    fromMemberId = currentUpiTransfer.fromMemberId,
-                    toMemberId = currentUpiTransfer.toMemberId,
-                    amountCents = currentUpiTransfer.transfer.amountCents
-                )
-                activeUpiSettlementTransfer = null
-            },
-            onDismiss = { activeUpiSettlementTransfer = null }
-        )
-    }
 }
 
 // ==============================================================================
@@ -1233,6 +1216,7 @@ private fun TripHubTopBar(
     groupName: String,
     subtitle: String,
     @Suppress("UNUSED_PARAMETER") activePerspectiveMember: GroupMemberEntity?,
+    onlineFriendsCount: Int = 0,
     isSearchExpanded: Boolean,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
@@ -1326,19 +1310,35 @@ private fun TripHubTopBar(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Rounded.PersonAdd,
-                                contentDescription = "Invite Friends via Link",
-                                tint = TripHubTokens.TextPrimary,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Text(
-                                text = "Invite",
-                                fontFamily = FigtreeFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = TripHubTokens.TextPrimary
-                            )
+                            if (onlineFriendsCount > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF22C55E))
+                                )
+                                Text(
+                                    text = "$onlineFriendsCount Online",
+                                    fontFamily = FigtreeFontFamily,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 12.sp,
+                                    color = TripHubTokens.TextPrimary
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Rounded.PersonAdd,
+                                    contentDescription = "Invite Friends via Link",
+                                    tint = TripHubTokens.TextPrimary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = "Invite",
+                                    fontFamily = FigtreeFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = TripHubTokens.TextPrimary
+                                )
+                            }
                         }
                     }
                 }
@@ -4580,7 +4580,7 @@ private fun TripHubTravelWalletView(
 
 /**
  * Subtask 3.3.3: `Money` Tab — Greedy Minimum Cash Flow Settlements (`SplitMateMathEngine.simplifyDebtsGreedy`)
- * + Compact Max-Heap Graph Inspector (`Icons.Rounded.Info`, `48.dp` touch bounds) + `Pay via UPI` & `Mark Paid`.
+ * + Compact Max-Heap Graph Inspector (`Icons.Rounded.Info`, `48.dp` touch bounds) + `Mark Paid`.
  */
 @Composable
 private fun TripHubMoneySettlementView(
@@ -4589,11 +4589,11 @@ private fun TripHubMoneySettlementView(
     @Suppress("UNUSED_PARAMETER") groupName: String,
     groupMembers: List<GroupMemberEntity>,
     netBalancesMap: Map<String, Long>,
-    onOpenUpiPaymentSheet: (SettlementTransferUiModel) -> Unit,
     @Suppress("UNUSED_PARAMETER") onOpenSettleUpClick: () -> Unit
 ) {
     val context = LocalContext.current
     val localView = LocalView.current
+    val uiState by viewModel.uiState.collectAsState()
     var showGraphInspector by remember { mutableStateOf(false) }
 
     val memberNetBalances = remember(groupMembers, netBalancesMap) {
@@ -4777,16 +4777,8 @@ private fun TripHubMoneySettlementView(
             ) { settlement ->
                 val fromMember = groupMembers.find { it.memberId == settlement.fromMemberId }
                 val toMember = groupMembers.find { it.memberId == settlement.toMemberId }
-                val rawFields = toMember?.upiId?.split("|")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
-                val rawPhone = rawFields.firstOrNull { !it.contains("@") } ?: ""
-                val cleanDigits = cleanIndianTenDigitPhone(rawPhone)
-                val clean10Phone = if (cleanDigits.length == 10) cleanDigits else {
-                    rawFields.map { cleanIndianTenDigitPhone(it.substringBefore("@")) }
-                        .firstOrNull { it.length == 10 }.orEmpty()
-                }
-                val customVpa = rawFields.firstOrNull { it.contains("@") && !it.endsWith("@upi", ignoreCase = true) }
-                    ?: rawFields.firstOrNull { it.contains("@") }
-                    ?: if (clean10Phone.length == 10) "${clean10Phone}@upi" else ""
+                val isFromOnline = fromMember != null && uiState.isMemberOnline(fromMember)
+                val isToOnline = toMember != null && uiState.isMemberOnline(toMember)
                 val formattedAmount = formatIndianRupeesFromCents(settlement.amountCents)
 
                 Surface(
@@ -4813,6 +4805,15 @@ private fun TripHubMoneySettlementView(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 modifier = Modifier.weight(1f)
                             ) {
+                                TripHubMemberAvatar(
+                                    seedOrName = fromMember?.avatarSeed?.ifBlank { settlement.fromName } ?: settlement.fromName,
+                                    fallbackName = settlement.fromName,
+                                    size = 32.dp,
+                                    backgroundColor = TripHubTokens.SunkenWell,
+                                    textColor = TripHubTokens.TextPrimary,
+                                    fontSize = 11.sp,
+                                    isOnline = isFromOnline
+                                )
                                 Text(
                                     text = settlement.fromName,
                                     fontFamily = FigtreeFontFamily,
@@ -4825,6 +4826,15 @@ private fun TripHubMoneySettlementView(
                                     contentDescription = "pays",
                                     tint = TripHubTokens.TextMuted,
                                     modifier = Modifier.size(16.dp)
+                                )
+                                TripHubMemberAvatar(
+                                    seedOrName = toMember?.avatarSeed?.ifBlank { settlement.toName } ?: settlement.toName,
+                                    fallbackName = settlement.toName,
+                                    size = 32.dp,
+                                    backgroundColor = TripHubTokens.PositiveSagePillBg,
+                                    textColor = TripHubTokens.PositiveSageText,
+                                    fontSize = 11.sp,
+                                    isOnline = isToOnline
                                 )
                                 Text(
                                     text = settlement.toName,
@@ -4847,80 +4857,39 @@ private fun TripHubMoneySettlementView(
                             )
                         }
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        Button(
+                            onClick = {
+                                performCrispTactileHaptic(context, localView, heavy = false)
+                                viewModel.recordSettlement(
+                                    groupId = groupId,
+                                    fromMemberId = settlement.fromMemberId,
+                                    toMemberId = settlement.toMemberId,
+                                    amountCents = settlement.amountCents
+                                )
+                            },
+                            shape = CircleShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = BuckwheatOlivePrimary,
+                                contentColor = Color.White
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .minimumInteractiveComponentSize()
+                                .defaultMinSize(minHeight = 48.dp)
                         ) {
-                            Button(
-                                onClick = {
-                                    performCrispTactileHaptic(context, localView, heavy = false)
-                                    val transferUiModel = SettlementTransferUiModel(
-                                        transfer = settlement,
-                                        fromMemberId = settlement.fromMemberId,
-                                        fromName = settlement.fromName,
-                                        fromSeed = fromMember?.avatarSeed ?: settlement.fromName,
-                                        toMemberId = settlement.toMemberId,
-                                        toName = settlement.toName,
-                                        toSeed = toMember?.avatarSeed ?: settlement.toName,
-                                        upiId = customVpa,
-                                        cleanPhone = clean10Phone,
-                                        hasLinkedPhone = clean10Phone.length == 10,
-                                        amount = String.format(Locale.US, "%.2f", settlement.amountCents / 100.0),
-                                        formattedDisplayAmount = formattedAmount,
-                                        isCurrentUserDebtor = fromMember?.isCurrentUser == true
-                                    )
-                                    onOpenUpiPaymentSheet(transferUiModel)
-                                },
-                                shape = CircleShape,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = BuckwheatOlivePrimary,
-                                    contentColor = Color.White
-                                ),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .minimumInteractiveComponentSize()
-                                    .defaultMinSize(minHeight = 48.dp)
-                            ) {
-                                Text(
-                                    text = "Pay via UPI",
-                                    fontFamily = FigtreeFontFamily,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 13.sp
-                                )
-                            }
-
-                            OutlinedButton(
-                                onClick = {
-                                    performCrispTactileHaptic(context, localView, heavy = false)
-                                    viewModel.recordSettlement(
-                                        groupId = groupId,
-                                        fromMemberId = settlement.fromMemberId,
-                                        toMemberId = settlement.toMemberId,
-                                        amountCents = settlement.amountCents
-                                    )
-                                },
-                                shape = CircleShape,
-                                border = BorderStroke(1.dp, TripHubTokens.CardBorder),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .minimumInteractiveComponentSize()
-                                    .defaultMinSize(minHeight = 48.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.CheckCircleOutline,
-                                    contentDescription = null,
-                                    tint = TripHubTokens.TextPrimary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Mark Paid",
-                                    fontFamily = FigtreeFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    color = TripHubTokens.TextPrimary
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Rounded.CheckCircleOutline,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Mark Paid",
+                                fontFamily = FigtreeFontFamily,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 13.sp
+                            )
                         }
                     }
                 }
@@ -4931,12 +4900,12 @@ private fun TripHubMoneySettlementView(
 
 /**
  * Subtask 3.3.4: `People` Tab — Lists all real `GroupMemberEntity` travelers with avatar initials,
- * phone/UPI VPA, live `tnum` net balance pill, and 1-tap `"View as <Name>"` perspective switching.
+ * live online presence dot + badge, phone status, live `tnum` net balance pill, and 1-tap perspective switching.
  */
 @Composable
 private fun TripHubPeoplePerspectiveView(
-    @Suppress("UNUSED_PARAMETER") viewModel: SplitMateViewModel,
-    @Suppress("UNUSED_PARAMETER") groupId: String,
+    viewModel: SplitMateViewModel,
+    groupId: String,
     groupMembers: List<GroupMemberEntity>,
     netBalancesMap: Map<String, Long>,
     onAddMemberClick: () -> Unit,
@@ -4945,6 +4914,7 @@ private fun TripHubPeoplePerspectiveView(
 ) {
     val context = LocalContext.current
     val localView = LocalView.current
+    val uiState by viewModel.uiState.collectAsState()
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -5023,6 +4993,9 @@ private fun TripHubPeoplePerspectiveView(
             key = { it.memberId }
         ) { member ->
             val isMe = member.isCurrentUser
+            val isOnline = uiState.isMemberOnline(member)
+            val cleanPhone10 = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(member.userPhone, member.upiId)
+            val phoneSubtitle = if (cleanPhone10.length == 10) "+91 $cleanPhone10 · Auto-Sync" else "Offline Member · Local Ledger"
             val netCents = netBalancesMap[member.memberId] ?: 0L
             val absFormatted = formatIndianRupeesFromCents(abs(netCents))
             val netLabel = when {
@@ -5032,6 +5005,12 @@ private fun TripHubPeoplePerspectiveView(
             }
 
             Surface(
+                onClick = {
+                    if (!isMe) {
+                        performCrispTactileHaptic(context, localView, heavy = false)
+                        viewModel.claimGroupMemberPerspective(groupId, member.memberId)
+                    }
+                },
                 shape = RoundedCornerShape(22.dp),
                 color = TripHubTokens.CardSurface,
                 border = BorderStroke(
@@ -5064,7 +5043,8 @@ private fun TripHubPeoplePerspectiveView(
                                 size = 44.dp,
                                 backgroundColor = if (isMe) TripHubTokens.PositiveSagePillBg else TripHubTokens.SunkenWell,
                                 textColor = if (isMe) TripHubTokens.PositiveSageText else TripHubTokens.TextPrimary,
-                                fontSize = 14.sp
+                                fontSize = 14.sp,
+                                isOnline = isOnline
                             )
                             Column(modifier = Modifier.weight(1f)) {
                                 Row(
@@ -5078,6 +5058,32 @@ private fun TripHubPeoplePerspectiveView(
                                         fontSize = 16.sp,
                                         color = TripHubTokens.TextPrimary
                                     )
+                                    if (isOnline) {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = Color(0xFFDCFCE7)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(6.dp)
+                                                        .clip(CircleShape)
+                                                        .background(Color(0xFF22C55E))
+                                                )
+                                                Text(
+                                                    text = "Online now",
+                                                    fontFamily = FigtreeFontFamily,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    fontSize = 9.sp,
+                                                    color = Color(0xFF15803D)
+                                                )
+                                            }
+                                        }
+                                    }
                                     if (isMe) {
                                         Surface(
                                             shape = CircleShape,
@@ -5156,7 +5162,7 @@ private fun TripHubPeoplePerspectiveView(
                                     }
                                 }
                                 Text(
-                                    text = member.upiId.ifBlank { member.userPhone.ifBlank { "UPI / Phone not linked yet" } },
+                                    text = phoneSubtitle,
                                     style = TextStyle(
                                         fontFamily = SplitMateTnumMonospace,
                                         fontWeight = FontWeight.Medium,

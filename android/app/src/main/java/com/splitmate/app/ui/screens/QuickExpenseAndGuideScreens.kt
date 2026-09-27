@@ -1096,9 +1096,6 @@ fun QuickExpenseScreen(
                             items(participants, key = { it.id }) { person ->
                                 val isSelected = selectedMemberIds.contains(person.id)
                                 val matchingRoomMember = activeMembers.find { it.memberId == person.id }
-                                val isMissingUpi = matchingRoomMember != null &&
-                                    !matchingRoomMember.isCurrentUser &&
-                                    person.upiId.isBlank()
                                 val shortName = person.name.removeSuffix(" (You)").substringBefore(" ").ifBlank { person.name }
                                 val avatarUrl = remember(person.avatarSeed) {
                                     buildDiceBearOpenPeepsUrl(person.avatarSeed)
@@ -1206,26 +1203,6 @@ fun QuickExpenseScreen(
                                                     fontWeight = FontWeight.ExtraBold,
                                                     color = Color(0xFF365314),
                                                     modifier = Modifier.padding(horizontal = 4.5.dp, vertical = 1.dp)
-                                                )
-                                            }
-                                        }
-
-                                        // Direct +UPI Badge on avatar when member lacks a linked UPI ID/phone
-                                        if (isMissingUpi) {
-                                            Surface(
-                                                onClick = { editingFriend = matchingRoomMember },
-                                                shape = QuickExpenseThemeTokens.RadiusPill,
-                                                color = QuickExpenseThemeTokens.TerracottaSurface,
-                                                border = BorderStroke(1.dp, QuickExpenseThemeTokens.TerracottaText.copy(alpha = 0.45f)),
-                                                modifier = Modifier.align(Alignment.TopEnd)
-                                            ) {
-                                                Text(
-                                                    text = "+UPI",
-                                                    fontFamily = SplitMateBrandFontFamily,
-                                                    fontSize = 8.sp,
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    color = QuickExpenseThemeTokens.TerracottaText,
-                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                                                 )
                                             }
                                         }
@@ -1896,7 +1873,7 @@ private data class EditableMemberDraft(
 )
 
 // ==============================================================================
-// EDIT FRIEND PERSONA, EDITABLE UPI ID & BATCH MEMBER EDITOR DIALOG
+// EDIT FRIEND PERSONA, 10-DIGIT MOBILE NUMBER & BATCH MEMBER EDITOR DIALOG
 // ==============================================================================
 @Composable
 fun EditFriendUpiDialog(
@@ -1915,17 +1892,19 @@ fun EditFriendUpiDialog(
     }
 
     // Persistent draft map across ALL members in the group so switching members never loses edits!
+    // Note: EditableMemberDraft.upiId stores the 10-digit mobile number string for phone sync.
     val memberDrafts = remember(effectiveMembers) {
         androidx.compose.runtime.mutableStateMapOf<String, EditableMemberDraft>().apply {
             effectiveMembers.forEach { m ->
                 val parsedDesc = com.splitmate.app.ui.AvatarSeedCodec.parse(m.avatarSeed.ifBlank { m.name })
+                val initialPhone10 = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(m.userPhone, m.upiId)
                 put(
                     m.memberId,
                     EditableMemberDraft(
                         memberId = m.memberId,
                         name = m.name,
                         style = parsedDesc.gender.id,
-                        upiId = m.upiId
+                        upiId = initialPhone10
                     )
                 )
             }
@@ -1940,7 +1919,7 @@ fun EditFriendUpiDialog(
         memberId = activeMember.memberId,
         name = activeMember.name,
         style = "Neutral",
-        upiId = activeMember.upiId
+        upiId = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(activeMember.userPhone, activeMember.upiId)
     )
 
     var showInAppContactPicker by remember { mutableStateOf(false) }
@@ -1991,15 +1970,15 @@ fun EditFriendUpiDialog(
             isLoading = isLoadingContacts,
             multiSelect = false,
             title = "Select Contact for ${activeDraft.name.ifBlank { activeMember.name }}",
-            subtitle = "Choose a contact from your phonebook to link name & UPI",
+            subtitle = "Choose a contact from your phonebook to link name & 10-digit mobile number",
             onDismissRequest = { showInAppContactPicker = false },
             onConfirmSelected = { selected ->
                 val chosen = selected.firstOrNull()
                 if (chosen != null) {
-                    val autoUpi = if (chosen.cleanPhone.length == 10) "${chosen.cleanPhone}@upi" else activeDraft.upiId
+                    val cleanPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(chosen.cleanPhone)
                     memberDrafts[activeMember.memberId] = activeDraft.copy(
                         name = chosen.name,
-                        upiId = autoUpi
+                        upiId = if (cleanPhone10.length == 10) cleanPhone10 else activeDraft.upiId
                     )
                 }
                 showInAppContactPicker = false
@@ -2044,14 +2023,14 @@ fun EditFriendUpiDialog(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "Edit Group Members & UPI",
+                            text = "Edit Group Members",
                             fontFamily = SplitMateDisplayFontFamily,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = QuickExpenseThemeTokens.PrimaryDark
                         )
                         Text(
-                            text = "Configure all members at once, then Save All",
+                            text = "Update member names, avatars & optional mobile numbers",
                             fontFamily = SplitMateBrandFontFamily,
                             fontSize = 12.sp,
                             color = QuickExpenseThemeTokens.TextSecondary
@@ -2068,7 +2047,7 @@ fun EditFriendUpiDialog(
                     if (effectiveMembers.size > 1) {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(
-                                text = "All Group Members (${effectiveMembers.size}) — Tap M / F / N or Select to Edit UPI",
+                                text = "All Group Members (${effectiveMembers.size}) — Tap M / F / N or Select to Edit",
                                 fontFamily = SplitMateBrandFontFamily,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
@@ -2080,7 +2059,7 @@ fun EditFriendUpiDialog(
                                         candidate.memberId,
                                         candidate.name,
                                         "Neutral",
-                                        candidate.upiId
+                                        com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(candidate.userPhone, candidate.upiId)
                                     )
                                     val candidateBaseDesc = com.splitmate.app.ui.AvatarSeedCodec.parse(candidate.avatarSeed.ifBlank { candidate.name })
                                     val candidateCompositeSeed = com.splitmate.app.ui.AvatarSeedCodec.encode(
@@ -2091,6 +2070,7 @@ fun EditFriendUpiDialog(
                                     )
                                     val candidateUrl = buildDiceBearOpenPeepsUrl(candidateCompositeSeed)
                                     val isCurrentTarget = candidate.memberId == activeMember.memberId
+                                    val cleanDraftPhone10 = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(draft.upiId, draft.upiId)
                                     Surface(
                                         onClick = {
                                             activeMemberId = candidate.memberId
@@ -2146,11 +2126,11 @@ fun EditFriendUpiDialog(
                                                         overflow = TextOverflow.Ellipsis
                                                     )
                                                     Text(
-                                                        text = draft.upiId.ifBlank { "Tap to add UPI ID" },
+                                                        text = if (cleanDraftPhone10.length == 10) "+91 $cleanDraftPhone10" else "Offline Member • Tap to link phone",
                                                         fontFamily = SplitMateBrandFontFamily,
                                                         fontSize = 10.sp,
                                                         fontWeight = FontWeight.SemiBold,
-                                                        color = if (draft.upiId.isNotBlank()) QuickExpenseThemeTokens.SageText else QuickExpenseThemeTokens.TerracottaText,
+                                                        color = if (cleanDraftPhone10.length == 10) QuickExpenseThemeTokens.SageText else QuickExpenseThemeTokens.TextSecondary,
                                                         maxLines = 1,
                                                         overflow = TextOverflow.Ellipsis
                                                     )
@@ -2245,10 +2225,10 @@ fun EditFriendUpiDialog(
                         }
                     }
 
-                    // 2. EDITABLE UPI ID FIELD (Direct UPI ID editing for active member!)
+                    // 2. EDITABLE 10-DIGIT MOBILE NUMBER FIELD
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "UPI ID for ${activeDraft.name}",
+                            text = "10-Digit Mobile Number for ${activeDraft.name} (Optional)",
                             fontFamily = SplitMateBrandFontFamily,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
@@ -2256,18 +2236,21 @@ fun EditFriendUpiDialog(
                         )
                         OutlinedTextField(
                             value = activeDraft.upiId,
-                            onValueChange = { newUpi ->
-                                memberDrafts[activeMember.memberId] = activeDraft.copy(upiId = newUpi.trim())
+                            onValueChange = { newPhone ->
+                                memberDrafts[activeMember.memberId] = activeDraft.copy(upiId = newPhone.trim())
                             },
                             placeholder = {
                                 Text(
-                                    text = "e.g. ${activeDraft.name.lowercase().replace(" ", "")}@okaxis or 9876543210@upi",
+                                    text = "e.g. 9876543210 (leave blank for offline member)",
                                     fontFamily = SplitMateBrandFontFamily,
                                     fontSize = 12.sp,
                                     color = QuickExpenseThemeTokens.TextSecondary
                                 )
                             },
                             singleLine = true,
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone
+                            ),
                             shape = RoundedCornerShape(14.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = QuickExpenseThemeTokens.SageText,
@@ -2326,7 +2309,12 @@ fun EditFriendUpiDialog(
                     onClick = {
                         if (onSaveAll != null) {
                             val batchUpdates = effectiveMembers.map { m ->
-                                val d = memberDrafts[m.memberId] ?: EditableMemberDraft(m.memberId, m.name, "Neutral", m.upiId)
+                                val d = memberDrafts[m.memberId] ?: EditableMemberDraft(
+                                    m.memberId,
+                                    m.name,
+                                    "Neutral",
+                                    com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(m.userPhone, m.upiId)
+                                )
                                 val cleanName = d.name.trim().ifEmpty { m.name }
                                 val baseDesc = com.splitmate.app.ui.AvatarSeedCodec.parse(m.avatarSeed.ifBlank { m.name })
                                 val resolvedSeedKey = if (cleanName == m.name.trim() && baseDesc.seedKey.isNotBlank()) baseDesc.seedKey else cleanName

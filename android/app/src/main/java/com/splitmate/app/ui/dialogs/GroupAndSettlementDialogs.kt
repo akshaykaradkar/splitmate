@@ -374,7 +374,8 @@ fun AvatarToken(
     initials: String,
     bg: Color,
     textColor: Color,
-    size: Int = 36
+    size: Int = 36,
+    isOnline: Boolean = false
 ) {
     val context = LocalContext.current
     val parsedDescriptor = remember(initials) {
@@ -396,40 +397,57 @@ fun AvatarToken(
         extractInitialsFromNameOrSeed(initials)
     }
 
-    Box(
-        modifier = Modifier
-            .size(size.dp)
-            .clip(CircleShape)
-            .background(presetBg)
-            .border(2.dp, SplitMateTheme.SurfaceWhite, CircleShape),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = cleanInitials,
-            fontFamily = SplitMateTheme.FontDisplay,
-            fontSize = (size * 0.34f).sp,
-            fontWeight = FontWeight.ExtraBold,
-            color = textColor
-        )
-        AsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(diceBearSvgUrl)
-                .decoderFactory(SvgDecoder.Factory())
-                .diskCacheKey("dicebear_avatar_$diceBearSvgUrl")
-                .memoryCacheKey("dicebear_avatar_$diceBearSvgUrl")
-                .crossfade(true)
-                .build(),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
+    Box(modifier = Modifier.size(size.dp)) {
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(CircleShape)
-        )
+                .background(presetBg)
+                .border(2.dp, SplitMateTheme.SurfaceWhite, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = cleanInitials,
+                fontFamily = SplitMateTheme.FontDisplay,
+                fontSize = (size * 0.34f).sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = textColor
+            )
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(diceBearSvgUrl)
+                    .decoderFactory(SvgDecoder.Factory())
+                    .diskCacheKey("dicebear_avatar_$diceBearSvgUrl")
+                    .memoryCacheKey("dicebear_avatar_$diceBearSvgUrl")
+                    .crossfade(true)
+                    .build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape)
+            )
+        }
+        if (isOnline) {
+            val dotSize = if (size >= 36) 11.dp else 9.dp
+            Box(
+                modifier = Modifier
+                    .size(dotSize)
+                    .align(Alignment.BottomEnd)
+                    .clip(CircleShape)
+                    .background(Color(0xFF22C55E))
+                    .border(1.5.dp, SplitMateTheme.SurfaceWhite, CircleShape)
+            )
+        }
     }
 }
 
 @Composable
-fun OverlappingAvatarStack(avatars: List<String>, remainingCount: Int = 0) {
+fun OverlappingAvatarStack(
+    avatars: List<String>,
+    remainingCount: Int = 0,
+    onlineFlags: List<Boolean> = emptyList()
+) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         avatars.forEachIndexed { index, seed ->
             Box(modifier = Modifier.offset(x = (-index * 8).dp)) {
@@ -437,7 +455,8 @@ fun OverlappingAvatarStack(avatars: List<String>, remainingCount: Int = 0) {
                     initials = seed,
                     bg = Color(0xFFE2E8F0),
                     textColor = SplitMateTheme.PrimaryDark,
-                    size = 28
+                    size = 28,
+                    isOnline = onlineFlags.getOrNull(index) == true
                 )
             }
         }

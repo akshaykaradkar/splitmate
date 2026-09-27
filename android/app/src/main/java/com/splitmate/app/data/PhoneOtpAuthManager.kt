@@ -32,6 +32,28 @@ object PhoneIdentityValidator {
     fun isValidIndianMobile10(phone10: String): Boolean {
         return phone10.length == 10 && phone10[0] in '6'..'9' && phone10.all { it.isDigit() }
     }
+
+    fun normalizeIndianMobile(raw: String): String {
+        val p10 = normalizeIndianPhone10(raw)
+        return if (isValidIndianMobile10(p10)) p10 else ""
+    }
+
+    /**
+     * Extracts a valid 10-digit Indian phone number from either `userPhone` or a phone-based `upiId`
+     * (e.g. `"9876543210@upi"`, `"9876543210@ybl"`, `"9876543210|user@okaxis"`).
+     */
+    fun extractMemberPhone10(userPhone: String, upiId: String = ""): String {
+        val primary = normalizeIndianPhone10(userPhone)
+        if (isValidIndianMobile10(primary)) return primary
+        if (upiId.isNotBlank()) {
+            for (part in upiId.split("|", ",", " ")) {
+                val handlePrefix = part.trim().substringBefore("@")
+                val candidate = normalizeIndianPhone10(handlePrefix)
+                if (isValidIndianMobile10(candidate)) return candidate
+            }
+        }
+        return primary
+    }
 }
 
 data class OtpDispatchResult(

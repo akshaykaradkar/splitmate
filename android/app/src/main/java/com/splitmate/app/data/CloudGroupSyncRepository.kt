@@ -40,15 +40,30 @@ data class CloudGroupLedgerDocument(
     val deletedExpenseIds: Map<String, Long>,
     val flightVaultByPnr: Map<String, String>,
     val trainSnapshotByPnr: Map<String, String>,
-    val updatedAtEpochMs: Long
+    val updatedAtEpochMs: Long,
+    val memberPresenceByPhone: Map<String, Long> = emptyMap()
 )
 
 data class CloudRestoreSummary(
     val restoredJoinedGroupsCount: Int,
-    val discoveredPendingInvitesCount: Int
+    val discoveredPendingInvitesCount: Int,
+    val memberPresenceByPhone: Map<String, Long> = emptyMap()
 )
 
 object CloudGroupSyncRepository {
+
+    const val ONLINE_PRESENCE_TTL_MS: Long = 90_000L
+
+    fun isPhoneOnlineNow(
+        phone10: String,
+        presenceMap: Map<String, Long>,
+        nowEpochMs: Long = System.currentTimeMillis()
+    ): Boolean {
+        val norm = PhoneIdentityValidator.normalizeIndianPhone10(phone10)
+        if (norm.length != 10) return false
+        val lastSeen = presenceMap[norm] ?: return false
+        return lastSeen > 0L && (nowEpochMs - lastSeen) <= ONLINE_PRESENCE_TTL_MS
+    }
 
     private fun sanitizeTopicKey(key: String): String {
         return key.replace(Regex("[^a-zA-Z0-9_-]"), "_")
@@ -219,6 +234,10 @@ object CloudGroupSyncRepository {
         doc.trainSnapshotByPnr.forEach { (pnr, json) -> trainObj.put(pnr, json) }
         root.put("trainSnapshotByPnr", trainObj)
 
+        val presenceObj = JSONObject()
+        doc.memberPresenceByPhone.forEach { (phone10, ts) -> presenceObj.put(phone10, ts) }
+        root.put("memberPresenceByPhone", presenceObj)
+
         return root.toString()
     }
 
@@ -242,6 +261,9 @@ object CloudGroupSyncRepository {
             val membersArr = root.optJSONArray("members") ?: JSONArray()
             for (i in 0 until membersArr.length()) {
                 val m = membersArr.optJSONObject(i) ?: continue
+                val rawUpi = m.optString("upiId", "")
+                val rawPhone = m.optString("userPhone", "")
+                val extractedPhone = PhoneIdentityValidator.extractMemberPhone10(rawPhone, rawUpi)
                 members.add(
                     GroupMemberEntity(
                         memberId = m.optString("memberId", ""),
@@ -249,8 +271,8 @@ object CloudGroupSyncRepository {
                         name = m.optString("name", ""),
                         avatarSeed = m.optString("avatarSeed", ""),
                         isCurrentUser = m.optBoolean("isCurrentUser", false),
-                        upiId = m.optString("upiId", ""),
-                        userPhone = m.optString("userPhone", ""),
+                        upiId = rawUpi,
+                        userPhone = extractedPhone.ifBlank { rawPhone },
                         inviteStatus = m.optString("inviteStatus", "JOINED")
                     )
                 )
@@ -356,6 +378,19 @@ object CloudGroupSyncRepository {
                 }
             }
 
+            val memberPresenceByPhone = mutableMapOf<String, Long>()
+            val presenceObj = root.optJSONObject("memberPresenceByPhone")
+            if (presenceObj != null) {
+                val keys = presenceObj.keys()
+                while (keys.hasNext()) {
+                    val k = keys.next()
+                    val normP = PhoneIdentityValidator.normalizeIndianPhone10(k)
+                    if (normP.length == 10) {
+                        memberPresenceByPhone[normP] = presenceObj.optLong(k, 0L)
+                    }
+                }
+            }
+
             CloudGroupLedgerDocument(
                 group = group,
                 members = members,
@@ -365,7 +400,8 @@ object CloudGroupSyncRepository {
                 deletedExpenseIds = deletedExpenseIds,
                 flightVaultByPnr = flightVaultByPnr,
                 trainSnapshotByPnr = trainSnapshotByPnr,
-                updatedAtEpochMs = root.optLong("updatedAtEpochMs", System.currentTimeMillis())
+                updatedAtEpochMs = root.optLong("updatedAtEpochMs", System.currentTimeMillis()),
+                memberPresenceByPhone = memberPresenceByPhone
             )
         } catch (_: Exception) {
             null
@@ -435,7 +471,7 @@ object CloudGroupSyncRepository {
 
     private suspend fun fetchNtfySnapshot(topic: String): String? = withContext(Dispatchers.IO) {
         try {
-            val url = URL("https://ntfy.sh/$topic/json?poll=1")
+            val url = URL("https://ntfy.sh/$topic/json?poll=1&since=all")
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
             conn.connectTimeout = 5000
@@ -471,7 +507,7 @@ object CloudGroupSyncRepository {
     private suspend fun fetchAllNtfyMessages(topic: String): List<String> = withContext(Dispatchers.IO) {
         val messages = mutableListOf<String>()
         try {
-            val url = URL("https://ntfy.sh/$topic/json?poll=1")
+            val url = URL("https://ntfy.sh/$topic/json?poll=1&since=all")
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
             conn.connectTimeout = 5000
@@ -506,6 +542,7 @@ object CloudGroupSyncRepository {
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
             conn.setRequestProperty("Title", "SplitMateSync")
+            conn.setRequestProperty("Cache", "yes")
             conn.doOutput = true
             conn.connectTimeout = 5000
             conn.readTimeout = 5000
@@ -528,11 +565,29 @@ object CloudGroupSyncRepository {
         localDoc: CloudGroupLedgerDocument?,
         remoteDoc: CloudGroupLedgerDocument?,
         localUserPhone10: String,
-        localUserAvatarSeed: String = ""
+        localUserAvatarSeed: String = "",
+        localPresenceEpochMs: Long = System.currentTimeMillis()
     ): CloudGroupLedgerDocument {
+        val normLocalPhone = PhoneIdentityValidator.normalizeIndianPhone10(localUserPhone10)
         if (localDoc == null && remoteDoc == null) throw IllegalArgumentException("Both docs null")
-        if (localDoc == null) return adjustMembersForLocalUser(remoteDoc!!, localUserPhone10, localUserAvatarSeed)
-        if (remoteDoc == null) return adjustMembersForLocalUser(localDoc, localUserPhone10, localUserAvatarSeed)
+        if (localDoc == null) {
+            return adjustMembersForLocalUser(
+                doc = remoteDoc!!,
+                localUserPhone10 = normLocalPhone,
+                localUserAvatarSeed = localUserAvatarSeed,
+                isRemoteOnly = true,
+                localPresenceEpochMs = localPresenceEpochMs
+            )
+        }
+        if (remoteDoc == null) {
+            return adjustMembersForLocalUser(
+                doc = localDoc,
+                localUserPhone10 = normLocalPhone,
+                localUserAvatarSeed = localUserAvatarSeed,
+                isRemoteOnly = false,
+                localPresenceEpochMs = localPresenceEpochMs
+            )
+        }
 
         val mergedDeletedExpenseIds = mutableMapOf<String, Long>()
         (localDoc.deletedExpenseIds.keys + remoteDoc.deletedExpenseIds.keys).forEach { id ->
@@ -583,37 +638,53 @@ object CloudGroupSyncRepository {
 
         val localPreferredSeed = localUserAvatarSeed.takeIf { it.isNotBlank() }
             ?: localDoc.members.firstOrNull { m ->
-                val normPhone = PhoneIdentityValidator.normalizeIndianPhone10(m.userPhone)
-                (localUserPhone10.length == 10 && normPhone == localUserPhone10) || m.isCurrentUser
+                val normPhone = PhoneIdentityValidator.extractMemberPhone10(m.userPhone, m.upiId)
+                (normLocalPhone.length == 10 && normPhone == normLocalPhone) || m.isCurrentUser
             }?.avatarSeed?.takeIf { it.contains("|") }.orEmpty()
 
         val memberMap = linkedMapOf<String, GroupMemberEntity>()
         val allMembersWithDocTime = localDoc.members.map { it to localDoc.updatedAtEpochMs } +
             remoteDoc.members.map { it to remoteDoc.updatedAtEpochMs }
         for ((member, docTime) in allMembersWithDocTime) {
-            val normPhone = PhoneIdentityValidator.normalizeIndianPhone10(member.userPhone)
-            val key = if (normPhone.isNotBlank()) normPhone else member.memberId
+            val normPhone = PhoneIdentityValidator.extractMemberPhone10(member.userPhone, member.upiId)
+            val normalizedMember = if (normPhone.isNotBlank() && member.userPhone != normPhone) {
+                member.copy(userPhone = normPhone)
+            } else {
+                member
+            }
+            val key = if (normPhone.isNotBlank()) normPhone else normalizedMember.memberId
 
             val existing = memberMap[key]
             if (existing == null) {
-                memberMap[key] = member
+                memberMap[key] = normalizedMember
             } else {
-                val existingDocTime = if (localDoc.members.contains(existing)) {
+                val existingDocTime = if (localDoc.members.any { it.memberId == existing.memberId }) {
                     localDoc.updatedAtEpochMs
                 } else {
                     remoteDoc.updatedAtEpochMs
                 }
                 if (docTime >= existingDocTime) {
-                    memberMap[key] = member.copy(memberId = existing.memberId)
+                    memberMap[key] = normalizedMember.copy(
+                        memberId = existing.memberId,
+                        userPhone = normPhone.ifBlank { existing.userPhone }
+                    )
                 }
             }
         }
         val localMeMemberIds = localDoc.members.filter { it.isCurrentUser }.map { it.memberId }.toSet()
+        val hasPhoneMatchedLocalUser = normLocalPhone.length == 10 && memberMap.values.any {
+            PhoneIdentityValidator.extractMemberPhone10(it.userPhone, it.upiId) == normLocalPhone
+        }
         val mergedMembers = memberMap.values.map { m ->
-            val normPhone = PhoneIdentityValidator.normalizeIndianPhone10(m.userPhone)
-            val isMe = (normPhone == localUserPhone10 && localUserPhone10.length == 10) ||
-                (normPhone.isEmpty() && m.memberId in localMeMemberIds)
+            val normPhone = PhoneIdentityValidator.extractMemberPhone10(m.userPhone, m.upiId)
+            val isMe = if (hasPhoneMatchedLocalUser) {
+                normPhone == normLocalPhone
+            } else {
+                (normPhone == normLocalPhone && normLocalPhone.length == 10) ||
+                    (normPhone.isEmpty() && m.memberId in localMeMemberIds)
+            }
             m.copy(
+                userPhone = normPhone.ifBlank { m.userPhone },
                 isCurrentUser = isMe,
                 avatarSeed = if (isMe && localPreferredSeed.isNotBlank()) localPreferredSeed else m.avatarSeed
             )
@@ -624,6 +695,20 @@ object CloudGroupSyncRepository {
         val mergedTrains = localDoc.trainSnapshotByPnr.toMutableMap()
         remoteDoc.trainSnapshotByPnr.forEach { (k, v) -> mergedTrains[k] = v }
 
+        val mergedPresence = mutableMapOf<String, Long>()
+        (localDoc.memberPresenceByPhone.keys + remoteDoc.memberPresenceByPhone.keys).forEach { p ->
+            val normP = PhoneIdentityValidator.normalizeIndianPhone10(p)
+            if (normP.length == 10) {
+                mergedPresence[normP] = max(
+                    localDoc.memberPresenceByPhone[p] ?: 0L,
+                    remoteDoc.memberPresenceByPhone[p] ?: 0L
+                )
+            }
+        }
+        if (normLocalPhone.length == 10) {
+            mergedPresence[normLocalPhone] = max(mergedPresence[normLocalPhone] ?: 0L, localPresenceEpochMs)
+        }
+
         return CloudGroupLedgerDocument(
             group = if (localDoc.updatedAtEpochMs >= remoteDoc.updatedAtEpochMs) localDoc.group else remoteDoc.group,
             members = mergedMembers,
@@ -633,26 +718,46 @@ object CloudGroupSyncRepository {
             deletedExpenseIds = mergedDeletedExpenseIds,
             flightVaultByPnr = mergedFlights,
             trainSnapshotByPnr = mergedTrains,
-            updatedAtEpochMs = max(localDoc.updatedAtEpochMs, remoteDoc.updatedAtEpochMs)
+            updatedAtEpochMs = max(localDoc.updatedAtEpochMs, remoteDoc.updatedAtEpochMs),
+            memberPresenceByPhone = mergedPresence
         )
     }
 
     private fun adjustMembersForLocalUser(
         doc: CloudGroupLedgerDocument,
         localUserPhone10: String,
-        localUserAvatarSeed: String = ""
+        localUserAvatarSeed: String = "",
+        isRemoteOnly: Boolean = false,
+        localPresenceEpochMs: Long = System.currentTimeMillis()
     ): CloudGroupLedgerDocument {
-        if (localUserPhone10.length != 10 && localUserAvatarSeed.isBlank()) return doc
+        val normLocalPhone = PhoneIdentityValidator.normalizeIndianPhone10(localUserPhone10)
+        val updatedPresence = doc.memberPresenceByPhone.toMutableMap()
+        if (normLocalPhone.length == 10) {
+            updatedPresence[normLocalPhone] = max(updatedPresence[normLocalPhone] ?: 0L, localPresenceEpochMs)
+        }
+        if (normLocalPhone.length != 10 && localUserAvatarSeed.isBlank()) {
+            return doc.copy(memberPresenceByPhone = updatedPresence)
+        }
+        val hasPhoneMatch = normLocalPhone.length == 10 && doc.members.any {
+            PhoneIdentityValidator.extractMemberPhone10(it.userPhone, it.upiId) == normLocalPhone
+        }
         val adjustedMembers = doc.members.map { m ->
-            val normPhone = PhoneIdentityValidator.normalizeIndianPhone10(m.userPhone)
-            val isMe = (localUserPhone10.length == 10 && normPhone == localUserPhone10) ||
-                (normPhone.isEmpty() && m.isCurrentUser)
+            val normPhone = PhoneIdentityValidator.extractMemberPhone10(m.userPhone, m.upiId)
+            val isMe = when {
+                hasPhoneMatch -> normPhone == normLocalPhone
+                !isRemoteOnly -> normPhone.isEmpty() && m.isCurrentUser
+                else -> false
+            }
             m.copy(
+                userPhone = normPhone.ifBlank { m.userPhone },
                 isCurrentUser = isMe,
                 avatarSeed = if (isMe && localUserAvatarSeed.isNotBlank()) localUserAvatarSeed else m.avatarSeed
             )
         }
-        return doc.copy(members = adjustedMembers)
+        return doc.copy(
+            members = adjustedMembers,
+            memberPresenceByPhone = updatedPresence
+        )
     }
 
     suspend fun pushUserProfileToCloud(
@@ -712,6 +817,10 @@ object CloudGroupSyncRepository {
         localUserName: String,
         additionalTombstones: Map<String, Long> = emptyMap()
     ): CloudGroupLedgerDocument? {
+        val normLocalPhone = PhoneIdentityValidator.normalizeIndianPhone10(localUserPhone10)
+            .ifBlank {
+                PhoneIdentityValidator.normalizeIndianPhone10(dao.getUserProfile()?.userPhone.orEmpty())
+            }
         val topic = "splitmate_v2_grp_${sanitizeTopicKey(groupId)}"
         val remoteJson = fetchNtfySnapshot(topic)
         val remoteDoc = if (remoteJson != null) decodeGroupLedgerDocument(remoteJson) else null
@@ -723,13 +832,24 @@ object CloudGroupSyncRepository {
         var localDoc: CloudGroupLedgerDocument? = null
 
         if (localGroup != null) {
-            val members = dao.getMembersForGroup(groupId)
+            val members = dao.getMembersForGroup(groupId).map { m ->
+                val extractedPhone = PhoneIdentityValidator.extractMemberPhone10(m.userPhone, m.upiId)
+                val finalPhone = if (m.isCurrentUser && extractedPhone.isBlank() && normLocalPhone.length == 10) {
+                    normLocalPhone
+                } else {
+                    extractedPhone.ifBlank { m.userPhone }
+                }
+                if (finalPhone != m.userPhone) m.copy(userPhone = finalPhone) else m
+            }
             val expenses = dao.getExpensesForGroup(groupId)
             val splits = dao.getSplitsForGroup(groupId)
             val settlements = dao.getSettlementsForGroup(groupId)
 
             val flights = context?.let { PnrNetworkRepository.exportAllFlightVaultJsonByPnr(it) } ?: emptyMap()
             val trains = context?.let { PnrNetworkRepository.exportAllTrainSnapshotJsonByPnr(it) } ?: emptyMap()
+
+            val nowMs = System.currentTimeMillis()
+            val initialPresence = if (normLocalPhone.length == 10) mapOf(normLocalPhone to nowMs) else emptyMap()
 
             localDoc = CloudGroupLedgerDocument(
                 group = localGroup,
@@ -740,7 +860,8 @@ object CloudGroupSyncRepository {
                 deletedExpenseIds = additionalTombstones,
                 flightVaultByPnr = flights,
                 trainSnapshotByPnr = trains,
-                updatedAtEpochMs = System.currentTimeMillis()
+                updatedAtEpochMs = nowMs,
+                memberPresenceByPhone = initialPresence
             )
         }
 
@@ -749,7 +870,7 @@ object CloudGroupSyncRepository {
         val mergedDoc = mergeGroupLedgerDocuments(
             localDoc = localDoc,
             remoteDoc = remoteDoc,
-            localUserPhone10 = localUserPhone10,
+            localUserPhone10 = normLocalPhone,
             localUserAvatarSeed = localAvatarSeed
         )
 
@@ -771,17 +892,26 @@ object CloudGroupSyncRepository {
             PnrNetworkRepository.importTrainSnapshotJsonByPnr(context, mergedDoc.trainSnapshotByPnr)
         }
 
-        val mergedDocUpdated = mergedDoc.copy(updatedAtEpochMs = System.currentTimeMillis())
+        val nowMs = System.currentTimeMillis()
+        val updatedPresence = mergedDoc.memberPresenceByPhone.toMutableMap()
+        if (normLocalPhone.length == 10) {
+            updatedPresence[normLocalPhone] = nowMs
+        }
+        val mergedDocUpdated = mergedDoc.copy(
+            updatedAtEpochMs = nowMs,
+            memberPresenceByPhone = updatedPresence
+        )
         pushNtfySnapshot(topic, encodeGroupLedgerDocument(mergedDocUpdated))
 
+        val pushedPhones = HashSet<String>()
         mergedDocUpdated.members.forEach { m ->
-            val p = PhoneIdentityValidator.normalizeIndianPhone10(m.userPhone)
-            if (p.isNotBlank()) {
+            val p = PhoneIdentityValidator.extractMemberPhone10(m.userPhone, m.upiId)
+            if (p.length == 10 && pushedPhones.add(p)) {
                 val idxEntry = CloudPhoneGroupIndexEntry(
                     groupId = mergedDocUpdated.group.groupId,
                     groupName = mergedDocUpdated.group.name,
                     inviterName = localUserName,
-                    inviterPhone = localUserPhone10,
+                    inviterPhone = normLocalPhone,
                     inviteStatus = m.inviteStatus,
                     updatedAtEpochMs = mergedDocUpdated.updatedAtEpochMs
                 )
@@ -819,17 +949,25 @@ object CloudGroupSyncRepository {
 
         var joined = 0
         var pending = 0
+        val aggregatedPresence = mutableMapOf<String, Long>()
+        aggregatedPresence[normPhone] = System.currentTimeMillis()
 
         val localProfile = dao.getUserProfile()
         val localName = localProfile?.name ?: "You"
 
         for (entry in uniqueEntries) {
-            syncGroupWithCloud(context, dao, entry.groupId, normPhone, localName, emptyMap())
+            val syncedDoc = syncGroupWithCloud(context, dao, entry.groupId, normPhone, localName, emptyMap())
+            syncedDoc?.memberPresenceByPhone?.forEach { (p, ts) ->
+                val normP = PhoneIdentityValidator.normalizeIndianPhone10(p)
+                if (normP.length == 10) {
+                    aggregatedPresence[normP] = max(aggregatedPresence[normP] ?: 0L, ts)
+                }
+            }
 
             val members = dao.getMembersForGroup(entry.groupId)
             val myMember = members.find {
-                PhoneIdentityValidator.normalizeIndianPhone10(it.userPhone) == normPhone
-            }
+                PhoneIdentityValidator.extractMemberPhone10(it.userPhone, it.upiId) == normPhone
+            } ?: members.find { it.isCurrentUser }
             if (myMember != null) {
                 when (myMember.inviteStatus) {
                     "JOINED" -> joined++
@@ -842,11 +980,21 @@ object CloudGroupSyncRepository {
         val remainingLocalGroups = dao.getAllGroups().filter { !it.isDemoSeed }
         for (localGroup in remainingLocalGroups) {
             if (uniqueEntries.none { it.groupId == localGroup.groupId }) {
-                syncGroupWithCloud(context, dao, localGroup.groupId, normPhone, localName, emptyMap())
+                val syncedDoc = syncGroupWithCloud(context, dao, localGroup.groupId, normPhone, localName, emptyMap())
+                syncedDoc?.memberPresenceByPhone?.forEach { (p, ts) ->
+                    val normP = PhoneIdentityValidator.normalizeIndianPhone10(p)
+                    if (normP.length == 10) {
+                        aggregatedPresence[normP] = max(aggregatedPresence[normP] ?: 0L, ts)
+                    }
+                }
                 joined++
             }
         }
 
-        return CloudRestoreSummary(joined, pending)
+        return CloudRestoreSummary(
+            restoredJoinedGroupsCount = joined,
+            discoveredPendingInvitesCount = pending,
+            memberPresenceByPhone = aggregatedPresence
+        )
     }
 }
