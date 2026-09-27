@@ -1412,7 +1412,6 @@ class SplitMateViewModel(
         avatarStyleId: String = "open-peeps",
         avatarColorPresetId: String = "Buckwheat",
         optionalPin4: String = "",
-        genderIdentity: String = "Male",
         onResult: (Boolean, String) -> Unit = { _, _ -> }
     ) {
         val verified = com.splitmate.app.data.PhoneOtpAuthManager.verifyOtp(rawPhone, enteredOtp)
@@ -1423,11 +1422,6 @@ class SplitMateViewModel(
             return
         }
 
-        val resolvedGenderToken = when (genderIdentity.trim().lowercase(Locale.US)) {
-            "female", "feminine" -> "Feminine"
-            "neutral" -> "Neutral"
-            else -> "Masculine"
-        }
         val phone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(rawPhone)
         val newPinHash = com.splitmate.app.data.PhoneOtpAuthManager.hashPin(phone10, optionalPin4)
         val typedName = userName.trim()
@@ -1442,7 +1436,7 @@ class SplitMateViewModel(
                     if (phone10.length == 10) "${phone10}@upi" else "${cleanHandle}@okaxis"
                 }
         }
-        val updatedSeed = "$cleanName|$resolvedGenderToken|$avatarStyleId|$avatarColorPresetId"
+        val updatedSeed = "$cleanName|Neutral|$avatarStyleId|$avatarColorPresetId"
         var updatedCurrentUserMembers = emptyList<GroupMemberEntity>()
 
         _uiState.update { state ->
@@ -1529,7 +1523,7 @@ class SplitMateViewModel(
                 !existingProfile?.pinHash.isNullOrBlank() -> existingProfile!!.pinHash
                 else -> ""
             }
-            val effectiveSeed = "$effectiveName|$resolvedGenderToken|$effectiveStyle|$effectivePreset"
+            val effectiveSeed = "$effectiveName|Neutral|$effectiveStyle|$effectivePreset"
 
             val profileEntity = UserProfileEntity(
                 profileId = "me",
