@@ -2939,6 +2939,45 @@ class SplitMateViewModel(
             ?: gMembers.firstOrNull()
     }
 
+    /**
+     * Returns all active Trip Organizers for [groupId] (primary creator + any co-organizers promoted
+     * via WhatsApp-style "Make Organizer"). Guarantees at least 1 organizer is always returned.
+     */
+    fun getGroupOrganizerMembers(
+        groupId: String = _uiState.value.activeGroupId,
+        state: SplitMateUiState = _uiState.value
+    ): List<GroupMemberEntity> {
+        val gMembers = state.members.filter { it.groupId == groupId }
+        if (gMembers.isEmpty()) return emptyList()
+        val primaryOrg = getGroupOrganizerMember(groupId, state)
+        val rolesMap = com.splitmate.app.data.CloudGroupSyncRepository.getOrganizerRolesByKey(null, groupId)
+        val explicitOrganizers = gMembers.filter { m ->
+            val phone10 = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(m.userPhone, m.upiId)
+            val phoneRole = if (phone10.length == 10) rolesMap[phone10] else null
+            val idRole = rolesMap[m.memberId]
+            val effectiveRole = when {
+                phoneRole != null && idRole != null ->
+                    if (kotlin.math.abs(phoneRole) >= kotlin.math.abs(idRole)) phoneRole else idRole
+                phoneRole != null -> phoneRole
+                idRole != null -> idRole
+                else -> null
+            }
+            when {
+                effectiveRole != null -> effectiveRole > 0L
+                else -> m.memberId == primaryOrg?.memberId
+            }
+        }
+        return explicitOrganizers.ifEmpty { listOfNotNull(primaryOrg ?: gMembers.firstOrNull()) }
+    }
+
+    fun isMemberGroupOrganizer(
+        groupId: String = _uiState.value.activeGroupId,
+        member: GroupMemberEntity,
+        state: SplitMateUiState = _uiState.value
+    ): Boolean {
+        return getGroupOrganizerMembers(groupId, state).any { it.memberId == member.memberId }
+    }
+
     fun isUserGroupOrganizer(
         groupId: String,
         state: SplitMateUiState
@@ -2949,19 +2988,221 @@ class SplitMateViewModel(
         userPhone: String = _uiState.value.userPhone,
         state: SplitMateUiState = _uiState.value
     ): Boolean {
+        val organizers = getGroupOrganizerMembers(groupId, state)
+        if (organizers.isEmpty()) return false
         val gMembers = state.members.filter { it.groupId == groupId }
-        if (gMembers.isEmpty()) return false
-        val organizer = getGroupOrganizerMember(groupId, state) ?: return false
-        val myPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(userPhone)
-        val orgPhone10 = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(organizer.userPhone, organizer.upiId)
-        if (myPhone10.length == 10 && orgPhone10.length == 10) {
-            return myPhone10 == orgPhone10
+        val activePerspectiveMember = gMembers.find { it.isCurrentUser }
+        val isDefaultUserPhone = userPhone == state.userPhone
+        if (isDefaultUserPhone && activePerspectiveMember != null) {
+            return organizers.any { it.memberId == activePerspectiveMember.memberId }
         }
-        return organizer.isCurrentUser
+        val myPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(userPhone)
+        return organizers.any { organizer ->
+            val orgPhone10 = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(organizer.userPhone, organizer.upiId)
+            if (myPhone10.length == 10 && orgPhone10.length == 10) {
+                myPhone10 == orgPhone10
+            } else {
+                organizer.isCurrentUser
+            }
+        }
     }
 
     fun isCurrentUserOrganizer(groupId: String = _uiState.value.activeGroupId): Boolean =
         isUserGroupOrganizer(groupId)
+
+    /**
+     * WhatsApp-style "Make Organizer": Allows any existing Trip Organizer to promote another member
+     * in [groupId] to Trip Organizer and syncs the promotion across all devices.
+     */
+    fun promoteMemberToOrganizer(
+        context: android.content.Context? = null,
+        groupId: String = _uiState.value.activeGroupId,
+        targetMemberId: String,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ): Boolean {
+        com.splitmate.app.data.CloudGroupSyncRepository.init(context)
+        val state = _uiState.value
+        val gMembers = state.members.filter { it.groupId == groupId }
+        val targetMember = gMembers.find { it.memberId == targetMemberId }
+        if (targetMember == null) {
+            val msg = "Member not found in group"
+            onResult(false, msg)
+            return false
+        }
+        if (!isUserGroupOrganizer(groupId)) {
+            val msg = "Only a Trip Organizer can make another member an organizer"
+            _uiState.update { it.copy(statusBannerMessage = msg) }
+            onResult(false, msg)
+            return false
+        }
+        val targetPhone10 = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(targetMember.userPhone, targetMember.upiId)
+        com.splitmate.app.data.CloudGroupSyncRepository.setMemberOrganizerRole(
+            context = context,
+            groupId = groupId,
+            memberId = targetMember.memberId,
+            memberPhone10 = targetPhone10,
+            isOrganizer = true
+        )
+        val statusMsg = "${targetMember.name} is now a Trip Organizer"
+        _uiState.update { curr ->
+            curr.copy(
+                members = curr.members.toList(),
+                statusBannerMessage = statusMsg
+            )
+        }
+        viewModelScope.launch(ioDispatcher) {
+            val d = dao
+            if (d != null) {
+                val normUserPhone = resolveEffectiveUserPhone10(d)
+                runCatching {
+                    com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
+                        context = context,
+                        dao = d,
+                        groupId = groupId,
+                        localUserPhone10 = normUserPhone,
+                        localUserName = _uiState.value.currentUserName.ifBlank { "You" },
+                        forceIndexPush = true,
+                        isLocalMutation = true
+                    )
+                    refreshStateFromDaoSnapshot(d = d, statusMsg = statusMsg)
+                }
+            }
+        }
+        onResult(true, statusMsg)
+        return true
+    }
+
+    /**
+     * WhatsApp-style "Dismiss as Organizer": Allows an existing Trip Organizer to dismiss another
+     * organizer as long as at least 1 organizer remains in the group.
+     */
+    fun dismissMemberAsOrganizer(
+        context: android.content.Context? = null,
+        groupId: String = _uiState.value.activeGroupId,
+        targetMemberId: String,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ): Boolean {
+        com.splitmate.app.data.CloudGroupSyncRepository.init(context)
+        val state = _uiState.value
+        val gMembers = state.members.filter { it.groupId == groupId }
+        val targetMember = gMembers.find { it.memberId == targetMemberId }
+        if (targetMember == null) {
+            val msg = "Member not found in group"
+            onResult(false, msg)
+            return false
+        }
+        if (!isUserGroupOrganizer(groupId)) {
+            val msg = "Only a Trip Organizer can dismiss an organizer"
+            _uiState.update { it.copy(statusBannerMessage = msg) }
+            onResult(false, msg)
+            return false
+        }
+        val currentOrganizers = getGroupOrganizerMembers(groupId, state)
+        if (currentOrganizers.size <= 1 && currentOrganizers.any { it.memberId == targetMemberId }) {
+            val msg = "Trip must have at least one Organizer"
+            _uiState.update { it.copy(statusBannerMessage = msg) }
+            onResult(false, msg)
+            return false
+        }
+        val targetPhone10 = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(targetMember.userPhone, targetMember.upiId)
+        com.splitmate.app.data.CloudGroupSyncRepository.setMemberOrganizerRole(
+            context = context,
+            groupId = groupId,
+            memberId = targetMember.memberId,
+            memberPhone10 = targetPhone10,
+            isOrganizer = false
+        )
+        val statusMsg = "Dismissed ${targetMember.name} as Trip Organizer"
+        _uiState.update { curr ->
+            curr.copy(
+                members = curr.members.toList(),
+                statusBannerMessage = statusMsg
+            )
+        }
+        viewModelScope.launch(ioDispatcher) {
+            val d = dao
+            if (d != null) {
+                val normUserPhone = resolveEffectiveUserPhone10(d)
+                runCatching {
+                    com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
+                        context = context,
+                        dao = d,
+                        groupId = groupId,
+                        localUserPhone10 = normUserPhone,
+                        localUserName = _uiState.value.currentUserName.ifBlank { "You" },
+                        isLocalMutation = true
+                    )
+                    refreshStateFromDaoSnapshot(d = d, statusMsg = statusMsg)
+                }
+            }
+        }
+        onResult(true, statusMsg)
+        return true
+    }
+
+    /**
+     * Determines whether the current local user is allowed to click `Mark Paid` on a settlement
+     * transfer where [toMemberId] is the recipient (the member receiving the money):
+     * 1. Allowed if the current local user IS the recipient (`toMemberId`) receiving the money.
+     * 2. Allowed if the current local user is a Trip Organizer AND the recipient (`toMemberId`)
+     *    is NOT an active joined app member in the trip group (e.g. offline/local-only member without
+     *    a verified 10-digit phone, or invite is still `PENDING` / `DECLINED`, or no longer in group).
+     */
+    fun canCurrentUserMarkTransferPaid(
+        groupId: String = _uiState.value.activeGroupId,
+        toMemberId: String,
+        state: SplitMateUiState = _uiState.value
+    ): Boolean {
+        val gMembers = state.members.filter { it.groupId == groupId }
+        if (gMembers.isEmpty()) return true
+        val toMember = gMembers.find { it.memberId == toMemberId }
+        val activePerspectiveMember = gMembers.find { it.isCurrentUser }
+        val myPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(state.userPhone)
+        val toPhone10 = toMember?.let {
+            com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(it.userPhone, it.upiId)
+        }.orEmpty()
+
+        // 1. Current user is the recipient (the member who is going to get the money)
+        val isRecipientCurrentUser = if (activePerspectiveMember != null) {
+            activePerspectiveMember.memberId == toMemberId
+        } else {
+            myPhone10.length == 10 && toPhone10.length == 10 && myPhone10 == toPhone10
+        }
+        if (isRecipientCurrentUser) return true
+
+        // 2. Recipient is NOT an active joined app member in the trip group -> Trip Organizer can mark paid on their behalf
+        val isRecipientJoinedInTripApp = toMember != null &&
+            toPhone10.length == 10 &&
+            toMember.inviteStatus.equals("JOINED", ignoreCase = true)
+
+        if (!isRecipientJoinedInTripApp && isUserGroupOrganizer(groupId, state)) {
+            return true
+        }
+
+        return false
+    }
+
+    fun getMarkPaidRestrictionLabel(
+        groupId: String = _uiState.value.activeGroupId,
+        toMemberId: String,
+        toMemberName: String,
+        state: SplitMateUiState = _uiState.value
+    ): String {
+        val gMembers = state.members.filter { it.groupId == groupId }
+        val toMember = gMembers.find { it.memberId == toMemberId }
+        val toPhone10 = toMember?.let {
+            com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(it.userPhone, it.upiId)
+        }.orEmpty()
+        val isRecipientJoinedInTripApp = toMember != null &&
+            toPhone10.length == 10 &&
+            toMember.inviteStatus.equals("JOINED", ignoreCase = true)
+        val cleanToName = toMember?.name?.ifBlank { toMemberName } ?: toMemberName
+        return if (isRecipientJoinedInTripApp) {
+            "Only $cleanToName (recipient) can Mark Paid"
+        } else {
+            "Only $cleanToName or Organizer can Mark Paid"
+        }
+    }
 
     fun getGroupJoinCode(groupId: String = _uiState.value.activeGroupId): String {
         if (groupId.isBlank()) return ""
@@ -3229,13 +3470,17 @@ class SplitMateViewModel(
             return false
         }
         val organizer = getGroupOrganizerMember(groupId)
+        val myPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(state.userPhone)
+        val targetPhone10 = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(targetMember.userPhone, targetMember.upiId)
         if (!isUserGroupOrganizer(groupId) || organizer == null) {
             val msg = "Only the Trip Organizer can remove members from this group"
             _uiState.update { it.copy(statusBannerMessage = msg) }
             onResult(false, msg)
             return false
         }
-        if (targetMember.memberId == organizer.memberId) {
+        val isRemovingSelf = targetMember.isCurrentUser ||
+            (myPhone10.length == 10 && targetPhone10.length == 10 && myPhone10 == targetPhone10)
+        if (isRemovingSelf) {
             val msg = "Trip Organizer cannot remove themselves; use Leave Group instead"
             _uiState.update { it.copy(statusBannerMessage = msg) }
             onResult(false, msg)
@@ -3251,9 +3496,16 @@ class SplitMateViewModel(
         }
 
         val nowMs = System.currentTimeMillis()
-        val targetPhone10 = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(targetMember.userPhone, targetMember.upiId)
+        com.splitmate.app.data.CloudGroupSyncRepository.setMemberOrganizerRole(
+            context = context,
+            groupId = groupId,
+            memberId = targetMemberId,
+            memberPhone10 = targetPhone10,
+            isOrganizer = false,
+            timestampMs = nowMs
+        )
         val orgPhone10 = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(organizer.userPhone, organizer.upiId)
-            .ifBlank { com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(state.userPhone) }
+            .ifBlank { myPhone10 }
 
         val deletedMemberIds = mapOf(targetMemberId to nowMs)
         val removedPhones = if (targetPhone10.length == 10) mapOf(targetPhone10 to nowMs) else emptyMap()
@@ -3635,6 +3887,18 @@ class SplitMateViewModel(
 
     fun markGreedyTransferSettled(transfer: SplitMateMathEngine.SimplifiedTransfer) {
         val state = _uiState.value
+        if (!canCurrentUserMarkTransferPaid(state.activeGroupId, transfer.toMemberId, state)) {
+            val restrictionMsg = getMarkPaidRestrictionLabel(
+                groupId = state.activeGroupId,
+                toMemberId = transfer.toMemberId,
+                toMemberName = transfer.toName,
+                state = state
+            )
+            _uiState.update { curr ->
+                curr.copy(statusBannerMessage = restrictionMsg)
+            }
+            return
+        }
         com.splitmate.app.data.CloudGroupSyncRepository.setGroupPendingCloudPush(null, state.activeGroupId, true)
         val settlement = SettlementEntity(
             settlementId = "settle_${System.currentTimeMillis()}",

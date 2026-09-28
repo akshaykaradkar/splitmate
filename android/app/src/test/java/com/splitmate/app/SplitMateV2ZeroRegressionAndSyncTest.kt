@@ -2669,7 +2669,98 @@ class SplitMateV2ZeroRegressionAndSyncTest {
         vm.onNetworkConnectivityChanged(null, isConnected = true)
         assertFalse(vm.uiState.value.isOfflineMode)
     }
+
+    @Test
+    @DisplayName("PA-12: WhatsApp-Style Multi-Organizer Governance & Recipient/Unjoined-Organizer Mark Paid Authorization")
+    fun testMultiOrganizerGovernanceAndRecipientMarkPaidAuthorization() = kotlinx.coroutines.test.runTest {
+        val dispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)
+        val vm = SplitMateViewModel(dao = null, ioDispatcher = dispatcher)
+        vm.completeOnboarding(
+            name = "Akshay",
+            countryName = "India",
+            currencyCode = "INR",
+            currencySymbol = "₹",
+            avatarSeed = "Akshay",
+            userPhone = "9876543210"
+        )
+        testScheduler.advanceUntilIdle()
+
+        // Create group with Rohan (JOINED 10-digit phone) and Sneha (offline / no phone)
+        vm.createNewGroupWithContacts(
+            name = "Pondicherry Escape",
+            iconName = "Flight",
+            memberDrafts = listOf(
+                com.splitmate.app.ui.NewGroupMemberDraft(name = "Rohan", cleanPhone = "9123456789"),
+                com.splitmate.app.ui.NewGroupMemberDraft(name = "Sneha", cleanPhone = "")
+            )
+        )
+        testScheduler.advanceUntilIdle()
+
+        val groupId = vm.uiState.value.activeGroupId
+        val membersInit = vm.uiState.value.members.filter { it.groupId == groupId }
+        val akshay = membersInit.first { it.name == "Akshay" }
+        val rohan = membersInit.first { it.name == "Rohan" }
+        val sneha = membersInit.first { it.name == "Sneha" }
+
+        // Mark Rohan as JOINED (active in trip group) while Sneha has no phone (offline/not joined via phone)
+        vm.acceptGroupInvite(context = null, groupId = groupId)
+        vm.claimGroupMemberPerspective(groupId, rohan.memberId)
+        vm.acceptGroupInvite(context = null, groupId = groupId)
+        vm.claimGroupMemberPerspective(groupId, akshay.memberId)
+        testScheduler.advanceUntilIdle()
+
+        // 1. Initially only Akshay (creator) is Organizer
+        assertEquals(listOf(akshay.memberId), vm.getGroupOrganizerMembers(groupId).map { it.memberId })
+        assertTrue(vm.isMemberGroupOrganizer(groupId, akshay))
+        assertFalse(vm.isMemberGroupOrganizer(groupId, rohan))
+
+        // 2. Akshay promotes Rohan to Organizer ("Make Organizer")
+        var promoteOk = false
+        vm.promoteMemberToOrganizer(context = null, groupId = groupId, targetMemberId = rohan.memberId) { ok, _ -> promoteOk = ok }
+        testScheduler.advanceUntilIdle()
+        assertTrue(promoteOk, "Organizer must be able to promote another member to Organizer")
+        assertTrue(vm.isMemberGroupOrganizer(groupId, rohan), "Rohan must now be a co-organizer")
+        assertEquals(2, vm.getGroupOrganizerMembers(groupId).size)
+
+        // 3. Verify Mark Paid Authorization:
+        //    - Transfer where Rohan (JOINED with phone) is the recipient (toMemberId = rohan.memberId):
+        //      * Akshay (payer / co-organizer) CANNOT mark paid because Rohan is JOINED in the group!
+        //      * Only Rohan (the recipient receiving the money) CAN mark paid.
+        assertFalse(
+            vm.canCurrentUserMarkTransferPaid(groupId, toMemberId = rohan.memberId),
+            "Even an Organizer cannot Mark Paid when the recipient (Rohan) is an active JOINED member in the trip group"
+        )
+        vm.claimGroupMemberPerspective(groupId, rohan.memberId)
+        assertTrue(
+            vm.canCurrentUserMarkTransferPaid(groupId, toMemberId = rohan.memberId),
+            "Recipient (Rohan) must be able to Mark Paid when receiving money"
+        )
+
+        //    - Transfer where Sneha (unjoined / offline member without 10-digit phone) is the recipient:
+        //      * Organizer (Akshay or Rohan) CAN mark paid on behalf of Sneha!
+        assertTrue(
+            vm.canCurrentUserMarkTransferPaid(groupId, toMemberId = sneha.memberId),
+            "Organizer must be able to Mark Paid when recipient (Sneha) is not an active JOINED phone member in the trip group"
+        )
+
+        // 4. Switch back to Akshay and dismiss Rohan as Organizer ("Dismiss as Organizer")
+        vm.claimGroupMemberPerspective(groupId, akshay.memberId)
+        var dismissOk = false
+        vm.dismissMemberAsOrganizer(context = null, groupId = groupId, targetMemberId = rohan.memberId) { ok, _ -> dismissOk = ok }
+        testScheduler.advanceUntilIdle()
+        assertTrue(dismissOk, "Co-organizer dismissal must succeed when at least 1 organizer remains")
+        assertFalse(vm.isMemberGroupOrganizer(groupId, rohan))
+        assertTrue(vm.isMemberGroupOrganizer(groupId, akshay))
+
+        // 5. Now that Rohan is no longer an Organizer, Rohan cannot mark paid for unjoined member Sneha
+        vm.claimGroupMemberPerspective(groupId, rohan.memberId)
+        assertFalse(
+            vm.canCurrentUserMarkTransferPaid(groupId, toMemberId = sneha.memberId),
+            "Non-organizer non-recipient (Rohan) must NOT be able to Mark Paid for unjoined member Sneha"
+        )
+    }
 }
+
 
 
 

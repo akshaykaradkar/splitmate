@@ -4906,8 +4906,21 @@ private fun TripHubMoneySettlementView(
                             )
                         }
 
+                        val canMarkPaid = viewModel.canCurrentUserMarkTransferPaid(
+                            groupId = groupId,
+                            toMemberId = settlement.toMemberId,
+                            state = uiState
+                        )
+                        val restrictionLabel = viewModel.getMarkPaidRestrictionLabel(
+                            groupId = groupId,
+                            toMemberId = settlement.toMemberId,
+                            toMemberName = settlement.toName,
+                            state = uiState
+                        )
+
                         Button(
                             onClick = {
+                                if (!canMarkPaid) return@Button
                                 performCrispTactileHaptic(context, localView, heavy = false)
                                 viewModel.recordSettlement(
                                     groupId = groupId,
@@ -4916,10 +4929,13 @@ private fun TripHubMoneySettlementView(
                                     amountCents = settlement.amountCents
                                 )
                             },
+                            enabled = canMarkPaid,
                             shape = CircleShape,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = BuckwheatOlivePrimary,
-                                contentColor = Color.White
+                                contentColor = Color.White,
+                                disabledContainerColor = TripHubTokens.SunkenWell,
+                                disabledContentColor = TripHubTokens.TextSecondary
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -4927,17 +4943,19 @@ private fun TripHubMoneySettlementView(
                                 .defaultMinSize(minHeight = 48.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Rounded.CheckCircleOutline,
+                                imageVector = if (canMarkPaid) Icons.Rounded.CheckCircleOutline else Icons.Rounded.Schedule,
                                 contentDescription = null,
-                                tint = Color.White,
+                                tint = if (canMarkPaid) Color.White else TripHubTokens.TextSecondary,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Mark Paid",
+                                text = if (canMarkPaid) "Mark Paid" else restrictionLabel,
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 13.sp
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -4970,10 +4988,10 @@ private fun TripHubPeoplePerspectiveView(
     val formattedJoinCode = remember(groupId, uiState.groups) {
         viewModel.getFormattedGroupJoinCode(groupId)
     }
-    val organizerMember = remember(groupMembers, uiState.groups, uiState.members, groupId) {
-        viewModel.getGroupOrganizerMember(groupId, uiState)
+    val organizerMembers = remember(groupMembers, uiState.groups, uiState.members, uiState.statusBannerMessage, groupId) {
+        viewModel.getGroupOrganizerMembers(groupId, uiState)
     }
-    val isCurrentUserOrganizer = remember(groupMembers, uiState.groups, uiState.members, uiState.userPhone, groupId) {
+    val isCurrentUserOrganizer = remember(groupMembers, uiState.groups, uiState.members, uiState.userPhone, uiState.statusBannerMessage, groupId) {
         viewModel.isUserGroupOrganizer(groupId, uiState)
     }
 
@@ -5491,7 +5509,7 @@ private fun TripHubPeoplePerspectiveView(
             key = { it.memberId }
         ) { member ->
             val isMe = member.isCurrentUser
-            val isMemberOrganizer = organizerMember?.memberId == member.memberId
+            val isMemberOrganizer = organizerMembers.any { it.memberId == member.memberId }
             val isOnline = uiState.isMemberOnline(member)
             val cleanPhone10 = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(member.userPhone, member.upiId)
             val phoneSubtitle = if (cleanPhone10.length == 10) "+91 $cleanPhone10 · Auto-Sync" else "Offline Member · Local Ledger"
@@ -5731,8 +5749,10 @@ private fun TripHubPeoplePerspectiveView(
                     }
 
                     val showInvitePhoneChip = !isMe && (cleanPhone10.isEmpty() || member.inviteStatus.equals("PENDING", ignoreCase = true))
+                    val showMakeOrganizerChip = isCurrentUserOrganizer && !isMe && !isMemberOrganizer
+                    val showDismissOrganizerChip = isCurrentUserOrganizer && !isMe && isMemberOrganizer && organizerMembers.size > 1
                     val showRemoveMemberChip = isCurrentUserOrganizer && !isMe && groupMembers.size > 1
-                    if (showInvitePhoneChip || showRemoveMemberChip) {
+                    if (showInvitePhoneChip || showMakeOrganizerChip || showDismissOrganizerChip || showRemoveMemberChip) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -5813,6 +5833,84 @@ private fun TripHubPeoplePerspectiveView(
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 11.sp,
                                             color = Color(0xFF365314)
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (showMakeOrganizerChip) {
+                                Surface(
+                                    onClick = {
+                                        performCrispTactileHaptic(context, localView, heavy = false)
+                                        viewModel.promoteMemberToOrganizer(
+                                            context = context,
+                                            groupId = groupId,
+                                            targetMemberId = member.memberId
+                                        ) { ok, msg ->
+                                            isPeopleFeedbackError = !ok
+                                            peopleFeedbackBanner = msg
+                                        }
+                                    },
+                                    shape = CircleShape,
+                                    color = Color(0xFFDCE9B9),
+                                    border = BorderStroke(1.dp, Color(0xFF416913).copy(alpha = 0.4f))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Verified,
+                                            contentDescription = null,
+                                            tint = Color(0xFF365314),
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Text(
+                                            text = "Make Organizer",
+                                            fontFamily = FigtreeFontFamily,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            color = Color(0xFF365314)
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (showDismissOrganizerChip) {
+                                Surface(
+                                    onClick = {
+                                        performCrispTactileHaptic(context, localView, heavy = false)
+                                        viewModel.dismissMemberAsOrganizer(
+                                            context = context,
+                                            groupId = groupId,
+                                            targetMemberId = member.memberId
+                                        ) { ok, msg ->
+                                            isPeopleFeedbackError = !ok
+                                            peopleFeedbackBanner = msg
+                                        }
+                                    },
+                                    shape = CircleShape,
+                                    color = Color(0xFFF4EFE6),
+                                    border = BorderStroke(1.dp, Color(0xFFEDE7DF))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.PersonRemove,
+                                            contentDescription = null,
+                                            tint = TripHubTokens.TextSecondary,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Text(
+                                            text = "Dismiss as Organizer",
+                                            fontFamily = FigtreeFontFamily,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            color = TripHubTokens.TextSecondary
                                         )
                                     }
                                 }

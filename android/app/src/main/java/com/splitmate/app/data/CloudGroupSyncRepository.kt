@@ -64,7 +64,8 @@ data class CloudGroupLedgerDocument(
     val joinCode6: String = "",
     val deletedMemberIds: Map<String, Long> = emptyMap(),
     val removedMemberPhones: Map<String, Long> = emptyMap(),
-    val deletedSettlementIds: Map<String, Long> = emptyMap()
+    val deletedSettlementIds: Map<String, Long> = emptyMap(),
+    val organizerRolesByKey: Map<String, Long> = emptyMap()
 )
 
 data class CloudRestoreSummary(
@@ -79,7 +80,8 @@ data class LocalTombstoneStore(
     val removedMemberPhones: Map<String, Long> = emptyMap(),
     val deletedSettlementIds: Map<String, Long> = emptyMap(),
     val organizerPhone10: String = "",
-    val joinCode6: String = ""
+    val joinCode6: String = "",
+    val organizerRolesByKey: Map<String, Long> = emptyMap()
 )
 
 object CloudGroupSyncRepository {
@@ -225,7 +227,8 @@ object CloudGroupSyncRepository {
         removedMemberPhones: Map<String, Long> = emptyMap(),
         deletedSettlementIds: Map<String, Long> = emptyMap(),
         organizerPhone10: String = "",
-        joinCode6: String = ""
+        joinCode6: String = "",
+        organizerRolesByKey: Map<String, Long> = emptyMap()
     ): LocalTombstoneStore {
         if (groupId.isBlank()) return LocalTombstoneStore()
         val current = loadLocalTombstones(context, groupId)
@@ -242,10 +245,60 @@ object CloudGroupSyncRepository {
             removedMemberPhones = normalizedRemovedPhones,
             deletedSettlementIds = deletedSettlementIds,
             organizerPhone10 = PhoneIdentityValidator.normalizeIndianPhone10(organizerPhone10),
-            joinCode6 = normalizeJoinCode6(joinCode6)
+            joinCode6 = normalizeJoinCode6(joinCode6),
+            organizerRolesByKey = organizerRolesByKey
         )
         val merged = mergeLocalTombstoneStores(current, incoming)
         saveLocalTombstones(context, groupId, merged)
+        return merged
+    }
+
+    fun setMemberOrganizerRole(
+        context: Context?,
+        groupId: String,
+        memberId: String,
+        memberPhone10: String,
+        isOrganizer: Boolean,
+        timestampMs: Long = System.currentTimeMillis()
+    ) {
+        if (groupId.isBlank()) return
+        val absEpoch = kotlin.math.abs(timestampMs).coerceAtLeast(1L)
+        val signedEpoch = if (isOrganizer) absEpoch else -absEpoch
+        val updates = mutableMapOf<String, Long>()
+        if (memberId.isNotBlank()) {
+            updates[memberId] = signedEpoch
+        }
+        val normPhone = PhoneIdentityValidator.normalizeIndianPhone10(memberPhone10)
+        if (normPhone.length == 10) {
+            updates[normPhone] = signedEpoch
+        }
+        if (updates.isNotEmpty()) {
+            recordLocalTombstones(
+                context = context,
+                groupId = groupId,
+                organizerRolesByKey = updates
+            )
+            setLastLocalMutationEpoch(context, groupId, absEpoch)
+            setGroupPendingCloudPush(context, groupId, true)
+        }
+    }
+
+    fun getOrganizerRolesByKey(context: Context?, groupId: String): Map<String, Long> {
+        if (groupId.isBlank()) return emptyMap()
+        return loadLocalTombstones(context, groupId).organizerRolesByKey
+    }
+
+    fun mergeOrganizerRoleMaps(vararg maps: Map<String, Long>): Map<String, Long> {
+        val merged = mutableMapOf<String, Long>()
+        for (m in maps) {
+            for ((k, v) in m) {
+                if (k.isBlank() || v == 0L) continue
+                val existing = merged[k]
+                if (existing == null || kotlin.math.abs(v) >= kotlin.math.abs(existing)) {
+                    merged[k] = v
+                }
+            }
+        }
         return merged
     }
 
@@ -326,13 +379,15 @@ object CloudGroupSyncRepository {
         (a.deletedSettlementIds.keys + b.deletedSettlementIds.keys).forEach { k ->
             setts[k] = max(a.deletedSettlementIds[k] ?: 0L, b.deletedSettlementIds[k] ?: 0L)
         }
+        val orgRoles = mergeOrganizerRoleMaps(a.organizerRolesByKey, b.organizerRolesByKey)
         return LocalTombstoneStore(
             deletedExpenseIds = exp,
             deletedMemberIds = mem,
             removedMemberPhones = phones,
             deletedSettlementIds = setts,
             organizerPhone10 = b.organizerPhone10.ifBlank { a.organizerPhone10 },
-            joinCode6 = b.joinCode6.ifBlank { a.joinCode6 }
+            joinCode6 = b.joinCode6.ifBlank { a.joinCode6 },
+            organizerRolesByKey = orgRoles
         )
     }
 
@@ -352,6 +407,9 @@ object CloudGroupSyncRepository {
             put("deletedSettlementIds", JSONObject().apply {
                 store.deletedSettlementIds.forEach { (k, v) -> put(k, v) }
             })
+            put("organizerRolesByKey", JSONObject().apply {
+                store.organizerRolesByKey.forEach { (k, v) -> put(k, v) }
+            })
         }.toString()
     }
 
@@ -364,11 +422,28 @@ object CloudGroupSyncRepository {
                 removedMemberPhones = parseLongMap(root.optJSONObject("removedMemberPhones"), normalizePhones = true),
                 deletedSettlementIds = parseLongMap(root.optJSONObject("deletedSettlementIds")),
                 organizerPhone10 = PhoneIdentityValidator.normalizeIndianPhone10(root.optString("organizerPhone10", "")),
-                joinCode6 = normalizeJoinCode6(root.optString("joinCode6", ""))
+                joinCode6 = normalizeJoinCode6(root.optString("joinCode6", "")),
+                organizerRolesByKey = parseSignedLongMap(root.optJSONObject("organizerRolesByKey"))
             )
         } catch (_: Exception) {
             LocalTombstoneStore()
         }
+    }
+
+    private fun parseSignedLongMap(obj: JSONObject?): Map<String, Long> {
+        if (obj == null) return emptyMap()
+        val result = mutableMapOf<String, Long>()
+        val keys = obj.keys()
+        while (keys.hasNext()) {
+            val key = keys.next().trim()
+            if (key.isNotBlank()) {
+                val v = obj.optLong(key, 0L)
+                if (v != 0L) {
+                    result[key] = v
+                }
+            }
+        }
+        return result
     }
 
     private fun parseLongMap(obj: JSONObject?, normalizePhones: Boolean = false): Map<String, Long> {
@@ -598,6 +673,10 @@ object CloudGroupSyncRepository {
         doc.deletedSettlementIds.forEach { (settleId, ts) -> deletedSettlementsObj.put(settleId, ts) }
         root.put("deletedSettlementIds", deletedSettlementsObj)
 
+        val orgRolesObj = JSONObject()
+        doc.organizerRolesByKey.forEach { (k, v) -> if (k.isNotBlank() && v != 0L) orgRolesObj.put(k, v) }
+        root.put("organizerRolesByKey", orgRolesObj)
+
         val flightObj = JSONObject()
         doc.flightVaultByPnr.forEach { (pnr, json) -> flightObj.put(pnr, json) }
         root.put("flightVaultByPnr", flightObj)
@@ -730,6 +809,7 @@ object CloudGroupSyncRepository {
             val deletedMemberIds = parseLongMap(root.optJSONObject("deletedMemberIds"))
             val removedMemberPhones = parseLongMap(root.optJSONObject("removedMemberPhones"), normalizePhones = true)
             val deletedSettlementIds = parseLongMap(root.optJSONObject("deletedSettlementIds"))
+            val organizerRolesByKey = parseSignedLongMap(root.optJSONObject("organizerRolesByKey"))
 
             val flightVaultByPnr = mutableMapOf<String, String>()
             val flightObj = root.optJSONObject("flightVaultByPnr")
@@ -777,7 +857,8 @@ object CloudGroupSyncRepository {
                 joinCode6 = resolvedJoinCode,
                 deletedMemberIds = deletedMemberIds,
                 removedMemberPhones = removedMemberPhones,
-                deletedSettlementIds = deletedSettlementIds
+                deletedSettlementIds = deletedSettlementIds,
+                organizerRolesByKey = organizerRolesByKey
             )
         } catch (_: Exception) {
             null
@@ -797,6 +878,13 @@ object CloudGroupSyncRepository {
             put("isDemoSeed", doc.group.isDemoSeed)
             put("organizerPhone10", PhoneIdentityValidator.normalizeIndianPhone10(doc.organizerPhone10))
             put("joinCode6", normalizeJoinCode6(doc.joinCode6).ifBlank { deriveGroupJoinCode6(doc.group.groupId) })
+            val orgRolesArr = JSONArray()
+            doc.organizerRolesByKey.entries.sortedBy { it.key }.forEach { (k, v) ->
+                if (k.isNotBlank() && v != 0L) {
+                    orgRolesArr.put("$k:${if (v > 0L) 1 else -1}")
+                }
+            }
+            put("organizerRolesByKey", orgRolesArr)
 
             val membersArr = JSONArray()
             doc.members.sortedWith(compareBy<GroupMemberEntity> {
@@ -1381,6 +1469,12 @@ object CloudGroupSyncRepository {
             )
         }
 
+        val mergedOrganizerRolesByKey = mergeOrganizerRoleMaps(
+            localDoc?.organizerRolesByKey.orEmpty(),
+            remoteDoc?.organizerRolesByKey.orEmpty(),
+            storedTombstones.organizerRolesByKey
+        )
+
         // Un-tombstone phone if a genuinely new member row (memberId !in mergedDeletedMemberIds)
         // was re-invited with PENDING/JOINED at a strictly newer document timestamp
         val allMembersWithDocTime = buildList {
@@ -1421,7 +1515,8 @@ object CloudGroupSyncRepository {
                 return adjustMembersForLocalUser(
                     doc = singleDoc.copy(
                         organizerPhone10 = resolvedOrgPhone,
-                        joinCode6 = resolvedJoinCode
+                        joinCode6 = resolvedJoinCode,
+                        organizerRolesByKey = mergedOrganizerRolesByKey
                     ),
                     localUserPhone10 = normLocalPhone,
                     localUserAvatarSeed = localUserAvatarSeed,
@@ -1768,7 +1863,8 @@ object CloudGroupSyncRepository {
             joinCode6 = resolvedJoinCode,
             deletedMemberIds = mergedDeletedMemberIds,
             removedMemberPhones = mergedRemovedMemberPhones,
-            deletedSettlementIds = mergedDeletedSettlementIds
+            deletedSettlementIds = mergedDeletedSettlementIds,
+            organizerRolesByKey = mergedOrganizerRolesByKey
         )
     }
 
@@ -2163,7 +2259,8 @@ object CloudGroupSyncRepository {
                 joinCode6 = inferredCode6,
                 deletedMemberIds = durableTombstones.deletedMemberIds,
                 removedMemberPhones = durableTombstones.removedMemberPhones,
-                deletedSettlementIds = durableTombstones.deletedSettlementIds
+                deletedSettlementIds = durableTombstones.deletedSettlementIds,
+                organizerRolesByKey = durableTombstones.organizerRolesByKey
             )
         }
 
@@ -2187,7 +2284,8 @@ object CloudGroupSyncRepository {
             removedMemberPhones = mergedDoc.removedMemberPhones,
             deletedSettlementIds = mergedDoc.deletedSettlementIds,
             organizerPhone10 = mergedDoc.organizerPhone10,
-            joinCode6 = mergedDoc.joinCode6
+            joinCode6 = mergedDoc.joinCode6,
+            organizerRolesByKey = mergedDoc.organizerRolesByKey
         )
 
         // PA-4 (3-Layer Removed-User Local Purge):
