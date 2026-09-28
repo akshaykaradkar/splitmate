@@ -931,6 +931,7 @@ fun TripHomeScreen(
                 subtitle = dynamicTripSubtitle,
                 activePerspectiveMember = activePerspectiveMember,
                 onlineFriendsCount = onlineFriendsCount,
+                isCloudSyncing = uiState.isCloudSyncing,
                 isSearchExpanded = isSearchExpanded,
                 searchQuery = searchQuery,
                 onSearchQueryChange = { searchQuery = it },
@@ -938,6 +939,10 @@ fun TripHomeScreen(
                     performCrispTactileHaptic(context, localView, heavy = false)
                     isSearchExpanded = !isSearchExpanded
                     if (!isSearchExpanded) searchQuery = ""
+                },
+                onManualSyncClick = {
+                    performCrispTactileHaptic(context, localView, heavy = false)
+                    viewModel.syncActiveGroupNow(context = context, groupId = resolvedGroupId, silent = false)
                 },
                 onBackClick = {
                     performCrispTactileHaptic(context, localView, heavy = false)
@@ -961,6 +966,7 @@ fun TripHomeScreen(
                 onSelectTab = { newTab ->
                     performCrispTactileHaptic(context, localView, heavy = false)
                     selectedSectionTab = newTab
+                    viewModel.syncActiveGroupNow(context = context, groupId = resolvedGroupId, silent = true)
                 }
             )
 
@@ -1234,10 +1240,12 @@ private fun TripHubTopBar(
     subtitle: String,
     @Suppress("UNUSED_PARAMETER") activePerspectiveMember: GroupMemberEntity?,
     onlineFriendsCount: Int = 0,
+    isCloudSyncing: Boolean = false,
     isSearchExpanded: Boolean,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     onToggleSearch: () -> Unit,
+    onManualSyncClick: () -> Unit = {},
     onBackClick: () -> Unit,
     onSwitchToClassicLedgerClick: () -> Unit,
     onOpenSyncAndPerspectiveSheet: () -> Unit
@@ -1361,10 +1369,24 @@ private fun TripHubTopBar(
                 }
 
                 IconButton(
+                    onClick = onManualSyncClick,
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .defaultMinSize(minWidth = 44.dp, minHeight = 48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Sync,
+                        contentDescription = "Sync Trip Expenses Now",
+                        tint = if (isCloudSyncing) Color(0xFF416913) else TripHubTokens.TextPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                IconButton(
                     onClick = onToggleSearch,
                     modifier = Modifier
                         .minimumInteractiveComponentSize()
-                        .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                        .defaultMinSize(minWidth = 44.dp, minHeight = 48.dp)
                 ) {
                     Icon(
                         imageVector = if (isSearchExpanded) Icons.Rounded.Close else Icons.Rounded.Search,
@@ -1378,7 +1400,7 @@ private fun TripHubTopBar(
                     onClick = onSwitchToClassicLedgerClick,
                     modifier = Modifier
                         .minimumInteractiveComponentSize()
-                        .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                        .defaultMinSize(minWidth = 44.dp, minHeight = 48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.ViewAgenda,

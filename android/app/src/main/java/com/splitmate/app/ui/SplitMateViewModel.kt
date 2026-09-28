@@ -1405,15 +1405,17 @@ class SplitMateViewModel(
             val d = dao
             if (d != null) {
                 d.insertExpenseWithSplits(expenseEntity, splitEntities)
-                val normUserPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(_uiState.value.userPhone)
-                if (normUserPhone.length == 10) {
+                val normUserPhone = resolveEffectiveUserPhone10(d)
+                runCatching {
                     com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
                         context = null,
                         dao = d,
                         groupId = expenseEntity.groupId,
                         localUserPhone10 = normUserPhone,
-                        localUserName = _uiState.value.currentUserName.ifBlank { "You" }
+                        localUserName = _uiState.value.currentUserName.ifBlank { "You" },
+                        isLocalMutation = true
                     )
+                    refreshStateFromDaoSnapshot(d = d)
                 }
             }
         }
@@ -2142,20 +2144,84 @@ class SplitMateViewModel(
         }
     }
 
+    private suspend fun resolveEffectiveUserPhone10(d: SplitMateDao?): String {
+        val fromState = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(_uiState.value.userPhone)
+        if (fromState.length == 10) return fromState
+        val fromDao = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(d?.getUserProfile()?.userPhone.orEmpty())
+        if (fromDao.length == 10) return fromDao
+        val currentMember = _uiState.value.members.firstOrNull { it.isCurrentUser && it.userPhone.isNotBlank() }
+        return com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(
+            currentMember?.userPhone.orEmpty(),
+            currentMember?.upiId.orEmpty()
+        )
+    }
+
+    fun syncActiveGroupNow(
+        context: android.content.Context? = null,
+        groupId: String? = null,
+        silent: Boolean = true
+    ) {
+        val d = dao ?: return
+        val state = _uiState.value
+        val targetGroupId = groupId?.takeIf { it.isNotBlank() }
+            ?: state.openedGroupDetailId?.takeIf { it.isNotBlank() }
+            ?: state.activeGroupId
+        if (targetGroupId.isBlank()) return
+        if (!silent) {
+            _uiState.update { it.copy(isCloudSyncing = true) }
+        }
+        viewModelScope.launch(ioDispatcher) {
+            runCatching {
+                val phone10 = resolveEffectiveUserPhone10(d)
+                val syncedDoc = com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
+                    context = context,
+                    dao = d,
+                    groupId = targetGroupId,
+                    localUserPhone10 = phone10,
+                    localUserName = _uiState.value.currentUserName.ifBlank { "You" },
+                    forceIndexPush = !silent,
+                    isLocalMutation = false
+                )
+                val presenceSummary = if (syncedDoc != null) {
+                    com.splitmate.app.data.CloudRestoreSummary(
+                        restoredJoinedGroupsCount = 1,
+                        discoveredPendingInvitesCount = 0,
+                        memberPresenceByPhone = syncedDoc.memberPresenceByPhone
+                    )
+                } else null
+                refreshStateFromDaoSnapshot(
+                    d = d,
+                    summary = presenceSummary,
+                    statusMsg = if (!silent) "Synced latest trip expenses & balances" else null
+                )
+            }.onFailure {
+                if (!silent) {
+                    _uiState.update { it.copy(isCloudSyncing = false) }
+                }
+            }
+        }
+    }
+
     fun syncAllGroupsWithCloud(
         context: android.content.Context? = null,
         silent: Boolean = false
     ) {
         val d = dao ?: return
         val state = _uiState.value
-        val phone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(state.userPhone)
-        if (phone10.length != 10) return
         val previousGroupIds = state.groups.map { it.groupId }.toSet()
         if (!silent) {
             _uiState.update { it.copy(isCloudSyncing = true) }
         }
         viewModelScope.launch(ioDispatcher) {
             runCatching {
+                val phone10 = resolveEffectiveUserPhone10(d)
+                val hasNonSeedGroups = d.getAllGroups().any { !it.isDemoSeed }
+                if (phone10.length != 10 && !hasNonSeedGroups) {
+                    if (!silent) {
+                        _uiState.update { it.copy(isCloudSyncing = false) }
+                    }
+                    return@launch
+                }
                 val summary = com.splitmate.app.data.CloudGroupSyncRepository.restoreAndSyncAllForVerifiedPhone(
                     context = context,
                     dao = d,
@@ -2218,13 +2284,19 @@ class SplitMateViewModel(
             if (updatedGroupMembers.isNotEmpty()) {
                 d.insertMembers(updatedGroupMembers)
             }
-            com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
-                context = context,
-                dao = d,
-                groupId = groupId,
-                localUserPhone10 = userPhone10,
-                localUserName = _uiState.value.currentUserName.ifBlank { "You" }
-            )
+            val effectivePhone10 = userPhone10.ifBlank { resolveEffectiveUserPhone10(d) }
+            runCatching {
+                com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
+                    context = context,
+                    dao = d,
+                    groupId = groupId,
+                    localUserPhone10 = effectivePhone10,
+                    localUserName = _uiState.value.currentUserName.ifBlank { "You" },
+                    forceIndexPush = true,
+                    isLocalMutation = true
+                )
+                refreshStateFromDaoSnapshot(d = d)
+            }
         }
     }
 
@@ -2260,13 +2332,19 @@ class SplitMateViewModel(
             if (updatedGroupMembers.isNotEmpty()) {
                 d.insertMembers(updatedGroupMembers)
             }
-            com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
-                context = context,
-                dao = d,
-                groupId = groupId,
-                localUserPhone10 = userPhone10,
-                localUserName = _uiState.value.currentUserName.ifBlank { "You" }
-            )
+            val effectivePhone10 = userPhone10.ifBlank { resolveEffectiveUserPhone10(d) }
+            runCatching {
+                com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
+                    context = context,
+                    dao = d,
+                    groupId = groupId,
+                    localUserPhone10 = effectivePhone10,
+                    localUserName = _uiState.value.currentUserName.ifBlank { "You" },
+                    forceIndexPush = true,
+                    isLocalMutation = true
+                )
+                refreshStateFromDaoSnapshot(d = d)
+            }
         }
     }
 
@@ -2303,13 +2381,19 @@ class SplitMateViewModel(
             if (updatedGroupMembers.isNotEmpty()) {
                 d.insertMembers(updatedGroupMembers)
             }
-            com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
-                context = context,
-                dao = d,
-                groupId = groupId,
-                localUserPhone10 = userPhone10,
-                localUserName = _uiState.value.currentUserName.ifBlank { "You" }
-            )
+            val effectivePhone10 = userPhone10.ifBlank { resolveEffectiveUserPhone10(d) }
+            runCatching {
+                com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
+                    context = context,
+                    dao = d,
+                    groupId = groupId,
+                    localUserPhone10 = effectivePhone10,
+                    localUserName = _uiState.value.currentUserName.ifBlank { "You" },
+                    forceIndexPush = true,
+                    isLocalMutation = true
+                )
+                refreshStateFromDaoSnapshot(d = d)
+            }
         }
     }
 
@@ -2381,14 +2465,18 @@ class SplitMateViewModel(
             replacementSplitsByExpenseId.forEach { (expId, newSplits) ->
                 d.replaceExpenseSplits(expId, newSplits)
             }
-            val userPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(_uiState.value.userPhone)
-            com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
-                context = context,
-                dao = d,
-                groupId = groupId,
-                localUserPhone10 = userPhone10,
-                localUserName = _uiState.value.currentUserName.ifBlank { "You" }
-            )
+            val userPhone10 = resolveEffectiveUserPhone10(d)
+            runCatching {
+                com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
+                    context = context,
+                    dao = d,
+                    groupId = groupId,
+                    localUserPhone10 = userPhone10,
+                    localUserName = _uiState.value.currentUserName.ifBlank { "You" },
+                    isLocalMutation = true
+                )
+                refreshStateFromDaoSnapshot(d = d)
+            }
         }
     }
 
@@ -2405,6 +2493,7 @@ class SplitMateViewModel(
                 returnToGroupDetailId = groupId
             )
         }
+        syncActiveGroupNow(context = null, groupId = groupId, silent = true)
     }
 
     fun closeGroupDetail() {
@@ -2429,13 +2518,18 @@ class SplitMateViewModel(
     }
 
     fun finishSubFlowToGroupDetail(explicitGroupId: String? = null) {
+        var resolvedTarget: String? = null
         _uiState.update { state ->
             val targetGroup = explicitGroupId ?: state.returnToGroupDetailId ?: state.openedGroupDetailId ?: state.activeGroup?.groupId
+            resolvedTarget = targetGroup
             state.copy(
                 selectedTabName = "LEDGERS",
                 openedGroupDetailId = targetGroup,
                 returnToGroupDetailId = null
             )
+        }
+        if (!resolvedTarget.isNullOrBlank()) {
+            syncActiveGroupNow(context = null, groupId = resolvedTarget, silent = true)
         }
     }
 
@@ -3521,15 +3615,17 @@ class SplitMateViewModel(
             val d = dao
             if (d != null) {
                 d.insertSettlement(settlement)
-                val normUserPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(_uiState.value.userPhone)
-                if (normUserPhone.length == 10) {
+                val normUserPhone = resolveEffectiveUserPhone10(d)
+                runCatching {
                     com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
                         context = null,
                         dao = d,
                         groupId = settlement.groupId,
                         localUserPhone10 = normUserPhone,
-                        localUserName = _uiState.value.currentUserName.ifBlank { "You" }
+                        localUserName = _uiState.value.currentUserName.ifBlank { "You" },
+                        isLocalMutation = true
                     )
+                    refreshStateFromDaoSnapshot(d = d)
                 }
             }
         }
@@ -3551,16 +3647,20 @@ class SplitMateViewModel(
             if (d != null) {
                 d.deleteSplitsForExpense(expenseId)
                 d.deleteExpense(expenseId)
-                val normUserPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(_uiState.value.userPhone)
+                val normUserPhone = resolveEffectiveUserPhone10(d)
                 if (targetGroupId.isNotBlank()) {
-                    com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
-                        context = null,
-                        dao = d,
-                        groupId = targetGroupId,
-                        localUserPhone10 = normUserPhone,
-                        localUserName = _uiState.value.currentUserName.ifBlank { "You" },
-                        additionalTombstones = mapOf(expenseId to System.currentTimeMillis())
-                    )
+                    runCatching {
+                        com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
+                            context = null,
+                            dao = d,
+                            groupId = targetGroupId,
+                            localUserPhone10 = normUserPhone,
+                            localUserName = _uiState.value.currentUserName.ifBlank { "You" },
+                            additionalTombstones = mapOf(expenseId to System.currentTimeMillis()),
+                            isLocalMutation = true
+                        )
+                        refreshStateFromDaoSnapshot(d = d)
+                    }
                 }
             }
         }
@@ -3571,6 +3671,8 @@ class SplitMateViewModel(
     }
 
     fun undoSettlement(settlementId: String) {
+        val removedSettlement = _uiState.value.settlements.find { it.settlementId == settlementId }
+        val targetGroupId = removedSettlement?.groupId ?: _uiState.value.activeGroupId
         _uiState.update { curr ->
             val removed = curr.settlements.find { it.settlementId == settlementId }
             curr.copy(
@@ -3579,7 +3681,25 @@ class SplitMateViewModel(
             )
         }
         viewModelScope.launch(ioDispatcher) {
-            dao?.deleteSettlementById(settlementId)
+            val d = dao
+            if (d != null) {
+                d.deleteSettlementById(settlementId)
+                val normUserPhone = resolveEffectiveUserPhone10(d)
+                if (targetGroupId.isNotBlank()) {
+                    runCatching {
+                        com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
+                            context = null,
+                            dao = d,
+                            groupId = targetGroupId,
+                            localUserPhone10 = normUserPhone,
+                            localUserName = _uiState.value.currentUserName.ifBlank { "You" },
+                            additionalDeletedSettlementIds = mapOf(settlementId to System.currentTimeMillis()),
+                            isLocalMutation = true
+                        )
+                        refreshStateFromDaoSnapshot(d = d)
+                    }
+                }
+            }
         }
     }
 
@@ -3634,7 +3754,7 @@ class SplitMateViewModel(
             val d = dao
             if (d != null && updatedEntitiesToPersist.isNotEmpty()) {
                 d.insertMembers(updatedEntitiesToPersist)
-                val normUserPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(_uiState.value.userPhone)
+                val normUserPhone = resolveEffectiveUserPhone10(d)
                 val affectedGroupIds = updatedEntitiesToPersist.map { it.groupId }.toSet()
                 affectedGroupIds.forEach { gId ->
                     runCatching {
@@ -3643,10 +3763,13 @@ class SplitMateViewModel(
                             dao = d,
                             groupId = gId,
                             localUserPhone10 = normUserPhone,
-                            localUserName = _uiState.value.currentUserName.ifBlank { "You" }
+                            localUserName = _uiState.value.currentUserName.ifBlank { "You" },
+                            forceIndexPush = true,
+                            isLocalMutation = true
                         )
                     }
                 }
+                runCatching { refreshStateFromDaoSnapshot(d = d) }
             }
         }
     }
@@ -3735,15 +3858,17 @@ class SplitMateViewModel(
             val d = dao
             if (d != null) {
                 d.insertExpenseWithSplits(updatedExpense, updatedSplits)
-                val normUserPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(_uiState.value.userPhone)
-                if (normUserPhone.length == 10) {
+                val normUserPhone = resolveEffectiveUserPhone10(d)
+                runCatching {
                     com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
                         context = null,
                         dao = d,
                         groupId = updatedExpense.groupId,
                         localUserPhone10 = normUserPhone,
-                        localUserName = _uiState.value.currentUserName.ifBlank { "You" }
+                        localUserName = _uiState.value.currentUserName.ifBlank { "You" },
+                        isLocalMutation = true
                     )
+                    refreshStateFromDaoSnapshot(d = d)
                 }
             }
         }

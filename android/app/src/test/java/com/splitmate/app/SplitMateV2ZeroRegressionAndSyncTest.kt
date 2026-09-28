@@ -2482,7 +2482,156 @@ class SplitMateV2ZeroRegressionAndSyncTest {
         testDispatcher.scheduler.advanceUntilIdle()
         assertTrue(directInviteOk && directInviteMsg.contains("9123456780"), "sendOrResendDirectMemberInvite must succeed: $directInviteMsg")
     }
+
+    @Test
+    @DisplayName("28. Cross-Device Expense Sync: MemberId Remapping (Phone & Name Match) & Monotonic JOINED Status")
+    fun testCrossDeviceExpenseMemberIdRemappingAndMonotonicJoinedSync() {
+        val group = com.splitmate.app.data.ExpenseGroupEntity(
+            groupId = "g_sync_cross_device",
+            name = "Gokarna Beach Trek",
+            currencyCode = "INR",
+            iconName = "Flight",
+            isDemoSeed = false,
+            createdAt = 1760000000000L
+        )
+
+        // Phone A (Akshay Organizer): Rohan has memberId = "m_rohan_local" and inviteStatus = "PENDING"
+        val localDocOnPhoneA = com.splitmate.app.data.CloudGroupLedgerDocument(
+            group = group,
+            members = listOf(
+                com.splitmate.app.data.GroupMemberEntity(
+                    memberId = "m_akshay_me",
+                    groupId = group.groupId,
+                    name = "Akshay",
+                    avatarSeed = "Akshay|Male|open-peeps|Buckwheat",
+                    isCurrentUser = true,
+                    upiId = "9876543210@upi",
+                    userPhone = "9876543210",
+                    inviteStatus = "JOINED"
+                ),
+                com.splitmate.app.data.GroupMemberEntity(
+                    memberId = "m_rohan_local",
+                    groupId = group.groupId,
+                    name = "Rohan",
+                    avatarSeed = "Rohan|Neutral",
+                    isCurrentUser = false,
+                    upiId = "9123456789@upi",
+                    userPhone = "9123456789",
+                    inviteStatus = "PENDING"
+                )
+            ),
+            expenses = emptyList(),
+            splits = emptyList(),
+            settlements = emptyList(),
+            updatedAtEpochMs = 1760000500000L,
+            organizerPhone10 = "9876543210"
+        )
+
+        // Phone B (Rohan): joined with a different generated memberId ("m_rohan_remote_join") and logged a ₹1,500 dinner expense
+        val rohanExpense = com.splitmate.app.data.ExpenseEntity(
+            expenseId = "exp_rohan_dinner_1",
+            groupId = group.groupId,
+            title = "Namaste Cafe Beach Dinner",
+            payerId = "m_rohan_remote_join",
+            baseSubtotalCents = 150_000L,
+            taxCents = 0L,
+            tipCents = 0L,
+            totalAmountCents = 150_000L,
+            lockedMultiplier = 1.0,
+            unassignedBaseCents = 0L,
+            currencyCode = "INR",
+            lockedExchangeRate = 1.0,
+            expenseCategory = "FOOD",
+            syncStatus = "SYNCED",
+            createdAt = 1760000400000L
+        )
+        val rohanSplits = listOf(
+            com.splitmate.app.data.ExpenseSplitEntity(
+                splitId = "exp_rohan_dinner_1_sp_0",
+                expenseId = "exp_rohan_dinner_1",
+                memberId = "m_akshay_me",
+                baseClaimedCents = 75_000L,
+                finalOwedCents = 75_000L,
+                plusOneCent = false
+            ),
+            com.splitmate.app.data.ExpenseSplitEntity(
+                splitId = "exp_rohan_dinner_1_sp_1",
+                expenseId = "exp_rohan_dinner_1",
+                memberId = "m_rohan_remote_join",
+                baseClaimedCents = 75_000L,
+                finalOwedCents = 75_000L,
+                plusOneCent = false
+            )
+        )
+        val remoteDocFromPhoneB = com.splitmate.app.data.CloudGroupLedgerDocument(
+            group = group,
+            members = listOf(
+                com.splitmate.app.data.GroupMemberEntity(
+                    memberId = "m_akshay_me",
+                    groupId = group.groupId,
+                    name = "Akshay",
+                    avatarSeed = "Akshay|Male|open-peeps|Buckwheat",
+                    isCurrentUser = false,
+                    upiId = "9876543210@upi",
+                    userPhone = "9876543210",
+                    inviteStatus = "JOINED"
+                ),
+                com.splitmate.app.data.GroupMemberEntity(
+                    memberId = "m_rohan_remote_join",
+                    groupId = group.groupId,
+                    name = "Rohan Sharma",
+                    avatarSeed = "Rohan Sharma|Male|adventurer|Terracotta",
+                    isCurrentUser = true,
+                    upiId = "9123456789@upi",
+                    userPhone = "9123456789",
+                    inviteStatus = "JOINED"
+                )
+            ),
+            expenses = listOf(rohanExpense),
+            splits = rohanSplits,
+            settlements = emptyList(),
+            updatedAtEpochMs = 1760000450000L,
+            organizerPhone10 = "9876543210"
+        )
+
+        val mergedOnPhoneA = com.splitmate.app.data.CloudGroupSyncRepository.mergeGroupLedgerDocuments(
+            localDoc = localDocOnPhoneA,
+            remoteDoc = remoteDocFromPhoneB,
+            localUserPhone10 = "9876543210"
+        )
+
+        // 1. Rohan's expense must NOT be dropped even though his remote memberId differed from Phone A's local memberId
+        assertEquals(1, mergedOnPhoneA.expenses.size, "Rohan's remote expense must be preserved after cross-device memberId remapping")
+        val mergedExp = mergedOnPhoneA.expenses.single()
+        val survivingRohan = mergedOnPhoneA.members.first { it.userPhone == "9123456789" }
+        assertEquals(
+            survivingRohan.memberId,
+            mergedExp.payerId,
+            "Expense payerId must be remapped to the canonical surviving memberId for Rohan"
+        )
+
+        // 2. Both splits must survive and sum to 150_000L paise (0.00c drift)
+        assertEquals(2, mergedOnPhoneA.splits.size, "Both expense splits must survive after memberId remapping")
+        assertEquals(
+            150_000L,
+            mergedOnPhoneA.splits.sumOf { it.finalOwedCents },
+            "Remapped expense splits must preserve exact 0.00c drift total"
+        )
+        assertTrue(
+            mergedOnPhoneA.splits.any { it.memberId == survivingRohan.memberId && it.finalOwedCents == 75_000L },
+            "Rohan's split must be remapped to his canonical surviving memberId"
+        )
+
+        // 3. Monotonic JOINED status and 4-part canonical avatarSeed must be preserved even when localDoc had a higher timestamp
+        assertEquals("JOINED", survivingRohan.inviteStatus, "JOINED status must be monotonic over PENDING")
+        assertEquals(
+            "Rohan Sharma|Male|adventurer|Terracotta",
+            survivingRohan.avatarSeed,
+            "4-part canonical avatarSeed from joined member must win over bare placeholder seed"
+        )
+    }
 }
+
 
 
 

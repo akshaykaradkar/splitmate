@@ -185,10 +185,20 @@ fun SplitMateApp(viewModel: SplitMateViewModel) {
     }
     SplitMateTheme.isDark = uiState.isDarkTheme
 
+    // Fast active-trip Cloud Sync loop (every 12s while viewing a specific trip so new expenses from other members appear within seconds)
+    LaunchedEffect(uiState.openedGroupDetailId, uiState.hasRegisteredProfile) {
+        val openedGroupId = uiState.openedGroupDetailId
+        if (uiState.hasRegisteredProfile && !openedGroupId.isNullOrBlank()) {
+            while (true) {
+                viewModel.syncActiveGroupNow(context = context, groupId = openedGroupId, silent = true)
+                kotlinx.coroutines.delay(12_000L)
+            }
+        }
+    }
+
     // Automatic fault-tolerant background Cloud Sync & Online Presence heartbeat (every 45s while app is open)
     LaunchedEffect(uiState.userPhone, uiState.hasRegisteredProfile) {
-        val cleanPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianMobile(uiState.userPhone)
-        if (uiState.hasRegisteredProfile && cleanPhone.length == 10) {
+        if (uiState.hasRegisteredProfile) {
             while (true) {
                 viewModel.performSilentAutoCloudSync(context)
                 kotlinx.coroutines.delay(45_000L)
@@ -197,13 +207,14 @@ fun SplitMateApp(viewModel: SplitMateViewModel) {
     }
 
     // Immediate silent auto-sync whenever the app returns to foreground (ON_RESUME)
-    DisposableEffect(lifecycleOwner, uiState.userPhone, uiState.hasRegisteredProfile) {
+    DisposableEffect(lifecycleOwner, uiState.userPhone, uiState.hasRegisteredProfile, uiState.openedGroupDetailId) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                val cleanPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianMobile(uiState.userPhone)
-                if (uiState.hasRegisteredProfile && cleanPhone.length == 10) {
-                    viewModel.performSilentAutoCloudSync(context)
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME && uiState.hasRegisteredProfile) {
+                val openedId = uiState.openedGroupDetailId
+                if (!openedId.isNullOrBlank()) {
+                    viewModel.syncActiveGroupNow(context = context, groupId = openedId, silent = true)
                 }
+                viewModel.performSilentAutoCloudSync(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
