@@ -35,9 +35,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.automirrored.rounded.ExitToApp
 import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Apartment
@@ -57,9 +59,11 @@ import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.PersonPin
 import androidx.compose.material.icons.rounded.PersonRemove
+import androidx.compose.material.icons.rounded.PhoneIphone
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Sync
@@ -107,6 +111,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
@@ -1143,6 +1148,8 @@ fun TripHomeScreen(
                         onOpenSyncSheetClick = {
                             showSyncAndPerspectiveSheet = true
                         },
+                        onOpenSettleUpClick = onOpenSettleUpClick,
+                        onLeaveGroupSuccess = onBackClick,
                         isTravelGroup = isTravelGroup
                     )
                 }
@@ -4925,11 +4932,416 @@ private fun TripHubPeoplePerspectiveView(
     netBalancesMap: Map<String, Long>,
     onAddMemberClick: () -> Unit,
     onOpenSyncSheetClick: () -> Unit,
+    onOpenSettleUpClick: () -> Unit = {},
+    onLeaveGroupSuccess: () -> Unit = {},
     isTravelGroup: Boolean = true
 ) {
     val context = LocalContext.current
     val localView = LocalView.current
     val uiState by viewModel.uiState.collectAsState()
+
+    val formattedJoinCode = remember(groupId, uiState.groups) {
+        viewModel.getFormattedGroupJoinCode(groupId)
+    }
+    val organizerMember = remember(groupMembers, uiState.groups, uiState.members, groupId) {
+        viewModel.getGroupOrganizerMember(groupId, uiState)
+    }
+    val isCurrentUserOrganizer = remember(groupMembers, uiState.groups, uiState.members, uiState.userPhone, groupId) {
+        viewModel.isUserGroupOrganizer(groupId, uiState)
+    }
+
+    var editingMemberForPhoneInvite by remember { mutableStateOf<GroupMemberEntity?>(null) }
+    var editedMemberName by remember { mutableStateOf("") }
+    var editedMemberPhone by remember { mutableStateOf("") }
+    var editPhoneDialogStatus by remember { mutableStateOf<String?>(null) }
+    var isEditPhoneError by remember { mutableStateOf(false) }
+
+    var confirmingRemoveMember by remember { mutableStateOf<GroupMemberEntity?>(null) }
+    var removeMemberStatusMsg by remember { mutableStateOf<String?>(null) }
+
+    var showLeaveTripConfirmDialog by remember { mutableStateOf(false) }
+    var leaveTripStatusMsg by remember { mutableStateOf<String?>(null) }
+
+    var peopleFeedbackBanner by remember { mutableStateOf<String?>(null) }
+    var isPeopleFeedbackError by remember { mutableStateOf(false) }
+
+    editingMemberForPhoneInvite?.let { targetMember ->
+        val cleanTypedPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianMobile(editedMemberPhone)
+        AlertDialog(
+            onDismissRequest = {
+                editingMemberForPhoneInvite = null
+                editPhoneDialogStatus = null
+            },
+            containerColor = Color(0xFFFAF6F0),
+            title = {
+                Text(
+                    text = "Update Mobile & Send Invite",
+                    fontFamily = FigtreeFontFamily,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 18.sp,
+                    color = Color(0xFF23201E)
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Link a 10-digit +91 mobile number for ${targetMember.name} so this trip syncs automatically to their phone.",
+                        fontFamily = FigtreeFontFamily,
+                        fontSize = 12.sp,
+                        color = TripHubTokens.TextSecondary
+                    )
+                    OutlinedTextField(
+                        value = editedMemberName,
+                        onValueChange = {
+                            editedMemberName = it
+                            editPhoneDialogStatus = null
+                        },
+                        label = { Text("Member Name", fontFamily = FigtreeFontFamily, fontSize = 12.sp) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = editedMemberPhone,
+                        onValueChange = { raw ->
+                            editedMemberPhone = raw.filter { it.isDigit() || it == '+' || it == ' ' }.take(15)
+                            editPhoneDialogStatus = null
+                        },
+                        label = { Text("10-Digit Mobile Number", fontFamily = FigtreeFontFamily, fontSize = 12.sp) },
+                        prefix = {
+                            Text(
+                                text = "+91 ",
+                                fontFamily = SplitMateTnumMonospace,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = Color(0xFF365314)
+                            )
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    editPhoneDialogStatus?.let { status ->
+                        Text(
+                            text = status,
+                            fontFamily = FigtreeFontFamily,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isEditPhoneError) Color(0xFF7C2D12) else Color(0xFF365314)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.updateMemberPhoneAndResendInvite(
+                            context = context,
+                            groupId = groupId,
+                            memberId = targetMember.memberId,
+                            rawPhone = editedMemberPhone,
+                            newName = editedMemberName.trim().ifBlank { targetMember.name }
+                        ) { ok, msg ->
+                            isEditPhoneError = !ok
+                            editPhoneDialogStatus = msg
+                            isPeopleFeedbackError = !ok
+                            peopleFeedbackBanner = msg
+                            if (ok) {
+                                editingMemberForPhoneInvite = null
+                                editPhoneDialogStatus = null
+                            }
+                        }
+                    },
+                    enabled = cleanTypedPhone10.length == 10 && editedMemberName.trim().isNotBlank(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF365314),
+                        contentColor = Color(0xFFFAF6F0)
+                    )
+                ) {
+                    Text(
+                        text = "Save & Send Invite",
+                        fontFamily = FigtreeFontFamily,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 12.sp
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        editingMemberForPhoneInvite = null
+                        editPhoneDialogStatus = null
+                    }
+                ) {
+                    Text(
+                        text = "Cancel",
+                        fontFamily = FigtreeFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        color = TripHubTokens.TextSecondary
+                    )
+                }
+            }
+        )
+    }
+
+    confirmingRemoveMember?.let { memberToRemove ->
+        val memberNetCents = netBalancesMap[memberToRemove.memberId] ?: 0L
+        val isSettled = memberNetCents == 0L
+        val memberNetFormatted = formatIndianRupeesFromCents(abs(memberNetCents))
+        val memberNetSignLabel = when {
+            memberNetCents > 0L -> "+$memberNetFormatted"
+            memberNetCents < 0L -> "-$memberNetFormatted"
+            else -> "₹0.00"
+        }
+        AlertDialog(
+            onDismissRequest = {
+                confirmingRemoveMember = null
+                removeMemberStatusMsg = null
+            },
+            containerColor = Color(0xFFFAF6F0),
+            title = {
+                Text(
+                    text = if (isSettled) "Remove ${memberToRemove.name}?" else "Remove & Rebalance ${memberToRemove.name}?",
+                    fontFamily = FigtreeFontFamily,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 18.sp,
+                    color = Color(0xFF23201E)
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (isSettled) {
+                        Text(
+                            text = "Remove ${memberToRemove.name} from this trip? Their balance is settled (₹0.00).",
+                            fontFamily = FigtreeFontFamily,
+                            fontSize = 13.sp,
+                            color = TripHubTokens.TextSecondary
+                        )
+                    } else {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFFFCE3D7),
+                            border = BorderStroke(1.dp, Color(0xFFE06B52).copy(alpha = 0.4f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "${memberToRemove.name} has an unsettled balance ($memberNetSignLabel). Removing them will reassign any expenses they paid to the Organizer and redistribute their split shares across the surviving participants with 0.00c drift.",
+                                fontFamily = FigtreeFontFamily,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF7C2D12),
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                confirmingRemoveMember = null
+                                removeMemberStatusMsg = null
+                                onOpenSettleUpClick()
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, Color(0xFF365314).copy(alpha = 0.45f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "Settle Balance First",
+                                fontFamily = FigtreeFontFamily,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 12.sp,
+                                color = Color(0xFF365314)
+                            )
+                        }
+                    }
+                    removeMemberStatusMsg?.let { msg ->
+                        Text(
+                            text = msg,
+                            fontFamily = FigtreeFontFamily,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF7C2D12)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.removeMemberFromGroup(
+                            context = context,
+                            groupId = groupId,
+                            targetMemberId = memberToRemove.memberId
+                        ) { ok, msg ->
+                            if (ok) {
+                                isPeopleFeedbackError = false
+                                peopleFeedbackBanner = msg
+                                confirmingRemoveMember = null
+                                removeMemberStatusMsg = null
+                            } else {
+                                removeMemberStatusMsg = msg
+                            }
+                        }
+                    },
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFE06B52),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text(
+                        text = if (isSettled) "Remove Member" else "Remove & Rebalance",
+                        fontFamily = FigtreeFontFamily,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 12.sp
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        confirmingRemoveMember = null
+                        removeMemberStatusMsg = null
+                    }
+                ) {
+                    Text(
+                        text = "Cancel",
+                        fontFamily = FigtreeFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        color = TripHubTokens.TextSecondary
+                    )
+                }
+            }
+        )
+    }
+
+    if (showLeaveTripConfirmDialog) {
+        val myMember = groupMembers.find { it.isCurrentUser }
+        val myNetCents = myMember?.let { netBalancesMap[it.memberId] ?: 0L } ?: 0L
+        val myNetFormatted = formatIndianRupeesFromCents(abs(myNetCents))
+        val myNetSignLabel = when {
+            myNetCents > 0L -> "+$myNetFormatted"
+            myNetCents < 0L -> "-$myNetFormatted"
+            else -> "₹0.00"
+        }
+        AlertDialog(
+            onDismissRequest = {
+                showLeaveTripConfirmDialog = false
+                leaveTripStatusMsg = null
+            },
+            containerColor = Color(0xFFFAF6F0),
+            title = {
+                Text(
+                    text = "Leave Trip?",
+                    fontFamily = FigtreeFontFamily,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 18.sp,
+                    color = Color(0xFF23201E)
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (myNetCents != 0L) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFFFCE3D7),
+                            border = BorderStroke(1.dp, Color(0xFFE06B52).copy(alpha = 0.4f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "You have an unsettled balance ($myNetSignLabel) in this group. Please settle up before leaving.",
+                                fontFamily = FigtreeFontFamily,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF7C2D12),
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = "Leave this trip? It will be removed from your active groups list, and remaining members will keep the ledger.",
+                            fontFamily = FigtreeFontFamily,
+                            fontSize = 13.sp,
+                            color = TripHubTokens.TextSecondary
+                        )
+                    }
+                    leaveTripStatusMsg?.let { msg ->
+                        Text(
+                            text = msg,
+                            fontFamily = FigtreeFontFamily,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF7C2D12)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                if (myNetCents != 0L) {
+                    Button(
+                        onClick = {
+                            showLeaveTripConfirmDialog = false
+                            leaveTripStatusMsg = null
+                            onOpenSettleUpClick()
+                        },
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF365314),
+                            contentColor = Color(0xFFFAF6F0)
+                        )
+                    ) {
+                        Text(
+                            text = "Settle Up First",
+                            fontFamily = FigtreeFontFamily,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 12.sp
+                        )
+                    }
+                } else {
+                    Button(
+                        onClick = {
+                            viewModel.leaveGroup(context = context, groupId = groupId) { ok, msg ->
+                                if (ok) {
+                                    showLeaveTripConfirmDialog = false
+                                    leaveTripStatusMsg = null
+                                    onLeaveGroupSuccess()
+                                } else {
+                                    leaveTripStatusMsg = msg
+                                }
+                            }
+                        },
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFE06B52),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text(
+                            text = "Confirm Leave Trip",
+                            fontFamily = FigtreeFontFamily,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showLeaveTripConfirmDialog = false
+                        leaveTripStatusMsg = null
+                    }
+                ) {
+                    Text(
+                        text = "Cancel",
+                        fontFamily = FigtreeFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        color = TripHubTokens.TextSecondary
+                    )
+                }
+            }
+        )
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -4937,68 +5349,111 @@ private fun TripHubPeoplePerspectiveView(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item(key = "people_actions_row") {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .animateItemPlacement(spring(dampingRatio = 0.78f, stiffness = 380f)),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Button(
-                    onClick = {
-                        performCrispTactileHaptic(context, localView, heavy = false)
-                        onAddMemberClick()
-                    },
-                    shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = TripHubTokens.ActiveTabPillBg,
-                        contentColor = TripHubTokens.ActiveTabPillText
-                    ),
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
                     modifier = Modifier
-                        .weight(1f)
-                        .minimumInteractiveComponentSize()
-                        .defaultMinSize(minHeight = 48.dp)
+                        .fillMaxWidth()
+                        .animateItemPlacement(spring(dampingRatio = 0.78f, stiffness = 380f)),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.PersonAdd,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = if (isTravelGroup) "+ Add Traveler" else "+ Add Member",
-                        fontFamily = FigtreeFontFamily,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 13.sp
-                    )
+                    Button(
+                        onClick = {
+                            performCrispTactileHaptic(context, localView, heavy = false)
+                            onAddMemberClick()
+                        },
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = TripHubTokens.ActiveTabPillBg,
+                            contentColor = TripHubTokens.ActiveTabPillText
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .minimumInteractiveComponentSize()
+                            .defaultMinSize(minHeight = 48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.PersonAdd,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isTravelGroup) "+ Add Traveler" else "+ Add Member",
+                            fontFamily = FigtreeFontFamily,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 13.sp
+                        )
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            performCrispTactileHaptic(context, localView, heavy = false)
+                            onOpenSyncSheetClick()
+                        },
+                        shape = CircleShape,
+                        border = BorderStroke(1.dp, TripHubTokens.CardBorder),
+                        modifier = Modifier
+                            .weight(1.25f)
+                            .minimumInteractiveComponentSize()
+                            .defaultMinSize(minHeight = 48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Share,
+                            contentDescription = null,
+                            tint = TripHubTokens.TextPrimary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = "Trip Code: $formattedJoinCode · Invite",
+                            fontFamily = SplitMateTnumMonospace,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = TripHubTokens.TextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
 
-                OutlinedButton(
-                    onClick = {
-                        performCrispTactileHaptic(context, localView, heavy = false)
-                        onOpenSyncSheetClick()
-                    },
-                    shape = CircleShape,
-                    border = BorderStroke(1.dp, TripHubTokens.CardBorder),
-                    modifier = Modifier
-                        .weight(1.15f)
-                        .minimumInteractiveComponentSize()
-                        .defaultMinSize(minHeight = 48.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Share,
-                        contentDescription = null,
-                        tint = TripHubTokens.TextPrimary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Invite Friends via Link",
-                        fontFamily = FigtreeFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
-                        color = TripHubTokens.TextPrimary,
-                        maxLines = 1
-                    )
+                peopleFeedbackBanner?.let { banner ->
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isPeopleFeedbackError) Color(0xFFFCE3D7) else Color(0xFFDCE9B9),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isPeopleFeedbackError) Color(0xFFE06B52).copy(alpha = 0.4f) else Color(0xFF416913).copy(alpha = 0.35f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = banner,
+                                fontFamily = FigtreeFontFamily,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isPeopleFeedbackError) Color(0xFF7C2D12) else Color(0xFF365314),
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(
+                                onClick = { peopleFeedbackBanner = null },
+                                modifier = Modifier.size(22.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Close,
+                                    contentDescription = "Dismiss",
+                                    tint = if (isPeopleFeedbackError) Color(0xFF7C2D12) else Color(0xFF365314),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -5008,6 +5463,7 @@ private fun TripHubPeoplePerspectiveView(
             key = { it.memberId }
         ) { member ->
             val isMe = member.isCurrentUser
+            val isMemberOrganizer = organizerMember?.memberId == member.memberId
             val isOnline = uiState.isMemberOnline(member)
             val cleanPhone10 = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(member.userPhone, member.upiId)
             val phoneSubtitle = if (cleanPhone10.length == 10) "+91 $cleanPhone10 · Auto-Sync" else "Offline Member · Local Ledger"
@@ -5067,6 +5523,21 @@ private fun TripHubPeoplePerspectiveView(
                                         fontSize = 16.sp,
                                         color = TripHubTokens.TextPrimary
                                     )
+                                    if (isMemberOrganizer) {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = Color(0xFFDCE9B9)
+                                        ) {
+                                            Text(
+                                                text = "ORGANIZER",
+                                                fontFamily = FigtreeFontFamily,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 9.sp,
+                                                color = Color(0xFF365314),
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
                                     if (isOnline) {
                                         Surface(
                                             shape = CircleShape,
@@ -5210,7 +5681,160 @@ private fun TripHubPeoplePerspectiveView(
                             )
                         }
                     }
+
+                    val isActivePerspective = isMe
+                    val showInvitePhoneChip = !isMe && (cleanPhone10.isEmpty() || member.inviteStatus.equals("PENDING", ignoreCase = true))
+                    val showRemoveMemberChip = isCurrentUserOrganizer && !isMe && groupMembers.size > 1
+                    if (!isActivePerspective || showInvitePhoneChip || showRemoveMemberChip) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (!isActivePerspective) {
+                                Surface(
+                                    onClick = {
+                                        performCrispTactileHaptic(context, localView, heavy = false)
+                                        viewModel.switchActivePerspectiveMember(groupId, member.memberId)
+                                        isPeopleFeedbackError = false
+                                        peopleFeedbackBanner = "Viewing trip as ${member.name}"
+                                    },
+                                    shape = CircleShape,
+                                    color = Color(0xFFF4EFE6),
+                                    border = BorderStroke(1.dp, Color(0xFFEDE7DF))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.PersonPin,
+                                            contentDescription = null,
+                                            tint = Color(0xFF365314),
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Text(
+                                            text = "View as ${member.name.substringBefore(" ")}",
+                                            fontFamily = FigtreeFontFamily,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            color = Color(0xFF365314)
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (showInvitePhoneChip) {
+                                val isMissingPhone = cleanPhone10.isEmpty()
+                                Surface(
+                                    onClick = {
+                                        performCrispTactileHaptic(context, localView, heavy = false)
+                                        editedMemberName = member.name
+                                        editedMemberPhone = cleanPhone10
+                                        editPhoneDialogStatus = null
+                                        editingMemberForPhoneInvite = member
+                                    },
+                                    shape = CircleShape,
+                                    color = if (isMissingPhone) Color(0xFFDCE9B9) else Color(0xFFF4EFE6),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (isMissingPhone) Color(0xFF416913).copy(alpha = 0.35f) else Color(0xFFEDE7DF)
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isMissingPhone) Icons.Rounded.PhoneIphone else Icons.Rounded.Send,
+                                            contentDescription = null,
+                                            tint = Color(0xFF365314),
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Text(
+                                            text = if (isMissingPhone) "+ Add Phone & Invite" else "Resend Invite · Edit Phone",
+                                            fontFamily = FigtreeFontFamily,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            color = Color(0xFF365314)
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (showRemoveMemberChip) {
+                                Surface(
+                                    onClick = {
+                                        performCrispTactileHaptic(context, localView, heavy = false)
+                                        removeMemberStatusMsg = null
+                                        confirmingRemoveMember = member
+                                    },
+                                    shape = CircleShape,
+                                    color = Color(0xFFFCE3D7),
+                                    border = BorderStroke(1.dp, Color(0xFFE06B52).copy(alpha = 0.4f))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.PersonRemove,
+                                            contentDescription = null,
+                                            tint = Color(0xFF7C2D12),
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Text(
+                                            text = "Remove Member",
+                                            fontFamily = FigtreeFontFamily,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            color = Color(0xFF7C2D12)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
+            }
+        }
+
+        item(key = "people_leave_trip_footer") {
+            OutlinedButton(
+                onClick = {
+                    performCrispTactileHaptic(context, localView, heavy = false)
+                    leaveTripStatusMsg = null
+                    showLeaveTripConfirmDialog = true
+                },
+                shape = RoundedCornerShape(18.dp),
+                border = BorderStroke(1.dp, Color(0xFFE06B52).copy(alpha = 0.6f)),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = Color(0xFFFCE3D7).copy(alpha = 0.45f),
+                    contentColor = Color(0xFF7C2D12)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = 48.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Rounded.ExitToApp,
+                    contentDescription = null,
+                    tint = Color(0xFF7C2D12),
+                    modifier = Modifier.size(17.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Leave Trip",
+                    fontFamily = FigtreeFontFamily,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 13.sp,
+                    color = Color(0xFF7C2D12)
+                )
             }
         }
     }

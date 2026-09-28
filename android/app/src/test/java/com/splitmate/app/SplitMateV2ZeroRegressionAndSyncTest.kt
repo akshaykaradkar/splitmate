@@ -33,6 +33,7 @@ class SplitMateV2ZeroRegressionAndSyncTest {
     fun setup() {
         Dispatchers.setMain(testDispatcher)
         com.splitmate.app.data.PhoneOtpAuthManager.clearPendingOtpChallenge(null)
+        com.splitmate.app.data.CloudGroupSyncRepository.resetInMemoryStateForTests()
     }
 
     @AfterEach
@@ -1935,6 +1936,535 @@ class SplitMateV2ZeroRegressionAndSyncTest {
             "SplitMateDao.getAllGroups() must enforce ORDER BY createdAt DESC, groupId ASC"
         )
     }
+
+    @Test
+    @DisplayName("23. Tier 1 (F1 & F5): PhoneIdentityValidator [6-9] validation and 6-Character Crockford Base32 Group Join Code algebra")
+    fun testPhoneIdentityValidatorAndSixCharJoinCodeAlgebra() = runTest(testDispatcher) {
+        val validator = com.splitmate.app.data.PhoneIdentityValidator
+        val syncRepo = com.splitmate.app.data.CloudGroupSyncRepository
+
+        // F1: Indian 10-digit normalization & [6-9] validation
+        assertEquals("9876543210", validator.normalizeTo10DigitIndianMobile("+91 98765-43210"))
+        assertEquals("9876543210", validator.normalizeTo10DigitIndianMobile("09876543210"))
+        assertEquals("9876543210", validator.normalizeTo10DigitIndianMobile("919876543210"))
+        assertEquals("9876543210", validator.normalizeTo10DigitIndianMobile("9876543210@okaxis"))
+        assertEquals("", validator.normalizeTo10DigitIndianMobile("1234567890"), "Numbers starting with 1-5 must be rejected")
+        assertEquals("", validator.normalizeTo10DigitIndianMobile("98765"), "Short numbers must be rejected")
+        assertEquals("", validator.normalizeTo10DigitIndianMobile("akshay.karadkar@okicici"), "Non-phone VPAs must return empty phone")
+
+        // F1: extractMemberPhone10 must validate primary userPhone via [6-9] before returning, falling back to upiId
+        assertEquals(
+            "9876543210",
+            validator.extractMemberPhone10("1234567890", "9876543210@okicici"),
+            "Invalid primary userPhone must fall back to valid 10-digit phone in upiId"
+        )
+        assertEquals(
+            "",
+            validator.extractMemberPhone10("1234567890", "akshay@okicici"),
+            "Both invalid primary and non-numeric VPA must yield empty phone"
+        )
+
+        // F5 / PA-7: 6-character Crockford Base32 Join Code generation & formatting
+        val code6 = syncRepo.deriveGroupJoinCode6("grp_goa_test", 1_790_000_000_000L)
+        assertEquals(6, code6.length)
+        val allowedAlphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ".toSet()
+        assertTrue(code6.all { it in allowedAlphabet }, "Join code must only contain unambiguous Crockford Base32 chars: $code6")
+        assertEquals("${code6.substring(0, 3)}-${code6.substring(3, 6)}", syncRepo.formatJoinCode6(code6))
+        assertEquals(code6, syncRepo.normalizeJoinCode6(syncRepo.formatJoinCode6(code6).lowercase()))
+
+        // Verify createNewGroupWithContacts embeds _<CODE6> suffix in groupId (PA-7)
+        val vm = SplitMateViewModel(dao = null, ioDispatcher = testDispatcher)
+        vm.completeOnboarding(
+            name = "Akshay",
+            countryName = "India",
+            currencyCode = "INR",
+            currencySymbol = "₹",
+            avatarSeed = "Akshay",
+            userPhone = "9876543210"
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.createNewGroupWithContacts(
+            name = "Goa Beach Villa",
+            iconName = "Flight",
+            memberDrafts = listOf(com.splitmate.app.ui.NewGroupMemberDraft(name = "Rahul", cleanPhone = "9876543211"))
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val gId = vm.uiState.value.activeGroupId
+        val embeddedCode = vm.getGroupJoinCode(gId)
+        assertEquals(6, embeddedCode.length)
+        assertTrue(gId.endsWith("_$embeddedCode"), "Created groupId ($gId) must embed _$embeddedCode suffix for PA-7 discovery")
+        assertEquals(syncRepo.formatJoinCode6(embeddedCode), vm.getFormattedGroupJoinCode(gId))
+
+        val bundle = vm.exportGroupSyncPayload(gId)
+        assertNotNull(bundle)
+        assertEquals(embeddedCode, bundle!!.joinCode6)
+        assertTrue(bundle.whatsappShareText.contains("Trip Join Code: ${syncRepo.formatJoinCode6(embeddedCode)}"))
+        assertFalse(containsUnicodeEmoji(bundle.whatsappShareText))
+    }
+
+    @Test
+    @DisplayName("24. Tier 2 (F2, F3, F5, PA-1, PA-3, PA-6): Structural ledger hash invariance and CRDT tombstone merge with subset-only split redistribution")
+    fun testStructuralLedgerHashAndCrdtTombstoneMerge() = runTest(testDispatcher) {
+        val syncRepo = com.splitmate.app.data.CloudGroupSyncRepository
+        val group = com.splitmate.app.data.ExpenseGroupEntity(
+            groupId = "grp_manali_K7M9P2",
+            name = "Manali Snow Expedition",
+            currencyCode = "INR",
+            iconName = "Flight",
+            createdAt = 1_790_000_000_000L
+        )
+        val mAkshay = com.splitmate.app.data.GroupMemberEntity(
+            memberId = "m_akshay",
+            groupId = group.groupId,
+            name = "Akshay",
+            avatarSeed = "Akshay",
+            upiId = "9876543210@okaxis",
+            isCurrentUser = true,
+            userPhone = "9876543210",
+            inviteStatus = "JOINED"
+        )
+        val mRahul = com.splitmate.app.data.GroupMemberEntity(
+            memberId = "m_rahul",
+            groupId = group.groupId,
+            name = "Rahul",
+            avatarSeed = "Rahul",
+            upiId = "9876543211@ybl",
+            isCurrentUser = false,
+            userPhone = "9876543211",
+            inviteStatus = "PENDING"
+        )
+        val mPriya = com.splitmate.app.data.GroupMemberEntity(
+            memberId = "m_priya",
+            groupId = group.groupId,
+            name = "Priya",
+            avatarSeed = "Priya",
+            upiId = "9876543212@okicici",
+            isCurrentUser = false,
+            userPhone = "9876543212",
+            inviteStatus = "JOINED"
+        )
+        val mKaran = com.splitmate.app.data.GroupMemberEntity(
+            memberId = "m_karan",
+            groupId = group.groupId,
+            name = "Karan",
+            avatarSeed = "Karan",
+            upiId = "9876543213@upi",
+            isCurrentUser = false,
+            userPhone = "9876543213",
+            inviteStatus = "JOINED"
+        )
+
+        // Expense 1: 10,000 cents paid by Rahul, split ONLY among Akshay, Rahul, Priya (Karan excluded!)
+        val exp1 = com.splitmate.app.data.ExpenseEntity(
+            expenseId = "exp_1",
+            groupId = group.groupId,
+            title = "Ski Gear Rental",
+            payerId = "m_rahul",
+            baseSubtotalCents = 10_000L,
+            taxCents = 0L,
+            tipCents = 0L,
+            totalAmountCents = 10_000L,
+            lockedMultiplier = 1.0,
+            unassignedBaseCents = 0L,
+            currencyCode = "INR",
+            lockedExchangeRate = 1.0,
+            createdAt = 1_790_000_100_000L
+        )
+        val splits1 = listOf(
+            com.splitmate.app.data.ExpenseSplitEntity("sp_1_a", "exp_1", "m_akshay", 3334L, 3334L, true),
+            com.splitmate.app.data.ExpenseSplitEntity("sp_1_r", "exp_1", "m_rahul", 3333L, 3333L, false),
+            com.splitmate.app.data.ExpenseSplitEntity("sp_1_p", "exp_1", "m_priya", 3333L, 3333L, false)
+        )
+
+        val docA = com.splitmate.app.data.CloudGroupLedgerDocument(
+            group = group,
+            members = listOf(mAkshay, mRahul, mPriya, mKaran),
+            expenses = listOf(exp1),
+            splits = splits1,
+            settlements = emptyList(),
+            updatedAtEpochMs = 1000L,
+            organizerPhone10 = "9876543210",
+            joinCode6 = "K7M9P2"
+        )
+        val docAReordered = docA.copy(
+            members = listOf(mKaran, mPriya, mRahul, mAkshay),
+            updatedAtEpochMs = 999999L
+        )
+
+        // F2: Structural hash must be identical regardless of updatedAtEpochMs or list order
+        assertEquals(
+            syncRepo.computeStructuralLedgerHash(docA),
+            syncRepo.computeStructuralLedgerHash(docAReordered),
+            "Structural hash must be invariant to updatedAtEpochMs and member list ordering"
+        )
+
+        // Changing inviteStatus must change structural hash
+        val docAJoined = docA.copy(
+            members = listOf(mAkshay, mRahul.copy(inviteStatus = "JOINED"), mPriya, mKaran)
+        )
+        org.junit.jupiter.api.Assertions.assertNotEquals(
+            syncRepo.computeStructuralLedgerHash(docA),
+            syncRepo.computeStructuralLedgerHash(docAJoined),
+            "Structural hash must detect inviteStatus transitions"
+        )
+
+        // F5: Wire JSON round-trip with tombstones, organizerPhone10, and joinCode6
+        val docRemoteWithRemoval = docA.copy(
+            members = listOf(mAkshay, mPriya, mKaran),
+            deletedMemberIds = mapOf("m_rahul" to 2000L),
+            removedMemberPhones = mapOf("9876543211" to 2000L),
+            deletedSettlementIds = mapOf("st_old" to 2000L),
+            updatedAtEpochMs = 2000L
+        )
+        val json = syncRepo.encodeGroupLedgerDocument(docRemoteWithRemoval)
+        val decoded = syncRepo.decodeGroupLedgerDocument(json)
+        assertNotNull(decoded)
+        assertEquals("9876543210", decoded!!.organizerPhone10)
+        assertEquals("K7M9P2", decoded.joinCode6)
+        assertEquals(setOf("m_rahul"), decoded.deletedMemberIds.keys)
+        assertEquals(setOf("9876543211"), decoded.removedMemberPhones.keys)
+        assertEquals(setOf("st_old"), decoded.deletedSettlementIds.keys)
+
+        // Merge docA (stale local still having Rahul) with decoded (remote having tombstone for Rahul)
+        val merged = syncRepo.mergeGroupLedgerDocuments(
+            localDoc = docA,
+            remoteDoc = decoded,
+            localUserPhone10 = "9876543210"
+        )
+        assertEquals(3, merged.members.size, "Tombstoned member m_rahul must be purged during CRDT merge")
+        assertFalse(merged.members.any { it.memberId == "m_rahul" })
+
+        // PA-1: Expense 1 payerId (was m_rahul) must be reassigned to Organizer (m_akshay)
+        val mergedExp1 = merged.expenses.single()
+        assertEquals("m_akshay", mergedExp1.payerId, "Orphaned expense payerId must fall back to Organizer m_akshay (PA-1)")
+
+        // PA-6: Splits on Expense 1 must be redistributed ONLY between Akshay and Priya (5000 + 5000 = 10000), NOT Karan!
+        val mergedExp1Splits = merged.splits.filter { it.expenseId == "exp_1" }
+        assertEquals(2, mergedExp1Splits.size, "Karan was not in Expense 1 and must NOT be added to its splits (PA-6)")
+        assertEquals(setOf("m_akshay", "m_priya"), mergedExp1Splits.map { it.memberId }.toSet())
+        assertEquals(10_000L, mergedExp1Splits.sumOf { it.finalOwedCents }, "Redistributed splits must have 0.00c drift")
+        assertTrue(mergedExp1Splits.all { it.finalOwedCents == 5_000L })
+    }
+
+    @Test
+    @DisplayName("25. Tier 3 (F7, F8, PA-1, PA-3, PA-4, PA-6): Organizer Remove Member, RBAC guard, Leave Group, 3-layer purge, and Re-Invite un-tombstoning")
+    fun testOrganizerRemoveMemberAndLeaveGroupLifecycle() = runTest(testDispatcher) {
+        val syncRepo = com.splitmate.app.data.CloudGroupSyncRepository
+        val orgVm = SplitMateViewModel(dao = null, ioDispatcher = testDispatcher)
+        orgVm.completeOnboarding(
+            name = "Akshay",
+            countryName = "India",
+            currencyCode = "INR",
+            currencySymbol = "₹",
+            avatarSeed = "Akshay",
+            userPhone = "9876543210"
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        orgVm.createNewGroupWithContacts(
+            name = "Coorg Coffee Estate",
+            iconName = "Flight",
+            memberDrafts = listOf(
+                com.splitmate.app.ui.NewGroupMemberDraft("Rahul", "9876543211"),
+                com.splitmate.app.ui.NewGroupMemberDraft("Priya", "9876543212"),
+                com.splitmate.app.ui.NewGroupMemberDraft("Karan", "9876543213")
+            )
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val gId = orgVm.uiState.value.activeGroupId
+        val membersBefore = orgVm.uiState.value.members.filter { it.groupId == gId }
+        assertEquals(4, membersBefore.size)
+        val akshay = membersBefore.first { it.name == "Akshay" }
+        val rahul = membersBefore.first { it.name == "Rahul" }
+        val priya = membersBefore.first { it.name == "Priya" }
+        val karan = membersBefore.first { it.name == "Karan" }
+
+        // Verify Organizer detection
+        assertTrue(orgVm.isUserGroupOrganizer(gId, "9876543210"))
+        assertFalse(orgVm.isUserGroupOrganizer(gId, "9876543211"))
+        assertEquals(akshay.memberId, orgVm.getGroupOrganizerMember(gId)?.memberId)
+
+        // Log an expense paid by Rahul and split ONLY among Akshay, Rahul, Priya (subset of 3 out of 4)
+        orgVm.commitQuickEqualExpense(
+            title = "Plantation Jeep Safari",
+            totalAmountCents = 9_000L,
+            selectedMemberIds = listOf(akshay.memberId, rahul.memberId, priya.memberId),
+            payerMemberId = rahul.memberId
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Log a settlement involving Rahul
+        orgVm.markGreedyTransferSettled(
+            SplitMateMathEngine.SimplifiedTransfer(
+                fromMemberId = priya.memberId,
+                fromName = priya.name,
+                toMemberId = rahul.memberId,
+                toName = rahul.name,
+                amountCents = 1_000L
+            )
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, orgVm.uiState.value.settlements.count { it.groupId == gId })
+
+        // Organizer removes Rahul
+        orgVm.removeMemberFromGroup(gId, rahul.memberId)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val stateAfterRemove = orgVm.uiState.value
+        val remainingMembers = stateAfterRemove.members.filter { it.groupId == gId }
+        assertEquals(3, remainingMembers.size)
+        assertFalse(remainingMembers.any { it.memberId == rahul.memberId })
+
+        // PA-1: Expense paid by Rahul must now be reassigned to Organizer Akshay
+        val updatedExpense = stateAfterRemove.expenses.single { it.groupId == gId }
+        assertEquals(akshay.memberId, updatedExpense.payerId, "Removed payer must fall back to Organizer Akshay (PA-1)")
+
+        // PA-6: Splits must be redistributed ONLY between Akshay and Priya (4500 + 4500 = 9000), excluding Karan
+        val updatedSplits = stateAfterRemove.splits.filter { it.expenseId == updatedExpense.expenseId }
+        assertEquals(2, updatedSplits.size)
+        assertEquals(setOf(akshay.memberId, priya.memberId), updatedSplits.map { it.memberId }.toSet())
+        assertFalse(updatedSplits.any { it.memberId == karan.memberId }, "Non-participating member Karan must not be added to subset expense")
+        assertEquals(9_000L, updatedSplits.sumOf { it.finalOwedCents })
+
+        // Settlements involving Rahul must be purged
+        assertEquals(0, stateAfterRemove.settlements.count { it.groupId == gId })
+
+        // PA-3 & PA-4: Durable tombstone recorded for Rahul's phone (9876543211)
+        assertTrue(syncRepo.isPhoneRemovedFromGroup(gId, "9876543211"))
+
+        // Re-adding Rahul via addMemberToActiveGroup must un-tombstone 9876543211
+        orgVm.addMemberToActiveGroup("Rahul Rejoined", "9876543211")
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(
+            syncRepo.isPhoneRemovedFromGroup(gId, "9876543211"),
+            "Re-inviting a previously removed phone must clear its local tombstone"
+        )
+        assertEquals(4, orgVm.uiState.value.members.count { it.groupId == gId })
+
+        // Non-organizer (Karan, 0.00c balance) leaves the trip on his own device
+        val capsule = orgVm.exportGroupSyncPayload(gId)!!.syncToken
+        val karanVm = SplitMateViewModel(dao = null, ioDispatcher = testDispatcher)
+        karanVm.completeOnboarding(
+            name = "Karan",
+            countryName = "India",
+            currencyCode = "INR",
+            currencySymbol = "₹",
+            avatarSeed = "Karan",
+            userPhone = "9876543213"
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        karanVm.importAndMergeGroupSyncPayload(capsule, openGroupAfterMerge = true)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(karanVm.uiState.value.groups.any { it.groupId == gId })
+        val leaveOk = karanVm.leaveGroup(gId)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(leaveOk, "Member with 0.00c net balance must be allowed to leave group")
+
+        assertFalse(
+            karanVm.uiState.value.groups.any { it.groupId == gId },
+            "Leaving group must immediately purge group from local state (PA-4)"
+        )
+        assertFalse(karanVm.uiState.value.activeJoinedGroups.any { it.groupId == gId })
+        assertTrue(syncRepo.isPhoneRemovedFromGroup(gId, "9876543213"))
+    }
+
+    @Test
+    @DisplayName("26. Tier 4 (F6 & PA-8): Edit Member Phone & Resend Invite, Optional PIN Onboarding, and Uninvited Joiner Perspective Isolation")
+    fun testUpdateMemberPhoneAndUninvitedJoinerPerspectiveIsolation() = runTest(testDispatcher) {
+        val orgVm = SplitMateViewModel(dao = null, ioDispatcher = testDispatcher)
+        orgVm.completeOnboarding(
+            name = "Akshay",
+            countryName = "India",
+            currencyCode = "INR",
+            currencySymbol = "₹",
+            avatarSeed = "Akshay",
+            userPhone = "9876543210"
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Optional PIN on first-time account setup: verifyPinAndRestoreCloud with blank PIN must succeed when hasExisting4DigitPin is false
+        var pinCallbackSuccess = false
+        orgVm.verifyPinAndRestoreCloud(
+            context = null,
+            rawPhone = "9876543210",
+            enteredPin4 = "",
+            fallbackUserName = "Akshay"
+        ) { ok, _ -> pinCallbackSuccess = ok }
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(pinCallbackSuccess, "Blank PIN must be accepted for first-time account without existing PIN")
+        assertTrue(orgVm.uiState.value.isPhoneVerified)
+
+        orgVm.createNewGroupWithContacts(
+            name = "Udaipur Palace Retreat",
+            iconName = "Flight",
+            memberDrafts = listOf(
+                com.splitmate.app.ui.NewGroupMemberDraft("Rohan", "9876543211")
+            )
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val gId = orgVm.uiState.value.activeGroupId
+        val rohanBefore = orgVm.uiState.value.members.first { it.groupId == gId && it.name == "Rohan" }
+
+        // F6: Edit Rohan's phone number and resend invite
+        orgVm.updateMemberPhoneAndResendInvite(gId, rohanBefore.memberId, "+91 99887-76655")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val rohanAfter = orgVm.uiState.value.members.first { it.memberId == rohanBefore.memberId }
+        assertEquals("9988776655", rohanAfter.userPhone)
+        assertEquals("9988776655@upi", rohanAfter.upiId)
+
+        // Invalid phone edit must be rejected without corrupting existing userPhone
+        orgVm.updateMemberPhoneAndResendInvite(gId, rohanBefore.memberId, "12345")
+        testDispatcher.scheduler.advanceUntilIdle()
+        val rohanStillValid = orgVm.uiState.value.members.first { it.memberId == rohanBefore.memberId }
+        assertEquals("9988776655", rohanStillValid.userPhone)
+
+        // PA-8: Uninvited user (Vikram, 9123456789) imports capsule — must NOT hijack Organizer Akshay's row!
+        val exportBundle = orgVm.exportGroupSyncPayload(gId)!!
+        val vikramVm = SplitMateViewModel(dao = null, ioDispatcher = testDispatcher)
+        vikramVm.completeOnboarding(
+            name = "Vikram",
+            countryName = "India",
+            currencyCode = "INR",
+            currencySymbol = "₹",
+            avatarSeed = "Vikram",
+            userPhone = "9123456789"
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val mergeResult = vikramVm.importAndMergeGroupSyncPayload(exportBundle.syncToken, openGroupAfterMerge = true)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(mergeResult.success)
+        assertEquals(3, mergeResult.mergedMemberCount, "Uninvited joiner Vikram must be appended as a 3rd member (PA-8)")
+        val vikramGroupMembers = vikramVm.uiState.value.members.filter { it.groupId == gId }
+        assertEquals(3, vikramGroupMembers.size)
+
+        val currentUserRows = vikramGroupMembers.filter { it.isCurrentUser }
+        assertEquals(1, currentUserRows.size, "Exactly one member row must have isCurrentUser = true")
+        assertEquals("Vikram", currentUserRows.single().name, "Vikram must own the local perspective row")
+        assertEquals("9123456789", currentUserRows.single().userPhone)
+        assertEquals("JOINED", currentUserRows.single().inviteStatus)
+
+        val akshayRowOnVikramDevice = vikramGroupMembers.first { it.name == "Akshay" }
+        assertFalse(akshayRowOnVikramDevice.isCurrentUser, "Organizer Akshay's row must have isCurrentUser = false on Vikram's device")
+        assertEquals(
+            akshayRowOnVikramDevice.memberId,
+            vikramVm.getGroupOrganizerMember(gId)?.memberId,
+            "Akshay must still be recognized as the Trip Organizer on Vikram's device"
+        )
+    }
+
+    @Test
+    @DisplayName("27. Tier 5 (F9–F14): Milestone 2 Buckwheat UI Surfaces, Contact Picker Manual +91 Entry, Join with Code Modal, People Tab RBAC & Sync Sheet Compliance")
+    fun testMilestone2BuckwheatUiSurfacesAndCallbackWiring() = runTest(testDispatcher) {
+        val srcMain = resolveSrcMainDir()
+
+        val themeFile = java.io.File(srcMain, "java/com/splitmate/app/ui/SplitMateTheme.kt")
+        val themeSource = themeFile.readText()
+        assertTrue(
+            themeSource.contains("Add by Mobile Number (+91)"),
+            "SplitMateTheme.kt ContactPickerBottomSheet must render inline 'Add by Mobile Number (+91)' card (F9)"
+        )
+        assertTrue(
+            themeSource.contains("contact.cleanPhone.startsWith(\"contact_\")"),
+            "SplitMateTheme.kt must guard phoneless contacts with contact_ prefix from silent offline addition (F9)"
+        )
+        assertTrue(
+            themeSource.contains("itemsIndexed("),
+            "SplitMateTheme.kt must use itemsIndexed with composite key to prevent duplicate phone LazyColumn crashes (F9)"
+        )
+
+        val appComposableFile = java.io.File(srcMain, "java/com/splitmate/app/ui/SplitMateAppComposable.kt")
+        val appSource = appComposableFile.readText()
+        assertTrue(
+            appSource.contains("CloudGroupSyncRepository.init(context.applicationContext)"),
+            "SplitMateApp must initialize CloudGroupSyncRepository at startup (F10)"
+        )
+        assertTrue(
+            appSource.contains("Save Profile & Find My Trips ->"),
+            "SplitMateCloudOtpOnboardingScreen must display unified single-gate primary CTA (F10)"
+        )
+        assertTrue(
+            appSource.contains("Continue in Offline Mode without Cloud Sync"),
+            "SplitMateCloudOtpOnboardingScreen must clearly distinguish offline mode secondary action (F10)"
+        )
+        assertTrue(
+            appSource.contains("Join with Code") && appSource.contains("fun JoinGroupByCodeDialog("),
+            "LedgersDashboardScreen must expose 'Join with Code' buttons and JoinGroupByCodeDialog (F11)"
+        )
+
+        val tripHomeFile = java.io.File(srcMain, "java/com/splitmate/app/ui/screens/TripHomeScreen.kt")
+        val tripHomeSource = tripHomeFile.readText()
+        assertTrue(
+            tripHomeSource.contains("Trip Code: \$formattedJoinCode · Invite"),
+            "TripHubPeoplePerspectiveView must display 6-character Trip Code in the top action bar (F12)"
+        )
+        assertTrue(
+            tripHomeSource.contains("\"ORGANIZER\"") &&
+                tripHomeSource.contains("+ Add Phone & Invite") &&
+                tripHomeSource.contains("Resend Invite · Edit Phone") &&
+                tripHomeSource.contains("View as \${member.name.substringBefore(\" \")}") &&
+                tripHomeSource.contains("Remove Member") &&
+                tripHomeSource.contains("Leave Trip"),
+            "TripHubPeoplePerspectiveView must include ORGANIZER badge, Edit Phone/Resend Invite, 1-tap View as chip, Remove Member, and Leave Trip controls (F12)"
+        )
+
+        val syncSheetFile = java.io.File(srcMain, "java/com/splitmate/app/ui/dialogs/TripSyncAndPerspectiveSheet.kt")
+        val syncSheetSource = syncSheetFile.readText()
+        assertTrue(
+            syncSheetSource.contains("6-CHARACTER TRIP JOIN CODE") &&
+                syncSheetSource.contains("Copy Code") &&
+                syncSheetSource.contains("Share Invite on WhatsApp") &&
+                syncSheetSource.contains("Join Another Trip by Code or Link") &&
+                syncSheetSource.contains("Viewing as (Switch Perspective)"),
+            "TripSyncAndPerspectiveSheet must render 6-character Trip Join Code card, universal Join by Code/Link, and 1-tap Perspective Switcher (F13)"
+        )
+
+        // Verify ViewModel callback overload for updateMemberPhoneAndResendInvite with (rawPhone, newName, onComplete)
+        val vm = SplitMateViewModel(dao = null, ioDispatcher = testDispatcher)
+        vm.completeOnboarding(
+            name = "Organizer A",
+            countryName = "India",
+            currencyCode = "INR",
+            currencySymbol = "₹",
+            avatarSeed = "OrganizerA",
+            userPhone = "9876543210"
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        vm.createNewGroupWithContacts(
+            name = "Munnar Tea Trail",
+            iconName = "Hotel",
+            memberDrafts = listOf(com.splitmate.app.ui.NewGroupMemberDraft("Offline Friend", ""))
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val gId = vm.uiState.value.activeGroupId
+        val friend = vm.uiState.value.members.first { it.groupId == gId && !it.isCurrentUser }
+        var callbackOk = false
+        var callbackMsg = ""
+        vm.updateMemberPhoneAndResendInvite(
+            context = null,
+            groupId = gId,
+            memberId = friend.memberId,
+            rawPhone = "+91 91234 56780",
+            newName = "Arjun Nair"
+        ) { ok, msg ->
+            callbackOk = ok
+            callbackMsg = msg
+        }
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(callbackOk, "updateMemberPhoneAndResendInvite callback must succeed: $callbackMsg")
+        val updatedFriend = vm.uiState.value.members.first { it.memberId == friend.memberId }
+        assertEquals("Arjun Nair", updatedFriend.name)
+        assertEquals("9123456780", updatedFriend.userPhone)
+    }
 }
+
 
 

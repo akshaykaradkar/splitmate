@@ -47,6 +47,20 @@ interface SplitMateDao {
     @Query("UPDATE group_members SET name = :name, upiId = :upiId, avatarSeed = :avatarSeed WHERE memberId = :memberId")
     suspend fun updateMemberProfile(memberId: String, name: String, upiId: String, avatarSeed: String)
 
+    @Query("UPDATE group_members SET name = :name, userPhone = :userPhone, inviteStatus = :inviteStatus WHERE memberId = :memberId")
+    suspend fun updateMemberPhoneAndInviteStatus(
+        memberId: String,
+        name: String,
+        userPhone: String,
+        inviteStatus: String
+    )
+
+    @Query("DELETE FROM group_members WHERE memberId = :memberId")
+    suspend fun deleteMemberById(memberId: String)
+
+    @Query("DELETE FROM group_members WHERE groupId = :groupId")
+    suspend fun deleteMembersForGroup(groupId: String)
+
     // --- Expenses & Splits ---
     @Query("SELECT * FROM expenses ORDER BY createdAt DESC, expenseId DESC")
     fun observeAllExpenses(): Flow<List<ExpenseEntity>>
@@ -84,11 +98,27 @@ interface SplitMateDao {
     @Query("DELETE FROM expenses WHERE expenseId = :expenseId")
     suspend fun deleteExpense(expenseId: String)
 
+    @Query("DELETE FROM expenses WHERE groupId = :groupId")
+    suspend fun deleteExpensesForGroup(groupId: String)
+
     @Query("DELETE FROM expense_splits WHERE expenseId = :expenseId")
     suspend fun deleteSplitsForExpense(expenseId: String)
 
     @Query("DELETE FROM expense_groups WHERE groupId = :groupId")
     suspend fun deleteGroupById(groupId: String)
+
+    @Query("DELETE FROM settlements WHERE groupId = :groupId")
+    suspend fun deleteSettlementsForGroup(groupId: String)
+
+    @Transaction
+    suspend fun deleteGroupCascade(groupId: String) {
+        val exps = getExpensesForGroup(groupId)
+        exps.forEach { deleteSplitsForExpense(it.expenseId) }
+        deleteExpensesForGroup(groupId)
+        deleteSettlementsForGroup(groupId)
+        deleteMembersForGroup(groupId)
+        deleteGroupById(groupId)
+    }
 
     // --- Settlements ---
     @Query("SELECT * FROM settlements ORDER BY settledAt DESC")
@@ -111,6 +141,12 @@ interface SplitMateDao {
 
     @Query("DELETE FROM settlements WHERE settlementId = :settlementId")
     suspend fun deleteSettlementById(settlementId: String)
+
+    @Query("DELETE FROM settlements WHERE groupId = :groupId AND (fromMemberId = :memberId OR toMemberId = :memberId)")
+    suspend fun deleteSettlementsForMember(groupId: String, memberId: String)
+
+    @Query("UPDATE expenses SET payerId = :newPayerId WHERE groupId = :groupId AND payerId = :oldPayerId")
+    suspend fun reassignExpensePayer(groupId: String, oldPayerId: String, newPayerId: String)
 
     @Query("UPDATE expenses SET syncStatus = 'SYNCED' WHERE syncStatus = 'PENDING'")
     suspend fun markPendingExpensesSynced()

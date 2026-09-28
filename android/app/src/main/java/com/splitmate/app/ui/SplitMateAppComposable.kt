@@ -163,6 +163,10 @@ enum class SplitMateTab(
 @Composable
 fun SplitMateApp(viewModel: SplitMateViewModel) {
     val context = LocalContext.current
+    remember(context) {
+        com.splitmate.app.data.CloudGroupSyncRepository.init(context.applicationContext)
+        true
+    }
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
     val prefs = remember { context.getSharedPreferences("splitmate_prefs", android.content.Context.MODE_PRIVATE) }
     val navController = rememberNavController()
@@ -845,7 +849,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                                     text = if (hasExisting4DigitPin) {
                                         "Welcome back, ${discoveredProfile?.name ?: "Explorer"}! Enter your 4-Digit PIN to unlock +91 $normalizedPhone10."
                                     } else {
-                                        "Set a 4-Digit Security PIN to protect +91 $normalizedPhone10 & sync trips across devices."
+                                        "Ready to sync +91 $normalizedPhone10! Optional 4-Digit PIN below locks your account across devices."
                                     },
                                     fontFamily = SplitMateTheme.FontRounded,
                                     fontSize = 12.sp,
@@ -856,7 +860,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                         }
                     }
 
-                    // 4-Digit Account Security PIN (Option 1: 10-Digit Phone Number + 4-Digit PIN)
+                    // 4-Digit Account Security PIN (Optional for new profiles, required if existing PIN is set)
                     OutlinedTextField(
                         value = enteredPin4,
                         onValueChange = { rawPin ->
@@ -865,14 +869,14 @@ fun SplitMateCloudOtpOnboardingScreen(
                         label = {
                             Text(
                                 text = if (hasExisting4DigitPin) {
-                                    "Enter 4-Digit Security PIN"
+                                    "Enter 4-Digit Security PIN to Unlock Account"
                                 } else {
-                                    "Create 4-Digit Security PIN"
+                                    "Optional 4-Digit Security PIN (Recommended for Multi-Device Lock)"
                                 },
                                 fontFamily = SplitMateTheme.FontRounded
                             )
                         },
-                        placeholder = { Text("4-digit secret PIN") },
+                        placeholder = { Text("Optional 4-digit PIN (or leave blank)") },
                         leadingIcon = {
                             Icon(Icons.Rounded.Lock, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
                         },
@@ -906,7 +910,12 @@ fun SplitMateCloudOtpOnboardingScreen(
                             }
                     )
 
-                    // Option 1 Primary CTA: 10-Digit Phone Number + 4-Digit Security PIN
+                    // Primary Unified CTA: 10-Digit Phone Number + Optional 4-Digit Security PIN + Awaited Cloud Discovery
+                    val isPinReady = if (hasExisting4DigitPin) {
+                        enteredPin4.length == 4
+                    } else {
+                        enteredPin4.isEmpty() || enteredPin4.length == 4
+                    }
                     Button(
                         onClick = {
                             val resolvedName = onboardingName.trim().ifBlank {
@@ -916,6 +925,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                                 discoveredProfile?.upiVpa?.takeIf { it.isNotBlank() } ?: "$normalizedPhone10@upi"
                             }
                             val finalSeedKey = customSeedKey.ifBlank { resolvedName }
+                            otpFeedbackMessage = "Checking invitations for +91 $normalizedPhone10..."
                             viewModel.verifyPinAndRestoreCloud(
                                 context = context,
                                 rawPhone = onboardingPhone,
@@ -934,7 +944,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                                 }
                             }
                         },
-                        enabled = isValidPhone10 && enteredPin4.length == 4 && !uiState.isCloudSyncing,
+                        enabled = isValidPhone10 && (onboardingName.trim().isNotBlank() || !discoveredProfile?.name.isNullOrBlank()) && isPinReady && !uiState.isCloudSyncing,
                         shape = SplitMateTheme.RadiusButton,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF365314),
@@ -953,9 +963,9 @@ fun SplitMateCloudOtpOnboardingScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = when {
-                                uiState.isCloudSyncing -> "Syncing Shared Trips..."
-                                hasExisting4DigitPin -> "Unlock Account & Sync Trips"
-                                else -> "Save Profile & Start Splitting"
+                                uiState.isCloudSyncing -> "Checking invitations for +91 $normalizedPhone10..."
+                                hasExisting4DigitPin -> "Unlock Account & Sync Trips ->"
+                                else -> "Save Profile & Find My Trips ->"
                             },
                             fontFamily = SplitMateTheme.FontRounded,
                             fontWeight = FontWeight.ExtraBold,
@@ -984,8 +994,8 @@ fun SplitMateCloudOtpOnboardingScreen(
                 }
             }
 
-            // Secondary Offline / Quick Start Action
-            OutlinedButton(
+            // Secondary Offline-Only Action (clearly distinguished from Cloud Sync)
+            TextButton(
                 onClick = {
                     val resolvedName = onboardingName.trim().ifBlank { "Explorer" }
                     val finalSeedKey = customSeedKey.ifBlank { resolvedName }
@@ -1005,25 +1015,14 @@ fun SplitMateCloudOtpOnboardingScreen(
                     )
                     onCompleteToDashboard()
                 },
-                shape = SplitMateTheme.RadiusBadge,
-                border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "Continue to SplitMate",
+                    text = "Continue in Offline Mode without Cloud Sync",
                     fontFamily = SplitMateTheme.FontRounded,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = SplitMateTheme.PrimaryDark
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
-                    contentDescription = null,
-                    tint = SplitMateTheme.PrimaryDark,
-                    modifier = Modifier.size(16.dp)
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = SplitMateTheme.TextSecondary
                 )
             }
         }
@@ -1710,6 +1709,7 @@ fun LedgersDashboardScreen(
     val activeGroups by viewModel.activeGroups.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showNewGroupDialog by remember { mutableStateOf(false) }
+    var showJoinByCodeDialog by remember { mutableStateOf(false) }
     var editingFriend by remember { mutableStateOf<GroupMemberEntity?>(null) }
     val openedGroupDetailId = uiState.openedGroupDetailId
     var expandedExpenseId by remember { mutableStateOf<String?>(null) }
@@ -1720,9 +1720,11 @@ fun LedgersDashboardScreen(
 
     // Intercept system Back when viewing inside a specific Group so user returns to All Groups list instead of exiting the app!
     androidx.activity.compose.BackHandler(
-        enabled = openedGroupDetailId != null || showClassicSyncSheet || showAddContactsToExistingGroupSheet
+        enabled = openedGroupDetailId != null || showClassicSyncSheet || showAddContactsToExistingGroupSheet || showJoinByCodeDialog
     ) {
-        if (showClassicSyncSheet) {
+        if (showJoinByCodeDialog) {
+            showJoinByCodeDialog = false
+        } else if (showClassicSyncSheet) {
             showClassicSyncSheet = false
         } else if (deletingExpense != null) {
             deletingExpense = null
@@ -3704,8 +3706,7 @@ fun LedgersDashboardScreen(
 
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        // Single primary action inside Hero Balance Card (+ New Group, plus Settle Up when open balances exist;
-                        // duplicate "Log Expense" button removed since floating FAB is the primary entry point)
+                        // Primary actions inside Hero Balance Card: + New Group and Join with Code (plus Settle Up when open balances exist)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -3726,26 +3727,44 @@ fun LedgersDashboardScreen(
                                 Text("+ New Group", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.ScreenBg, fontWeight = FontWeight.Bold)
                             }
 
-                            if (totalBalance != "₹0.00") {
-                                FilledTonalButton(
-                                    onClick = onNavigateToSettle,
-                                    shape = SplitMateTheme.RadiusButton,
-                                    colors = ButtonDefaults.filledTonalButtonColors(containerColor = SplitMateTheme.SurfaceWhite),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .sizeIn(minHeight = 46.dp)
-                                ) {
-                                    Icon(Icons.Rounded.TaskAlt, contentDescription = null, tint = SplitMateTheme.PrimaryDark, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Settle Up", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.PrimaryDark, fontWeight = FontWeight.Bold)
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
-                                        contentDescription = null,
-                                        tint = SplitMateTheme.PrimaryDark,
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                }
+                            FilledTonalButton(
+                                onClick = { showJoinByCodeDialog = true },
+                                shape = SplitMateTheme.RadiusButton,
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = SplitMateTheme.SageSurface,
+                                    contentColor = SplitMateTheme.PrimaryDark
+                                ),
+                                border = BorderStroke(1.dp, Color(0xFF416913).copy(alpha = 0.28f)),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .sizeIn(minHeight = 46.dp)
+                            ) {
+                                Icon(Icons.Rounded.GroupAdd, contentDescription = null, tint = SplitMateTheme.PrimaryDark, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Join with Code", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.PrimaryDark, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        if (totalBalance != "₹0.00") {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            FilledTonalButton(
+                                onClick = onNavigateToSettle,
+                                shape = SplitMateTheme.RadiusButton,
+                                colors = ButtonDefaults.filledTonalButtonColors(containerColor = SplitMateTheme.SurfaceWhite),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .sizeIn(minHeight = 44.dp)
+                            ) {
+                                Icon(Icons.Rounded.TaskAlt, contentDescription = null, tint = SplitMateTheme.PrimaryDark, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Settle Up", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.PrimaryDark, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                                    contentDescription = null,
+                                    tint = SplitMateTheme.PrimaryDark,
+                                    modifier = Modifier.size(15.dp)
+                                )
                             }
                         }
                     }
@@ -3895,7 +3914,7 @@ fun LedgersDashboardScreen(
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "No active trips yet. Tap + New Group to start splitting!",
+                            text = "No active trips yet. Tap + New Group or Join with Code!",
                             fontFamily = SplitMateTheme.FontDisplay,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.ExtraBold,
@@ -3912,17 +3931,38 @@ fun LedgersDashboardScreen(
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(14.dp))
-                        Button(
-                            onClick = { showNewGroupDialog = true },
-                            shape = SplitMateTheme.RadiusBadge,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = SplitMateTheme.PrimaryDark,
-                                contentColor = SplitMateTheme.ScreenBg
-                            )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Icon(Icons.Rounded.Add, contentDescription = null, tint = SplitMateTheme.ScreenBg, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Create First Group", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.ScreenBg, fontWeight = FontWeight.Bold)
+                            Button(
+                                onClick = { showNewGroupDialog = true },
+                                shape = SplitMateTheme.RadiusBadge,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = SplitMateTheme.PrimaryDark,
+                                    contentColor = SplitMateTheme.ScreenBg
+                                ),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Rounded.Add, contentDescription = null, tint = SplitMateTheme.ScreenBg, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Create First Group", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.ScreenBg, fontWeight = FontWeight.Bold)
+                            }
+
+                            OutlinedButton(
+                                onClick = { showJoinByCodeDialog = true },
+                                shape = SplitMateTheme.RadiusBadge,
+                                border = BorderStroke(1.dp, Color(0xFF416913).copy(alpha = 0.35f)),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = SplitMateTheme.SageSurface,
+                                    contentColor = SplitMateTheme.PrimaryDark
+                                ),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Rounded.GroupAdd, contentDescription = null, tint = SplitMateTheme.PrimaryDark, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Join with Code", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.PrimaryDark, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
@@ -4966,6 +5006,264 @@ fun LedgersDashboardScreen(
                 }
             }
         }
+        }
+
+        if (showJoinByCodeDialog) {
+            JoinGroupByCodeDialog(
+                viewModel = viewModel,
+                onDismiss = { showJoinByCodeDialog = false },
+                onJoinedGroup = { joinedGroupId ->
+                    showJoinByCodeDialog = false
+                    if (joinedGroupId.isNotBlank()) {
+                        viewModel.openGroupDetail(joinedGroupId)
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun JoinGroupByCodeDialog(
+    viewModel: SplitMateViewModel,
+    onDismiss: () -> Unit,
+    onJoinedGroup: (String) -> Unit = {}
+) {
+    val context = LocalContext.current
+    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var inputCodeOrLink by remember { mutableStateOf("") }
+    var statusMessage by remember { mutableStateOf<String?>(null) }
+    var isErrorStatus by remember { mutableStateOf(false) }
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss
+    ) {
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = Color(0xFFFAF6F0),
+            border = BorderStroke(1.dp, Color(0xFFEDE7DF)),
+            shadowElevation = 10.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFDCE9B9)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.GroupAdd,
+                                contentDescription = null,
+                                tint = Color(0xFF365314),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Column {
+                            Text(
+                                text = "Join a Shared Trip",
+                                fontFamily = SplitMateTheme.FontDisplay,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF23201E)
+                            )
+                            Text(
+                                text = "6-character Trip Code, WhatsApp invite, or link",
+                                fontFamily = SplitMateTheme.FontRounded,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = SplitMateTheme.TextSecondary
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = "Close",
+                            tint = SplitMateTheme.TextSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Enter a 6-character Trip Code (e.g. K9X-4M2), paste a WhatsApp invite message, or paste a splitmate:// link.",
+                    fontFamily = SplitMateTheme.FontRounded,
+                    fontSize = 12.sp,
+                    color = SplitMateTheme.TextSecondary,
+                    lineHeight = 17.sp
+                )
+
+                OutlinedTextField(
+                    value = inputCodeOrLink,
+                    onValueChange = { raw ->
+                        inputCodeOrLink = if (raw.length <= 9 && !raw.contains("://") && !raw.contains(" ")) {
+                            raw.uppercase(Locale.US)
+                        } else {
+                            raw
+                        }
+                        statusMessage = null
+                    },
+                    label = {
+                        Text(
+                            text = "Trip Code (e.g. K9X-4M2) or Invite Link",
+                            fontFamily = SplitMateTheme.FontRounded,
+                            fontSize = 12.sp
+                        )
+                    },
+                    placeholder = {
+                        Text(
+                            text = "K9X-4M2",
+                            fontFamily = SplitMateTnumMonospace,
+                            fontSize = 14.sp
+                        )
+                    },
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        fontFamily = SplitMateTnumMonospace,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF23201E),
+                        fontFeatureSettings = "tnum"
+                    ),
+                    singleLine = false,
+                    maxLines = 3,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        onClick = {
+                            val clip = clipboardManager.getText()?.text?.trim().orEmpty()
+                            if (clip.isNotBlank()) {
+                                inputCodeOrLink = clip
+                                statusMessage = null
+                            } else {
+                                isErrorStatus = true
+                                statusMessage = "Clipboard is empty. Copy a 6-character Trip Code or WhatsApp invite first."
+                            }
+                        },
+                        shape = SplitMateTheme.RadiusBadge,
+                        color = Color(0xFFF4EFE6),
+                        border = BorderStroke(1.dp, Color(0xFFEDE7DF))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.ContentPaste,
+                                contentDescription = null,
+                                tint = Color(0xFF365314),
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = "Paste from Clipboard",
+                                fontFamily = SplitMateTheme.FontRounded,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF365314)
+                            )
+                        }
+                    }
+
+                    if (inputCodeOrLink.isNotBlank()) {
+                        TextButton(onClick = { inputCodeOrLink = "" }) {
+                            Text(
+                                text = "Clear",
+                                fontFamily = SplitMateTheme.FontRounded,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SplitMateTheme.TextSecondary
+                            )
+                        }
+                    }
+                }
+
+                statusMessage?.let { feedback ->
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isErrorStatus) Color(0xFFFCE3D7) else Color(0xFFDCE9B9),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isErrorStatus) Color(0xFFE06B52).copy(alpha = 0.45f) else Color(0xFF416913).copy(alpha = 0.35f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = feedback,
+                            fontFamily = SplitMateTheme.FontRounded,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isErrorStatus) Color(0xFF7C2D12) else Color(0xFF365314),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = {
+                        viewModel.joinGroupByCodeOrLink(context, inputCodeOrLink) { ok, msg ->
+                            isErrorStatus = !ok
+                            statusMessage = msg
+                            if (ok) {
+                                val resolvedId = viewModel.uiState.value.openedGroupDetailId?.takeIf { it.isNotBlank() }
+                                    ?: viewModel.uiState.value.activeGroupId
+                                onJoinedGroup(resolvedId)
+                            }
+                        }
+                    },
+                    enabled = inputCodeOrLink.trim().isNotBlank() && !uiState.isCloudSyncing,
+                    shape = SplitMateTheme.RadiusButton,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF365314),
+                        contentColor = Color(0xFFFAF6F0)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.CheckCircle,
+                        contentDescription = null,
+                        tint = Color(0xFFDCE9B9),
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (uiState.isCloudSyncing) "Finding Shared Trip..." else "Find & Join Trip",
+                        fontFamily = SplitMateTheme.FontRounded,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFFFAF6F0)
+                    )
+                }
+            }
         }
     }
 }

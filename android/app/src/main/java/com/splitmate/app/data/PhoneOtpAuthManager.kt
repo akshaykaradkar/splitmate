@@ -38,6 +38,10 @@ object PhoneIdentityValidator {
         return if (isValidIndianMobile10(p10)) p10 else ""
     }
 
+    fun normalizeTo10DigitIndianMobile(raw: String): String = normalizeIndianMobile(raw)
+
+    fun isValidIndianMobile(raw: String): Boolean = isValidIndianMobile10(normalizeIndianPhone10(raw))
+
     /**
      * Extracts a valid 10-digit Indian phone number from either `userPhone` or a phone-based `upiId`
      * (e.g. `"9876543210@upi"`, `"9876543210@ybl"`, `"9876543210|user@okaxis"`).
@@ -52,7 +56,7 @@ object PhoneIdentityValidator {
                 if (isValidIndianMobile10(candidate)) return candidate
             }
         }
-        return primary
+        return if (isValidIndianMobile10(primary)) primary else ""
     }
 }
 

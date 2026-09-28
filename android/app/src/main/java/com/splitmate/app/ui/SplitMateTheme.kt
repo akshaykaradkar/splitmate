@@ -27,6 +27,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -1415,7 +1416,7 @@ fun queryAllDeviceContacts(context: Context): List<DeviceContact> {
                     contactsMap["${rawName.lowercase()}|$syntheticPhoneKey"] = DeviceContact(
                         name = rawName,
                         cleanPhone = syntheticPhoneKey,
-                        formattedPhone = "Saved in Contacts"
+                        formattedPhone = "No phone number · Tap to add +91 mobile"
                     )
                 }
             }
@@ -1435,7 +1436,7 @@ fun ContactPickerBottomSheet(
     preSelectedPhones: Set<String> = emptySet(),
     initialSelectedPhones: Set<String> = preSelectedPhones,
     title: String = "Add Members from Contacts",
-    subtitle: String = "Select friends from your phonebook",
+    subtitle: String = "Select friends from your phonebook or add +91 mobile",
     onDismissRequest: () -> Unit = {},
     onDismiss: () -> Unit = onDismissRequest,
     onConfirmSelected: (List<DeviceContact>) -> Unit = {},
@@ -1446,16 +1447,46 @@ fun ContactPickerBottomSheet(
     var selectedPhones by remember(initialSelectedPhones) {
         mutableStateOf(initialSelectedPhones.toSet())
     }
+    var customAddedContacts by remember { mutableStateOf(listOf<DeviceContact>()) }
+    var manualNameInput by remember { mutableStateOf("") }
+    var manualPhoneInput by remember { mutableStateOf("") }
+    var promptingPhonelessContact by remember { mutableStateOf<DeviceContact?>(null) }
 
-    val filteredContacts = remember(contacts, searchQuery) {
+    val allContacts = remember(contacts, customAddedContacts) {
+        customAddedContacts + contacts
+    }
+
+    val filteredContacts = remember(allContacts, searchQuery) {
         val q = searchQuery.trim().lowercase()
         if (q.isEmpty()) {
-            contacts
+            allContacts
         } else {
-            contacts.filter {
+            allContacts.filter {
                 it.name.lowercase().contains(q) || it.cleanPhone.contains(q)
             }
         }
+    }
+
+    // Auto-populate manual fields when user types a 10-digit phone or name with no matching contacts
+    LaunchedEffect(searchQuery, filteredContacts.size) {
+        if (filteredContacts.isEmpty() && searchQuery.isNotBlank()) {
+            val digits = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(searchQuery)
+            val letters = searchQuery.replace(Regex("[0-9+\\-()\\s]"), " ").trim()
+            if (digits.isNotEmpty() && manualPhoneInput.isBlank()) {
+                manualPhoneInput = digits
+            }
+            if (letters.isNotEmpty() && manualNameInput.isBlank()) {
+                manualNameInput = letters
+            }
+        }
+    }
+
+    val manualPhone10 = remember(manualPhoneInput) {
+        com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(manualPhoneInput)
+    }
+    val isManualEntryValid = remember(manualNameInput, manualPhone10) {
+        manualNameInput.trim().isNotBlank() &&
+            com.splitmate.app.data.PhoneIdentityValidator.isValidIndianMobile10(manualPhone10)
     }
 
     ModalBottomSheet(
@@ -1496,13 +1527,16 @@ fun ContactPickerBottomSheet(
                             color = SplitMateTheme.TextSecondary
                         )
                     }
-                    if (multiSelect && contacts.isNotEmpty()) {
+                    if (multiSelect && allContacts.isNotEmpty()) {
                         TextButton(
                             onClick = {
-                                selectedPhones = if (selectedPhones.size == filteredContacts.size && filteredContacts.isNotEmpty()) {
+                                val selectablePhones = filteredContacts
+                                    .filterNot { it.cleanPhone.startsWith("contact_") }
+                                    .map { it.cleanPhone }
+                                selectedPhones = if (selectablePhones.isNotEmpty() && selectedPhones.containsAll(selectablePhones)) {
                                     emptySet()
                                 } else {
-                                    selectedPhones + filteredContacts.map { it.cleanPhone }
+                                    selectedPhones + selectablePhones
                                 }
                             }
                         ) {
@@ -1519,7 +1553,7 @@ fun ContactPickerBottomSheet(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 OutlinedTextField(
                     value = searchQuery,
@@ -1561,13 +1595,191 @@ fun ContactPickerBottomSheet(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Inline Buckwheat "Add by Mobile Number (+91)" Card (F9 / RCA-2B / RCA-2C)
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = if (SplitMateTheme.isDark) Color(0xFF24201C) else Color(0xFFF7F3EC),
+                    border = BorderStroke(
+                        width = if (promptingPhonelessContact != null) 1.5.dp else 1.dp,
+                        color = if (promptingPhonelessContact != null) Color(0xFFE06B52) else Color(0xFFEDE7DF)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (promptingPhonelessContact != null) {
+                                    "Enter 10-digit mobile for ${promptingPhonelessContact?.name} to send cloud invite"
+                                } else {
+                                    "Add by Mobile Number (+91)"
+                                },
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.ExtraBold),
+                                color = if (promptingPhonelessContact != null) Color(0xFF7C2D12) else SplitMateTheme.PrimaryDark,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (promptingPhonelessContact != null) {
+                                TextButton(
+                                    onClick = {
+                                        val offlineContact = promptingPhonelessContact
+                                        if (offlineContact != null) {
+                                            selectedPhones = if (multiSelect) {
+                                                selectedPhones + offlineContact.cleanPhone
+                                            } else {
+                                                setOf(offlineContact.cleanPhone)
+                                            }
+                                        }
+                                        promptingPhonelessContact = null
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "Add Offline Without Number",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = Color(0xFF7C2D12)
+                                    )
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = manualNameInput,
+                                onValueChange = { manualNameInput = it },
+                                placeholder = {
+                                    Text("Friend's Name", fontSize = 12.sp, color = SplitMateTheme.TextSecondary)
+                                },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                textStyle = TextStyle(
+                                    fontFamily = FigtreeFontFamily,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 13.sp,
+                                    color = SplitMateTheme.PrimaryDark
+                                ),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = SplitMateTheme.PrimaryDark,
+                                    unfocusedTextColor = SplitMateTheme.PrimaryDark,
+                                    focusedBorderColor = BuckwheatOlivePrimary,
+                                    unfocusedBorderColor = SplitMateTheme.BorderLight,
+                                    focusedContainerColor = SplitMateTheme.SurfaceWhite,
+                                    unfocusedContainerColor = SplitMateTheme.SurfaceWhite
+                                ),
+                                modifier = Modifier.weight(0.95f)
+                            )
+
+                            OutlinedTextField(
+                                value = manualPhoneInput,
+                                onValueChange = { raw ->
+                                    manualPhoneInput = raw.filter { it.isDigit() }.takeLast(10)
+                                },
+                                prefix = {
+                                    Text(
+                                        text = "+91 ",
+                                        style = TextStyle(
+                                            fontFamily = SplitMateTnumMonospace,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = BuckwheatOlivePrimary,
+                                            fontFeatureSettings = "tnum"
+                                        )
+                                    )
+                                },
+                                placeholder = {
+                                    Text("9876543210", fontSize = 12.sp, color = SplitMateTheme.TextSecondary)
+                                },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                textStyle = TextStyle(
+                                    fontFamily = SplitMateTnumMonospace,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = SplitMateTheme.PrimaryDark,
+                                    fontFeatureSettings = "tnum"
+                                ),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = SplitMateTheme.PrimaryDark,
+                                    unfocusedTextColor = SplitMateTheme.PrimaryDark,
+                                    focusedBorderColor = BuckwheatOlivePrimary,
+                                    unfocusedBorderColor = SplitMateTheme.BorderLight,
+                                    focusedContainerColor = SplitMateTheme.SurfaceWhite,
+                                    unfocusedContainerColor = SplitMateTheme.SurfaceWhite
+                                ),
+                                modifier = Modifier.weight(1.05f)
+                            )
+                        }
+
+                        Button(
+                            onClick = {
+                                val resolvedName = manualNameInput.trim().ifBlank { "Friend (${manualPhone10.takeLast(4)})" }
+                                val newContact = DeviceContact(
+                                    name = resolvedName,
+                                    cleanPhone = manualPhone10,
+                                    formattedPhone = formatTenDigitIndianPhone(manualPhone10)
+                                )
+                                customAddedContacts = (listOf(newContact) + customAddedContacts)
+                                    .distinctBy { "${it.name.lowercase()}|${it.cleanPhone}" }
+                                val nextSelectedPhones = if (multiSelect) {
+                                    selectedPhones + manualPhone10
+                                } else {
+                                    setOf(manualPhone10)
+                                }
+                                selectedPhones = nextSelectedPhones
+                                promptingPhonelessContact = null
+                                manualNameInput = ""
+                                manualPhoneInput = ""
+                                val combinedSelected = (listOf(newContact) + allContacts.filter { nextSelectedPhones.contains(it.cleanPhone) })
+                                    .distinctBy { "${it.name.lowercase()}|${it.cleanPhone}" }
+                                onConfirmSelection(combinedSelected)
+                                onDismiss()
+                            },
+                            enabled = isManualEntryValid,
+                            shape = RoundedCornerShape(50),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = BuckwheatOlivePrimary,
+                                contentColor = Color(0xFFFAF6F0),
+                                disabledContainerColor = SplitMateTheme.BorderLight,
+                                disabledContentColor = SplitMateTheme.TextSecondary
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(42.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.PersonAdd,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "+ Add & Send Invite",
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.ExtraBold)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
 
                 if (isLoading) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(220.dp),
+                            .height(200.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator(color = SplitMateTheme.PrimaryDark)
@@ -1576,7 +1788,7 @@ fun ContactPickerBottomSheet(
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 16.dp),
+                            .padding(vertical = 12.dp),
                         shape = RoundedCornerShape(20.dp),
                         color = SplitMateTheme.SurfaceWhite,
                         border = BorderStroke(1.dp, SplitMateTheme.BorderLight)
@@ -1584,21 +1796,21 @@ fun ContactPickerBottomSheet(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(24.dp),
+                                .padding(20.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Contacts,
                                 contentDescription = null,
                                 tint = SplitMateTheme.TextSecondary,
-                                modifier = Modifier.size(32.dp)
+                                modifier = Modifier.size(28.dp)
                             )
                             Text(
-                                text = if (contacts.isEmpty()) {
-                                    "No contacts with 10-digit phone numbers found on this device"
+                                text = if (allContacts.isEmpty()) {
+                                    "No device contacts found — enter Name & +91 mobile number above"
                                 } else {
-                                    "No contacts matching \"$searchQuery\""
+                                    "No contacts matching \"$searchQuery\" — use + Add & Send Invite above"
                                 },
                                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                                 color = SplitMateTheme.TextSecondary
@@ -1609,16 +1821,25 @@ fun ContactPickerBottomSheet(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 180.dp, max = 340.dp),
+                            .heightIn(min = 160.dp, max = 280.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(filteredContacts, key = { it.cleanPhone }) { contact ->
+                        itemsIndexed(
+                            filteredContacts,
+                            key = { idx, c -> "${c.name}|${c.cleanPhone}|$idx" }
+                        ) { _, contact ->
+                            val isPhoneless = contact.cleanPhone.startsWith("contact_")
                             val isChecked = selectedPhones.contains(contact.cleanPhone)
                             val toggleSelection = {
-                                selectedPhones = if (multiSelect) {
-                                    if (isChecked) selectedPhones - contact.cleanPhone else selectedPhones + contact.cleanPhone
+                                if (isPhoneless && !isChecked) {
+                                    promptingPhonelessContact = contact
+                                    manualNameInput = contact.name
                                 } else {
-                                    setOf(contact.cleanPhone)
+                                    selectedPhones = if (multiSelect) {
+                                        if (isChecked) selectedPhones - contact.cleanPhone else selectedPhones + contact.cleanPhone
+                                    } else {
+                                        setOf(contact.cleanPhone)
+                                    }
                                 }
                             }
                             Surface(
@@ -1676,7 +1897,7 @@ fun ContactPickerBottomSheet(
                                             Text(
                                                 text = contact.formattedPhone,
                                                 style = MaterialTheme.typography.labelMedium,
-                                                color = SplitMateTheme.TextSecondary
+                                                color = if (isPhoneless) Color(0xFF7C2D12) else SplitMateTheme.TextSecondary
                                             )
                                         }
                                     }
@@ -1694,12 +1915,12 @@ fun ContactPickerBottomSheet(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 val selectedCount = selectedPhones.size
                 Button(
                     onClick = {
-                        val selectedList = contacts.filter { selectedPhones.contains(it.cleanPhone) }
+                        val selectedList = allContacts.filter { selectedPhones.contains(it.cleanPhone) }
                         if (selectedList.isNotEmpty()) {
                             onConfirmSelection(selectedList)
                         }
