@@ -2630,6 +2630,45 @@ class SplitMateV2ZeroRegressionAndSyncTest {
             "4-part canonical avatarSeed from joined member must win over bare placeholder seed"
         )
     }
+
+    @Test
+    @DisplayName("PA-11: Automatic Offline-to-Online Pending Cloud Push Queue & Live Topic Resolution")
+    fun testAutomaticOfflineToOnlinePendingCloudPushQueue() = kotlinx.coroutines.test.runTest {
+        val vm = SplitMateViewModel(dao = null, ioDispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler))
+        vm.createNewGroup(name = "Coorg Roadtrip", currencyCode = "INR", friendNamesCsv = "Rohan")
+        testScheduler.advanceUntilIdle()
+
+        val groupId = vm.uiState.value.activeGroupId
+        assertTrue(groupId.isNotBlank())
+
+        // Clear any initial flag, then set offline mode and log an expense
+        com.splitmate.app.data.CloudGroupSyncRepository.setGroupPendingCloudPush(null, groupId, false)
+        assertFalse(com.splitmate.app.data.CloudGroupSyncRepository.isGroupPendingCloudPush(null, groupId))
+
+        vm.setOfflineMode(true)
+        vm.commitQuickEqualExpense(
+            title = "Coffee Stop while Offline",
+            totalAmountCents = 48_000L,
+            selectedMemberIds = vm.uiState.value.activeGroupMembers.map { it.memberId }
+        )
+        testScheduler.advanceUntilIdle()
+
+        // Must automatically queue group for pending cloud push and mark expense as PENDING
+        assertTrue(
+            com.splitmate.app.data.CloudGroupSyncRepository.isGroupPendingCloudPush(null, groupId),
+            "Adding an expense must immediately mark the group for automatic pending cloud push"
+        )
+        val loggedExpense = vm.uiState.value.expenses.first { it.title == "Coffee Stop while Offline" }
+        assertEquals("PENDING", loggedExpense.syncStatus)
+
+        // Verify live topic resolution for real-time ntfy stream subscription
+        val topic = com.splitmate.app.data.CloudGroupSyncRepository.groupTopicForGroupId(groupId)
+        assertTrue(topic.startsWith("splitmate_v2_grp_"))
+
+        // When network connectivity returns, onNetworkConnectivityChanged clears offline mode automatically
+        vm.onNetworkConnectivityChanged(null, isConnected = true)
+        assertFalse(vm.uiState.value.isOfflineMode)
+    }
 }
 
 

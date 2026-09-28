@@ -1352,8 +1352,9 @@ class SplitMateViewModel(
             ?: groupMembers.first()
 
         val lockedRate = state.activeCurrency.rateFromBase
-        val syncStatus = if (state.isOfflineMode) "PENDING" else "SYNCED"
+        val syncStatus = if (dao != null || state.isOfflineMode) "PENDING" else "SYNCED"
         val expenseId = "exp_${System.currentTimeMillis()}"
+        com.splitmate.app.data.CloudGroupSyncRepository.setGroupPendingCloudPush(null, state.activeGroupId, true)
 
         val equalAllocations = SplitMateMathEngine.splitEquallyZeroDrift(
             totalCents = totalAmountCents,
@@ -2249,6 +2250,49 @@ class SplitMateViewModel(
 
     fun performSilentAutoCloudSync(context: android.content.Context? = null) {
         syncAllGroupsWithCloud(context = context, silent = true)
+    }
+
+    /**
+     * Automatically triggered by `ConnectivityManager.NetworkCallback` whenever internet connectivity
+     * changes on the device. When the phone reconnects (`isConnected == true`), any expenses, edits,
+     * deletions, or settlements queued while offline (`syncStatus == "PENDING"` or `pending_push_<groupId>`)
+     * are pushed automatically in the background without requiring any manual button press.
+     */
+    fun onNetworkConnectivityChanged(
+        context: android.content.Context?,
+        isConnected: Boolean
+    ) {
+        val wasOffline = _uiState.value.isOfflineMode
+        _uiState.update { it.copy(isOfflineMode = !isConnected) }
+        if (isConnected && _uiState.value.hasRegisteredProfile) {
+            val activeOrOpenedGroupId = _uiState.value.openedGroupDetailId?.takeIf { it.isNotBlank() }
+                ?: _uiState.value.activeGroupId
+            if (activeOrOpenedGroupId.isNotBlank()) {
+                syncActiveGroupNow(context = context, groupId = activeOrOpenedGroupId, silent = true)
+            }
+            if (wasOffline || _uiState.value.expenses.any { it.syncStatus == "PENDING" } || _uiState.value.settlements.any { it.syncStatus == "PENDING" }) {
+                performSilentAutoCloudSync(context)
+            }
+        }
+    }
+
+    /**
+     * Triggered in < 1 second whenever a live `ntfy.sh` message event arrives on any of the user's
+     * active group topics or phone index topic.
+     */
+    fun handleLiveCloudTopicEvent(
+        context: android.content.Context?,
+        changedTopic: String
+    ) {
+        if (changedTopic.isBlank() || !_uiState.value.hasRegisteredProfile) return
+        val matchedGroup = _uiState.value.groups.firstOrNull { g ->
+            com.splitmate.app.data.CloudGroupSyncRepository.groupTopicForGroupId(g.groupId) == changedTopic
+        }
+        if (matchedGroup != null) {
+            syncActiveGroupNow(context = context, groupId = matchedGroup.groupId, silent = true)
+        } else {
+            performSilentAutoCloudSync(context)
+        }
     }
 
     fun acceptGroupInvite(context: android.content.Context?, groupId: String) {
@@ -3591,6 +3635,7 @@ class SplitMateViewModel(
 
     fun markGreedyTransferSettled(transfer: SplitMateMathEngine.SimplifiedTransfer) {
         val state = _uiState.value
+        com.splitmate.app.data.CloudGroupSyncRepository.setGroupPendingCloudPush(null, state.activeGroupId, true)
         val settlement = SettlementEntity(
             settlementId = "settle_${System.currentTimeMillis()}",
             groupId = state.activeGroupId,
@@ -3601,7 +3646,7 @@ class SplitMateViewModel(
             amountCents = transfer.amountCents,
             currencyCode = state.activeCurrencyCode,
             lockedExchangeRate = state.activeCurrency.rateFromBase,
-            syncStatus = if (state.isOfflineMode) "PENDING" else "SYNCED"
+            syncStatus = if (dao != null || state.isOfflineMode) "PENDING" else "SYNCED"
         )
 
         _uiState.update { curr ->
@@ -3634,6 +3679,9 @@ class SplitMateViewModel(
     fun rollbackExpense(expenseId: String) {
         val removedExpense = _uiState.value.expenses.find { it.expenseId == expenseId }
         val targetGroupId = removedExpense?.groupId ?: _uiState.value.activeGroupId
+        if (targetGroupId.isNotBlank()) {
+            com.splitmate.app.data.CloudGroupSyncRepository.setGroupPendingCloudPush(null, targetGroupId, true)
+        }
         _uiState.update { curr ->
             val removed = curr.expenses.find { it.expenseId == expenseId }
             curr.copy(
@@ -3673,6 +3721,9 @@ class SplitMateViewModel(
     fun undoSettlement(settlementId: String) {
         val removedSettlement = _uiState.value.settlements.find { it.settlementId == settlementId }
         val targetGroupId = removedSettlement?.groupId ?: _uiState.value.activeGroupId
+        if (targetGroupId.isNotBlank()) {
+            com.splitmate.app.data.CloudGroupSyncRepository.setGroupPendingCloudPush(null, targetGroupId, true)
+        }
         _uiState.update { curr ->
             val removed = curr.settlements.find { it.settlementId == settlementId }
             curr.copy(
@@ -3824,6 +3875,7 @@ class SplitMateViewModel(
             currentUserId = currentUser?.memberId
         )
 
+        com.splitmate.app.data.CloudGroupSyncRepository.setGroupPendingCloudPush(null, existing.groupId, true)
         val updatedExpense = existing.copy(
             title = cleanTitle,
             payerId = resolvedPayerId,
@@ -3832,7 +3884,8 @@ class SplitMateViewModel(
             expenseCategory = inferred.expenseCategory.takeIf { it != "OTHER" } ?: existing.expenseCategory,
             travelPnr = inferred.travelPnr.ifBlank { existing.travelPnr },
             providerName = inferred.providerName.ifBlank { existing.providerName },
-            scheduledAtEpochMs = inferred.scheduledAtEpochMs ?: existing.scheduledAtEpochMs
+            scheduledAtEpochMs = inferred.scheduledAtEpochMs ?: existing.scheduledAtEpochMs,
+            syncStatus = if (dao != null || state.isOfflineMode) "PENDING" else "SYNCED"
         )
 
         val updatedSplits = equalAllocations.mapIndexed { idx, alloc ->

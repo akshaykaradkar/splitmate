@@ -185,6 +185,71 @@ fun SplitMateApp(viewModel: SplitMateViewModel) {
     }
     SplitMateTheme.isDark = uiState.isDarkTheme
 
+    // Automatic Network Connectivity Monitor: flushes any offline PENDING expenses the instant internet returns
+    DisposableEffect(context, uiState.hasRegisteredProfile) {
+        val connectivityManager = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+        val initialOnline = com.splitmate.app.data.CloudGroupSyncRepository.isInternetAvailable(context)
+        viewModel.onNetworkConnectivityChanged(context, initialOnline)
+        val callback = object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) {
+                viewModel.onNetworkConnectivityChanged(context, true)
+            }
+
+            override fun onCapabilitiesChanged(
+                network: android.net.Network,
+                networkCapabilities: android.net.NetworkCapabilities
+            ) {
+                val hasInternet = networkCapabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                if (hasInternet) {
+                    viewModel.onNetworkConnectivityChanged(context, true)
+                }
+            }
+
+            override fun onLost(network: android.net.Network) {
+                val stillOnline = com.splitmate.app.data.CloudGroupSyncRepository.isInternetAvailable(context)
+                viewModel.onNetworkConnectivityChanged(context, stillOnline)
+            }
+        }
+        runCatching {
+            connectivityManager?.registerDefaultNetworkCallback(callback)
+        }
+        onDispose {
+            runCatching {
+                connectivityManager?.unregisterNetworkCallback(callback)
+            }
+        }
+    }
+
+    // Real-Time Live Cloud Stream (< 1s delivery whenever any group member logs/edits an expense or settles up)
+    val liveStreamTopicKey = remember(uiState.hasRegisteredProfile, uiState.userPhone, uiState.groups) {
+        if (!uiState.hasRegisteredProfile) {
+            emptyList()
+        } else {
+            val normPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(uiState.userPhone)
+            buildList {
+                if (normPhone.length == 10) {
+                    add("splitmate_v2_idx_$normPhone")
+                }
+                uiState.groups.filter { !it.isDemoSeed }.forEach { g ->
+                    add(com.splitmate.app.data.CloudGroupSyncRepository.groupTopicForGroupId(g.groupId))
+                }
+            }.distinct()
+        }
+    }
+    LaunchedEffect(liveStreamTopicKey) {
+        if (liveStreamTopicKey.isNotEmpty()) {
+            while (true) {
+                val changedTopic = com.splitmate.app.data.CloudGroupSyncRepository.awaitLiveCloudTopicChange(liveStreamTopicKey)
+                if (!changedTopic.isNullOrBlank()) {
+                    viewModel.handleLiveCloudTopicEvent(context, changedTopic)
+                    kotlinx.coroutines.delay(500L)
+                } else {
+                    kotlinx.coroutines.delay(3_000L)
+                }
+            }
+        }
+    }
+
     // Fast active-trip Cloud Sync loop (every 12s while viewing a specific trip so new expenses from other members appear within seconds)
     LaunchedEffect(uiState.openedGroupDetailId, uiState.hasRegisteredProfile) {
         val openedGroupId = uiState.openedGroupDetailId

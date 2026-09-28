@@ -101,6 +101,7 @@ object CloudGroupSyncRepository {
     private val lastPushedIndexStatusByGroupPhone = ConcurrentHashMap<String, String>()
     private val lastCodePublishEpochByGroup = ConcurrentHashMap<String, Long>()
     private val lastLocalMutationEpochByGroup = ConcurrentHashMap<String, Long>()
+    private val pendingCloudPushByGroup = ConcurrentHashMap<String, Boolean>()
 
     fun init(context: Context?) {
         if (context != null) {
@@ -122,6 +123,7 @@ object CloudGroupSyncRepository {
         lastPushedIndexStatusByGroupPhone.clear()
         lastCodePublishEpochByGroup.clear()
         lastLocalMutationEpochByGroup.clear()
+        pendingCloudPushByGroup.clear()
     }
 
     fun isPhoneOnlineNow(
@@ -975,6 +977,44 @@ object CloudGroupSyncRepository {
         }
     }
 
+    fun isGroupPendingCloudPush(context: Context?, groupId: String): Boolean {
+        val mem = pendingCloudPushByGroup[groupId]
+        if (mem != null) return mem
+        val ctx = resolveContext(context) ?: return false
+        return try {
+            ctx.getSharedPreferences(SYNC_META_PREFS_NAME, Context.MODE_PRIVATE)
+                .getBoolean("pending_push_$groupId", false)
+                .also { pendingCloudPushByGroup[groupId] = it }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun setGroupPendingCloudPush(context: Context?, groupId: String, pending: Boolean) {
+        pendingCloudPushByGroup[groupId] = pending
+        val ctx = resolveContext(context) ?: return
+        try {
+            ctx.getSharedPreferences(SYNC_META_PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("pending_push_$groupId", pending)
+                .apply()
+        } catch (_: Exception) {
+        }
+    }
+
+    fun isInternetAvailable(context: Context?): Boolean {
+        val ctx = resolveContext(context) ?: return true
+        return try {
+            val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+                ?: return true
+            val activeNet = cm.activeNetwork ?: return false
+            val caps = cm.getNetworkCapabilities(activeNet) ?: return false
+            caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        } catch (_: Exception) {
+            true
+        }
+    }
+
     // =========================================================================
     // CLOUD NTFY JSON CHANNEL TRANSPORT + EXPONENTIAL BACKOFF (F4)
     // =========================================================================
@@ -1207,6 +1247,52 @@ object CloudGroupSyncRepository {
             }
         }
         return@withContext messages
+    }
+
+    fun groupTopicForGroupId(groupId: String): String =
+        "splitmate_v2_grp_${sanitizeTopicKey(groupId)}"
+
+    /**
+     * Opens a single real-time HTTP pub/sub stream on ntfy.sh across [topics] and suspends until
+     * any member on another device publishes a "message" event, returning the changed topic name
+     * in < 1 second (or null on keepalive timeout / disconnect).
+     */
+    suspend fun awaitLiveCloudTopicChange(topics: List<String>): String? = withContext(Dispatchers.IO) {
+        val cleanTopics = topics.map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(12)
+        if (cleanTopics.isEmpty()) return@withContext null
+        val urlStr = "https://ntfy.sh/${cleanTopics.joinToString(",")}/json"
+        var conn: HttpURLConnection? = null
+        return@withContext try {
+            conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 8000
+                readTimeout = 55000
+            }
+            if (conn.responseCode != 200) {
+                return@withContext null
+            }
+            java.io.BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { reader ->
+                while (true) {
+                    val line = reader.readLine() ?: break
+                    if (line.isBlank()) continue
+                    try {
+                        val json = JSONObject(line)
+                        if (json.optString("event") == "message") {
+                            val changedTopic = json.optString("topic", "").trim()
+                            if (changedTopic.isNotEmpty()) {
+                                return@withContext changedTopic
+                            }
+                        }
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+            null
+        } catch (_: Exception) {
+            null
+        } finally {
+            runCatching { conn?.disconnect() }
+        }
     }
 
     private suspend fun pushNtfySnapshot(topic: String, jsonPayload: String): Boolean = withContext(Dispatchers.IO) {
@@ -1980,6 +2066,21 @@ object CloudGroupSyncRepository {
             deletedSettlementIds = additionalDeletedSettlementIds
         )
 
+        val nowMs = System.currentTimeMillis()
+        val rawExplicitMutation = isLocalMutation ||
+            forceIndexPush ||
+            additionalTombstones.isNotEmpty() ||
+            additionalDeletedMemberIds.isNotEmpty() ||
+            additionalRemovedMemberPhones.isNotEmpty() ||
+            additionalDeletedSettlementIds.isNotEmpty()
+
+        // Mark group as having a pending cloud push BEFORE network I/O so if the device is offline,
+        // the pending mutation is durably remembered and automatically pushed the instant internet returns!
+        if (rawExplicitMutation) {
+            setLastLocalMutationEpoch(ctx, groupId, nowMs)
+            setGroupPendingCloudPush(ctx, groupId, true)
+        }
+
         val topic = "splitmate_v2_grp_${sanitizeTopicKey(groupId)}"
         val (remoteDoc, remoteFetchSucceeded) = fetchRemoteGroupLedgerOutcome(
             topic = topic,
@@ -1990,18 +2091,7 @@ object CloudGroupSyncRepository {
         val localGroup = dao.getGroupById(groupId)
         var rawGroupMembers: List<GroupMemberEntity>? = null
         var localDoc: CloudGroupLedgerDocument? = null
-
-        val nowMs = System.currentTimeMillis()
-        val hasExplicitMutation = isLocalMutation ||
-            forceIndexPush ||
-            additionalTombstones.isNotEmpty() ||
-            additionalDeletedMemberIds.isNotEmpty() ||
-            additionalRemovedMemberPhones.isNotEmpty() ||
-            additionalDeletedSettlementIds.isNotEmpty()
-
-        if (hasExplicitMutation) {
-            setLastLocalMutationEpoch(ctx, groupId, nowMs)
-        }
+        var hasPendingLocalEntities = false
 
         if (localGroup != null) {
             val loadedMembers = dao.getMembersForGroup(groupId)
@@ -2026,6 +2116,8 @@ object CloudGroupSyncRepository {
             val expenses = dao.getExpensesForGroup(groupId)
             val splits = dao.getSplitsForGroup(groupId)
             val settlements = dao.getSettlementsForGroup(groupId)
+            hasPendingLocalEntities = expenses.any { it.syncStatus.equals("PENDING", ignoreCase = true) } ||
+                settlements.any { it.syncStatus.equals("PENDING", ignoreCase = true) }
 
             val flights = ctx?.let { PnrNetworkRepository.exportAllFlightVaultJsonByPnr(it) } ?: emptyMap()
             val trains = ctx?.let { PnrNetworkRepository.exportAllTrainSnapshotJsonByPnr(it) } ?: emptyMap()
@@ -2039,11 +2131,14 @@ object CloudGroupSyncRepository {
             }
             val inferredCode6 = durableTombstones.joinCode6.ifBlank { deriveGroupJoinCode6(groupId) }
 
+            val hadPendingPush = isGroupPendingCloudPush(ctx, groupId) || hasPendingLocalEntities
+            val hasExplicitMutation = rawExplicitMutation || hadPendingPush
+
             // Crucial: During passive background polls (!hasExplicitMutation), do NOT stamp localDoc with nowMs > remoteDoc.updatedAtEpochMs,
             // otherwise local stale metadata would win LWW over remote updates and trigger a ping-pong POST storm across devices!
             val storedLocalMut = getLastLocalMutationEpoch(ctx, groupId)
             val effectiveLocalEpochMs = when {
-                hasExplicitMutation -> nowMs
+                hasExplicitMutation -> max(nowMs, storedLocalMut)
                 remoteDoc != null -> if (storedLocalMut > remoteDoc.updatedAtEpochMs) {
                     storedLocalMut
                 } else {
@@ -2071,6 +2166,8 @@ object CloudGroupSyncRepository {
                 deletedSettlementIds = durableTombstones.deletedSettlementIds
             )
         }
+
+        val hasExplicitMutation = rawExplicitMutation || isGroupPendingCloudPush(ctx, groupId) || hasPendingLocalEntities
 
         if (localDoc == null && remoteDoc == null) return null
 
@@ -2119,6 +2216,7 @@ object CloudGroupSyncRepository {
                 pushPhoneIndexEntry(removedIdxEntry, normLocalPhone)
                 setLastPushedIndexStatus(ctx, groupId, normLocalPhone, "REMOVED")
             }
+            setGroupPendingCloudPush(ctx, groupId, false)
             dao.deleteGroupCascade(groupId)
             return null
         }
@@ -2204,7 +2302,15 @@ object CloudGroupSyncRepository {
         if (normLocalPhone.length == 10) {
             updatedPresence[normLocalPhone] = postMergeMs
         }
+        val syncedExpenses = mergedDoc.expenses.map {
+            if (it.syncStatus != "SYNCED") it.copy(syncStatus = "SYNCED") else it
+        }
+        val syncedSettlements = mergedDoc.settlements.map {
+            if (it.syncStatus != "SYNCED") it.copy(syncStatus = "SYNCED") else it
+        }
         val mergedDocUpdated = mergedDoc.copy(
+            expenses = syncedExpenses,
+            settlements = syncedSettlements,
             updatedAtEpochMs = if (hasExplicitMutation) postMergeMs else max(mergedDoc.updatedAtEpochMs, postMergeMs),
             memberPresenceByPhone = updatedPresence
         )
@@ -2222,13 +2328,34 @@ object CloudGroupSyncRepository {
             else -> false
         }
 
+        var cloudSyncedConfirmed = false
         if (shouldPushLedger) {
             val pushedOk = pushNtfySnapshot(topic, encodeGroupLedgerDocument(mergedDocUpdated))
             if (pushedOk) {
                 setLastPushedGroupHash(ctx, groupId, newStructuralHash)
+                setGroupPendingCloudPush(ctx, groupId, false)
+                cloudSyncedConfirmed = true
+            } else {
+                // Network push failed (device offline or rate-limited); keep pending flag true so it auto-flushes when internet returns
+                setGroupPendingCloudPush(ctx, groupId, true)
             }
         } else if (remoteDoc != null && newStructuralHash == remoteStructuralHash) {
             setLastPushedGroupHash(ctx, groupId, newStructuralHash)
+            setGroupPendingCloudPush(ctx, groupId, false)
+            cloudSyncedConfirmed = true
+        }
+
+        if (cloudSyncedConfirmed && hasPendingLocalEntities) {
+            syncedExpenses.filter { exp ->
+                mergedDoc.expenses.find { it.expenseId == exp.expenseId }?.syncStatus != "SYNCED"
+            }.forEach { exp ->
+                runCatching { dao.insertExpense(exp) }
+            }
+            syncedSettlements.filter { settle ->
+                mergedDoc.settlements.find { it.settlementId == settle.settlementId }?.syncStatus != "SYNCED"
+            }.forEach { settle ->
+                runCatching { dao.insertSettlement(settle) }
+            }
         }
 
         // PA-7: Publish / refresh 6-character Join Code pointer on splitmate_v2_code_<CODE6>
