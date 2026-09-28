@@ -2413,8 +2413,13 @@ class SplitMateV2ZeroRegressionAndSyncTest {
                 !tripHomeSource.contains("View as \${member.name") &&
                 !tripHomeSource.contains("switchActivePerspectiveMember") &&
                 tripHomeSource.contains("Remove Member") &&
-                tripHomeSource.contains("Leave Trip"),
-            "TripHubPeoplePerspectiveView must include ORGANIZER badge, Send Pending Invite, Edit Phone/Resend Invite, Remove Member, and Leave Trip controls, and must NOT expose 'View as {Member}' perspective switching (F12)"
+                tripHomeSource.contains("Leave Trip") &&
+                tripHomeSource.contains("selectedMemberForActions") &&
+                tripHomeSource.contains("Recipients confirm payments once received · Organizers can settle for offline members") &&
+                !tripHomeSource.contains("containerColor = Color(0xFFFAF6F0)") &&
+                !tripHomeSource.contains("\"Online now\"") &&
+                !tripHomeSource.contains("· Auto-Sync"),
+            "TripHubPeoplePerspectiveView and TripHubMoneySettlementView must use adaptive TripHubTokens for Espresso Dark Mode, M3 ModalBottomSheet progressive disclosure, and non-repetitive role-aware badges (F12)"
         )
 
         val syncSheetFile = java.io.File(srcMain, "java/com/splitmate/app/ui/dialogs/TripSyncAndPerspectiveSheet.kt")

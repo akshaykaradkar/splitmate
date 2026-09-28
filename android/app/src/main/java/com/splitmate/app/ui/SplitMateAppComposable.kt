@@ -5979,6 +5979,8 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                             Spacer(modifier = Modifier.height(12.dp))
 
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                var hasNonActionableIncomingLeg = false
+                                val recipientFirstName = summary.memberName.trim().substringBefore(" ").ifBlank { summary.memberName }
                                 summary.incomingPayments.forEach { leg ->
                                     val matchingTransfer = settlementPlan.find {
                                         it.fromMemberId == leg.counterpartyMemberId && it.toMemberId == summary.memberId
@@ -5988,6 +5990,14 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                         userPhone = fromRoomMember?.userPhone.orEmpty(),
                                         upiId = fromRoomMember?.upiId.orEmpty()
                                     )
+                                    val canMarkPaidIn = matchingTransfer != null && viewModel.canCurrentUserMarkTransferPaid(
+                                        groupId = uiState.activeGroupId,
+                                        toMemberId = matchingTransfer.transfer.toMemberId,
+                                        state = uiState
+                                    )
+                                    if (matchingTransfer != null && !canMarkPaidIn) {
+                                        hasNonActionableIncomingLeg = true
+                                    }
 
                                     Surface(
                                         shape = RoundedCornerShape(14.dp),
@@ -6033,16 +6043,47 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                     )
                                                 }
 
-                                                Text(
-                                                    text = leg.formattedAmount,
-                                                    fontFamily = SplitMateTheme.FontDisplay,
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    fontSize = 14.sp,
-                                                    color = SplitMateTheme.PrimaryDark
-                                                )
+                                                Column(
+                                                    horizontalAlignment = Alignment.End,
+                                                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                                                ) {
+                                                    Text(
+                                                        text = leg.formattedAmount,
+                                                        fontFamily = SplitMateTheme.FontDisplay,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        fontSize = 14.sp,
+                                                        color = SplitMateTheme.PrimaryDark
+                                                    )
+                                                    if (matchingTransfer != null && !canMarkPaidIn) {
+                                                        Surface(
+                                                            shape = CircleShape,
+                                                            color = SplitMateTheme.SurfaceMuted
+                                                        ) {
+                                                            Row(
+                                                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                                                verticalAlignment = Alignment.CenterVertically,
+                                                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = Icons.Rounded.Schedule,
+                                                                    contentDescription = null,
+                                                                    tint = SplitMateTheme.TextSecondary,
+                                                                    modifier = Modifier.size(10.dp)
+                                                                )
+                                                                Text(
+                                                                    text = "$recipientFirstName confirms",
+                                                                    fontFamily = SplitMateTheme.FontRounded,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    fontSize = 9.sp,
+                                                                    color = SplitMateTheme.TextSecondary
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                             }
 
-                                            if (matchingTransfer != null) {
+                                            if (matchingTransfer != null && canMarkPaidIn) {
                                                 Spacer(modifier = Modifier.height(8.dp))
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth(),
@@ -6097,11 +6138,6 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                     var isDrainingIn by remember { mutableStateOf(false) }
                                                     val drainScopeIn = rememberCoroutineScope()
                                                     val drainHapticIn = LocalHapticFeedback.current
-                                                    val canMarkPaidIn = viewModel.canCurrentUserMarkTransferPaid(
-                                                        groupId = uiState.activeGroupId,
-                                                        toMemberId = matchingTransfer.transfer.toMemberId,
-                                                        state = uiState
-                                                    )
                                                     val markPaidCornerIn by animateDpAsState(
                                                         targetValue = if (isDrainingIn) 12.dp else 20.dp,
                                                         animationSpec = spring(dampingRatio = 0.62f, stiffness = 500f),
@@ -6109,7 +6145,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                     )
                                                     Button(
                                                         onClick = {
-                                                            if (!canMarkPaidIn || isDrainingIn) return@Button
+                                                            if (isDrainingIn) return@Button
                                                             isDrainingIn = true
                                                             drainHapticIn.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                                             drainScopeIn.launch {
@@ -6120,13 +6156,10 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                                 isDrainingIn = false
                                                             }
                                                         },
-                                                        enabled = canMarkPaidIn,
                                                         shape = RoundedCornerShape(markPaidCornerIn),
                                                         colors = ButtonDefaults.buttonColors(
                                                             containerColor = if (isDrainingIn) Color(0xFF365314) else SplitMateTheme.PrimaryDark,
-                                                            contentColor = SplitMateTheme.ScreenBg,
-                                                            disabledContainerColor = SplitMateTheme.SurfaceMuted,
-                                                            disabledContentColor = SplitMateTheme.TextSecondary
+                                                            contentColor = SplitMateTheme.ScreenBg
                                                         ),
                                                         modifier = Modifier
                                                             .weight(1f)
@@ -6134,17 +6167,13 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
                                                     ) {
                                                         Icon(
-                                                            imageVector = if (canMarkPaidIn) Icons.Rounded.Check else Icons.Rounded.Lock,
+                                                            imageVector = Icons.Rounded.Check,
                                                             contentDescription = null,
                                                             modifier = Modifier.size(14.dp)
                                                         )
                                                         Spacer(modifier = Modifier.width(4.dp))
                                                         Text(
-                                                            text = when {
-                                                                isDrainingIn -> "₹0.00 · Settled"
-                                                                canMarkPaidIn -> "Mark Paid"
-                                                                else -> "Only ${matchingTransfer.transfer.toName} marks paid"
-                                                            },
+                                                            text = if (isDrainingIn) "₹0.00 · Settled" else "Mark Paid",
                                                             fontFamily = SplitMateTheme.FontRounded,
                                                             fontWeight = FontWeight.Bold,
                                                             fontSize = 11.sp,
@@ -6154,6 +6183,28 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                 }
                                             }
                                         }
+                                    }
+                                }
+
+                                if (hasNonActionableIncomingLeg) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Schedule,
+                                            contentDescription = null,
+                                            tint = SplitMateTheme.TextSecondary,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Text(
+                                            text = "${summary.memberName} confirms incoming payments once received",
+                                            fontSize = 11.sp,
+                                            color = SplitMateTheme.TextSecondary
+                                        )
                                     }
                                 }
                             }
@@ -6296,11 +6347,21 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                             Spacer(modifier = Modifier.height(8.dp))
                                         }
 
+                                        var hasNonActionableOutgoingLeg = false
                                         summary.outgoingPayments.forEachIndexed { legIdx, leg ->
                                             val matchingTransfer = settlementPlan.find {
                                                 it.fromMemberId == summary.memberId && it.toMemberId == leg.counterpartyMemberId
                                             }
                                             val toRoomMember = uiState.members.find { it.memberId == leg.counterpartyMemberId }
+                                            val canMarkPaidOut = matchingTransfer != null && viewModel.canCurrentUserMarkTransferPaid(
+                                                groupId = uiState.activeGroupId,
+                                                toMemberId = matchingTransfer.transfer.toMemberId,
+                                                state = uiState
+                                            )
+                                            if (matchingTransfer != null && !canMarkPaidOut) {
+                                                hasNonActionableOutgoingLeg = true
+                                            }
+                                            val counterpartyFirstName = leg.counterpartyName.trim().substringBefore(" ").ifBlank { leg.counterpartyName }
 
                                             if (legIdx > 0) {
                                                 HorizontalDivider(
@@ -6363,7 +6424,10 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                         }
                                                     }
 
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Column(
+                                                        horizontalAlignment = Alignment.End,
+                                                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                                                    ) {
                                                         Text(
                                                             text = leg.formattedAmount,
                                                             fontFamily = SplitMateTheme.FontDisplay,
@@ -6371,10 +6435,36 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                             fontSize = 14.sp,
                                                             color = SplitMateTheme.PrimaryDark
                                                         )
+                                                        if (matchingTransfer != null && !canMarkPaidOut) {
+                                                            Surface(
+                                                                shape = CircleShape,
+                                                                color = SplitMateTheme.TerracottaSurface
+                                                            ) {
+                                                                Row(
+                                                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                                                    verticalAlignment = Alignment.CenterVertically,
+                                                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                                                ) {
+                                                                    Icon(
+                                                                        imageVector = Icons.Rounded.Schedule,
+                                                                        contentDescription = null,
+                                                                        tint = SplitMateTheme.TerracottaText,
+                                                                        modifier = Modifier.size(10.dp)
+                                                                    )
+                                                                    Text(
+                                                                        text = "Awaiting $counterpartyFirstName",
+                                                                        fontFamily = SplitMateTheme.FontRounded,
+                                                                        fontWeight = FontWeight.Bold,
+                                                                        fontSize = 9.sp,
+                                                                        color = SplitMateTheme.TerracottaText
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
                                                     }
                                                 }
 
-                                                if (matchingTransfer != null) {
+                                                if (matchingTransfer != null && canMarkPaidOut) {
                                                     Spacer(modifier = Modifier.height(8.dp))
                                                     Row(
                                                         modifier = Modifier.fillMaxWidth(),
@@ -6383,11 +6473,6 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                         var isDrainingOut by remember { mutableStateOf(false) }
                                                         val drainScopeOut = rememberCoroutineScope()
                                                         val drainHapticOut = LocalHapticFeedback.current
-                                                        val canMarkPaidOut = viewModel.canCurrentUserMarkTransferPaid(
-                                                            groupId = uiState.activeGroupId,
-                                                            toMemberId = matchingTransfer.transfer.toMemberId,
-                                                            state = uiState
-                                                        )
                                                         val markPaidCornerOut by animateDpAsState(
                                                             targetValue = if (isDrainingOut) 12.dp else 20.dp,
                                                             animationSpec = spring(dampingRatio = 0.62f, stiffness = 500f),
@@ -6395,7 +6480,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                         )
                                                         Button(
                                                             onClick = {
-                                                                if (!canMarkPaidOut || isDrainingOut) return@Button
+                                                                if (isDrainingOut) return@Button
                                                                 isDrainingOut = true
                                                                 drainHapticOut.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                                                 drainScopeOut.launch {
@@ -6406,13 +6491,10 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                                     isDrainingOut = false
                                                                 }
                                                             },
-                                                            enabled = canMarkPaidOut,
                                                             shape = RoundedCornerShape(markPaidCornerOut),
                                                             colors = ButtonDefaults.buttonColors(
                                                                 containerColor = if (isDrainingOut) Color(0xFF365314) else SplitMateTheme.PrimaryDark,
-                                                                contentColor = SplitMateTheme.ScreenBg,
-                                                                disabledContainerColor = SplitMateTheme.SurfaceMuted,
-                                                                disabledContentColor = SplitMateTheme.TextSecondary
+                                                                contentColor = SplitMateTheme.ScreenBg
                                                             ),
                                                             modifier = Modifier
                                                                 .weight(1f)
@@ -6420,22 +6502,13 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
                                                         ) {
                                                             Icon(
-                                                                imageVector = if (canMarkPaidOut) Icons.Rounded.Check else Icons.Rounded.Lock,
+                                                                imageVector = Icons.Rounded.Check,
                                                                 contentDescription = null,
                                                                 modifier = Modifier.size(13.dp)
                                                             )
                                                             Spacer(modifier = Modifier.width(4.dp))
                                                             Text(
-                                                                text = when {
-                                                                    isDrainingOut -> "₹0.00 · Settled"
-                                                                    canMarkPaidOut -> "Mark Paid"
-                                                                    else -> viewModel.getMarkPaidRestrictionLabel(
-                                                                        groupId = uiState.activeGroupId,
-                                                                        toMemberId = matchingTransfer.transfer.toMemberId,
-                                                                        toMemberName = matchingTransfer.transfer.toName,
-                                                                        state = uiState
-                                                                    )
-                                                                },
+                                                                text = if (isDrainingOut) "₹0.00 · Settled" else "Mark Paid",
                                                                 fontFamily = SplitMateTheme.FontRounded,
                                                                 fontWeight = FontWeight.Bold,
                                                                 fontSize = 11.sp
@@ -6443,6 +6516,30 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                         }
                                                     }
                                                 }
+                                            }
+                                        }
+
+                                        if (hasNonActionableOutgoingLeg) {
+                                            HorizontalDivider(
+                                                color = peachBoxBorder,
+                                                modifier = Modifier.padding(top = 8.dp, bottom = 6.dp)
+                                            )
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Schedule,
+                                                    contentDescription = null,
+                                                    tint = SplitMateTheme.TextSecondary,
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Text(
+                                                    text = "Recipients confirm payments once received",
+                                                    fontSize = 11.sp,
+                                                    color = SplitMateTheme.TextSecondary
+                                                )
                                             }
                                         }
                                     }
