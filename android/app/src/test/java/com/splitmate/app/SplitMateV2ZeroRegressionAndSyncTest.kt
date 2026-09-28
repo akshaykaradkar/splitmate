@@ -2408,8 +2408,12 @@ class SplitMateV2ZeroRegressionAndSyncTest {
         assertTrue(
             tripHomeSource.contains("\"ORGANIZER\"") &&
                 tripHomeSource.contains("+ Add Phone & Invite") &&
-                tripHomeSource.contains("Send Pending Invite") &&
-                tripHomeSource.contains("Resend Invite · Edit Phone") &&
+                tripHomeSource.contains("Edit Name & Phone") &&
+                tripHomeSource.contains("Share Invite on WhatsApp") &&
+                tripHomeSource.contains("Your Settlements") &&
+                tripHomeSource.contains("Other Travelers' Settlements") &&
+                tripHomeSource.contains("Confirmed by each recipient once received") &&
+                !tripHomeSource.contains("· Invite sent") &&
                 !tripHomeSource.contains("View as \${member.name") &&
                 !tripHomeSource.contains("switchActivePerspectiveMember") &&
                 tripHomeSource.contains("Remove Member") &&
@@ -2419,7 +2423,16 @@ class SplitMateV2ZeroRegressionAndSyncTest {
                 !tripHomeSource.contains("containerColor = Color(0xFFFAF6F0)") &&
                 !tripHomeSource.contains("\"Online now\"") &&
                 !tripHomeSource.contains("· Auto-Sync"),
-            "TripHubPeoplePerspectiveView and TripHubMoneySettlementView must use adaptive TripHubTokens for Espresso Dark Mode, M3 ModalBottomSheet progressive disclosure, and non-repetitive role-aware badges (F12)"
+            "TripHubPeoplePerspectiveView and TripHubMoneySettlementView must use M3 Expressive Segmented Contained List, Me-First hierarchy, non-overlapping action sheet rows, and adaptive TripHubTokens (F12)"
+        )
+        assertTrue(
+            appSource.contains("GETS BACK (") &&
+                appSource.contains("OWES (") &&
+                appSource.contains("Show top 3 rows") &&
+                appSource.contains("Your Settlements") &&
+                appSource.contains("Other Travelers' Settlements") &&
+                !appSource.contains("confirms incoming payments once received"),
+            "SettleUpTab must render compact 2-column GETS BACK | OWES split board with 3-row accordion, Me-First settlements, and zero repetitive per-card confirmation footers (F12)"
         )
 
         val syncSheetFile = java.io.File(srcMain, "java/com/splitmate/app/ui/dialogs/TripSyncAndPerspectiveSheet.kt")

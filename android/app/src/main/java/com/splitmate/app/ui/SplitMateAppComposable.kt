@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -5472,6 +5473,15 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
             memberSummaries
         }
     }
+    val myMemberSummaries = remember(displayedMemberSummaries) {
+        displayedMemberSummaries.filter { it.isCurrentUser }
+    }
+    val otherMemberSummaries = remember(displayedMemberSummaries) {
+        displayedMemberSummaries.filter { !it.isCurrentUser }
+    }
+    val orderedMemberSummaries = remember(myMemberSummaries, otherMemberSummaries) {
+        myMemberSummaries + otherMemberSummaries
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -5489,7 +5499,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                 color = SplitMateTheme.PrimaryDark
             )
             Text(
-                text = "Simplified balances grouped by member with 1-tap Mark Paid & WhatsApp reminders",
+                text = "Your settlements first, followed by simplified group balances",
                 fontFamily = SplitMateTheme.FontRounded,
                 fontSize = 12.sp,
                 color = SplitMateTheme.TextSecondary
@@ -5532,7 +5542,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
             }
         }
 
-        // 1. TRIP SETTLEMENT SUMMARY CARD (Top Overview Grid of Who Receives & Who Needs to Pay)
+        // 1. TRIP SETTLEMENT SUMMARY CARD (Compact 2-Column GETS BACK | OWES Split Board with 3-Row Accordion)
         if (topGridSummaries.isNotEmpty()) {
             item(key = "trip_settlement_summary_card") {
                 val summaryContainerBg = if (SplitMateTheme.isDark) {
@@ -5545,12 +5555,31 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                 } else {
                     Color(0xFFDCE6C8)
                 }
+                val receiversList = remember(topGridSummaries) {
+                    topGridSummaries.filter { it.hasIncoming }
+                        .sortedWith(
+                            compareByDescending<SplitMateMathEngine.MemberSettlementSummary> { it.isCurrentUser }
+                                .thenByDescending { it.totalIncomingCents }
+                        )
+                }
+                val payersList = remember(topGridSummaries) {
+                    topGridSummaries.filter { it.hasOutgoing }
+                        .sortedWith(
+                            compareByDescending<SplitMateMathEngine.MemberSettlementSummary> { it.isCurrentUser }
+                                .thenByDescending { it.totalOutgoingCents }
+                        )
+                }
+                var isSummaryBoardExpanded by remember { mutableStateOf(false) }
+                val maxSummaryRows = maxOf(receiversList.size, payersList.size)
+                val visibleRowCount = if (isSummaryBoardExpanded) maxSummaryRows else minOf(maxSummaryRows, 3)
+
                 Card(
                     shape = RoundedCornerShape(24.dp),
                     colors = CardDefaults.cardColors(containerColor = summaryContainerBg),
                     modifier = Modifier
                         .fillMaxWidth()
                         .border(1.dp, summaryBorderColor, RoundedCornerShape(24.dp))
+                        .animateContentSize(animationSpec = spring(dampingRatio = 0.78f, stiffness = 380f))
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         var showMaxHeapGraphInspector by remember { mutableStateOf(false) }
@@ -5570,7 +5599,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(42.dp)
+                                    .size(38.dp)
                                     .clip(CircleShape)
                                     .background(SplitMateTheme.SageSurface),
                                 contentAlignment = Alignment.Center
@@ -5579,16 +5608,16 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                     imageVector = Icons.Rounded.Groups,
                                     contentDescription = null,
                                     tint = SplitMateTheme.SageText,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
-                            Spacer(modifier = Modifier.width(12.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         text = "Trip Settlement Summary",
                                         fontFamily = SplitMateTheme.FontDisplay,
-                                        fontSize = 16.sp,
+                                        fontSize = 15.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = SplitMateTheme.PrimaryDark
                                     )
@@ -5601,20 +5630,20 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                         border = BorderStroke(1.dp, Color(0xFF416913).copy(alpha = 0.45f)),
                                         modifier = Modifier
                                             .minimumInteractiveComponentSize()
-                                            .size(24.dp)
+                                            .size(22.dp)
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
                                             Icon(
                                                 imageVector = Icons.Rounded.Info,
                                                 contentDescription = "Why were debts simplified?",
                                                 tint = if (showMaxHeapGraphInspector) Color(0xFFD7E8B6) else SplitMateTheme.SageText,
-                                                modifier = Modifier.size(14.dp)
+                                                modifier = Modifier.size(13.dp)
                                             )
                                         }
                                     }
                                 }
                                 Text(
-                                    text = "Quick view of who receives and who needs to pay",
+                                    text = "${receiversList.size} receiving · ${payersList.size} paying · $simplifiedTransferCount ${if (simplifiedTransferCount == 1) "transfer" else "transfers"}",
                                     fontSize = 11.sp,
                                     color = SplitMateTheme.TextSecondary
                                 )
@@ -5740,7 +5769,6 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                 radius = 5.dp.toPx(),
                                                 center = endPt
                                             )
-                                            // Animated kinetic settlement particle along simplified edge
                                             val dotX = startHub.x + (endPt.x - startHub.x) * flowProgress
                                             val dotY = startHub.y + (endPt.y - startHub.y) * flowProgress
                                             drawCircle(
@@ -5754,97 +5782,198 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            topGridSummaries.chunked(2).forEach { rowItems ->
+                        // Proportional Sage vs Terracotta Balance Bar
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(5.dp)
+                                .clip(CircleShape),
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(receiversList.size.coerceAtLeast(1).toFloat())
+                                    .fillMaxSize()
+                                    .clip(CircleShape)
+                                    .background(SplitMateTheme.SageText.copy(alpha = 0.75f))
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .weight(payersList.size.coerceAtLeast(1).toFloat())
+                                    .fillMaxSize()
+                                    .clip(CircleShape)
+                                    .background(SplitMateTheme.TerracottaText.copy(alpha = 0.75f))
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Compact 2-Column Split Summary Board (GETS BACK | OWES)
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = SplitMateTheme.SurfaceWhite,
+                            border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    rowItems.forEach { summary ->
-                                        val shortName = summary.memberName.substringBefore(" ").ifBlank { summary.memberName }
-                                        val isReceiverTile = summary.hasIncoming && !summary.hasOutgoing
-                                        Surface(
-                                            shape = RoundedCornerShape(16.dp),
-                                            color = SplitMateTheme.SurfaceWhite,
-                                            border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
-                                            modifier = Modifier.weight(1f)
+                                    Text(
+                                        text = "GETS BACK (${receiversList.size})",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = SplitMateTheme.SageText,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        text = "OWES (${payersList.size})",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = SplitMateTheme.TerracottaText,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+
+                                HorizontalDivider(color = SplitMateTheme.BorderLight)
+
+                                for (rowIdx in 0 until visibleRowCount) {
+                                    if (rowIdx > 0) {
+                                        HorizontalDivider(color = SplitMateTheme.BorderLight.copy(alpha = 0.5f))
+                                    }
+                                    val rec = receiversList.getOrNull(rowIdx)
+                                    val pay = payersList.getOrNull(rowIdx)
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // Left Column: Receiver mini-row
+                                        Row(
+                                            modifier = Modifier.weight(1f),
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                AvatarToken(
-                                                    initials = summary.avatarSeed,
-                                                    bg = if (isReceiverTile) SplitMateTheme.SageSurface else SplitMateTheme.TerracottaSurface,
-                                                    textColor = if (isReceiverTile) SplitMateTheme.SageText else SplitMateTheme.TerracottaText,
-                                                    size = 36
-                                                )
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Column {
-                                                    Text(
-                                                        text = shortName,
-                                                        fontWeight = FontWeight.ExtraBold,
-                                                        fontSize = 13.sp,
-                                                        color = SplitMateTheme.PrimaryDark,
-                                                        maxLines = 1
-                                                    )
-                                                    if (summary.hasBothDirections) {
-                                                        Text(
-                                                            text = "Receives & Pays",
-                                                            fontSize = 10.sp,
-                                                            color = SplitMateTheme.TextSecondary
-                                                        )
-                                                        Text(
-                                                            text = "+${summary.formattedTotalIncoming}",
-                                                            fontFamily = SplitMateTheme.FontDisplay,
-                                                            fontWeight = FontWeight.ExtraBold,
-                                                            fontSize = 12.sp,
-                                                            color = SplitMateTheme.SageText
-                                                        )
-                                                        Text(
-                                                            text = "-${summary.formattedTotalOutgoing}",
-                                                            fontFamily = SplitMateTheme.FontDisplay,
-                                                            fontWeight = FontWeight.ExtraBold,
-                                                            fontSize = 12.sp,
-                                                            color = SplitMateTheme.TerracottaText
-                                                        )
-                                                    } else if (summary.hasIncoming) {
-                                                        Text(
-                                                            text = "Receives",
-                                                            fontSize = 10.sp,
-                                                            fontWeight = FontWeight.Medium,
-                                                            color = SplitMateTheme.SageText
-                                                        )
-                                                        Text(
-                                                            text = "+${summary.formattedTotalIncoming}",
-                                                            fontFamily = SplitMateTheme.FontDisplay,
-                                                            fontWeight = FontWeight.ExtraBold,
-                                                            fontSize = 14.sp,
-                                                            color = SplitMateTheme.SageText
-                                                        )
-                                                    } else {
-                                                        Text(
-                                                            text = "Total to pay",
-                                                            fontSize = 10.sp,
-                                                            fontWeight = FontWeight.Medium,
-                                                            color = SplitMateTheme.TextSecondary
-                                                        )
-                                                        Text(
-                                                            text = "-${summary.formattedTotalOutgoing}",
-                                                            fontFamily = SplitMateTheme.FontDisplay,
-                                                            fontWeight = FontWeight.ExtraBold,
-                                                            fontSize = 14.sp,
-                                                            color = SplitMateTheme.TerracottaText
-                                                        )
-                                                    }
+                                            if (rec != null) {
+                                                val recLabel = if (rec.isCurrentUser) {
+                                                    "You"
+                                                } else {
+                                                    rec.memberName.substringBefore(" ").ifBlank { rec.memberName }
                                                 }
+                                                AvatarToken(
+                                                    initials = rec.avatarSeed,
+                                                    bg = SplitMateTheme.SageSurface,
+                                                    textColor = SplitMateTheme.SageText,
+                                                    size = 22
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = recLabel,
+                                                    fontWeight = if (rec.isCurrentUser) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                                    fontSize = 12.sp,
+                                                    color = SplitMateTheme.PrimaryDark,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = "+${rec.formattedTotalIncoming}",
+                                                    fontFamily = SplitMateTheme.FontDisplay,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    fontSize = 12.sp,
+                                                    color = SplitMateTheme.SageText,
+                                                    maxLines = 1
+                                                )
+                                            }
+                                        }
+
+                                        Box(
+                                            modifier = Modifier
+                                                .padding(horizontal = 8.dp)
+                                                .width(1.dp)
+                                                .height(22.dp)
+                                                .background(SplitMateTheme.BorderLight)
+                                        )
+
+                                        // Right Column: Payer mini-row
+                                        Row(
+                                            modifier = Modifier.weight(1f),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            if (pay != null) {
+                                                val payLabel = if (pay.isCurrentUser) {
+                                                    "You"
+                                                } else {
+                                                    pay.memberName.substringBefore(" ").ifBlank { pay.memberName }
+                                                }
+                                                AvatarToken(
+                                                    initials = pay.avatarSeed,
+                                                    bg = SplitMateTheme.TerracottaSurface,
+                                                    textColor = SplitMateTheme.TerracottaText,
+                                                    size = 22
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = payLabel,
+                                                    fontWeight = if (pay.isCurrentUser) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                                    fontSize = 12.sp,
+                                                    color = SplitMateTheme.PrimaryDark,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = "-${pay.formattedTotalOutgoing}",
+                                                    fontFamily = SplitMateTheme.FontDisplay,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    fontSize = 12.sp,
+                                                    color = SplitMateTheme.TerracottaText,
+                                                    maxLines = 1
+                                                )
                                             }
                                         }
                                     }
-                                    if (rowItems.size == 1) {
-                                        Spacer(modifier = Modifier.weight(1f))
+                                }
+
+                                if (maxSummaryRows > 3) {
+                                    HorizontalDivider(color = SplitMateTheme.BorderLight)
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { isSummaryBoardExpanded = !isSummaryBoardExpanded }
+                                            .padding(vertical = 7.dp),
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = if (isSummaryBoardExpanded) {
+                                                "Show top 3 rows"
+                                            } else {
+                                                "Show all ${topGridSummaries.size} travelers"
+                                            },
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = SplitMateTheme.SageText
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Icon(
+                                            imageVector = if (isSummaryBoardExpanded) {
+                                                Icons.Rounded.KeyboardArrowUp
+                                            } else {
+                                                Icons.Rounded.KeyboardArrowDown
+                                            },
+                                            contentDescription = null,
+                                            tint = SplitMateTheme.SageText,
+                                            modifier = Modifier.size(16.dp)
+                                        )
                                     }
                                 }
                             }
@@ -5853,8 +5982,8 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                 }
             }
 
-            // 2. SECTION HEADER: INDIVIDUAL MEMBER DETAILS + SORT TOGGLE
-            item(key = "individual_member_details_header") {
+            // 2. SECTION 1 HEADER: YOUR SETTLEMENTS (Me-First Hierarchy)
+            item(key = "your_settlements_section_header") {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -5863,41 +5992,122 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Individual Member Details",
+                        text = "Your Settlements",
                         fontFamily = SplitMateTheme.FontDisplay,
                         fontSize = 17.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = SplitMateTheme.PrimaryDark
                     )
                     Surface(
-                        onClick = { sortByBalanceMagnitude = !sortByBalanceMagnitude },
                         shape = SplitMateTheme.RadiusBadge,
-                        color = Color.Transparent
+                        color = if (myMemberSummaries.isEmpty()) SplitMateTheme.SageSurface else SplitMateTheme.SurfaceMuted
+                    ) {
+                        Text(
+                            text = if (myMemberSummaries.isEmpty()) "All settled" else "Priority view",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (myMemberSummaries.isEmpty()) SplitMateTheme.SageText else SplitMateTheme.TextSecondary,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+            }
+
+            if (myMemberSummaries.isEmpty()) {
+                item(key = "your_settlements_settled_card") {
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = SplitMateTheme.SurfaceWhite,
+                        border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Text(
-                                text = if (sortByBalanceMagnitude) "Sorted by amount" else "Sort by balance",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = SplitMateTheme.TextSecondary
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
                             Icon(
-                                imageVector = Icons.Rounded.SwapVert,
-                                contentDescription = "Sort by balance",
-                                tint = SplitMateTheme.TextSecondary,
-                                modifier = Modifier.size(15.dp)
+                                imageVector = Icons.Rounded.CheckCircle,
+                                contentDescription = null,
+                                tint = SplitMateTheme.SageText,
+                                modifier = Modifier.size(20.dp)
                             )
+                            Column {
+                                Text(
+                                    text = "You're all settled up (₹0.00)",
+                                    fontFamily = SplitMateTheme.FontDisplay,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 14.sp,
+                                    color = SplitMateTheme.PrimaryDark
+                                )
+                                Text(
+                                    text = "You don't owe or receive anything in this trip.",
+                                    fontSize = 11.sp,
+                                    color = SplitMateTheme.TextSecondary
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            // 3. INDIVIDUAL MEMBER CARDS (RECEIVES Cards & PAYS Cards with Multi-Payment Breakdown)
-            items(displayedMemberSummaries, key = { "member_detail_${it.memberId}" }) { summary ->
+            // 3. MEMBER SETTLEMENT CARDS (Your Settlements first, then Other Travelers' Settlements)
+            itemsIndexed(
+                items = orderedMemberSummaries,
+                key = { _, it -> "member_detail_${it.memberId}" }
+            ) { index, summary ->
+                // Render "Other Travelers' Settlements" header right above the first non-current-user card
+                if (!summary.isCurrentUser && index == myMemberSummaries.size) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp, bottom = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Other Travelers' Settlements",
+                                fontFamily = SplitMateTheme.FontDisplay,
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = SplitMateTheme.PrimaryDark
+                            )
+                            Text(
+                                text = "Confirmed by each recipient once received",
+                                fontSize = 11.sp,
+                                color = SplitMateTheme.TextSecondary
+                            )
+                        }
+                        Surface(
+                            onClick = { sortByBalanceMagnitude = !sortByBalanceMagnitude },
+                            shape = SplitMateTheme.RadiusBadge,
+                            color = Color.Transparent
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = if (sortByBalanceMagnitude) "Sorted by amount" else "Sort by balance",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = SplitMateTheme.TextSecondary
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Icon(
+                                    imageVector = Icons.Rounded.SwapVert,
+                                    contentDescription = "Sort by balance",
+                                    tint = SplitMateTheme.TextSecondary,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // A. If the member has INCOMING payments (RECEIVES Card)
                 if (summary.hasIncoming) {
                     val receiverCardBg = if (SplitMateTheme.isDark) {
@@ -5932,16 +6142,16 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                         initials = summary.avatarSeed,
                                         bg = SplitMateTheme.SageSurface,
                                         textColor = SplitMateTheme.SageText,
-                                        size = 46
+                                        size = 44
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Text(
-                                                text = summary.memberName,
+                                                text = if (summary.isCurrentUser) "${summary.memberName} (You)" else summary.memberName,
                                                 fontFamily = SplitMateTheme.FontDisplay,
                                                 fontWeight = FontWeight.ExtraBold,
-                                                fontSize = 17.sp,
+                                                fontSize = 16.sp,
                                                 color = SplitMateTheme.PrimaryDark
                                             )
                                             Spacer(modifier = Modifier.width(8.dp))
@@ -5950,7 +6160,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                 color = SplitMateTheme.SageSurface
                                             ) {
                                                 Text(
-                                                    text = "RECEIVES",
+                                                    text = if (summary.isCurrentUser) "YOU RECEIVE" else "RECEIVES",
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.ExtraBold,
                                                     color = SplitMateTheme.SageText,
@@ -5960,7 +6170,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                         }
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            text = "Owes you from others",
+                                            text = if (summary.isCurrentUser) "Incoming from group members" else "Receives from group members",
                                             fontSize = 12.sp,
                                             color = SplitMateTheme.TextSecondary
                                         )
@@ -5971,7 +6181,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                     text = "+${summary.formattedTotalIncoming}",
                                     fontFamily = SplitMateTheme.FontDisplay,
                                     fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 19.sp,
+                                    fontSize = 18.sp,
                                     color = SplitMateTheme.SageText
                                 )
                             }
@@ -5979,8 +6189,6 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                             Spacer(modifier = Modifier.height(12.dp))
 
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                var hasNonActionableIncomingLeg = false
-                                val recipientFirstName = summary.memberName.trim().substringBefore(" ").ifBlank { summary.memberName }
                                 summary.incomingPayments.forEach { leg ->
                                     val matchingTransfer = settlementPlan.find {
                                         it.fromMemberId == leg.counterpartyMemberId && it.toMemberId == summary.memberId
@@ -5995,9 +6203,6 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                         toMemberId = matchingTransfer.transfer.toMemberId,
                                         state = uiState
                                     )
-                                    if (matchingTransfer != null && !canMarkPaidIn) {
-                                        hasNonActionableIncomingLeg = true
-                                    }
 
                                     Surface(
                                         shape = RoundedCornerShape(14.dp),
@@ -6043,44 +6248,13 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                     )
                                                 }
 
-                                                Column(
-                                                    horizontalAlignment = Alignment.End,
-                                                    verticalArrangement = Arrangement.spacedBy(3.dp)
-                                                ) {
-                                                    Text(
-                                                        text = leg.formattedAmount,
-                                                        fontFamily = SplitMateTheme.FontDisplay,
-                                                        fontWeight = FontWeight.ExtraBold,
-                                                        fontSize = 14.sp,
-                                                        color = SplitMateTheme.PrimaryDark
-                                                    )
-                                                    if (matchingTransfer != null && !canMarkPaidIn) {
-                                                        Surface(
-                                                            shape = CircleShape,
-                                                            color = SplitMateTheme.SurfaceMuted
-                                                        ) {
-                                                            Row(
-                                                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-                                                                verticalAlignment = Alignment.CenterVertically,
-                                                                horizontalArrangement = Arrangement.spacedBy(3.dp)
-                                                            ) {
-                                                                Icon(
-                                                                    imageVector = Icons.Rounded.Schedule,
-                                                                    contentDescription = null,
-                                                                    tint = SplitMateTheme.TextSecondary,
-                                                                    modifier = Modifier.size(10.dp)
-                                                                )
-                                                                Text(
-                                                                    text = "$recipientFirstName confirms",
-                                                                    fontFamily = SplitMateTheme.FontRounded,
-                                                                    fontWeight = FontWeight.Bold,
-                                                                    fontSize = 9.sp,
-                                                                    color = SplitMateTheme.TextSecondary
-                                                                )
-                                                            }
-                                                        }
-                                                    }
-                                                }
+                                                Text(
+                                                    text = leg.formattedAmount,
+                                                    fontFamily = SplitMateTheme.FontDisplay,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    fontSize = 14.sp,
+                                                    color = SplitMateTheme.PrimaryDark
+                                                )
                                             }
 
                                             if (matchingTransfer != null && canMarkPaidIn) {
@@ -6185,28 +6359,6 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                         }
                                     }
                                 }
-
-                                if (hasNonActionableIncomingLeg) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 4.dp, vertical = 2.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Schedule,
-                                            contentDescription = null,
-                                            tint = SplitMateTheme.TextSecondary,
-                                            modifier = Modifier.size(12.dp)
-                                        )
-                                        Text(
-                                            text = "${summary.memberName} confirms incoming payments once received",
-                                            fontSize = 11.sp,
-                                            color = SplitMateTheme.TextSecondary
-                                        )
-                                    }
-                                }
                             }
                         }
                     }
@@ -6253,16 +6405,16 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                         initials = summary.avatarSeed,
                                         bg = SplitMateTheme.TerracottaSurface,
                                         textColor = SplitMateTheme.TerracottaText,
-                                        size = 46
+                                        size = 44
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Text(
-                                                text = summary.memberName,
+                                                text = if (summary.isCurrentUser) "${summary.memberName} (You)" else summary.memberName,
                                                 fontFamily = SplitMateTheme.FontDisplay,
                                                 fontWeight = FontWeight.ExtraBold,
-                                                fontSize = 17.sp,
+                                                fontSize = 16.sp,
                                                 color = SplitMateTheme.PrimaryDark
                                             )
                                             Spacer(modifier = Modifier.width(8.dp))
@@ -6271,7 +6423,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                 color = SplitMateTheme.TerracottaSurface
                                             ) {
                                                 Text(
-                                                    text = "PAYS",
+                                                    text = if (summary.isCurrentUser) "YOU PAY" else "PAYS",
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.ExtraBold,
                                                     color = SplitMateTheme.TerracottaText,
@@ -6347,7 +6499,6 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                             Spacer(modifier = Modifier.height(8.dp))
                                         }
 
-                                        var hasNonActionableOutgoingLeg = false
                                         summary.outgoingPayments.forEachIndexed { legIdx, leg ->
                                             val matchingTransfer = settlementPlan.find {
                                                 it.fromMemberId == summary.memberId && it.toMemberId == leg.counterpartyMemberId
@@ -6358,9 +6509,6 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                 toMemberId = matchingTransfer.transfer.toMemberId,
                                                 state = uiState
                                             )
-                                            if (matchingTransfer != null && !canMarkPaidOut) {
-                                                hasNonActionableOutgoingLeg = true
-                                            }
                                             val counterpartyFirstName = leg.counterpartyName.trim().substringBefore(" ").ifBlank { leg.counterpartyName }
 
                                             if (legIdx > 0) {
@@ -6435,7 +6583,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                             fontSize = 14.sp,
                                                             color = SplitMateTheme.PrimaryDark
                                                         )
-                                                        if (matchingTransfer != null && !canMarkPaidOut) {
+                                                        if (summary.isCurrentUser && matchingTransfer != null && !canMarkPaidOut) {
                                                             Surface(
                                                                 shape = CircleShape,
                                                                 color = SplitMateTheme.TerracottaSurface
@@ -6516,30 +6664,6 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                         }
                                                     }
                                                 }
-                                            }
-                                        }
-
-                                        if (hasNonActionableOutgoingLeg) {
-                                            HorizontalDivider(
-                                                color = peachBoxBorder,
-                                                modifier = Modifier.padding(top = 8.dp, bottom = 6.dp)
-                                            )
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(5.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.Schedule,
-                                                    contentDescription = null,
-                                                    tint = SplitMateTheme.TextSecondary,
-                                                    modifier = Modifier.size(12.dp)
-                                                )
-                                                Text(
-                                                    text = "Recipients confirm payments once received",
-                                                    fontSize = 11.sp,
-                                                    color = SplitMateTheme.TextSecondary
-                                                )
                                             }
                                         }
                                     }
