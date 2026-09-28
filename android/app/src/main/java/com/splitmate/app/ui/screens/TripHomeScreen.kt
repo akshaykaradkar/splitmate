@@ -740,8 +740,13 @@ fun TripHomeScreen(
     val groupMembers: List<GroupMemberEntity> = remember(uiState.members, resolvedGroupId) {
         uiState.members.filter { it.groupId == resolvedGroupId }
     }
-    val activePerspectiveMember: GroupMemberEntity? = remember(groupMembers) {
-        groupMembers.find { it.isCurrentUser } ?: groupMembers.firstOrNull()
+    val activePerspectiveMember: GroupMemberEntity? = remember(groupMembers, uiState.userPhone) {
+        val normMyPhone = uiState.userPhone.filter { it.isDigit() }.takeLast(10)
+        (if (normMyPhone.length == 10) {
+            groupMembers.find { it.userPhone.filter { ch -> ch.isDigit() }.takeLast(10) == normMyPhone }
+        } else null)
+            ?: groupMembers.find { it.isCurrentUser }
+            ?: groupMembers.firstOrNull()
     }
     val groupExpenses: List<ExpenseEntity> = remember(uiState.expenses, resolvedGroupId, context) {
         uiState.expenses
@@ -5041,7 +5046,8 @@ private fun TripHubPeoplePerspectiveView(
                             groupId = groupId,
                             memberId = targetMember.memberId,
                             rawPhone = editedMemberPhone,
-                            newName = editedMemberName.trim().ifBlank { targetMember.name }
+                            newName = editedMemberName.trim().ifBlank { targetMember.name },
+                            launchWhatsAppShare = true
                         ) { ok, msg ->
                             isEditPhoneError = !ok
                             editPhoneDialogStatus = msg
@@ -5591,8 +5597,28 @@ private fun TripHubPeoplePerspectiveView(
                                         }
                                     } else if (member.inviteStatus.equals("PENDING", ignoreCase = true)) {
                                         Surface(
+                                            onClick = {
+                                                performCrispTactileHaptic(context, localView, heavy = false)
+                                                if (cleanPhone10.length == 10) {
+                                                    viewModel.sendOrResendDirectMemberInvite(
+                                                        context = context,
+                                                        groupId = groupId,
+                                                        memberId = member.memberId,
+                                                        launchWhatsAppShare = true
+                                                    ) { ok, msg ->
+                                                        isPeopleFeedbackError = !ok
+                                                        peopleFeedbackBanner = msg
+                                                    }
+                                                } else {
+                                                    editedMemberName = member.name
+                                                    editedMemberPhone = cleanPhone10
+                                                    editPhoneDialogStatus = null
+                                                    editingMemberForPhoneInvite = member
+                                                }
+                                            },
                                             shape = CircleShape,
-                                            color = Color(0xFFDCE3FD)
+                                            color = Color(0xFFDCE3FD),
+                                            border = BorderStroke(1.dp, Color(0xFF1E3A8A).copy(alpha = 0.25f))
                                         ) {
                                             Row(
                                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
@@ -5682,10 +5708,9 @@ private fun TripHubPeoplePerspectiveView(
                         }
                     }
 
-                    val isActivePerspective = isMe
                     val showInvitePhoneChip = !isMe && (cleanPhone10.isEmpty() || member.inviteStatus.equals("PENDING", ignoreCase = true))
                     val showRemoveMemberChip = isCurrentUserOrganizer && !isMe && groupMembers.size > 1
-                    if (!isActivePerspective || showInvitePhoneChip || showRemoveMemberChip) {
+                    if (showInvitePhoneChip || showRemoveMemberChip) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -5693,42 +5718,47 @@ private fun TripHubPeoplePerspectiveView(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (!isActivePerspective) {
-                                Surface(
-                                    onClick = {
-                                        performCrispTactileHaptic(context, localView, heavy = false)
-                                        viewModel.switchActivePerspectiveMember(groupId, member.memberId)
-                                        isPeopleFeedbackError = false
-                                        peopleFeedbackBanner = "Viewing trip as ${member.name}"
-                                    },
-                                    shape = CircleShape,
-                                    color = Color(0xFFF4EFE6),
-                                    border = BorderStroke(1.dp, Color(0xFFEDE7DF))
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.PersonPin,
-                                            contentDescription = null,
-                                            tint = Color(0xFF365314),
-                                            modifier = Modifier.size(13.dp)
-                                        )
-                                        Text(
-                                            text = "View as ${member.name.substringBefore(" ")}",
-                                            fontFamily = FigtreeFontFamily,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 11.sp,
-                                            color = Color(0xFF365314)
-                                        )
-                                    }
-                                }
-                            }
-
                             if (showInvitePhoneChip) {
                                 val isMissingPhone = cleanPhone10.isEmpty()
+                                if (!isMissingPhone) {
+                                    Surface(
+                                        onClick = {
+                                            performCrispTactileHaptic(context, localView, heavy = false)
+                                            viewModel.sendOrResendDirectMemberInvite(
+                                                context = context,
+                                                groupId = groupId,
+                                                memberId = member.memberId,
+                                                launchWhatsAppShare = true
+                                            ) { ok, msg ->
+                                                isPeopleFeedbackError = !ok
+                                                peopleFeedbackBanner = msg
+                                            }
+                                        },
+                                        shape = CircleShape,
+                                        color = Color(0xFFDCE9B9),
+                                        border = BorderStroke(1.dp, Color(0xFF416913).copy(alpha = 0.35f))
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Send,
+                                                contentDescription = null,
+                                                tint = Color(0xFF365314),
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                            Text(
+                                                text = "Send Pending Invite",
+                                                fontFamily = FigtreeFontFamily,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 11.sp,
+                                                color = Color(0xFF365314)
+                                            )
+                                        }
+                                    }
+                                }
                                 Surface(
                                     onClick = {
                                         performCrispTactileHaptic(context, localView, heavy = false)
@@ -5750,7 +5780,7 @@ private fun TripHubPeoplePerspectiveView(
                                         horizontalArrangement = Arrangement.spacedBy(5.dp)
                                     ) {
                                         Icon(
-                                            imageVector = if (isMissingPhone) Icons.Rounded.PhoneIphone else Icons.Rounded.Send,
+                                            imageVector = Icons.Rounded.PhoneIphone,
                                             contentDescription = null,
                                             tint = Color(0xFF365314),
                                             modifier = Modifier.size(13.dp)
@@ -5885,7 +5915,7 @@ private fun AddBookingQuickSheet(
                 color = TripHubTokens.TextPrimary
             )
             Text(
-                text = "Choose a booking type or sync with your travel group.",
+                text = "Choose a booking type or invite friends to your travel group.",
                 fontFamily = FigtreeFontFamily,
                 fontWeight = FontWeight.Medium,
                 fontSize = 13.sp,
@@ -5896,7 +5926,7 @@ private fun AddBookingQuickSheet(
                 Triple("IRCTC Train PNR Ticket", Icons.Rounded.Train, onSelectTrainPnr),
                 Triple("Flight Boarding Pass / PDF", Icons.Rounded.FlightTakeoff, onSelectFlightPass),
                 Triple("Hotel, Rental, Cab or Shared Expense", Icons.AutoMirrored.Rounded.ReceiptLong, onSelectSharedExpense),
-                Triple("Sync & Switch Perspective", Icons.Rounded.Sync, onSelectSyncAndPerspective)
+                Triple("Share Trip Code & Invite Friends", Icons.Rounded.PersonAdd, onSelectSyncAndPerspective)
             )
 
             actions.forEach { (label, icon, callback) ->

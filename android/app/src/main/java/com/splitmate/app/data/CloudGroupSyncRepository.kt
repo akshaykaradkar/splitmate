@@ -1263,6 +1263,8 @@ object CloudGroupSyncRepository {
 
         // 2. Member union & filtering against deletedMemberIds and removedMemberPhones
         val memberMap = linkedMapOf<String, GroupMemberEntity>()
+        val docTimeByKey = mutableMapOf<String, Long>()
+        val keyByMemberId = mutableMapOf<String, String>()
         for ((member, docTime) in allMembersWithDocTime) {
             if (member.memberId in mergedDeletedMemberIds) continue
             val normPhone = PhoneIdentityValidator.extractMemberPhone10(member.userPhone, member.upiId)
@@ -1273,23 +1275,46 @@ object CloudGroupSyncRepository {
             } else {
                 member
             }
-            val key = if (normPhone.isNotBlank()) normPhone else normalizedMember.memberId
+            val candidateKey = if (normPhone.isNotBlank()) normPhone else normalizedMember.memberId
+            val existingKeyForMemberId = keyByMemberId[normalizedMember.memberId]
+            val effectiveKey = existingKeyForMemberId ?: candidateKey
 
-            val existing = memberMap[key]
+            val existing = memberMap[effectiveKey] ?: memberMap[candidateKey]
             if (existing == null) {
-                memberMap[key] = normalizedMember
+                memberMap[candidateKey] = normalizedMember
+                docTimeByKey[candidateKey] = docTime
+                keyByMemberId[normalizedMember.memberId] = candidateKey
             } else {
-                val existingDocTime = if (localDoc?.members?.any { it.memberId == existing.memberId } == true) {
-                    localDoc.updatedAtEpochMs
-                } else {
-                    remoteDoc?.updatedAtEpochMs ?: 0L
+                val existingActualKey = if (memberMap.containsKey(effectiveKey)) effectiveKey else candidateKey
+                val existingDocTime = docTimeByKey[existingActualKey] ?: 0L
+                val existingPhone = PhoneIdentityValidator.extractMemberPhone10(existing.userPhone, existing.upiId)
+                val mergedPhone = when {
+                    docTime >= existingDocTime && normPhone.length == 10 -> normPhone
+                    existingPhone.length == 10 -> existingPhone
+                    else -> normPhone.ifBlank { existing.userPhone }
                 }
-                if (docTime >= existingDocTime) {
-                    memberMap[key] = normalizedMember.copy(
-                        memberId = existing.memberId,
-                        userPhone = normPhone.ifBlank { existing.userPhone }
-                    )
+                val mergedInviteStatus = when {
+                    docTime >= existingDocTime -> normalizedMember.inviteStatus
+                    existing.inviteStatus.equals("JOINED", ignoreCase = true) &&
+                        existingPhone.isEmpty() &&
+                        normPhone.length == 10 -> normalizedMember.inviteStatus
+                    else -> existing.inviteStatus
                 }
+                val winnerBase = if (docTime >= existingDocTime) normalizedMember else existing
+                val mergedWinner = winnerBase.copy(
+                    memberId = existing.memberId,
+                    userPhone = mergedPhone,
+                    upiId = if (mergedPhone.length == 10 && winnerBase.upiId.isBlank()) "${mergedPhone}@upi" else winnerBase.upiId,
+                    inviteStatus = mergedInviteStatus
+                )
+                val finalKey = if (mergedPhone.length == 10) mergedPhone else existing.memberId
+                if (existingActualKey != finalKey) {
+                    memberMap.remove(existingActualKey)
+                    docTimeByKey.remove(existingActualKey)
+                }
+                memberMap[finalKey] = mergedWinner
+                docTimeByKey[finalKey] = max(existingDocTime, docTime)
+                keyByMemberId[existing.memberId] = finalKey
             }
         }
 

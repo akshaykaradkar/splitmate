@@ -34,6 +34,7 @@ import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.PersonPin
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Sync
@@ -85,8 +86,7 @@ import com.splitmate.app.ui.performCrispTactileHaptic
 import kotlin.math.abs
 
 /**
- * Compact Buckwheat Sage header pill displaying `"Viewing as: <Member> (You)"` with `Icons.Rounded.Sync`
- * and `Icons.Rounded.KeyboardArrowDown`.
+ * Compact Buckwheat Sage header pill displaying `"Invite & Trip Code"` with `Icons.Rounded.PersonAdd`.
  *
  * Enforces WCAG 2.5.5 `48.dp` touch target bounds via `.minimumInteractiveComponentSize()` and
  * `.defaultMinSize(minHeight = 48.dp)` while preserving compact visual pill geometry.
@@ -160,25 +160,19 @@ fun PerspectiveAndSyncHeaderPill(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Rounded.Sync,
-                    contentDescription = "Switch Perspective and Sync Trip",
+                    imageVector = Icons.Rounded.PersonAdd,
+                    contentDescription = "Invite Friends & Trip Code",
                     tint = pillText,
                     modifier = Modifier.size(15.dp)
                 )
                 Text(
-                    text = "Viewing as: $displayMember (You)",
+                    text = "Invite & Trip Code",
                     fontFamily = FigtreeFontFamily,
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp,
                     color = pillText,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
-                )
-                Icon(
-                    imageVector = Icons.Rounded.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint = pillText,
-                    modifier = Modifier.size(16.dp)
                 )
             }
         }
@@ -187,10 +181,8 @@ fun PerspectiveAndSyncHeaderPill(
 
 /**
  * Canonical Material 3 ModalBottomSheet for:
- * 1. 1-Tap Perspective Switching (`"Who are you in this trip?"`) with `performCrispTactileHaptic(context)`
- *    and tabular `tnum` per-member net balances.
- * 2. $0.00-Server-Cost GZIP+Base64url Sync Capsule Export (`SM2_<base64url>`) via WhatsApp or Clipboard.
- * 3. Auto-Detected Clipboard Capsule Banner & Manual Paste Union Merge.
+ * 1. 6-Character Trip Join Code (`XXX-XXX`) with 1-tap Copy & WhatsApp Share.
+ * 2. Universal Join / Sync Trip by 6-Character Code, Invite Link, or Offline Backup Token.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -213,16 +205,6 @@ fun TripSyncAndPerspectiveSheet(
     val resolvedGroupName = groupName.ifBlank { resolvedGroup?.name ?: "Trip Hub" }
     val resolvedMembers = remember(members, uiState.members, resolvedGroupId) {
         uiState.members.filter { it.groupId == resolvedGroupId }.ifEmpty { members }
-    }
-
-    val netBalancesMap = remember(
-        resolvedGroupId,
-        resolvedMembers,
-        uiState.expenses,
-        uiState.splits,
-        uiState.settlements
-    ) {
-        viewModel.computeGroupMemberNetBalances(resolvedGroupId)
     }
 
     val formattedJoinCode = remember(resolvedGroupId, uiState.groups) {
@@ -326,7 +308,7 @@ fun TripSyncAndPerspectiveSheet(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Rounded.Sync,
+                            imageVector = Icons.Rounded.PersonAdd,
                             contentDescription = null,
                             tint = if (isDark) BuckwheatSageContainer else BuckwheatOlivePrimary,
                             modifier = Modifier.size(22.dp)
@@ -334,7 +316,7 @@ fun TripSyncAndPerspectiveSheet(
                     }
                     Column {
                         Text(
-                            text = "Trip Code, Invite & Perspective",
+                            text = "Invite Friends & Trip Code",
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 18.sp,
@@ -836,144 +818,6 @@ fun TripSyncAndPerspectiveSheet(
                                 fontSize = 12.sp,
                                 maxLines = 1
                             )
-                        }
-                    }
-                }
-            }
-
-            // =========================================================================
-            // SECTION 3: 1-Tap Perspective Switcher ("Viewing as")
-            // =========================================================================
-            if (resolvedMembers.isNotEmpty()) {
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = SplitMateTheme.SurfaceWhite,
-                    border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.PersonPin,
-                                contentDescription = null,
-                                tint = SplitMateTheme.SageText,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Column {
-                                Text(
-                                    text = "Viewing as (Switch Perspective)",
-                                    fontFamily = FigtreeFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp,
-                                    color = SplitMateTheme.PrimaryDark
-                                )
-                                Text(
-                                    text = "Tap your name below if your mobile number wasn't auto-matched yet",
-                                    fontFamily = FigtreeFontFamily,
-                                    fontWeight = FontWeight.Medium,
-                                    fontSize = 11.sp,
-                                    color = SplitMateTheme.TextSecondary
-                                )
-                            }
-                        }
-
-                        resolvedMembers.forEach { member ->
-                            val isActive = member.isCurrentUser
-                            val netCents = netBalancesMap[member.memberId] ?: 0L
-                            val absFormatted = formatIndianRupeesFromCents(abs(netCents))
-                            val netText = when {
-                                netCents > 0L -> "+$absFormatted"
-                                netCents < 0L -> "-$absFormatted"
-                                else -> "₹0.00"
-                            }
-                            Surface(
-                                onClick = {
-                                    performCrispTactileHaptic(context, localView, heavy = false)
-                                    viewModel.claimGroupMemberPerspective(resolvedGroupId, member.memberId)
-                                    isFeedbackError = false
-                                    feedbackBannerText = "Switched active perspective to ${member.name}"
-                                },
-                                shape = RoundedCornerShape(14.dp),
-                                color = if (isActive) Color(0xFFDCE9B9).copy(alpha = 0.55f) else Color(0xFFF4EFE6),
-                                border = BorderStroke(
-                                    width = if (isActive) 1.5.dp else 1.dp,
-                                    color = if (isActive) BuckwheatOlivePrimary else Color(0xFFEDE7DF)
-                                ),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(32.dp)
-                                                .clip(CircleShape)
-                                                .background(if (isActive) Color(0xFF365314) else Color(0xFFEDE7DF)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = extractInitialsFromNameOrSeed(member.name),
-                                                fontFamily = FigtreeFontFamily,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                fontSize = 11.sp,
-                                                color = if (isActive) Color(0xFFFAF6F0) else Color(0xFF23201E)
-                                            )
-                                        }
-                                        Column {
-                                            Text(
-                                                text = if (isActive) "${member.name} (You)" else member.name,
-                                                fontFamily = FigtreeFontFamily,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                fontSize = 13.sp,
-                                                color = Color(0xFF23201E)
-                                            )
-                                            if (member.userPhone.isNotBlank()) {
-                                                Text(
-                                                    text = "+91 ${member.userPhone}",
-                                                    style = TextStyle(
-                                                        fontFamily = SplitMateTnumMonospace,
-                                                        fontSize = 11.sp,
-                                                        fontFeatureSettings = "tnum"
-                                                    ),
-                                                    color = SplitMateTheme.TextSecondary
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    Text(
-                                        text = netText,
-                                        style = TextStyle(
-                                            fontFamily = SplitMateTnumMonospace,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            fontSize = 12.sp,
-                                            fontFeatureSettings = "tnum"
-                                        ),
-                                        color = when {
-                                            netCents > 0L -> Color(0xFF365314)
-                                            netCents < 0L -> Color(0xFF7C2D12)
-                                            else -> SplitMateTheme.TextSecondary
-                                        }
-                                    )
-                                }
-                            }
                         }
                     }
                 }

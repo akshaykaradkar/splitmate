@@ -2682,55 +2682,91 @@ class SplitMateViewModel(
         val stateBefore = _uiState.value
         val normUserPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(stateBefore.userPhone)
         val existingMembers = stateBefore.members.filter { it.groupId == groupId }
-        val existingPhones = existingMembers.flatMap { m ->
-            listOf(
-                com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(m.userPhone),
-                com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(m.upiId.substringBefore("@"))
-            )
-        }.filter { it.isNotEmpty() }.toSet()
+        val existingByPhone = existingMembers.mapNotNull { m ->
+            val p = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(m.userPhone, m.upiId)
+            if (p.length == 10) p to m else null
+        }.toMap()
+        val existingPhonelessByName = existingMembers.filter { m ->
+            com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(m.userPhone, m.upiId).isEmpty()
+        }.associateBy { it.name.trim().lowercase() }.toMutableMap()
         val existingNames = existingMembers.map { it.name.trim().lowercase() }.toSet()
         val now = System.currentTimeMillis()
         val seenBatchPhones = HashSet<String>()
         val seenBatchPhonelessNames = HashSet<String>()
+
+        val upgradedExistingMembers = mutableListOf<GroupMemberEntity>()
         val newMembers = contacts.mapIndexedNotNull { idx, c ->
             val cleanName = c.name.trim()
             val cleanPhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(c.cleanPhone)
             val isSelfPhone = normUserPhone.isNotBlank() && cleanPhone.isNotBlank() && cleanPhone == normUserPhone
-            val isDuplicatePhone = cleanPhone.isNotEmpty() && (existingPhones.contains(cleanPhone) || !seenBatchPhones.add(cleanPhone))
-            val isDuplicatePhoneLessName = cleanPhone.isEmpty() && (existingNames.contains(cleanName.lowercase()) || !seenBatchPhonelessNames.add(cleanName.lowercase()))
-            if (cleanName.isEmpty() || isSelfPhone || isDuplicatePhone || isDuplicatePhoneLessName) null
-            else {
-                GroupMemberEntity(
-                    memberId = "${groupId}_c_${now}_$idx",
-                    groupId = groupId,
-                    name = cleanName,
-                    avatarSeed = "$cleanName|Neutral",
-                    upiId = if (cleanPhone.length == 10) "${cleanPhone}@upi" else "",
-                    userPhone = cleanPhone,
-                    isCurrentUser = false,
-                    inviteStatus = if (cleanPhone.length == 10) "PENDING" else "JOINED"
-                )
+            if (cleanName.isEmpty() || isSelfPhone) return@mapIndexedNotNull null
+
+            if (cleanPhone.length == 10) {
+                if (!seenBatchPhones.add(cleanPhone)) return@mapIndexedNotNull null
+                val alreadyByPhone = existingByPhone[cleanPhone]
+                if (alreadyByPhone != null) {
+                    val refreshed = if (alreadyByPhone.inviteStatus.equals("JOINED", ignoreCase = true)) {
+                        alreadyByPhone
+                    } else {
+                        alreadyByPhone.copy(inviteStatus = "PENDING", userPhone = cleanPhone, upiId = "${cleanPhone}@upi")
+                    }
+                    upgradedExistingMembers.add(refreshed)
+                    return@mapIndexedNotNull null
+                }
+                val phonelessMatch = existingPhonelessByName.remove(cleanName.lowercase())
+                if (phonelessMatch != null && !phonelessMatch.isCurrentUser) {
+                    upgradedExistingMembers.add(
+                        phonelessMatch.copy(
+                            name = cleanName,
+                            userPhone = cleanPhone,
+                            upiId = "${cleanPhone}@upi",
+                            inviteStatus = "PENDING"
+                        )
+                    )
+                    return@mapIndexedNotNull null
+                }
+            } else {
+                val isDuplicatePhoneLessName = existingNames.contains(cleanName.lowercase()) || !seenBatchPhonelessNames.add(cleanName.lowercase())
+                if (isDuplicatePhoneLessName) return@mapIndexedNotNull null
             }
+
+            GroupMemberEntity(
+                memberId = "${groupId}_c_${now}_$idx",
+                groupId = groupId,
+                name = cleanName,
+                avatarSeed = "$cleanName|Neutral",
+                upiId = if (cleanPhone.length == 10) "${cleanPhone}@upi" else "",
+                userPhone = cleanPhone,
+                isCurrentUser = false,
+                inviteStatus = if (cleanPhone.length == 10) "PENDING" else "JOINED"
+            )
         }
-        if (newMembers.isEmpty()) return
-        val reInvitedPhones = newMembers.map { it.userPhone }.filter { it.length == 10 }
+        val allTouchedMembers = upgradedExistingMembers + newMembers
+        if (allTouchedMembers.isEmpty()) return
+        val reInvitedPhones = allTouchedMembers.map { it.userPhone }.filter { it.length == 10 }
         if (reInvitedPhones.isNotEmpty()) {
             com.splitmate.app.data.CloudGroupSyncRepository.unTombstonePhones(
                 context = null,
                 groupId = groupId,
-                phonesToRestore = reInvitedPhones
+                phonesToRestore = reInvitedPhones,
+                memberIdsToRestore = allTouchedMembers.map { it.memberId }
             )
         }
+        val upgradedById = upgradedExistingMembers.associateBy { it.memberId }
         _uiState.update { state ->
             state.copy(
-                members = state.members + newMembers,
-                statusBannerMessage = "Added ${newMembers.size} contact(s) to group"
+                members = state.members.map { upgradedById[it.memberId] ?: it } + newMembers,
+                statusBannerMessage = if (newMembers.isNotEmpty()) {
+                    "Added ${newMembers.size} contact(s) & sent cloud invite(s)"
+                } else {
+                    "Updated & re-invited ${upgradedExistingMembers.size} contact(s)"
+                }
             )
         }
         viewModelScope.launch(ioDispatcher) {
             val d = dao
             if (d != null) {
-                d.insertMembers(newMembers)
+                d.insertMembers(allTouchedMembers)
                 com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
                     context = null,
                     dao = d,
@@ -2800,6 +2836,128 @@ class SplitMateViewModel(
         return com.splitmate.app.data.CloudGroupSyncRepository.formatJoinCode6(raw)
     }
 
+    fun launchDirectMemberWhatsAppOrShareInvite(
+        context: android.content.Context?,
+        groupId: String,
+        groupName: String,
+        memberName: String,
+        cleanPhone10: String
+    ) {
+        if (context == null) return
+        val formattedCode = getFormattedGroupJoinCode(groupId)
+        val rawCode6 = getGroupJoinCode(groupId)
+        val encodedName = android.net.Uri.encode(groupName)
+        val deepLink = "https://splitmate.app/join?groupId=${android.net.Uri.encode(groupId)}&name=$encodedName&code=$rawCode6"
+        val shareBody = buildString {
+            append("Hey ${memberName.trim().ifBlank { "there" }}! Join our trip \"$groupName\" on SplitMate.\n\n")
+            append("Trip Join Code: $formattedCode\n")
+            append("Tap to join or enter the code in SplitMate:\n")
+            append(deepLink)
+        }
+        runCatching {
+            val waUri = android.net.Uri.parse(
+                "https://api.whatsapp.com/send?phone=91$cleanPhone10&text=${android.net.Uri.encode(shareBody)}"
+            )
+            val waIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, waUri).apply {
+                setPackage("com.whatsapp")
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(waIntent)
+        }.onFailure {
+            runCatching {
+                val fallbackIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(android.content.Intent.EXTRA_SUBJECT, "Join $groupName on SplitMate")
+                    putExtra(android.content.Intent.EXTRA_TEXT, shareBody)
+                }
+                context.startActivity(
+                    android.content.Intent.createChooser(fallbackIntent, "Send Invite to $memberName").apply {
+                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                )
+            }
+        }
+    }
+
+    fun sendOrResendDirectMemberInvite(
+        context: android.content.Context? = null,
+        groupId: String = _uiState.value.activeGroupId,
+        memberId: String,
+        launchWhatsAppShare: Boolean = true,
+        onComplete: (Boolean, String) -> Unit = { _, _ -> }
+    ): Boolean {
+        com.splitmate.app.data.CloudGroupSyncRepository.init(context)
+        val state = _uiState.value
+        val existingMember = state.members.find { it.groupId == groupId && it.memberId == memberId }
+        if (existingMember == null) {
+            onComplete(false, "Member not found")
+            return false
+        }
+        val cleanPhone10 = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(
+            existingMember.userPhone,
+            existingMember.upiId
+        )
+        if (!com.splitmate.app.data.PhoneIdentityValidator.isValidIndianMobile10(cleanPhone10)) {
+            val errMsg = "Link a valid 10-digit mobile number for ${existingMember.name} first"
+            _uiState.update { it.copy(statusBannerMessage = errMsg) }
+            onComplete(false, errMsg)
+            return false
+        }
+        val groupName = state.groups.find { it.groupId == groupId }?.name
+            ?: state.activeGroup?.name
+            ?: "SplitMate Trip"
+        val formattedCode = getFormattedGroupJoinCode(groupId)
+        val updatedStatus = if (existingMember.isCurrentUser || existingMember.inviteStatus.equals("JOINED", ignoreCase = true)) {
+            "JOINED"
+        } else {
+            "PENDING"
+        }
+        val updatedMember = existingMember.copy(
+            userPhone = cleanPhone10,
+            upiId = if (existingMember.upiId.isBlank()) "${cleanPhone10}@upi" else existingMember.upiId,
+            inviteStatus = updatedStatus
+        )
+        com.splitmate.app.data.CloudGroupSyncRepository.unTombstonePhones(
+            context = context,
+            groupId = groupId,
+            phonesToRestore = listOf(cleanPhone10),
+            memberIdsToRestore = listOf(memberId)
+        )
+        val okMsg = "Invite sent to ${existingMember.name} (+91 $cleanPhone10) · Trip Code $formattedCode"
+        _uiState.update { curr ->
+            curr.copy(
+                members = curr.members.map { if (it.memberId == memberId) updatedMember else it },
+                statusBannerMessage = okMsg
+            )
+        }
+        val myPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(state.userPhone)
+        viewModelScope.launch(ioDispatcher) {
+            val d = dao
+            if (d != null) {
+                d.insertMembers(listOf(updatedMember))
+                com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
+                    context = context,
+                    dao = d,
+                    groupId = groupId,
+                    localUserPhone10 = myPhone10,
+                    localUserName = _uiState.value.currentUserName.ifBlank { "You" },
+                    forceIndexPush = true
+                )
+            }
+        }
+        if (launchWhatsAppShare && context != null) {
+            launchDirectMemberWhatsAppOrShareInvite(
+                context = context,
+                groupId = groupId,
+                groupName = groupName,
+                memberName = existingMember.name,
+                cleanPhone10 = cleanPhone10
+            )
+        }
+        onComplete(true, okMsg)
+        return true
+    }
+
     fun updateMemberPhoneAndResendInvite(
         groupId: String,
         memberId: String,
@@ -2819,6 +2977,7 @@ class SplitMateViewModel(
         memberId: String,
         rawPhone: String,
         newName: String = "",
+        launchWhatsAppShare: Boolean = false,
         onComplete: (Boolean, String) -> Unit = { _, _ -> }
     ): Boolean {
         com.splitmate.app.data.CloudGroupSyncRepository.init(context)
@@ -2868,7 +3027,8 @@ class SplitMateViewModel(
             memberIdsToRestore = listOf(memberId)
         )
 
-        val okMsg = "Linked +91 $cleanPhone10 to $resolvedName & queued invite"
+        val formattedCode = getFormattedGroupJoinCode(groupId)
+        val okMsg = "Linked +91 $cleanPhone10 to $resolvedName & sent invite (Code: $formattedCode)"
         _uiState.update { curr ->
             curr.copy(
                 members = curr.members.map { if (it.memberId == memberId) updatedMember else it },
@@ -2886,6 +3046,18 @@ class SplitMateViewModel(
                 localUserPhone10 = myPhone10,
                 localUserName = _uiState.value.currentUserName.ifBlank { "You" },
                 forceIndexPush = true
+            )
+        }
+        if (launchWhatsAppShare && context != null) {
+            val groupName = state.groups.find { it.groupId == groupId }?.name
+                ?: state.activeGroup?.name
+                ?: "SplitMate Trip"
+            launchDirectMemberWhatsAppOrShareInvite(
+                context = context,
+                groupId = groupId,
+                groupName = groupName,
+                memberName = resolvedName,
+                cleanPhone10 = cleanPhone10
             )
         }
         onComplete(true, okMsg)

@@ -2408,11 +2408,13 @@ class SplitMateV2ZeroRegressionAndSyncTest {
         assertTrue(
             tripHomeSource.contains("\"ORGANIZER\"") &&
                 tripHomeSource.contains("+ Add Phone & Invite") &&
+                tripHomeSource.contains("Send Pending Invite") &&
                 tripHomeSource.contains("Resend Invite · Edit Phone") &&
-                tripHomeSource.contains("View as \${member.name.substringBefore(\" \")}") &&
+                !tripHomeSource.contains("View as \${member.name") &&
+                !tripHomeSource.contains("switchActivePerspectiveMember") &&
                 tripHomeSource.contains("Remove Member") &&
                 tripHomeSource.contains("Leave Trip"),
-            "TripHubPeoplePerspectiveView must include ORGANIZER badge, Edit Phone/Resend Invite, 1-tap View as chip, Remove Member, and Leave Trip controls (F12)"
+            "TripHubPeoplePerspectiveView must include ORGANIZER badge, Send Pending Invite, Edit Phone/Resend Invite, Remove Member, and Leave Trip controls, and must NOT expose 'View as {Member}' perspective switching (F12)"
         )
 
         val syncSheetFile = java.io.File(srcMain, "java/com/splitmate/app/ui/dialogs/TripSyncAndPerspectiveSheet.kt")
@@ -2422,11 +2424,12 @@ class SplitMateV2ZeroRegressionAndSyncTest {
                 syncSheetSource.contains("Copy Code") &&
                 syncSheetSource.contains("Share Invite on WhatsApp") &&
                 syncSheetSource.contains("Join Another Trip by Code or Link") &&
-                syncSheetSource.contains("Viewing as (Switch Perspective)"),
-            "TripSyncAndPerspectiveSheet must render 6-character Trip Join Code card, universal Join by Code/Link, and 1-tap Perspective Switcher (F13)"
+                !syncSheetSource.contains("Viewing as (Switch Perspective)") &&
+                !syncSheetSource.contains("claimGroupMemberPerspective"),
+            "TripSyncAndPerspectiveSheet must render 6-character Trip Join Code card and universal Join by Code/Link without any perspective switcher (F13)"
         )
 
-        // Verify ViewModel callback overload for updateMemberPhoneAndResendInvite with (rawPhone, newName, onComplete)
+        // Verify ViewModel callback overload for updateMemberPhoneAndResendInvite & sendOrResendDirectMemberInvite
         val vm = SplitMateViewModel(dao = null, ioDispatcher = testDispatcher)
         vm.completeOnboarding(
             name = "Organizer A",
@@ -2463,6 +2466,21 @@ class SplitMateV2ZeroRegressionAndSyncTest {
         val updatedFriend = vm.uiState.value.members.first { it.memberId == friend.memberId }
         assertEquals("Arjun Nair", updatedFriend.name)
         assertEquals("9123456780", updatedFriend.userPhone)
+        assertEquals("PENDING", updatedFriend.inviteStatus)
+
+        var directInviteOk = false
+        var directInviteMsg = ""
+        vm.sendOrResendDirectMemberInvite(
+            context = null,
+            groupId = gId,
+            memberId = friend.memberId,
+            launchWhatsAppShare = false
+        ) { ok, msg ->
+            directInviteOk = ok
+            directInviteMsg = msg
+        }
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(directInviteOk && directInviteMsg.contains("9123456780"), "sendOrResendDirectMemberInvite must succeed: $directInviteMsg")
     }
 }
 
