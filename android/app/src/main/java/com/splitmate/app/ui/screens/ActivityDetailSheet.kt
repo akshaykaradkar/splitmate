@@ -1,6 +1,5 @@
 package com.splitmate.app.ui.screens
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -25,11 +24,9 @@ import androidx.compose.material.icons.rounded.Train
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.splitmate.app.data.ExpenseEntity
@@ -46,9 +44,9 @@ import com.splitmate.app.SplitMateTheme
 import com.splitmate.app.ui.SplitMateTnumMonospace
 import com.splitmate.app.ui.SplitMateViewModel.ExpenseSplitBreakdownSummary
 import com.splitmate.app.ui.cleanDisplayExpenseTitle
+import com.splitmate.app.ui.components.EditorialFinancialTotalText
 import com.splitmate.app.ui.components.ExperimentalMaterial3ExpressiveApi
 import com.splitmate.app.ui.components.ExpressiveMenuAction
-import com.splitmate.app.ui.components.LinearWavyProgressIndicator
 import com.splitmate.app.ui.components.SplitButtonLayout
 import com.splitmate.app.ui.components.rememberAnimatedSegmentedIslandItemShape
 import com.splitmate.app.ui.extractTravelTicketFromTitle
@@ -101,49 +99,40 @@ fun ActivityDetailSheet(
                 .padding(horizontal = 20.dp, vertical = 12.dp)
                 .navigationBarsPadding()
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(end = 12.dp)
-                ) {
-                    Text(
-                        text = cleanTitle,
-                        fontFamily = SplitMateTheme.FontDisplay,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 18.sp,
-                        color = SplitMateTheme.PrimaryDark
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "Paid by ${payer?.name ?: "You"} · ${breakdown.perPersonHeadlineShare}/person",
-                        fontFamily = SplitMateTheme.FontRounded,
-                        fontSize = 12.sp,
-                        color = SplitMateTheme.TextSecondary,
-                        style = TextStyle(fontFeatureSettings = "tnum")
-                    )
-                }
+            Text(
+                text = cleanTitle,
+                fontFamily = SplitMateTheme.FontDisplay,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 18.sp,
+                color = SplitMateTheme.PrimaryDark,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "Paid by ${payer?.name ?: "You"} · ${breakdown.perPersonHeadlineShare}/person",
+                fontFamily = SplitMateTheme.FontRounded,
+                fontSize = 12.sp,
+                color = SplitMateTheme.TextSecondary,
+                style = TextStyle(fontFeatureSettings = "tnum")
+            )
+            Spacer(modifier = Modifier.height(12.dp))
 
-                // 2. Typography Hero Moment: Elevate the transaction total using MaterialTheme.typography.displaySmall + SplitMateTnumMonospace
-                Text(
-                    text = formattedTotal,
-                    style = MaterialTheme.typography.displaySmall.copy(
-                        fontFamily = SplitMateTnumMonospace,
-                        fontWeight = FontWeight.Black,
-                        fontFeatureSettings = "tnum"
-                    ),
-                    color = SplitMateTheme.PrimaryDark
-                )
-            }
+            // 2. Typography Hero Moment: Elevate the transaction total using MaterialTheme.typography.displaySmall + SplitMateTnumMonospace.
+            // The figure sits on its own line and auto-fits so large totals never overflow the header.
+            EditorialFinancialTotalText(
+                text = formattedTotal,
+                style = MaterialTheme.typography.displaySmall,
+                fontFamily = SplitMateTnumMonospace,
+                fontWeight = FontWeight.Black,
+                color = SplitMateTheme.PrimaryDark,
+                modifier = Modifier.fillMaxWidth()
+            )
 
             if (parsedTravelTicket != null &&
                 (parsedTravelTicket.pnr.isNotBlank() || isFlightTicketExpense(expense.title, parsedTravelTicket))
             ) {
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 Button(
                     onClick = {
                         val gId = expense.groupId
@@ -160,7 +149,7 @@ fun ActivityDetailSheet(
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(46.dp)
+                        .height(48.dp)
                 ) {
                     Icon(
                         imageVector = if (isFlightTicketExpense(expense.title, parsedTravelTicket)) {
@@ -181,6 +170,8 @@ fun ActivityDetailSheet(
                         fontFamily = SplitMateTheme.FontRounded,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 13.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         style = TextStyle(fontFamily = SplitMateTnumMonospace, fontFeatureSettings = "tnum")
                     )
                     Spacer(modifier = Modifier.width(6.dp))
@@ -192,9 +183,8 @@ fun ActivityDetailSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
-            HorizontalDivider(color = SplitMateTheme.BorderLight)
-            Spacer(modifier = Modifier.height(12.dp))
+            // M3E spacing (no divider): the section break is carried by whitespace alone.
+            Spacer(modifier = Modifier.height(24.dp))
 
             Text(
                 text = breakdown.headerLabel,
@@ -203,13 +193,14 @@ fun ActivityDetailSheet(
                 fontWeight = FontWeight.ExtraBold,
                 color = SplitMateTheme.PrimaryDark
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // 3. M3 Expressive Segmented Island: Each participant row morphs corners based on position + LinearWavyProgressIndicator
+            // 3. M3 Expressive Segmented Island: Each participant row morphs corners based on position.
+            // Static share amounts carry no progress/wavy indicator (v2.3.2 M3E audit).
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 260.dp),
+                    .heightIn(max = 300.dp),
                 contentPadding = PaddingValues(vertical = 2.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
@@ -222,59 +213,45 @@ fun ActivityDetailSheet(
                         totalCount = activeParticipantRows.size,
                         isSelected = false
                     )
-                    val shareFraction = if (expense.totalAmountCents > 0L) {
-                        (row.owedCents.toFloat() / expense.totalAmountCents.toFloat()).coerceIn(0f, 1f)
-                    } else {
-                        0f
-                    }
                     Surface(
                         color = MaterialTheme.colorScheme.secondaryContainer,
                         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                         shape = itemShape,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 10.dp)
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = row.displayName,
-                                    fontFamily = SplitMateTheme.FontRounded,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                                )
-                                Text(
-                                    text = row.formattedShare,
-                                    fontFamily = SplitMateTnumMonospace,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    style = TextStyle(fontFamily = SplitMateTnumMonospace, fontFeatureSettings = "tnum")
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(6.dp))
-                            LinearWavyProgressIndicator(
-                                progress = { shareFraction },
-                                modifier = Modifier.fillMaxWidth(),
-                                color = MaterialTheme.colorScheme.primary,
-                                trackColor = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.14f),
-                                amplitude = 0.75f,
-                                wavelength = 18.dp,
-                                strokeWidth = 3.dp
+                            Text(
+                                text = row.displayName,
+                                fontFamily = SplitMateTheme.FontRounded,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(end = 12.dp)
+                            )
+                            Text(
+                                text = row.formattedShare,
+                                fontFamily = SplitMateTnumMonospace,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                style = TextStyle(fontFamily = SplitMateTnumMonospace, fontFeatureSettings = "tnum")
                             )
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             // 4. M3 Expressive SplitButtonLayout for Edit Expense (Leading) + Undo Entry (Trailing Menu)
             SplitButtonLayout(
@@ -298,7 +275,8 @@ fun ActivityDetailSheet(
                 ),
                 modifier = Modifier.fillMaxWidth(),
                 containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                fillWidth = true
             )
             Spacer(modifier = Modifier.height(12.dp))
         }

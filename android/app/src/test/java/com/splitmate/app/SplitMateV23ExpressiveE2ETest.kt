@@ -586,10 +586,10 @@ class SplitMateV23ExpressiveE2ETest {
         }
 
         @Test
-        fun `F6_T1_05 buildGradle configures versionCode 49 versionName 2_3_1 and graphics-shapes 1_0_1`() {
+        fun `F6_T1_05 buildGradle configures versionCode 50 versionName 2_3_2 and graphics-shapes 1_0_1`() {
             val gradleText = resolveBuildGradleFile().readText()
-            assertTrue(gradleText.contains("versionCode 49") || gradleText.contains("versionCode = 49"))
-            assertTrue(gradleText.contains("versionName \"2.3.1\"") || gradleText.contains("versionName = \"2.3.1\""))
+            assertTrue(gradleText.contains("versionCode 50") || gradleText.contains("versionCode = 50"))
+            assertTrue(gradleText.contains("versionName \"2.3.2\"") || gradleText.contains("versionName = \"2.3.2\""))
             assertTrue(gradleText.contains("androidx.graphics:graphics-shapes"))
         }
 
@@ -4254,9 +4254,9 @@ class SplitMateV23ExpressiveE2ETest {
                     pnrSrc.contains("playBoardingPassTearAndStampOneShot") &&
                     flightSrc.contains("buildBoardingPassTearAndStampPcm")
             )
-            assertTrue(pnrSrc.contains("ContainedLoadingIndicator(") && pnrSrc.contains("ExpressiveGapLinearProgressIndicator("))
+            assertTrue(pnrSrc.contains("ContainedLoadingIndicator(") && !pnrSrc.contains("ExpressiveGapLinearProgressIndicator("))
             assertTrue(flightSrc.contains("fun EngravedAviationBarcode(") && flightSrc.contains("val stubFoldDegrees = stubPitchX"))
-            assertTrue(flightSrc.contains("ContainedLoadingIndicator(") && flightSrc.contains("ExpressiveGapLinearProgressIndicator("))
+            assertTrue(flightSrc.contains("ContainedLoadingIndicator(") && !flightSrc.contains("ExpressiveGapLinearProgressIndicator("))
         }
 
         @Test
@@ -4608,8 +4608,9 @@ class SplitMateV23ExpressiveE2ETest {
             }
             assertTrue(pnrSrc.contains("SplitMateThemeMode.KYOTO_MATCHA_YUZU"))
             assertTrue(flightSrc.contains("SplitMateThemeMode.KYOTO_MATCHA_YUZU"))
-            assertTrue(pnrSrc.contains("ExpressiveGapLinearProgressIndicator("))
-            assertTrue(flightSrc.contains("ExpressiveGapLinearProgressIndicator("))
+            // v2.3.2 M3E audit: static fare/share data carries no progress indicators in the review screens.
+            assertFalse(pnrSrc.contains("ExpressiveGapLinearProgressIndicator("))
+            assertFalse(flightSrc.contains("ExpressiveGapLinearProgressIndicator("))
 
             // 4. QuickExpenseAndGuideScreens ConnectedButtonGroup + LinearWavyProgressIndicator
             assertTrue(quickExpenseSrc.contains("ConnectedButtonGroup("))

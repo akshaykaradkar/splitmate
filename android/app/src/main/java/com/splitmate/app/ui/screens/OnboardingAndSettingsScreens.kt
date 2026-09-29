@@ -129,7 +129,7 @@ object SplitMateThemeTokens {
         get() = resolvedPalette.onSurfaceVariant
 
     val RadiusHero = DesignSystemBindings.GM3ShapeExtraLarge
-    val RadiusCard = DesignSystemBindings.GM3ShapeLarge
+    val RadiusCard = RoundedCornerShape(20.dp)
     val RadiusPanel = RoundedCornerShape(20.dp)
     val RadiusButton = RoundedCornerShape(16.dp)
     val RadiusPill = DesignSystemBindings.GM3ShapePill

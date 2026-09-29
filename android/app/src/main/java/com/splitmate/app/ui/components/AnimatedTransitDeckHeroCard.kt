@@ -200,7 +200,7 @@ fun AnimatedTransitDeckHeroCard(
     val trainOffsetY = baseTrainOffsetY + (if (!isFlightInFrontZ) (-8).dp else 6.dp) * crossingArc
     val trainAlpha by animateFloatAsState(
         targetValue = if (isTrainActive) 1.0f else 0.84f,
-        animationSpec = tween(durationMillis = 260),
+        animationSpec = SplitMateMotion.defaultEffects(),
         label = "TrainAlpha"
     )
     val trainElevation by animateDpAsState(
@@ -222,7 +222,7 @@ fun AnimatedTransitDeckHeroCard(
     val flightOffsetY = baseFlightOffsetY + (if (isFlightInFrontZ) (-8).dp else 6.dp) * crossingArc
     val flightAlpha by animateFloatAsState(
         targetValue = if (isFlightActive) 1.0f else 0.84f,
-        animationSpec = tween(durationMillis = 260),
+        animationSpec = SplitMateMotion.defaultEffects(),
         label = "FlightAlpha"
     )
     val flightElevation by animateDpAsState(

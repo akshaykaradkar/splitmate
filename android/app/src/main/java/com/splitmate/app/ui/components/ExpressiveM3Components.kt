@@ -75,11 +75,18 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.draw.drawWithContent
 import androidx.graphics.shapes.Morph
 import com.splitmate.app.ui.FigtreeFontFamily
 import com.splitmate.app.ui.LocalSplitMatePalette
@@ -1001,11 +1008,15 @@ fun SplitButtonLayout(
     menuItems: List<ExpressiveMenuAction>,
     modifier: Modifier = Modifier,
     containerColor: Color = MaterialTheme.colorScheme.primary,
-    contentColor: Color = MaterialTheme.colorScheme.onPrimary
+    contentColor: Color = MaterialTheme.colorScheme.onPrimary,
+    fillWidth: Boolean = false
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    // Full-width mode (primary sheet actions) uses the M3E "Medium" 48.dp split-button size.
+    val buttonHeight = if (fillWidth) 48.dp else 40.dp
+    val outerCorner = buttonHeight / 2
     val trailingInnerCorner by animateDpAsState(
-        targetValue = if (menuExpanded) 20.dp else 4.dp,
+        targetValue = if (menuExpanded) outerCorner else 4.dp,
         animationSpec = SplitMateMotion.fastSpatial(),
         label = "SplitButtonTrailingInnerCorner"
     )
@@ -1017,6 +1028,7 @@ fun SplitButtonLayout(
 
     Box(modifier = modifier) {
         Row(
+            modifier = if (fillWidth) Modifier.fillMaxWidth() else Modifier,
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
@@ -1024,8 +1036,8 @@ fun SplitButtonLayout(
             Button(
                 onClick = onLeadingClick,
                 shape = RoundedCornerShape(
-                    topStart = 20.dp,
-                    bottomStart = 20.dp,
+                    topStart = outerCorner,
+                    bottomStart = outerCorner,
                     topEnd = 4.dp,
                     bottomEnd = 4.dp
                 ),
@@ -1034,22 +1046,28 @@ fun SplitButtonLayout(
                     containerColor = containerColor,
                     contentColor = contentColor
                 ),
-                modifier = Modifier.height(40.dp)
+                modifier = if (fillWidth) {
+                    Modifier
+                        .weight(1f)
+                        .height(buttonHeight)
+                } else {
+                    Modifier.height(buttonHeight)
+                }
             ) {
                 if (leadingIcon != null) {
                     Icon(
                         imageVector = leadingIcon,
                         contentDescription = null,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(if (fillWidth) 18.dp else 16.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(if (fillWidth) 8.dp else 6.dp))
                 }
                 Text(
                     text = leadingText,
                     style = SplitMateExpressiveTypography.labelLargeEmphasized,
                     fontFamily = FigtreeFontFamily,
                     fontWeight = FontWeight.ExtraBold,
-                    fontSize = 12.sp,
+                    fontSize = if (fillWidth) 14.sp else 12.sp,
                     maxLines = 1
                 )
             }
@@ -1057,28 +1075,28 @@ fun SplitButtonLayout(
             // 2. Morphing Trailing Menu Cap (D-shape morphing to CircleShape when menuExpanded)
             Surface(
                 onClick = { menuExpanded = !menuExpanded },
-                shape = if (menuExpanded && trailingInnerCorner >= 19.dp) {
+                shape = if (menuExpanded && trailingInnerCorner >= outerCorner - 1.dp) {
                     CircleShape
                 } else {
                     RoundedCornerShape(
                         topStart = trailingInnerCorner,
                         bottomStart = trailingInnerCorner,
-                        topEnd = 20.dp,
-                        bottomEnd = 20.dp
+                        topEnd = outerCorner,
+                        bottomEnd = outerCorner
                     )
                 },
                 color = containerColor,
                 contentColor = contentColor,
                 modifier = Modifier
-                    .height(40.dp)
-                    .width(36.dp)
+                    .height(buttonHeight)
+                    .width(if (fillWidth) 48.dp else 36.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = Icons.Rounded.ExpandMore,
                         contentDescription = "More actions",
                         modifier = Modifier
-                            .size(18.dp)
+                            .size(if (fillWidth) 22.dp else 18.dp)
                             .graphicsLayer { rotationZ = chevronRotation }
                     )
                 }
@@ -1311,5 +1329,59 @@ fun LoadingIndicator(
         containerSize = size,
         containerColor = Color.Transparent,
         indicatorColor = color
+    )
+}
+
+// ==============================================================================
+// 8. EDITORIAL FINANCIAL TOTAL (HERO NUMERALS THAT NEVER OVERFLOW)
+// ==============================================================================
+
+/**
+ * Material 3 Expressive editorial hero figure for financial totals (e.g. `₹33,365.35`).
+ *
+ * Renders with a large type role (default [androidx.compose.material3.Typography.displaySmall])
+ * and tabular numerals, on a single line. When the figure is wider than the available
+ * width it steps the font size down (never below [minFontScale] of the base size) instead
+ * of wrapping or pushing sibling header content off-screen. Pure presentation: the text
+ * passed in is already formatted from integer cents by the caller.
+ */
+@Composable
+fun EditorialFinancialTotalText(
+    text: String,
+    modifier: Modifier = Modifier,
+    style: TextStyle = MaterialTheme.typography.displaySmall,
+    color: Color = Color.Unspecified,
+    fontFamily: FontFamily? = null,
+    fontWeight: FontWeight = FontWeight.Black,
+    textAlign: TextAlign? = null,
+    minFontScale: Float = 0.55f
+) {
+    var fontScale by remember(text, style) { mutableFloatStateOf(1f) }
+    var readyToDraw by remember(text, style) { mutableStateOf(false) }
+    val baseFontSize = if (style.fontSize.isSpecified) style.fontSize else 36.sp
+    val scaledLineHeight = if (style.lineHeight.isSpecified) style.lineHeight * fontScale else TextUnit.Unspecified
+
+    Text(
+        text = text,
+        modifier = modifier.drawWithContent { if (readyToDraw) drawContent() },
+        style = style.copy(
+            fontSize = baseFontSize * fontScale,
+            lineHeight = scaledLineHeight,
+            fontFamily = fontFamily ?: style.fontFamily,
+            fontWeight = fontWeight,
+            fontFeatureSettings = "tnum"
+        ),
+        color = color,
+        textAlign = textAlign,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Clip,
+        onTextLayout = { result ->
+            if (result.didOverflowWidth && fontScale > minFontScale) {
+                fontScale = (fontScale * 0.9f).coerceAtLeast(minFontScale)
+            } else {
+                readyToDraw = true
+            }
+        }
     )
 }

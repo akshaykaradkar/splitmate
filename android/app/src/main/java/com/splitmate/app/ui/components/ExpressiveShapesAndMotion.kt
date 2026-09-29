@@ -353,6 +353,13 @@ class RoundedPolygonShape(
 }
 
 /**
+ * Mirrors the official Material 3 Expressive `RoundedPolygon.toShape()` extension
+ * (e.g. `MaterialShapes.Cookie9Sided.toShape()`), backed by [RoundedPolygonShape].
+ */
+fun RoundedPolygon.toShape(rotationDegrees: Float = 0f): Shape =
+    RoundedPolygonShape(polygon = this, rotationDegrees = rotationDegrees)
+
+/**
  * Computes the M3 Expressive Segmented Contained Island item shape (`24.dp` outer island
  * corners, `6.dp` inner item corners, morphing to `24.dp` all-around when selected/expanded).
  */

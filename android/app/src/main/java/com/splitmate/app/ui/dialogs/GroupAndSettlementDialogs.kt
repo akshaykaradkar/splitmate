@@ -65,6 +65,8 @@ import com.splitmate.app.data.GroupMemberEntity
 import com.splitmate.app.ui.ParsedTravelTicket
 import com.splitmate.app.ui.buildDiceBearOpenPeepsUrl
 import com.splitmate.app.ui.extractInitialsFromNameOrSeed
+import com.splitmate.app.ui.components.MaterialShapes
+import com.splitmate.app.ui.components.toShape
 import com.splitmate.app.ui.extractTravelTicketFromTitle
 import com.splitmate.app.ui.formatTravelExpenseTitle
 import java.util.Locale
@@ -397,13 +399,16 @@ fun AvatarToken(
         extractInitialsFromNameOrSeed(initials)
     }
 
+    // M3 Expressive avatar geometry: 9-sided cookie instead of a plain circle.
+    val avatarShape = remember { MaterialShapes.Cookie9Sided.toShape() }
+
     Box(modifier = Modifier.size(size.dp)) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(CircleShape)
+                .clip(avatarShape)
                 .background(presetBg)
-                .border(2.dp, SplitMateTheme.SurfaceWhite, CircleShape),
+                .border(2.dp, SplitMateTheme.SurfaceWhite, avatarShape),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -425,7 +430,7 @@ fun AvatarToken(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(CircleShape)
+                    .clip(avatarShape)
             )
         }
         if (isOnline) {

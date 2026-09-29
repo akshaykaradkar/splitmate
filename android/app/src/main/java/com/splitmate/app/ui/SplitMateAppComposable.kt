@@ -119,6 +119,7 @@ import com.splitmate.app.ui.components.WavyProgressIndicatorDefaults
 import com.splitmate.app.ui.components.floatingToolbarVerticalNestedScroll
 import com.splitmate.app.ui.components.rememberAnimatedSegmentedIslandItemShape
 import com.splitmate.app.ui.components.segmentedIslandItemShape
+import com.splitmate.app.ui.components.toShape
 import com.splitmate.app.ui.screens.ActivityDetailSheet
 import com.splitmate.app.ui.screens.EditFriendUpiDialog
 import com.splitmate.app.ui.screens.FlightExpenseReviewScreen
@@ -192,7 +193,8 @@ object SplitMateTheme {
         get() = resolvedPalette.onSurfaceVariant
 
     val RadiusHero = DesignSystemBindings.GM3ShapeExtraLarge
-    val RadiusCard = DesignSystemBindings.GM3ShapeLarge
+    // v2.3.2 M3E geometry: cards standardize on 20.dp corners.
+    val RadiusCard = RoundedCornerShape(20.dp)
     val RadiusPanel = RoundedCornerShape(20.dp)
     val RadiusButton = RoundedCornerShape(16.dp)
     val RadiusDialog = RoundedCornerShape(28.dp)
@@ -1340,7 +1342,7 @@ fun PendingGroupInviteCard(
                     Box(
                         modifier = Modifier
                             .size(44.dp)
-                            .clip(CircleShape)
+                            .clip(MaterialShapes.Cookie9Sided.toShape())
                             .background(Color(0xFFD7E8B6)),
                         contentAlignment = Alignment.Center
                     ) {
@@ -1743,10 +1745,17 @@ fun SplitMateMainDashboardScaffold(
             }
         }
     ) { innerPadding ->
+        // v2.3.2 inset fix: the immersive Trip Hub renders its own LargeTopAppBar, which handles the
+        // status-bar inset (and paints its container behind it). Applying the root innerPadding here as
+        // well produced a double status-bar gap, so it is skipped for the single-pane Trip Hub. Any top
+        // padding that IS applied is consumed so nested Scaffolds/TopAppBars never re-apply it.
+        val tripHubOwnsStatusBar = isImmersiveTripHubOpen && !isTwoPaneTabletWithGroups
+        val appliedTopInsetPadding = if (tripHubOwnsStatusBar) 0.dp else innerPadding.calculateTopPadding()
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = innerPadding.calculateTopPadding())
+                .padding(top = appliedTopInsetPadding)
+                .consumeWindowInsets(PaddingValues(top = appliedTopInsetPadding))
                 .imePadding()
         ) {
             if (isMediumOrExpandedWindow && currentTab != SplitMateTab.SPLIT) {
@@ -2479,7 +2488,7 @@ fun LedgersDashboardScreen(
                                 Box(
                                     modifier = Modifier
                                         .size(48.dp)
-                                        .clip(CircleShape)
+                                        .clip(MaterialShapes.Cookie9Sided.toShape())
                                         .background(SplitMateTheme.SageSurface)
                                         .clickable { editingGroupTarget = openedGroup },
                                     contentAlignment = Alignment.Center
@@ -4225,39 +4234,30 @@ fun LedgersDashboardScreen(
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(14.dp))
-                        Row(
+                        // v2.3.2: "Create First Group" (primary) + "Join with Code" (menu) condensed into one M3E SplitButtonLayout.
+                        SplitButtonLayout(
+                            leadingText = "Create First Group",
+                            leadingIcon = Icons.Rounded.Add,
+                            onLeadingClick = { showNewGroupDialog = true },
+                            menuItems = listOf(
+                                ExpressiveMenuAction(
+                                    label = "Join with Code",
+                                    icon = Icons.Rounded.GroupAdd,
+                                    subtitle = "Enter an invite code from a friend",
+                                    onClick = { showJoinByCodeDialog = true }
+                                ),
+                                ExpressiveMenuAction(
+                                    label = "Create New Group",
+                                    icon = Icons.Rounded.Add,
+                                    subtitle = "Start a fresh trip or shared ledger",
+                                    onClick = { showNewGroupDialog = true }
+                                )
+                            ),
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Button(
-                                onClick = { showNewGroupDialog = true },
-                                shape = SplitMateTheme.RadiusBadge,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = SplitMateTheme.PrimaryDark,
-                                    contentColor = SplitMateTheme.ScreenBg
-                                ),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(Icons.Rounded.Add, contentDescription = null, tint = SplitMateTheme.ScreenBg, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Create First Group", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.ScreenBg, fontWeight = FontWeight.Bold)
-                            }
-
-                            OutlinedButton(
-                                onClick = { showJoinByCodeDialog = true },
-                                shape = SplitMateTheme.RadiusBadge,
-                                border = BorderStroke(1.dp, Color(0xFF416913).copy(alpha = 0.35f)),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    containerColor = SplitMateTheme.SageSurface,
-                                    contentColor = SplitMateTheme.PrimaryDark
-                                ),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(Icons.Rounded.GroupAdd, contentDescription = null, tint = SplitMateTheme.PrimaryDark, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Join with Code", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.PrimaryDark, fontWeight = FontWeight.Bold)
-                            }
-                        }
+                            containerColor = SplitMateTheme.PrimaryDark,
+                            contentColor = SplitMateTheme.ScreenBg,
+                            fillWidth = true
+                        )
                     }
                 }
             }
@@ -4313,7 +4313,7 @@ fun LedgersDashboardScreen(
                             Box(
                                 modifier = Modifier
                                     .size(42.dp)
-                                    .clip(CircleShape)
+                                    .clip(MaterialShapes.Cookie9Sided.toShape())
                                     .background(if (groupCard.netBalanceCents == 0L) SplitMateTheme.SurfaceMuted else Color.White),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -4680,10 +4680,10 @@ fun LedgersDashboardScreen(
         AnimatedContent(
             targetState = currentOpenedGroup,
             transitionSpec = {
-                (fadeIn(tween(240)) + scaleIn(
+                (fadeIn(SplitMateMotion.defaultEffects()) + scaleIn(
                     initialScale = 0.93f,
                     animationSpec = spring(dampingRatio = 0.76f, stiffness = 380f)
-                )) togetherWith (fadeOut(tween(180)) + scaleOut(
+                )) togetherWith (fadeOut(SplitMateMotion.fastEffects()) + scaleOut(
                     targetScale = 0.95f,
                     animationSpec = spring(dampingRatio = 0.80f, stiffness = 400f)
                 )) using SizeTransform(clip = false) { _, _ ->

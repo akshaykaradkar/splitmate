@@ -115,7 +115,7 @@ object QuickExpenseThemeTokens {
         get() = DesignSystemBindings.activePalette.onSurfaceVariant
 
     val RadiusHero = DesignSystemBindings.GM3ShapeExtraLarge
-    val RadiusCard = DesignSystemBindings.GM3ShapeLarge
+    val RadiusCard = RoundedCornerShape(20.dp)
     val RadiusKeySquircle = DesignSystemBindings.GM3ShapeLarge
     val RadiusPill = DesignSystemBindings.GM3ShapePill
 }
@@ -820,7 +820,7 @@ fun QuickExpenseScreen(
                         keystrokeDynamicIntensity.snapTo(peak)
                         keystrokeDynamicIntensity.animateTo(
                             targetValue = 0f,
-                            animationSpec = androidx.compose.animation.core.tween(950, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                            animationSpec = com.splitmate.app.ui.components.SplitMateMotion.slowEffects()
                         )
                         if (mathEnergyState == com.splitmate.app.ui.components.Gm3EnergyState.RECEIVING) {
                             mathEnergyState = com.splitmate.app.ui.components.Gm3EnergyState.IDLE
@@ -834,7 +834,7 @@ fun QuickExpenseScreen(
                         remainderCoinFlightProgress.snapTo(0.02f)
                         remainderCoinFlightProgress.animateTo(
                             targetValue = 1f,
-                            animationSpec = androidx.compose.animation.core.tween(420, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                            animationSpec = com.splitmate.app.ui.components.SplitMateMotion.defaultEffects()
                         )
                         isRemainderEquallySplit = true
                         mathEnergyState = com.splitmate.app.ui.components.Gm3EnergyState.RESPONDING

@@ -59,7 +59,7 @@ import com.splitmate.app.ui.SplitMateThemeMode
 import com.splitmate.app.ui.SplitMateViewModel
 import com.splitmate.app.ui.components.ConnectedButtonGroup
 import com.splitmate.app.ui.components.ContainedLoadingIndicator
-import com.splitmate.app.ui.components.ExpressiveGapLinearProgressIndicator
+import com.splitmate.app.ui.components.EditorialFinancialTotalText
 import com.splitmate.app.ui.components.SplitMateMotion
 import com.splitmate.app.ui.components.rememberAnimatedSegmentedIslandItemShape
 import com.splitmate.app.ui.components.segmentedIslandItemShape
@@ -967,9 +967,9 @@ fun FlightExpenseReviewScreen(
                                     result = extractedTicket.copy(totalFarePaise = totalAirfarePaise)
                                 )
                                 commitScope.launch {
-                                    commitTearProgress.animateTo(1f, tween(125, easing = FastOutLinearInEasing))
+                                    commitTearProgress.animateTo(1f, SplitMateMotion.fastEffects())
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    launch { commitStampAlpha.animateTo(1f, tween(60)) }
+                                    launch { commitStampAlpha.animateTo(1f, SplitMateMotion.fastEffects()) }
                                     commitStampScale.animateTo(
                                         targetValue = 1f,
                                         animationSpec = spring(dampingRatio = 0.52f, stiffness = 680f)
@@ -1055,9 +1055,10 @@ fun FlightExpenseReviewScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
+                    .consumeWindowInsets(innerPadding)
                     .padding(horizontal = 20.dp),
                 contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // 1. PNR SYNC PILL
                 item {
@@ -1502,21 +1503,6 @@ fun FlightExpenseReviewScreen(
                                                 fontWeight = FontWeight.ExtraBold,
                                                 color = if (member.isSelected) FlightPassTokens.PrimaryDark else FlightPassTokens.TextMuted
                                             )
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            val memberShareProgress = if (totalAirfarePaise > 0L) {
-                                                (member.shareAmountPaise.toFloat() / totalAirfarePaise.toFloat()).coerceIn(0f, 1f)
-                                            } else 0f
-                                            ExpressiveGapLinearProgressIndicator(
-                                                progress = { memberShareProgress },
-                                                modifier = Modifier
-                                                    .width(64.dp)
-                                                    .height(4.dp),
-                                                color = if (member.isSelected) FlightPassTokens.SkyBlueText else FlightPassTokens.BorderSubtle,
-                                                trackColor = FlightPassTokens.BorderSubtle.copy(alpha = 0.4f),
-                                                gapSize = 4.dp,
-                                                stopSize = 3.dp,
-                                                strokeWidth = 4.dp
-                                            )
                                         }
                                     }
                                 }
@@ -1905,7 +1891,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
     // 3. Holographic "BOARDING VERIFIED" Gate Stamp Slam (1.6f -> 1.0f bouncy overshoot)
     val stampAlpha by animateFloatAsState(
         targetValue = if (isFolded) 1f else 0f,
-        animationSpec = tween(durationMillis = 210, easing = FastOutSlowInEasing),
+        animationSpec = SplitMateMotion.fastEffects(),
         label = "GateStampAlpha"
     )
     val stampScale by animateFloatAsState(
@@ -1920,14 +1906,14 @@ fun AnimatedLuxuryAirlineBoardingPass(
     // Dynamic inner crease & wallet pocket shadow
     val walletPocketAlpha by animateFloatAsState(
         targetValue = if (isFolded) 1f else 0f,
-        animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+        animationSpec = SplitMateMotion.defaultEffects(),
         label = "WalletPocketAlpha"
     )
 
     // Overall card elevation expansion on tear-and-tuck
     val cardElevation by animateDpAsState(
         targetValue = if (isFolded) 22.dp else 16.dp,
-        animationSpec = tween(durationMillis = 300),
+        animationSpec = SplitMateMotion.defaultSpatial(),
         label = "CardElevation"
     )
 
@@ -2482,7 +2468,11 @@ fun AnimatedLuxuryAirlineBoardingPass(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 12.dp)
+                        ) {
                             Text(
                                 text = "TOTAL GROUP AIRFARE",
                                 fontSize = 11.sp,
@@ -2490,15 +2480,16 @@ fun AnimatedLuxuryAirlineBoardingPass(
                                 color = FlightPassTokens.TextMuted,
                                 letterSpacing = 1.sp
                             )
-                            Text(
+                            EditorialFinancialTotalText(
                                 text = "₹${NumberFormat.getNumberInstance(Locale("en", "IN")).format(totalAirfare)}",
-                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
+                                style = MaterialTheme.typography.displaySmall.copy(
+                                    fontSize = 38.sp,
+                                    letterSpacing = (-1.5).sp,
+                                    lineHeight = 42.sp
+                                ),
                                 fontFamily = SplitMateTheme.FontDisplay,
-                                fontSize = 38.sp,
                                 fontWeight = FontWeight.Black,
-                                color = FlightPassTokens.PrimaryDark,
-                                letterSpacing = (-1.5).sp,
-                                lineHeight = 42.sp
+                                color = FlightPassTokens.PrimaryDark
                             )
                             Text(
                                 text = perSeatSummaryText,
@@ -2536,21 +2527,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    ExpressiveGapLinearProgressIndicator(
-                        progress = { 1f },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(6.dp),
-                        color = if (isFolded) FlightPassTokens.SkyBlueText else FlightPassTokens.StatusGreenText,
-                        trackColor = FlightPassTokens.BorderSubtle,
-                        gapSize = 4.dp,
-                        stopSize = 4.dp,
-                        strokeWidth = 6.dp
-                    )
-
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
 
                     EngravedAviationBarcode(
                         pnrNumber = pnrNumber,

@@ -1364,13 +1364,21 @@ fun SplitMateCharacterAvatar(
 
     val ringColor = if (highlighted) preset.accentRingColor else SplitMateTheme.BorderLight
     val ringWidth = if (highlighted) 3.dp else 1.dp
+    // M3 Expressive avatar geometry: Cookie9Sided by default, SoftBurst for the highlighted/active user.
+    val avatarShape = remember(highlighted) {
+        if (highlighted) {
+            com.splitmate.app.ui.components.RoundedPolygonShape(com.splitmate.app.ui.components.MaterialShapes.SoftBurst)
+        } else {
+            com.splitmate.app.ui.components.RoundedPolygonShape(com.splitmate.app.ui.components.MaterialShapes.Cookie9Sided)
+        }
+    }
 
     Box(
         modifier = modifier
             .size(size)
-            .clip(CircleShape)
+            .clip(avatarShape)
             .background(preset.primaryBgColor)
-            .border(ringWidth, ringColor, CircleShape),
+            .border(ringWidth, ringColor, avatarShape),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -1394,7 +1402,7 @@ fun SplitMateCharacterAvatar(
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .fillMaxSize()
-                .clip(CircleShape)
+                .clip(avatarShape)
         )
     }
 }
@@ -1542,7 +1550,7 @@ fun OpenPeepsHeroStage(
             AnimatedContent(
                 targetState = activeScene,
                 transitionSpec = {
-                    (fadeIn(animationSpec = tween(220)) +
+                    (fadeIn(animationSpec = com.splitmate.app.ui.components.SplitMateMotion.defaultEffects()) +
                         scaleIn(
                             initialScale = 0.92f,
                             animationSpec = spring(
@@ -1550,7 +1558,7 @@ fun OpenPeepsHeroStage(
                                 stiffness = Spring.StiffnessMediumLow
                             )
                         )).togetherWith(
-                        fadeOut(animationSpec = tween(150)) +
+                        fadeOut(animationSpec = com.splitmate.app.ui.components.SplitMateMotion.fastEffects()) +
                             scaleOut(targetScale = 0.95f)
                     )
                 },

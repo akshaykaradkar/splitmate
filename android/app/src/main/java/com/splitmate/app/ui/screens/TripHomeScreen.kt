@@ -184,6 +184,9 @@ import com.splitmate.app.ui.components.UpiExpressPaymentSheet
 import com.splitmate.app.ui.components.WavyProgressIndicatorDefaults
 import com.splitmate.app.ui.components.rememberAnimatedSegmentedIslandItemShape
 import com.splitmate.app.ui.components.segmentedIslandItemShape
+import com.splitmate.app.ui.components.toShape
+import com.splitmate.app.ui.components.EditorialFinancialTotalText
+import androidx.compose.foundation.layout.consumeWindowInsets
 import com.splitmate.app.ui.dialogs.TripSyncAndPerspectiveSheet
 import com.splitmate.app.ui.extractInitialsFromNameOrSeed
 import com.splitmate.app.ui.extractTravelTicketFromTitle
@@ -554,13 +557,16 @@ fun TripHubMemberAvatar(
     val svgUrl = remember(effectiveSeed) { buildDiceBearOpenPeepsUrl(effectiveSeed) }
     val initials = remember(fallbackName) { extractInitialsFromNameOrSeed(fallbackName) }
 
+    // M3 Expressive avatar geometry: 9-sided cookie instead of a plain circle.
+    val avatarShape = remember { MaterialShapes.Cookie9Sided.toShape() }
+
     Box(modifier = Modifier.size(size)) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(CircleShape)
+                .clip(avatarShape)
                 .background(presetBg)
-                .border(1.5.dp, TripHubTokens.CardSurface, CircleShape),
+                .border(1.5.dp, TripHubTokens.CardSurface, avatarShape),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -582,7 +588,7 @@ fun TripHubMemberAvatar(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(CircleShape)
+                    .clip(avatarShape)
             )
         }
         if (isOnline) {
@@ -1058,6 +1064,7 @@ fun TripHomeScreen(
                 .fillMaxSize()
                 .background(TripHubTokens.CanvasBg)
                 .padding(innerPadding)
+                .consumeWindowInsets(innerPadding)
         ) {
             if ((selectedSectionTab == TripHubSectionTab.OVERVIEW || selectedSectionTab == TripHubSectionTab.TRAVEL) &&
                 groupExpenses.isNotEmpty()
@@ -1718,16 +1725,8 @@ private fun CompactPerspectiveNetBalanceStrip(
         activeMemberNetCents < 0L -> BuckwheatTerracottaDark
         else -> MaterialTheme.colorScheme.onPrimaryContainer
     }
-    val harmonyProgress = remember(totalGroupSpendCents, activeMemberNetCents) {
-        if (activeMemberNetCents == 0L) {
-            1f
-        } else if (totalGroupSpendCents <= 0L) {
-            0.5f
-        } else {
-            (1f - (abs(activeMemberNetCents).toFloat() / totalGroupSpendCents.toFloat()).coerceIn(0f, 0.85f)).coerceIn(0.15f, 1f)
-        }
-    }
-
+    // v2.3.2 M3E audit: static financial data (spend/net) carries no wavy/linear progress
+    // indicators. Hierarchy is expressed through an editorial headlineLarge figure + spacing.
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = TripHubTokens.CardSurface,
@@ -1739,100 +1738,35 @@ private fun CompactPerspectiveNetBalanceStrip(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Row(
+                Column(
                     modifier = Modifier.weight(1f),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    if (!isAllSettled) {
-                        CircularWavyProgressIndicator(
-                            progress = { harmonyProgress },
-                            modifier = Modifier.size(34.dp),
-                            color = if (activeMemberNetCents < 0L) {
-                                MaterialTheme.colorScheme.secondary
-                            } else {
-                                WavyProgressIndicatorDefaults.indicatorColor
-                            },
-                            trackColor = WavyProgressIndicatorDefaults.trackColor,
-                            amplitude = 0.85f,
-                            wavelength = 14.dp,
-                            strokeWidth = 3.5.dp
-                        )
-                    } else {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.CheckCircle,
-                                    contentDescription = "All Settled",
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(15.dp)
-                                )
-                                Text(
-                                    text = "Settled",
-                                    fontFamily = FigtreeFontFamily,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            }
-                        }
-                    }
-
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = "${if (isTravelGroup) "Trip Spend" else "Group Spend"}: $formattedTotalSpend",
-                                style = TextStyle(
-                                    fontFamily = SplitMateTnumMonospace,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 13.sp,
-                                    fontFeatureSettings = "tnum"
-                                ),
-                                color = TripHubTokens.TextPrimary
-                            )
-                        }
-
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = netBadgeBg
-                        ) {
-                            Text(
-                                text = "$activeMemberName · $netBadgeText",
-                                style = TextStyle(
-                                    fontFamily = SplitMateTnumMonospace,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
-                                    fontFeatureSettings = "tnum"
-                                ),
-                                color = netBadgeTextColor,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
+                    Text(
+                        text = if (isTravelGroup) "TRIP SPEND" else "GROUP SPEND",
+                        fontFamily = FigtreeFontFamily,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 11.sp,
+                        letterSpacing = 0.8.sp,
+                        color = TripHubTokens.TextSecondary
+                    )
+                    // Editorial hero total: headlineLarge, auto-shrinks so it never overflows the Settle Up column.
+                    EditorialFinancialTotalText(
+                        text = formattedTotalSpend,
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontFamily = SplitMateTnumMonospace,
+                        fontWeight = FontWeight.Black,
+                        color = TripHubTokens.TextPrimary,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
 
                 Box(modifier = Modifier.width(118.dp)) {
@@ -1851,20 +1785,58 @@ private fun CompactPerspectiveNetBalanceStrip(
                 }
             }
 
-            if (!isAllSettled) {
-                LinearWavyProgressIndicator(
-                    progress = { harmonyProgress },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = if (activeMemberNetCents < 0L) {
-                        MaterialTheme.colorScheme.secondary
-                    } else {
-                        WavyProgressIndicatorDefaults.indicatorColor
-                    },
-                    trackColor = WavyProgressIndicatorDefaults.trackColor,
-                    amplitude = 0.85f,
-                    wavelength = 20.dp,
-                    strokeWidth = 4.dp
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (isAllSettled) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.CheckCircle,
+                                contentDescription = "All Settled",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = "Settled",
+                                fontFamily = FigtreeFontFamily,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = netBadgeBg,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Text(
+                        text = "$activeMemberName · $netBadgeText",
+                        style = TextStyle(
+                            fontFamily = SplitMateTnumMonospace,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            fontFeatureSettings = "tnum"
+                        ),
+                        color = netBadgeTextColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
             }
         }
     }
@@ -1891,7 +1863,7 @@ private fun TripHubOverviewFeed(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item(key = "empty_trip_hub_state") {
                 EmptyTripHubStateCard(
@@ -1915,7 +1887,7 @@ private fun TripHubOverviewFeed(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         items(
             items = filteredClassifiedExpenses,
@@ -2101,6 +2073,14 @@ fun DeepGreenTrainTicketCard(
 ) {
     val context = LocalContext.current
     val localView = LocalView.current
+    // v2.3.2 M3E surfaces: inner passenger/berth boxes are borderless tonal washes of
+    // colorScheme.surfaceContainerHigh over the deep-green card (white/sage text stays AA-readable).
+    val trainBerthSurface = MaterialTheme.colorScheme.surfaceContainerHigh.copy(
+        alpha = if (SplitMateTheme.isDark) 0.42f else 0.12f
+    )
+    val trainBerthSurfaceEmphasis = MaterialTheme.colorScheme.surfaceContainerHigh.copy(
+        alpha = if (SplitMateTheme.isDark) 0.60f else 0.22f
+    )
 
     val parsedTicket = remember(expense.title) { extractTravelTicketFromTitle(expense.title) }
     val pnrDigits = remember(expense.title, parsedTicket) {
@@ -2237,7 +2217,7 @@ fun DeepGreenTrainTicketCard(
 
         // Main Deep-Green Ticket Pass + Bottom Stub
         Surface(
-            shape = RoundedCornerShape(26.dp),
+            shape = RoundedCornerShape(20.dp),
             color = TripHubTokens.CardSurface,
             border = BorderStroke(1.dp, TripHubTokens.CardBorder),
             modifier = Modifier.fillMaxWidth()
@@ -2453,17 +2433,14 @@ fun DeepGreenTrainTicketCard(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 rowCells.forEach { cell ->
+                                    // v2.3.2: borderless tonal cell (surfaceContainerHigh wash) instead of a hairline box.
                                     Surface(
                                         shape = RoundedCornerShape(12.dp),
-                                        color = TripHubTokens.TrainBerthCellBg,
-                                        border = BorderStroke(
-                                            width = if (cell.isCurrentUser) 1.5.dp else 1.dp,
-                                            color = if (cell.isCurrentUser) TripHubTokens.TrainAccentLime else TripHubTokens.TrainBerthCellBorder
-                                        ),
+                                        color = if (cell.isCurrentUser) trainBerthSurfaceEmphasis else trainBerthSurface,
                                         modifier = Modifier.weight(1f)
                                     ) {
                                         Column(
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                             verticalArrangement = Arrangement.spacedBy(2.dp)
                                         ) {
                                             Row(
@@ -2479,7 +2456,7 @@ fun DeepGreenTrainTicketCard(
                                                         fontSize = 11.sp,
                                                         fontFeatureSettings = "tnum"
                                                     ),
-                                                    color = TripHubTokens.TrainAccentLime,
+                                                    color = TripHubTokens.TrainSecondarySage,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis,
                                                     modifier = Modifier.weight(1f)
@@ -2536,8 +2513,7 @@ fun DeepGreenTrainTicketCard(
                                     contentAlignment = Alignment.Center,
                                     modifier = Modifier
                                         .clip(CircleShape)
-                                        .background(TripHubTokens.TrainBerthCellBg, CircleShape)
-                                        .border(1.dp, TripHubTokens.TrainBerthCellBorder, CircleShape)
+                                        .background(trainBerthSurface, CircleShape)
                                         .padding(horizontal = 14.dp, vertical = 8.dp)
                                 ) {
                                     Text(
@@ -2824,7 +2800,7 @@ fun ReturnTransitTrainCard(
         }
 
         Surface(
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(20.dp),
             color = TripHubTokens.CardSurface,
             border = BorderStroke(1.dp, TripHubTokens.CardBorder),
             modifier = Modifier.fillMaxWidth()
@@ -3205,7 +3181,7 @@ fun PeriwinkleFlightBookingCard(
                 performCrispTactileHaptic(context, localView, heavy = false)
                 onOpenFlightReviewClick("EXPENSE:${expense.expenseId}")
             },
-            shape = RoundedCornerShape(26.dp),
+            shape = RoundedCornerShape(20.dp),
             color = TripHubTokens.CardSurface,
             border = BorderStroke(1.dp, TripHubTokens.CardBorder),
             modifier = Modifier.fillMaxWidth()
@@ -3232,7 +3208,9 @@ fun PeriwinkleFlightBookingCard(
                     ) {
                         Surface(
                             shape = RoundedCornerShape(10.dp),
-                            color = Color.White.copy(alpha = 0.14f)
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(
+                                alpha = if (SplitMateTheme.isDark) 0.42f else 0.16f
+                            )
                         ) {
                             Text(
                                 text = flightHeader,
@@ -3490,7 +3468,7 @@ fun LodgingBookingCard(
         }
 
         Surface(
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(20.dp),
             color = TripHubTokens.CardSurface,
             border = BorderStroke(1.dp, TripHubTokens.CardBorder),
             modifier = Modifier.fillMaxWidth()
@@ -3855,7 +3833,7 @@ fun GroundMobilityBookingCard(
                 performCrispTactileHaptic(context, localView, heavy = false)
                 showSplitDrawer = !showSplitDrawer
             },
-            shape = RoundedCornerShape(22.dp),
+            shape = RoundedCornerShape(20.dp),
             color = TripHubTokens.CardSurface,
             border = BorderStroke(1.dp, TripHubTokens.CardBorder),
             modifier = Modifier.fillMaxWidth()
@@ -4034,7 +4012,7 @@ fun GeneralSharedExpenseCard(
             performCrispTactileHaptic(context, localView, heavy = false)
             expanded = !expanded
         },
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(20.dp),
         color = TripHubTokens.CardSurface,
         border = BorderStroke(1.dp, TripHubTokens.CardBorder),
         modifier = modifier
@@ -4232,7 +4210,7 @@ private fun EmptyTripHubStateCard(
     val localView = LocalView.current
 
     Surface(
-        shape = RoundedCornerShape(26.dp),
+        shape = RoundedCornerShape(20.dp),
         color = TripHubTokens.CardSurface,
         border = BorderStroke(1.dp, TripHubTokens.CardBorder),
         modifier = modifier.fillMaxWidth()
@@ -4654,7 +4632,7 @@ private fun TripHubTravelWalletView(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // Top Interactive 3D Flip Travel Pass Deck Launcher
         item(key = "classic_3d_transit_deck_launcher") {
@@ -4842,7 +4820,7 @@ private fun TripHubMoneySettlementView(
         // Header + Compact Max-Heap Graph Inspector Toggle (`Icons.Rounded.Info`, >= 48.dp touch bounds)
         item(key = "greedy_settlement_header") {
             Surface(
-                shape = RoundedCornerShape(22.dp),
+                shape = RoundedCornerShape(20.dp),
                 color = TripHubTokens.CardSurface,
                 border = BorderStroke(1.dp, TripHubTokens.CardBorder),
                 modifier = Modifier
@@ -5001,7 +4979,7 @@ private fun TripHubMoneySettlementView(
                     label = "allSettledPolygonMorph"
                 )
                 Surface(
-                    shape = RoundedCornerShape(22.dp),
+                    shape = RoundedCornerShape(20.dp),
                     color = TripHubTokens.CardSurface,
                     border = BorderStroke(1.dp, TripHubTokens.CardBorder),
                     modifier = Modifier
@@ -5693,7 +5671,7 @@ private fun TripHubPeoplePerspectiveView(
                         }
                     },
                     enabled = cleanTypedPhone10.length == 10 && editedMemberName.trim().isNotBlank(),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = BuckwheatOlivePrimary,
                         contentColor = Color.White
@@ -5780,7 +5758,7 @@ private fun TripHubPeoplePerspectiveView(
                                 removeMemberStatusMsg = null
                                 onOpenSettleUpClick()
                             },
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(16.dp),
                             border = BorderStroke(1.dp, TripHubTokens.PositiveSageText.copy(alpha = 0.45f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -5822,7 +5800,7 @@ private fun TripHubPeoplePerspectiveView(
                             }
                         }
                     },
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFFE06B52),
                         contentColor = Color.White
@@ -5923,7 +5901,7 @@ private fun TripHubPeoplePerspectiveView(
                             leaveTripStatusMsg = null
                             onOpenSettleUpClick()
                         },
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = BuckwheatOlivePrimary,
                             contentColor = Color.White
@@ -5949,7 +5927,7 @@ private fun TripHubPeoplePerspectiveView(
                                 }
                             }
                         },
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFFE06B52),
                             contentColor = Color.White
