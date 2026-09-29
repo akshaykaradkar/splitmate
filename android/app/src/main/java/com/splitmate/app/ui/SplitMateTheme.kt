@@ -188,27 +188,27 @@ val WarmEspressoNightPalette = SplitMateExpressivePalette(
 
 val KyotoMatchaYuzuPalette = SplitMateExpressivePalette(
     mode = SplitMateThemeMode.KYOTO_MATCHA_YUZU,
-    surfaceContainerLowest = Color(0xFFF9FBF7),
-    surfaceContainerLow = Color(0xFFF1F6EE),
-    surfaceContainer = Color(0xFFE5EFE0),
-    surfaceContainerHigh = Color(0xFFD8E6D1),
-    surfaceContainerHighest = Color(0xFFC9DBC0),
-    onSurface = Color(0xFF14281D),
-    onSurfaceVariant = Color(0xFF4A6353),
-    primary = Color(0xFF2E5A1C),
+    surfaceContainerLowest = Color(0xFFEDF7EA),
+    surfaceContainerLow = Color(0xFFDDF0D5),
+    surfaceContainer = Color(0xFFCCE6C2),
+    surfaceContainerHigh = Color(0xFFBBDAAF),
+    surfaceContainerHighest = Color(0xFFA8CE9A),
+    onSurface = Color(0xFF0A1F12),
+    onSurfaceVariant = Color(0xFF1E3F29),
+    primary = Color(0xFF0F6B3E),
     onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFD9F99D),
-    onPrimaryContainer = Color(0xFF14281D),
-    secondary = Color(0xFFFF6B4A),
+    primaryContainer = Color(0xFF86EFAC),
+    onPrimaryContainer = Color(0xFF062E19),
+    secondary = Color(0xFFB45309),
     onSecondary = Color(0xFFFFFFFF),
-    secondaryContainer = Color(0xFFFFE4DC),
-    onSecondaryContainer = Color(0xFF7C2D12),
-    tertiary = Color(0xFF312E81),
+    secondaryContainer = Color(0xFFFEF08A),
+    onSecondaryContainer = Color(0xFF451A03),
+    tertiary = Color(0xFF6B21A8),
     onTertiary = Color(0xFFFFFFFF),
-    tertiaryContainer = Color(0xFFE0E7FF),
-    onTertiaryContainer = Color(0xFF1E1B4B),
-    outline = Color(0xFFCBE0C3),
-    outlineVariant = Color(0xFFD8E6D1)
+    tertiaryContainer = Color(0xFFF3E8FF),
+    onTertiaryContainer = Color(0xFF3B0764),
+    outline = Color(0xFF86B87A),
+    outlineVariant = Color(0xFFA3CC97)
 )
 
 fun SplitMateThemeMode.toPalette(): SplitMateExpressivePalette = when (this) {
@@ -278,21 +278,34 @@ object DesignSystemBindings {
     val PixelCompactItemSpacing = 8.dp
 }
 
-// Stitch "Organic Tactile Financial" (Buckwheat) + HCT Expressive Tokens
-val BuckwheatCanvas = Color(0xFFFAF6F0)
-val BuckwheatSurface = Color(0xFFFFFFFF)
-val BuckwheatSunken = Color(0xFFF4EFE6)
-val BuckwheatCharcoal = Color(0xFF23201E)
-val BuckwheatSecondaryText = Color(0xFF6E675F)
-val BuckwheatBorder = Color(0xFFEDE7DF)
+// Stitch "Organic Tactile Financial" (Buckwheat) + HCT Expressive Tokens (Reactive to Kyoto Matcha & Yuzu)
+val BuckwheatCanvas: Color
+    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.surfaceContainerLow else Color(0xFFFAF6F0)
+val BuckwheatSurface: Color
+    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.surfaceContainerLowest else Color(0xFFFFFFFF)
+val BuckwheatSunken: Color
+    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.surfaceContainer else Color(0xFFF4EFE6)
+val BuckwheatCharcoal: Color
+    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.onSurface else Color(0xFF23201E)
+val BuckwheatSecondaryText: Color
+    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.onSurfaceVariant else Color(0xFF6E675F)
+val BuckwheatBorder: Color
+    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.outline else Color(0xFFEDE7DF)
 
-val BuckwheatOlivePrimary = Color(0xFF365314)
-val BuckwheatSageContainer = Color(0xFFD7E8B6)
-val BuckwheatTerracotta = Color(0xFFE06B52)
-val BuckwheatPeachContainer = Color(0xFFFED8C8)
-val BuckwheatTerracottaDark = Color(0xFF7C2D12)
-val BuckwheatLavenderContainer = Color(0xFFDCE3FD)
-val BuckwheatLavenderText = Color(0xFF3730A3)
+val BuckwheatOlivePrimary: Color
+    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.primary else Color(0xFF365314)
+val BuckwheatSageContainer: Color
+    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.primaryContainer else Color(0xFFD7E8B6)
+val BuckwheatTerracotta: Color
+    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.secondary else Color(0xFFE06B52)
+val BuckwheatPeachContainer: Color
+    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.secondaryContainer else Color(0xFFFED8C8)
+val BuckwheatTerracottaDark: Color
+    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.onSecondaryContainer else Color(0xFF7C2D12)
+val BuckwheatLavenderContainer: Color
+    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.tertiaryContainer else Color(0xFFDCE3FD)
+val BuckwheatLavenderText: Color
+    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.tertiary else Color(0xFF3730A3)
 
 private val SplitMateLightColorScheme = lightColorScheme(
     primary = SunlitBuckwheatPalette.primary,

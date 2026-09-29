@@ -155,6 +155,8 @@ object SplitMateTheme {
     val SageText: Color
         get() = if (isDark || DesignSystemBindings.activeThemeMode.isDark) {
             resolvedPalette.onPrimaryContainer
+        } else if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) {
+            resolvedPalette.onPrimaryContainer
         } else {
             DesignSystemBindings.ElementsPositiveText
         }
@@ -3782,12 +3784,13 @@ fun LedgersDashboardScreen(
             }
         }
 
-        // 2. Hero Balance Card (32dp Radius, Warm Espresso Night Adaptive Gradient, Buckwheat-Inspired 64.sp Numbers)
+        // 2. Hero Balance Card (32dp Radius, Warm Espresso Night & Kyoto Matcha Adaptive Gradient, Buckwheat-Inspired 64.sp Numbers)
         item {
-            val heroGradientColors = if (SplitMateTheme.isDark) {
-                listOf(Color(0xFF233216), Color(0xFF24201C))
-            } else {
-                listOf(Color(0xFFF5F8EC), Color(0xFFFDF1EC))
+            val heroGradientColors = when {
+                SplitMateTheme.isDark -> listOf(Color(0xFF233216), Color(0xFF24201C))
+                DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU ->
+                    listOf(Color(0xFFC4ECCB), Color(0xFFFEF08A))
+                else -> listOf(Color(0xFFF5F8EC), Color(0xFFFDF1EC))
             }
             Card(
                 shape = SplitMateTheme.RadiusHero,
@@ -5771,15 +5774,15 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
         // 1. TRIP SETTLEMENT SUMMARY CARD (Compact 2-Column GETS BACK | OWES Split Board with 3-Row Accordion)
         if (topGridSummaries.isNotEmpty()) {
             item(key = "trip_settlement_summary_card") {
-                val summaryContainerBg = if (SplitMateTheme.isDark) {
-                    SplitMateTheme.SurfaceWhite
-                } else {
-                    Color(0xFFF3F7EB)
+                val summaryContainerBg = when {
+                    SplitMateTheme.isDark -> SplitMateTheme.SurfaceWhite
+                    DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFFD2F4DC)
+                    else -> Color(0xFFF3F7EB)
                 }
-                val summaryBorderColor = if (SplitMateTheme.isDark) {
-                    SplitMateTheme.BorderLight
-                } else {
-                    Color(0xFFDCE6C8)
+                val summaryBorderColor = when {
+                    SplitMateTheme.isDark -> SplitMateTheme.BorderLight
+                    DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF75C993)
+                    else -> Color(0xFFDCE6C8)
                 }
                 val receiversList = remember(topGridSummaries) {
                     topGridSummaries.filter { it.hasIncoming }

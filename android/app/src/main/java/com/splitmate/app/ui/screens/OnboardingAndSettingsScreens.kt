@@ -703,8 +703,8 @@ fun UserSettingsScreen(
                                 Surface(
                                     onClick = { currentSeedSuffix = (100..999).random().toString() },
                                     shape = CircleShape,
-                                    color = Color(0xFF365314),
-                                    border = BorderStroke(1.5.dp, Color(0xFFFAF6F0)),
+                                    color = activePalette.primary,
+                                    border = BorderStroke(1.5.dp, activePalette.surfaceContainerLow),
                                     modifier = Modifier
                                         .size(28.dp)
                                         .align(Alignment.BottomEnd)
@@ -713,7 +713,7 @@ fun UserSettingsScreen(
                                         Icon(
                                             imageVector = Icons.Rounded.Casino,
                                             contentDescription = "Shuffle Look",
-                                            tint = Color(0xFFD7E8B6),
+                                            tint = activePalette.onPrimary,
                                             modifier = Modifier.size(15.dp)
                                         )
                                     }
@@ -841,10 +841,10 @@ fun UserSettingsScreen(
                                         Surface(
                                             onClick = { selectedStyleId = styleSpec.id },
                                             shape = RoundedCornerShape(16.dp),
-                                            color = if (isSelected) Color(0xFF365314) else cardBg,
+                                            color = if (isSelected) activePalette.primary else cardBg,
                                             border = BorderStroke(
                                                 width = if (isSelected) 1.5.dp else 1.dp,
-                                                color = if (isSelected) Color(0xFF416913) else borderColor
+                                                color = if (isSelected) activePalette.primary else borderColor
                                             )
                                         ) {
                                             Row(
@@ -867,13 +867,13 @@ fun UserSettingsScreen(
                                                         fontFamily = SplitMateBrandFontFamily,
                                                         fontSize = 12.sp,
                                                         fontWeight = FontWeight.ExtraBold,
-                                                        color = if (isSelected) Color(0xFFFAF6F0) else textPrimary
+                                                        color = if (isSelected) activePalette.onPrimary else textPrimary
                                                     )
                                                     Text(
                                                         text = styleSpec.subtitle,
                                                         fontFamily = SplitMateBrandFontFamily,
                                                         fontSize = 10.sp,
-                                                        color = if (isSelected) Color(0xFFD7E8B6) else textSecondary
+                                                        color = if (isSelected) activePalette.primaryContainer else textSecondary
                                                     )
                                                 }
                                             }
@@ -954,8 +954,8 @@ fun UserSettingsScreen(
                                 },
                                 shape = SplitMateThemeTokens.RadiusPill,
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = textPrimary,
-                                    contentColor = screenBg
+                                    containerColor = activePalette.primary,
+                                    contentColor = activePalette.onPrimary
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -995,8 +995,8 @@ fun UserSettingsScreen(
                         Column {
                             SettingsRowItem(
                                 icon = Icons.Rounded.Share,
-                                iconBg = if (isDarkTheme) Color(0xFF282552) else Color(0xFFEEF2FF),
-                                iconTint = if (isDarkTheme) Color(0xFFDCE3FD) else Color(0xFF3730A3),
+                                iconBg = activePalette.tertiaryContainer,
+                                iconTint = activePalette.onTertiaryContainer,
                                 title = "Export & Share Trip Summary",
                                 subtitle = "Share a clean WhatsApp/Clipboard summary of all group balances & expenses ($activeGroupsCount active groups)",
                                 titleColor = textPrimary,
@@ -1106,7 +1106,6 @@ fun UserSettingsScreen(
                                     isDarkTheme = mode.isDark
                                     persistAndApplyExpressiveThemeMode(context, mode)
                                     onSelectThemeMode(mode)
-                                    onThemeToggle(mode.isDark)
                                     com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = false)
                                 },
                                 labelProvider = { it.shortBadgeLabel },
@@ -1124,20 +1123,24 @@ fun UserSettingsScreen(
                                         outerCorner = 20.dp,
                                         innerCorner = 6.dp
                                     )
+                                    val paletteHexSummary = when (mode) {
+                                        SplitMateThemeMode.SUNLIT_BUCKWHEAT -> "#FAF6F0 · #365314 · #D9F99D · #FED8C8"
+                                        SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> "#1C1815 · #A3E635 · #283D0E · #FB923C"
+                                        SplitMateThemeMode.KYOTO_MATCHA_YUZU -> "#DDF0D5 · #0F6B3E · #86EFAC · #FEF08A"
+                                    }
                                     Surface(
                                         onClick = {
                                             selectedThemeMode = mode
                                             isDarkTheme = mode.isDark
                                             persistAndApplyExpressiveThemeMode(context, mode)
                                             onSelectThemeMode(mode)
-                                            onThemeToggle(mode.isDark)
                                             com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = false)
                                         },
                                         shape = rowShape,
-                                        color = if (isSelected) activePalette.primaryContainer.copy(alpha = 0.48f) else mutedBg.copy(alpha = 0.55f),
+                                        color = if (isSelected) modePalette.primaryContainer.copy(alpha = 0.52f) else mutedBg.copy(alpha = 0.55f),
                                         border = BorderStroke(
                                             width = if (isSelected) 1.5.dp else 1.dp,
-                                            color = if (isSelected) activePalette.primary else borderColor
+                                            color = if (isSelected) modePalette.primary else borderColor
                                         ),
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
@@ -1156,16 +1159,16 @@ fun UserSettingsScreen(
                                                 Row(horizontalArrangement = Arrangement.spacedBy((-6).dp)) {
                                                     listOf(
                                                         modePalette.surfaceContainerLow,
+                                                        modePalette.primary,
                                                         modePalette.primaryContainer,
-                                                        modePalette.secondaryContainer,
-                                                        modePalette.tertiaryContainer
+                                                        modePalette.secondaryContainer
                                                     ).forEach { swatch ->
                                                         Box(
                                                             modifier = Modifier
                                                                 .size(20.dp)
                                                                 .clip(CircleShape)
                                                                 .background(swatch)
-                                                                .border(1.dp, modePalette.onSurface.copy(alpha = 0.25f), CircleShape)
+                                                                .border(1.dp, modePalette.onSurface.copy(alpha = 0.3f), CircleShape)
                                                         )
                                                     }
                                                 }
@@ -1183,13 +1186,20 @@ fun UserSettingsScreen(
                                                         fontSize = 11.sp,
                                                         color = textSecondary
                                                     )
+                                                    Text(
+                                                        text = paletteHexSummary,
+                                                        fontFamily = com.splitmate.app.ui.SplitMateTnumMonospace,
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = if (isSelected) modePalette.primary else textSecondary.copy(alpha = 0.85f)
+                                                    )
                                                 }
                                             }
                                             if (isSelected) {
                                                 Icon(
                                                     imageVector = Icons.Rounded.CheckCircle,
                                                     contentDescription = "Active Theme",
-                                                    tint = activePalette.primary,
+                                                    tint = modePalette.primary,
                                                     modifier = Modifier.size(20.dp)
                                                 )
                                             }
@@ -1210,10 +1220,10 @@ fun UserSettingsScreen(
                         Column {
                             SettingsRowItem(
                                 icon = if (isDarkTheme) Icons.Rounded.DarkMode else Icons.Rounded.LightMode,
-                                iconBg = if (isDarkTheme) Color(0xFF282552) else Color(0xFFEEF2FF),
-                                iconTint = if (isDarkTheme) Color(0xFFDCE3FD) else Color(0xFF3730A3),
+                                iconBg = activePalette.tertiaryContainer,
+                                iconTint = activePalette.onTertiaryContainer,
                                 title = "Dark Mode (Warm Espresso)",
-                                subtitle = "Switch between Buckwheat Cream Light and Warm Espresso Night canvas",
+                                subtitle = "Switch between Daylight Expressive and Warm Espresso Night canvas",
                                 titleColor = textPrimary,
                                 subtitleColor = textSecondary,
                                 trailingContent = {
@@ -1231,13 +1241,12 @@ fun UserSettingsScreen(
                                             selectedThemeMode = targetMode
                                             persistAndApplyExpressiveThemeMode(context, targetMode)
                                             onSelectThemeMode(targetMode)
-                                            onThemeToggle(it)
                                             com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = false)
                                         },
                                         colors = SwitchDefaults.colors(
                                             checkedThumbColor = Color.White,
-                                            checkedTrackColor = Color(0xFF416913),
-                                            uncheckedThumbColor = Color(0xFF23201E),
+                                            checkedTrackColor = activePalette.primary,
+                                            uncheckedThumbColor = activePalette.onSurface,
                                             uncheckedTrackColor = mutedBg
                                         )
                                     )
@@ -1253,7 +1262,6 @@ fun UserSettingsScreen(
                                     selectedThemeMode = targetMode
                                     persistAndApplyExpressiveThemeMode(context, targetMode)
                                     onSelectThemeMode(targetMode)
-                                    onThemeToggle(nextDark)
                                     com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = false)
                                 }
                             )
@@ -1280,8 +1288,8 @@ fun UserSettingsScreen(
                                         },
                                         colors = SwitchDefaults.colors(
                                             checkedThumbColor = Color.White,
-                                            checkedTrackColor = Color(0xFF416913),
-                                            uncheckedThumbColor = Color(0xFF23201E),
+                                            checkedTrackColor = activePalette.primary,
+                                            uncheckedThumbColor = activePalette.onSurface,
                                             uncheckedTrackColor = mutedBg
                                         )
                                     )

@@ -256,15 +256,21 @@ class SplitMateV23ExpressiveE2ETest {
         @Test
         fun `F1_T1_04 KyotoMatchaYuzuPalette matches canonical botanical stationery and hanko coral tokens`() {
             val p = SplitMateThemeMode.KYOTO_MATCHA_YUZU.toPalette()
-            assertEquals(Color(0xFFF9FBF7), p.surfaceContainerLowest)
-            assertEquals(Color(0xFFF1F6EE), p.surfaceContainerLow)
-            assertEquals(Color(0xFFE5EFE0), p.surfaceContainer)
-            assertEquals(Color(0xFFD8E6D1), p.surfaceContainerHigh)
-            assertEquals(Color(0xFFC9DBC0), p.surfaceContainerHighest)
-            assertEquals(Color(0xFF2E5A1C), p.primary)
-            assertEquals(Color(0xFFFF6B4A), p.secondary)
-            assertEquals(Color(0xFFFFE4DC), p.secondaryContainer)
-            assertEquals(Color(0xFF312E81), p.tertiary)
+            assertEquals(Color(0xFFEDF7EA), p.surfaceContainerLowest)
+            assertEquals(Color(0xFFDDF0D5), p.surfaceContainerLow)
+            assertEquals(Color(0xFFCCE6C2), p.surfaceContainer)
+            assertEquals(Color(0xFFBBDAAF), p.surfaceContainerHigh)
+            assertEquals(Color(0xFFA8CE9A), p.surfaceContainerHighest)
+            assertEquals(Color(0xFF0F6B3E), p.primary)
+            assertEquals(Color(0xFF86EFAC), p.primaryContainer)
+            assertEquals(Color(0xFFB45309), p.secondary)
+            assertEquals(Color(0xFFFEF08A), p.secondaryContainer)
+            assertEquals(Color(0xFF6B21A8), p.tertiary)
+            assertEquals(Color(0xFFF3E8FF), p.tertiaryContainer)
+            assertNotEquals(SunlitBuckwheatPalette.primaryContainer, p.primaryContainer)
+            assertNotEquals(SunlitBuckwheatPalette.secondaryContainer, p.secondaryContainer)
+            assertNotEquals(SunlitBuckwheatPalette.tertiaryContainer, p.tertiaryContainer)
+            assertNotEquals(SunlitBuckwheatPalette.onSecondaryContainer, p.onSecondaryContainer)
         }
 
         @Test
@@ -3465,12 +3471,12 @@ class SplitMateV23ExpressiveE2ETest {
             assertEquals(SunlitBuckwheatPalette.surfaceContainerLowest, SplitMateTheme.SurfaceWhite)
             assertEquals(SunlitBuckwheatPalette.primaryContainer, SplitMateTheme.SageSurface)
 
-            // Scenario C: KYOTO_MATCHA_YUZU active with isDark = false resolves Kyoto Matcha tokens & Elements financial text
+            // Scenario C: KYOTO_MATCHA_YUZU active with isDark = false resolves Kyoto Matcha tokens
             DesignSystemBindings.activeThemeMode = SplitMateThemeMode.KYOTO_MATCHA_YUZU
             SplitMateTheme.isDark = false
             assertEquals(KyotoMatchaYuzuPalette.surfaceContainerLow, SplitMateTheme.ScreenBg)
             assertEquals(KyotoMatchaYuzuPalette.primaryContainer, SplitMateTheme.SageSurface)
-            assertEquals(DesignSystemBindings.ElementsPositiveText, SplitMateTheme.SageText)
+            assertEquals(KyotoMatchaYuzuPalette.onPrimaryContainer, SplitMateTheme.SageText)
             assertEquals(KyotoMatchaYuzuPalette.secondaryContainer.copy(alpha = 0.65f), SplitMateTheme.TerracottaSurface)
             assertEquals(KyotoMatchaYuzuPalette.onSecondaryContainer, SplitMateTheme.TerracottaText)
 
