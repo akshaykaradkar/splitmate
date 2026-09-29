@@ -1,4 +1,8 @@
-@file:OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@file:OptIn(
+    ExperimentalFoundationApi::class,
+    ExperimentalMaterial3Api::class,
+    ExperimentalMaterial3ExpressiveApi::class
+)
 
 package com.splitmate.app.ui.screens
 
@@ -17,6 +21,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -85,6 +90,8 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -93,6 +100,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -111,6 +120,7 @@ import androidx.compose.ui.graphics.Color
 import android.content.Context
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -158,6 +168,7 @@ import com.splitmate.app.ui.components.ButtonGroup
 import com.splitmate.app.ui.components.CircularWavyProgressIndicator
 import com.splitmate.app.ui.components.ConnectedButtonGroup
 import com.splitmate.app.ui.components.ContainedLoadingIndicator
+import com.splitmate.app.ui.components.ExperimentalMaterial3ExpressiveApi
 import com.splitmate.app.ui.components.ExpressiveActionItem
 import com.splitmate.app.ui.components.ExpressiveFabMenuItem
 import com.splitmate.app.ui.components.ExpressiveGapLinearProgressIndicator
@@ -170,6 +181,7 @@ import com.splitmate.app.ui.components.RoundedPolygonShape
 import com.splitmate.app.ui.components.SplitButtonLayout
 import com.splitmate.app.ui.components.SplitMateMotion
 import com.splitmate.app.ui.components.UpiExpressPaymentSheet
+import com.splitmate.app.ui.components.WavyProgressIndicatorDefaults
 import com.splitmate.app.ui.components.rememberAnimatedSegmentedIslandItemShape
 import com.splitmate.app.ui.components.segmentedIslandItemShape
 import com.splitmate.app.ui.dialogs.TripSyncAndPerspectiveSheet
@@ -929,9 +941,63 @@ fun TripHomeScreen(
     }
 
     var isFabMenuExpanded by remember { mutableStateOf(false) }
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val openGroupDebtCents = remember(netBalancesMap) {
+        netBalancesMap.values.filter { it > 0L }.sum()
+    }
+    val isAllSettled = remember(activeMemberNetCents, openGroupDebtCents) {
+        activeMemberNetCents == 0L && openGroupDebtCents == 0L
+    }
 
     Scaffold(
         containerColor = TripHubTokens.CanvasBg,
+        topBar = {
+            // =================================================================
+            // SUBTASK 3.1.1 & 3.1.2: COLLAPSING LARGE TOP APP BAR + 5 SECTION PILLS
+            // =================================================================
+            TripHubTopBar(
+                groupName = (group?.name ?: "Trip Hub").toSmartTitleCase(),
+                subtitle = dynamicTripSubtitle,
+                activePerspectiveMember = activePerspectiveMember,
+                onlineFriendsCount = onlineFriendsCount,
+                isCloudSyncing = uiState.isCloudSyncing,
+                isSearchExpanded = isSearchExpanded,
+                searchQuery = searchQuery,
+                onSearchQueryChange = { searchQuery = it },
+                onToggleSearch = {
+                    performCrispTactileHaptic(context, localView, heavy = false)
+                    isSearchExpanded = !isSearchExpanded
+                    if (!isSearchExpanded) searchQuery = ""
+                },
+                onManualSyncClick = {
+                    performCrispTactileHaptic(context, localView, heavy = false)
+                    viewModel.syncActiveGroupNow(context = context, groupId = resolvedGroupId, silent = false)
+                },
+                onCycleThemeClick = {
+                    performCrispTactileHaptic(context, localView, heavy = false)
+                    viewModel.cycleExpressiveThemeMode(context)
+                },
+                onBackClick = {
+                    performCrispTactileHaptic(context, localView, heavy = false)
+                    onBackClick()
+                },
+                onSwitchToClassicLedgerClick = {
+                    performCrispTactileHaptic(context, localView, heavy = false)
+                    onSwitchToClassicLedgerClick()
+                },
+                onOpenSyncAndPerspectiveSheet = {
+                    performCrispTactileHaptic(context, localView, heavy = false)
+                    showSyncAndPerspectiveSheet = true
+                },
+                selectedSectionTab = selectedSectionTab,
+                onSelectSectionTab = { newTab ->
+                    performCrispTactileHaptic(context, localView, heavy = false)
+                    selectedSectionTab = newTab
+                    viewModel.syncActiveGroupNow(context = context, groupId = resolvedGroupId, silent = true)
+                },
+                scrollBehavior = scrollBehavior
+            )
+        },
         floatingActionButton = {
             if (selectedSectionTab != TripHubSectionTab.PEOPLE && selectedSectionTab != TripHubSectionTab.MONEY) {
                 FloatingActionButtonMenu(
@@ -983,66 +1049,16 @@ fun TripHomeScreen(
                 )
             }
         },
-        modifier = modifier.fillMaxSize()
+        modifier = modifier
+            .fillMaxSize()
+            .nestedScroll(scrollBehavior.nestedScrollConnection)
     ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(TripHubTokens.CanvasBg)
-                .statusBarsPadding()
-                .padding(bottom = innerPadding.calculateBottomPadding())
+                .padding(innerPadding)
         ) {
-            // =================================================================
-            // SUBTASK 3.1.1: TOP APP BAR + PERSPECTIVE & SYNC PILL BAR
-            // =================================================================
-            TripHubTopBar(
-                groupName = (group?.name ?: "Trip Hub").toSmartTitleCase(),
-                subtitle = dynamicTripSubtitle,
-                activePerspectiveMember = activePerspectiveMember,
-                onlineFriendsCount = onlineFriendsCount,
-                isCloudSyncing = uiState.isCloudSyncing,
-                isSearchExpanded = isSearchExpanded,
-                searchQuery = searchQuery,
-                onSearchQueryChange = { searchQuery = it },
-                onToggleSearch = {
-                    performCrispTactileHaptic(context, localView, heavy = false)
-                    isSearchExpanded = !isSearchExpanded
-                    if (!isSearchExpanded) searchQuery = ""
-                },
-                onManualSyncClick = {
-                    performCrispTactileHaptic(context, localView, heavy = false)
-                    viewModel.syncActiveGroupNow(context = context, groupId = resolvedGroupId, silent = false)
-                },
-                onCycleThemeClick = {
-                    performCrispTactileHaptic(context, localView, heavy = false)
-                    viewModel.cycleExpressiveThemeMode(context)
-                },
-                onBackClick = {
-                    performCrispTactileHaptic(context, localView, heavy = false)
-                    onBackClick()
-                },
-                onSwitchToClassicLedgerClick = {
-                    performCrispTactileHaptic(context, localView, heavy = false)
-                    onSwitchToClassicLedgerClick()
-                },
-                onOpenSyncAndPerspectiveSheet = {
-                    performCrispTactileHaptic(context, localView, heavy = false)
-                    showSyncAndPerspectiveSheet = true
-                }
-            )
-
-            // =================================================================
-            // SUBTASK 3.1.2: 5 SECTION PILLS + DYNAMIC CATEGORY SUB-CHIPS
-            // =================================================================
-            TripHubSectionTabsRow(
-                selectedTab = selectedSectionTab,
-                onSelectTab = { newTab ->
-                    performCrispTactileHaptic(context, localView, heavy = false)
-                    selectedSectionTab = newTab
-                    viewModel.syncActiveGroupNow(context = context, groupId = resolvedGroupId, silent = true)
-                }
-            )
-
             if ((selectedSectionTab == TripHubSectionTab.OVERVIEW || selectedSectionTab == TripHubSectionTab.TRAVEL) &&
                 groupExpenses.isNotEmpty()
             ) {
@@ -1063,6 +1079,7 @@ fun TripHomeScreen(
                 totalGroupSpendCents = totalGroupSpendCents,
                 activeMemberNetCents = activeMemberNetCents,
                 activeMemberName = activePerspectiveMember?.name ?: "You",
+                isAllSettled = isAllSettled,
                 onSettleUpClick = {
                     performCrispTactileHaptic(context, localView, heavy = false)
                     if (selectedSectionTab != TripHubSectionTab.MONEY) {
@@ -1307,6 +1324,7 @@ fun TripHomeScreen(
 // 4. TASK 3.1 COMPONENTS: TOP BAR, 5 PILL TABS, DYNAMIC CHIPS & BALANCE STRIP
 // ==============================================================================
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TripHubTopBar(
     groupName: String,
@@ -1322,26 +1340,22 @@ private fun TripHubTopBar(
     onCycleThemeClick: () -> Unit = {},
     onBackClick: () -> Unit,
     onSwitchToClassicLedgerClick: () -> Unit,
-    onOpenSyncAndPerspectiveSheet: () -> Unit
+    onOpenSyncAndPerspectiveSheet: () -> Unit,
+    selectedSectionTab: TripHubSectionTab,
+    onSelectSectionTab: (TripHubSectionTab) -> Unit,
+    scrollBehavior: TopAppBarScrollBehavior
 ) {
     val context = LocalContext.current
     val localView = LocalView.current
+    val collapsedFraction = scrollBehavior.state.collapsedFraction
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+            .background(TripHubTokens.CanvasBg)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-            ) {
+        LargeTopAppBar(
+            navigationIcon = {
                 IconButton(
                     onClick = onBackClick,
                     modifier = Modifier
@@ -1355,36 +1369,35 @@ private fun TripHubTopBar(
                         modifier = Modifier.size(22.dp)
                     )
                 }
-                Spacer(modifier = Modifier.width(4.dp))
-                Column(modifier = Modifier.weight(1f)) {
+            },
+            title = {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
                         text = groupName,
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 20.sp,
+                        fontSize = if (collapsedFraction > 0.5f) 18.sp else 24.sp,
                         color = TripHubTokens.TextPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Text(
-                        text = subtitle,
-                        style = TextStyle(
-                            fontFamily = FigtreeFontFamily,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 12.sp,
-                            fontFeatureSettings = "tnum"
-                        ),
-                        color = TripHubTokens.TextSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    if (collapsedFraction < 0.65f) {
+                        Text(
+                            text = subtitle,
+                            style = TextStyle(
+                                fontFamily = FigtreeFontFamily,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 12.sp,
+                                fontFeatureSettings = "tnum"
+                            ),
+                            color = TripHubTokens.TextSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
+            },
+            actions = {
                 Surface(
                     onClick = {
                         performCrispTactileHaptic(context, localView, heavy = false)
@@ -1505,8 +1518,21 @@ private fun TripHubTopBar(
                         modifier = Modifier.size(21.dp)
                     )
                 }
-            }
-        }
+            },
+            colors = TopAppBarDefaults.largeTopAppBarColors(
+                containerColor = TripHubTokens.CanvasBg,
+                scrolledContainerColor = TripHubTokens.CardSurface,
+                navigationIconContentColor = TripHubTokens.TextPrimary,
+                titleContentColor = TripHubTokens.TextPrimary,
+                actionIconContentColor = TripHubTokens.TextPrimary
+            ),
+            scrollBehavior = scrollBehavior
+        )
+
+        TripHubSectionTabsRow(
+            selectedTab = selectedSectionTab,
+            onSelectTab = onSelectSectionTab
+        )
 
         AnimatedVisibility(visible = isSearchExpanded) {
             OutlinedTextField(
@@ -1552,7 +1578,7 @@ private fun TripHubTopBar(
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp)
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
             )
         }
     }
@@ -1568,7 +1594,7 @@ private fun TripHubSectionTabsRow(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 2.dp)
+            .padding(horizontal = 16.dp, vertical = 4.dp)
     ) {
         ConnectedButtonGroup(
             options = tabs,
@@ -1657,6 +1683,7 @@ private fun CompactPerspectiveNetBalanceStrip(
     totalGroupSpendCents: Long,
     activeMemberNetCents: Long,
     activeMemberName: String,
+    isAllSettled: Boolean = false,
     onSettleUpClick: () -> Unit,
     isTravelGroup: Boolean = true
 ) {
@@ -1682,14 +1709,14 @@ private fun CompactPerspectiveNetBalanceStrip(
         activeMemberNetCents > 0L -> BuckwheatSageContainer
         activeMemberNetCents < 0L && isDark -> Color(0xFF3A2019)
         activeMemberNetCents < 0L -> BuckwheatPeachContainer
-        else -> TripHubTokens.SunkenWell
+        else -> MaterialTheme.colorScheme.primaryContainer
     }
     val netBadgeTextColor = when {
         activeMemberNetCents > 0L && isDark -> BuckwheatSageContainer
         activeMemberNetCents > 0L -> BuckwheatOlivePrimary
         activeMemberNetCents < 0L && isDark -> Color(0xFFFECDD3)
         activeMemberNetCents < 0L -> BuckwheatTerracottaDark
-        else -> TripHubTokens.TextSecondary
+        else -> MaterialTheme.colorScheme.onPrimaryContainer
     }
     val harmonyProgress = remember(totalGroupSpendCents, activeMemberNetCents) {
         if (activeMemberNetCents == 0L) {
@@ -1725,15 +1752,48 @@ private fun CompactPerspectiveNetBalanceStrip(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    CircularWavyProgressIndicator(
-                        progress = { harmonyProgress },
-                        modifier = Modifier.size(34.dp),
-                        color = if (activeMemberNetCents < 0L) TripHubTokens.TerracottaIconTint else TripHubTokens.PositiveSageText,
-                        trackColor = TripHubTokens.SunkenWell,
-                        amplitude = if (activeMemberNetCents == 0L) 0f else 0.7f,
-                        wavelength = 14.dp,
-                        strokeWidth = 3.5.dp
-                    )
+                    if (!isAllSettled) {
+                        CircularWavyProgressIndicator(
+                            progress = { harmonyProgress },
+                            modifier = Modifier.size(34.dp),
+                            color = if (activeMemberNetCents < 0L) {
+                                MaterialTheme.colorScheme.secondary
+                            } else {
+                                WavyProgressIndicatorDefaults.indicatorColor
+                            },
+                            trackColor = WavyProgressIndicatorDefaults.trackColor,
+                            amplitude = 0.85f,
+                            wavelength = 14.dp,
+                            strokeWidth = 3.5.dp
+                        )
+                    } else {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.CheckCircle,
+                                    contentDescription = "All Settled",
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Text(
+                                    text = "Settled",
+                                    fontFamily = FigtreeFontFamily,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+                    }
+
                     Column(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -1791,15 +1851,21 @@ private fun CompactPerspectiveNetBalanceStrip(
                 }
             }
 
-            ExpressiveGapLinearProgressIndicator(
-                progress = { harmonyProgress },
-                modifier = Modifier.fillMaxWidth(),
-                color = if (activeMemberNetCents < 0L) TripHubTokens.TerracottaIconTint else TripHubTokens.PositiveSageText,
-                trackColor = TripHubTokens.SunkenWell,
-                gapSize = 4.dp,
-                stopSize = 4.dp,
-                strokeWidth = 4.dp
-            )
+            if (!isAllSettled) {
+                LinearWavyProgressIndicator(
+                    progress = { harmonyProgress },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = if (activeMemberNetCents < 0L) {
+                        MaterialTheme.colorScheme.secondary
+                    } else {
+                        WavyProgressIndicatorDefaults.indicatorColor
+                    },
+                    trackColor = WavyProgressIndicatorDefaults.trackColor,
+                    amplitude = 0.85f,
+                    wavelength = 20.dp,
+                    strokeWidth = 4.dp
+                )
+            }
         }
     }
 }
@@ -4126,7 +4192,7 @@ private fun ExpandableSplitBreakdownDrawer(
                 }
             }
 
-            splitBreakdown.rows.forEach { row ->
+            splitBreakdown.rows.filter { it.isIncludedInSplit }.forEach { row ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -4137,7 +4203,7 @@ private fun ExpandableSplitBreakdownDrawer(
                         fontFamily = FigtreeFontFamily,
                         fontWeight = if (row.isCurrentUser) FontWeight.ExtraBold else FontWeight.Medium,
                         fontSize = 12.sp,
-                        color = if (row.isIncludedInSplit) TripHubTokens.TextPrimary else TripHubTokens.TextMuted
+                        color = TripHubTokens.TextPrimary
                     )
                     Text(
                         text = row.formattedShare,
@@ -4147,7 +4213,7 @@ private fun ExpandableSplitBreakdownDrawer(
                             fontSize = 12.sp,
                             fontFeatureSettings = "tnum"
                         ),
-                        color = if (row.isIncludedInSplit) TripHubTokens.PositiveSageText else TripHubTokens.TextMuted
+                        color = TripHubTokens.PositiveSageText
                     )
                 }
             }

@@ -1365,7 +1365,7 @@ fun UserSettingsScreen(
                     }
 
                     Text(
-                        text = "SplitMate v2.3.0 | Material 3 Expressive (Build 48)",
+                        text = "SplitMate v2.3.1 | Material 3 Expressive (Build 49)",
                         fontFamily = SplitMateBrandFontFamily,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,

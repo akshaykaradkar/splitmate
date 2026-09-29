@@ -586,10 +586,10 @@ class SplitMateV23ExpressiveE2ETest {
         }
 
         @Test
-        fun `F6_T1_05 buildGradle configures versionCode 48 versionName 2_3_0 and graphics-shapes 1_0_1`() {
+        fun `F6_T1_05 buildGradle configures versionCode 49 versionName 2_3_1 and graphics-shapes 1_0_1`() {
             val gradleText = resolveBuildGradleFile().readText()
-            assertTrue(gradleText.contains("versionCode 48") || gradleText.contains("versionCode = 48"))
-            assertTrue(gradleText.contains("versionName \"2.3.0\"") || gradleText.contains("versionName = \"2.3.0\""))
+            assertTrue(gradleText.contains("versionCode 49") || gradleText.contains("versionCode = 49"))
+            assertTrue(gradleText.contains("versionName \"2.3.1\"") || gradleText.contains("versionName = \"2.3.1\""))
             assertTrue(gradleText.contains("androidx.graphics:graphics-shapes"))
         }
 
@@ -4575,5 +4575,46 @@ class SplitMateV23ExpressiveE2ETest {
             DesignSystemBindings.activeThemeMode = SplitMateThemeMode.SUNLIT_BUCKWHEAT
             SplitMateTheme.isDark = false
         }
+
+        @Test
+        fun `T5_21 M3 Expressive UX and Motion Polish contracts across TripHomeScreen ActivityDetailSheet Pnr Flight and QuickExpense`() {
+            val tripHomeSrc = readSourceFile("ui/screens/TripHomeScreen.kt")
+            val activitySheetSrc = readSourceFile("ui/screens/ActivityDetailSheet.kt")
+            val pnrSrc = readSourceFile("ui/screens/PnrExpenseReviewScreen.kt")
+            val flightSrc = readSourceFile("ui/screens/FlightExpenseReviewScreen.kt")
+            val quickExpenseSrc = readSourceFile("ui/screens/QuickExpenseAndGuideScreens.kt")
+
+            // 1. TripHomeScreen collapsing LargeTopAppBar + nestedScroll + LinearWavyProgressIndicator in Itinerary
+            assertTrue(tripHomeSrc.contains("TopAppBarDefaults.exitUntilCollapsedScrollBehavior()"))
+            assertTrue(tripHomeSrc.contains(".nestedScroll(scrollBehavior.nestedScrollConnection)"))
+            assertTrue(tripHomeSrc.contains("LargeTopAppBar("))
+            assertTrue(tripHomeSrc.contains("LinearWavyProgressIndicator("))
+
+            // 2. ActivityDetailSheet ModalBottomSheet + SplitButtonLayout + Segmented Island + Tnum Monospace
+            assertTrue(activitySheetSrc.contains("ModalBottomSheet("))
+            assertTrue(activitySheetSrc.contains("SplitButtonLayout("))
+            assertTrue(activitySheetSrc.contains("rememberAnimatedSegmentedIslandItemShape("))
+            assertTrue(activitySheetSrc.contains("SplitMateTnumMonospace"))
+            assertFalse(
+                Regex("""Color\(0x[0-9A-Fa-f]{8}\)""").containsMatchIn(activitySheetSrc),
+                "ActivityDetailSheet.kt must use semantic tokens with zero hardcoded hex colors"
+            )
+
+            // 3. PnrExpenseReviewScreen.kt and FlightExpenseReviewScreen.kt adapt across all 3 themes with zero hardcoded Buckwheat chrome literals
+            val bannedChromeHexes = listOf("0xFFFAF6F0", "0xFF23201E", "0xFFEDE7DF", "0xFF365314")
+            bannedChromeHexes.forEach { hex ->
+                assertFalse(pnrSrc.contains(hex, ignoreCase = true), "PnrExpenseReviewScreen.kt must not contain hardcoded chrome hex $hex")
+                assertFalse(flightSrc.contains(hex, ignoreCase = true), "FlightExpenseReviewScreen.kt must not contain hardcoded chrome hex $hex")
+            }
+            assertTrue(pnrSrc.contains("SplitMateThemeMode.KYOTO_MATCHA_YUZU"))
+            assertTrue(flightSrc.contains("SplitMateThemeMode.KYOTO_MATCHA_YUZU"))
+            assertTrue(pnrSrc.contains("ExpressiveGapLinearProgressIndicator("))
+            assertTrue(flightSrc.contains("ExpressiveGapLinearProgressIndicator("))
+
+            // 4. QuickExpenseAndGuideScreens ConnectedButtonGroup + LinearWavyProgressIndicator
+            assertTrue(quickExpenseSrc.contains("ConnectedButtonGroup("))
+            assertTrue(quickExpenseSrc.contains("LinearWavyProgressIndicator("))
+        }
     }
 }
+

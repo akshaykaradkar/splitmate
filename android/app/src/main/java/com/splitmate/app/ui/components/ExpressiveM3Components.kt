@@ -23,6 +23,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -34,6 +35,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -66,6 +68,13 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -80,9 +89,21 @@ import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
 
+@RequiresOptIn(message = "This Material 3 Expressive API is experimental.")
+@Retention(AnnotationRetention.BINARY)
+annotation class ExperimentalMaterial3ExpressiveApi
+
 // ==============================================================================
 // 1. M3 EXPRESSIVE WAVY & GAP PROGRESS INDICATORS
 // ==============================================================================
+
+object WavyProgressIndicatorDefaults {
+    val indicatorColor: Color
+        @Composable get() = MaterialTheme.colorScheme.tertiary
+
+    val trackColor: Color
+        @Composable get() = MaterialTheme.colorScheme.surfaceVariant
+}
 
 /**
  * Material 3 Expressive `LinearWavyProgressIndicator` with sinusoidal wave animation,
@@ -1109,8 +1130,53 @@ fun SplitButtonLayout(
 }
 
 // ==============================================================================
-// 7. HORIZONTAL FLOATING TOOLBAR (WITH ADJACENT FAB)
+// 7. HORIZONTAL FLOATING TOOLBAR (WITH ADJACENT FAB & NESTED SCROLL)
 // ==============================================================================
+
+object FloatingToolbarDefaults {
+    @Composable
+    fun StandardFloatingActionButton(
+        onClick: () -> Unit,
+        modifier: Modifier = Modifier,
+        containerColor: Color = MaterialTheme.colorScheme.primary,
+        contentColor: Color = MaterialTheme.colorScheme.onPrimary,
+        content: @Composable () -> Unit
+    ) {
+        Surface(
+            onClick = onClick,
+            shape = CircleShape,
+            color = containerColor,
+            contentColor = contentColor,
+            shadowElevation = 6.dp,
+            modifier = modifier.size(52.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                content()
+            }
+        }
+    }
+}
+
+/**
+ * Automatically toggles a [HorizontalFloatingToolbar]'s expanded/collapsed state
+ * as the user scrolls vertically in the parent list.
+ */
+fun Modifier.floatingToolbarVerticalNestedScroll(
+    expanded: Boolean = true,
+    onExpand: () -> Unit = {},
+    onCollapse: () -> Unit = {}
+): Modifier = this.nestedScroll(
+    object : NestedScrollConnection {
+        override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+            if (available.y < -6f && expanded) {
+                onCollapse()
+            } else if (available.y > 6f && !expanded) {
+                onExpand()
+            }
+            return Offset.Zero
+        }
+    }
+)
 
 /**
  * Material 3 Expressive `HorizontalFloatingToolbar` hovering above the system navigation
@@ -1138,27 +1204,112 @@ fun HorizontalFloatingToolbar(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Surface(
-            shape = CircleShape,
-            color = palette.surfaceContainerHigh,
-            contentColor = palette.onSurface,
-            border = BorderStroke(1.dp, palette.outline.copy(alpha = 0.65f)),
-            modifier = Modifier
-                .weight(1f, fill = false)
-                .height(60.dp)
-                .shadow(elevation = 6.dp, shape = CircleShape)
+        AnimatedVisibility(
+            visible = expanded,
+            enter = fadeIn(animationSpec = SplitMateMotion.fastEffects()) +
+                expandHorizontally(animationSpec = SplitMateMotion.defaultSpatial()),
+            exit = fadeOut(animationSpec = SplitMateMotion.fastEffects()) +
+                shrinkHorizontally(animationSpec = SplitMateMotion.defaultSpatial())
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = horizontalPad, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                content = content
-            )
+            Surface(
+                shape = CircleShape,
+                color = palette.surfaceContainerHigh,
+                contentColor = palette.onSurface,
+                border = BorderStroke(1.dp, palette.outline.copy(alpha = 0.65f)),
+                modifier = Modifier
+                    .height(60.dp)
+                    .shadow(elevation = 6.dp, shape = CircleShape)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = horizontalPad, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    content = content
+                )
+            }
         }
 
         if (floatingActionButton != null) {
-            Spacer(modifier = Modifier.width(10.dp))
-            floatingActionButton?.invoke()
+            if (expanded) {
+                Spacer(modifier = Modifier.width(10.dp))
+            }
+            floatingActionButton.invoke()
         }
     }
+}
+
+/**
+ * Material 3 Expressive `VerticalFloatingToolbar` for edge-docked quick actions
+ * and foldable/tablet vertical toolbars, paired with an optional [floatingActionButton].
+ */
+@Composable
+fun VerticalFloatingToolbar(
+    expanded: Boolean,
+    modifier: Modifier = Modifier,
+    floatingActionButton: (@Composable () -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val palette = LocalSplitMatePalette.current
+    val verticalPad by animateDpAsState(
+        targetValue = if (expanded) 12.dp else 8.dp,
+        animationSpec = SplitMateMotion.defaultSpatial(),
+        label = "VerticalFloatingToolbarPadding"
+    )
+    Column(
+        modifier = modifier
+            .widthIn(max = 72.dp)
+            .padding(horizontal = 4.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        AnimatedVisibility(
+            visible = expanded,
+            enter = fadeIn(animationSpec = SplitMateMotion.fastEffects()) +
+                expandVertically(animationSpec = SplitMateMotion.defaultSpatial()),
+            exit = fadeOut(animationSpec = SplitMateMotion.fastEffects()) +
+                shrinkVertically(animationSpec = SplitMateMotion.defaultSpatial())
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = palette.surfaceContainerHigh,
+                contentColor = palette.onSurface,
+                border = BorderStroke(1.dp, palette.outline.copy(alpha = 0.65f)),
+                modifier = Modifier
+                    .width(60.dp)
+                    .shadow(elevation = 6.dp, shape = CircleShape)
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = verticalPad),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    content = content
+                )
+            }
+        }
+
+        if (floatingActionButton != null) {
+            if (expanded) {
+                Spacer(modifier = Modifier.height(10.dp))
+            }
+            floatingActionButton.invoke()
+        }
+    }
+}
+
+/**
+ * Material 3 Expressive uncontained `LoadingIndicator` cycling through
+ * [MaterialShapes.morphSequence] without an outer circular container.
+ */
+@Composable
+fun LoadingIndicator(
+    modifier: Modifier = Modifier,
+    size: Dp = 38.dp,
+    color: Color = MaterialTheme.colorScheme.primary
+) {
+    ContainedLoadingIndicator(
+        modifier = modifier,
+        containerSize = size,
+        containerColor = Color.Transparent,
+        indicatorColor = color
+    )
 }
