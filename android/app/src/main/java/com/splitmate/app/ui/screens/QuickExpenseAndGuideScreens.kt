@@ -56,9 +56,18 @@ import com.splitmate.app.ui.DesignSystemBindings
 import com.splitmate.app.ui.DeviceContact
 import com.splitmate.app.ui.SplitMateBrandFontFamily
 import com.splitmate.app.ui.SplitMateDisplayFontFamily
+import com.splitmate.app.ui.SplitMateExpressiveTypography
+import com.splitmate.app.ui.SplitMateMonospaceTextStyle
+import com.splitmate.app.ui.SplitMateTnumMonospace
+import com.splitmate.app.ui.components.ConnectedButtonGroup
+import com.splitmate.app.ui.components.ExpressiveGapLinearProgressIndicator
+import com.splitmate.app.ui.components.LinearWavyProgressIndicator
+import com.splitmate.app.ui.components.MaterialShapes
+import com.splitmate.app.ui.components.MorphPolygonShape
+import com.splitmate.app.ui.components.SplitMateMotion
 import com.splitmate.app.ui.queryAllDeviceContacts
+import androidx.graphics.shapes.Morph
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.splitmate.app.ui.SplitMateViewModel
 import com.splitmate.app.ui.buildDiceBearOpenPeepsUrl
@@ -67,34 +76,43 @@ import com.splitmate.app.ui.resolveGroupCategoryIcon
 import java.text.NumberFormat
 import java.util.Locale
 
+enum class QuickSplitMode(val label: String) {
+    EQUAL("Equal"),
+    EXACT("Exact"),
+    PERCENTAGE("%"),
+    SHARES("Shares")
+}
+
 // ==============================================================================
-// SPLITMATE MATERIAL 3 EXPRESSIVE THEME TOKENS (GM3 DARK ELEVATION COMPLIANT)
+// SPLITMATE MATERIAL 3 EXPRESSIVE THEME TOKENS (GM3 3-THEME COMPLIANT)
 // ==============================================================================
 object QuickExpenseThemeTokens {
     val ScreenBg: Color
-        get() = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkBackground else DesignSystemBindings.GM3LightBackground
+        get() = DesignSystemBindings.activePalette.surfaceContainerLow
     val PrimaryDark: Color
-        get() = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkPrimaryText else DesignSystemBindings.GM3LightPrimaryText
-    val AccentSage = DesignSystemBindings.ElementsPositiveContainer
+        get() = DesignSystemBindings.activePalette.onSurface
+    val AccentSage: Color
+        get() = DesignSystemBindings.activePalette.primaryContainer
     val SageSurface: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF233216) else Color(0xFFEAF3DC)
+        get() = DesignSystemBindings.activePalette.primaryContainer
     val SageText: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFFD7E8B6) else DesignSystemBindings.ElementsPositiveText
-    val SageBorder = Color(0xFF5A8E24)
+        get() = DesignSystemBindings.activePalette.onPrimaryContainer
+    val SageBorder: Color
+        get() = DesignSystemBindings.activePalette.primary
     val TerracottaSurface: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF3A2019) else Color(0xFFFCECE7)
+        get() = DesignSystemBindings.activePalette.secondaryContainer
     val TerracottaText: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFFFECDD3) else DesignSystemBindings.ElementsNegativeText
+        get() = DesignSystemBindings.activePalette.onSecondaryContainer
     val SurfaceWhite: Color
-        get() = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkCardSurface else DesignSystemBindings.GM3LightCardSurface
+        get() = DesignSystemBindings.activePalette.surfaceContainerLowest
     val SurfaceKeypad: Color
-        get() = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkKeypadSurface else DesignSystemBindings.GM3LightKeypadSurface
+        get() = DesignSystemBindings.activePalette.surfaceContainer
     val SurfaceKeypadBorder: Color
-        get() = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkBorder else Color(0xFFE8E2D8)
+        get() = DesignSystemBindings.activePalette.outline
     val BorderLight: Color
-        get() = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkBorder else Color(0xFFE5DFC5)
+        get() = DesignSystemBindings.activePalette.outline
     val TextSecondary: Color
-        get() = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkSubtitleText else DesignSystemBindings.GM3LightSubtitleText
+        get() = DesignSystemBindings.activePalette.onSurfaceVariant
 
     val RadiusHero = DesignSystemBindings.GM3ShapeExtraLarge
     val RadiusCard = DesignSystemBindings.GM3ShapeLarge
@@ -140,34 +158,35 @@ fun QuickExpenseScreen(
         ?: uiState?.activeGroupMembers
         ?: emptyList()
     val isDark = uiState?.isDarkTheme == true || SplitMateTheme.isDark
+    val activePalette = DesignSystemBindings.activePalette
 
     val screenBg by animateColorAsState(
-        targetValue = if (isDark) DesignSystemBindings.GM3DarkBackground else DesignSystemBindings.GM3LightBackground,
+        targetValue = activePalette.surfaceContainerLow,
         animationSpec = DesignSystemBindings.themeColorTween(),
         label = "QuickExpenseScreenBg"
     )
     val surfaceColor by animateColorAsState(
-        targetValue = if (isDark) DesignSystemBindings.GM3DarkCardSurface else DesignSystemBindings.GM3LightCardSurface,
+        targetValue = activePalette.surfaceContainerLowest,
         animationSpec = DesignSystemBindings.themeColorTween(),
         label = "QuickExpenseCardSurface"
     )
     val textPrimary by animateColorAsState(
-        targetValue = if (isDark) DesignSystemBindings.GM3DarkPrimaryText else DesignSystemBindings.GM3LightPrimaryText,
+        targetValue = activePalette.onSurface,
         animationSpec = DesignSystemBindings.themeColorTween(),
         label = "QuickExpenseTextPrimary"
     )
     val textSecondary by animateColorAsState(
-        targetValue = if (isDark) DesignSystemBindings.GM3DarkSubtitleText else DesignSystemBindings.GM3LightSubtitleText,
+        targetValue = activePalette.onSurfaceVariant,
         animationSpec = DesignSystemBindings.themeColorTween(),
         label = "QuickExpenseTextSecondary"
     )
     val keypadBg by animateColorAsState(
-        targetValue = if (isDark) DesignSystemBindings.GM3DarkKeypadSurface else DesignSystemBindings.GM3LightKeypadSurface,
+        targetValue = activePalette.surfaceContainer,
         animationSpec = DesignSystemBindings.themeColorTween(),
         label = "QuickExpenseKeypadBg"
     )
     val keypadBorder by animateColorAsState(
-        targetValue = if (isDark) Color(0xFF3A3A3A) else Color(0xFFE8E2D8),
+        targetValue = activePalette.outline,
         animationSpec = DesignSystemBindings.themeColorTween(),
         label = "QuickExpenseKeypadBorder"
     )
@@ -862,11 +881,11 @@ fun QuickExpenseScreen(
                         items(quickCategoryPills) { (chipLabel, fullCategory, chipIcon) ->
                             val isChosen = expenseCategoryTitle.startsWith(fullCategory, ignoreCase = true) ||
                                 (fullCategory == "Train / PNR Ticket" && (expenseCategoryTitle.contains("PNR:") || expenseCategoryTitle.contains("Train", ignoreCase = true)))
-                            val selectedBg = if (isDark) Color(0xFFD7E8B6) else Color(0xFF23201E)
-                            val selectedFg = if (isDark) Color(0xFF181512) else Color.White
+                            val selectedBg = if (isDark) activePalette.primary else activePalette.onSurface
+                            val selectedFg = if (isDark) activePalette.onPrimary else activePalette.surfaceContainerLowest
                             val chipCorner by androidx.compose.animation.core.animateDpAsState(
                                 targetValue = if (isChosen) 10.dp else 20.dp,
-                                animationSpec = spring(dampingRatio = 0.65f, stiffness = 480f),
+                                animationSpec = SplitMateMotion.fastSpatial(),
                                 label = "GM3CategoryChipCorner"
                             )
                             Surface(
@@ -912,11 +931,11 @@ fun QuickExpenseScreen(
                             val isCustomNote = quickCategoryPills.none { (_, fullCat, _) ->
                                 expenseCategoryTitle.equals(fullCat, ignoreCase = true)
                             } && expenseCategoryTitle.isNotBlank()
-                            val selectedBg = if (isDark) Color(0xFFD7E8B6) else Color(0xFF23201E)
-                            val selectedFg = if (isDark) Color(0xFF181512) else Color.White
+                            val selectedBg = if (isDark) activePalette.primary else activePalette.onSurface
+                            val selectedFg = if (isDark) activePalette.onPrimary else activePalette.surfaceContainerLowest
                             val customChipCorner by androidx.compose.animation.core.animateDpAsState(
                                 targetValue = if (isCustomNote) 10.dp else 20.dp,
-                                animationSpec = spring(dampingRatio = 0.65f, stiffness = 480f),
+                                animationSpec = SplitMateMotion.fastSpatial(),
                                 label = "GM3CustomChipCorner"
                             )
                             Surface(
@@ -1219,6 +1238,23 @@ fun QuickExpenseScreen(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
+
+                                    Spacer(modifier = Modifier.height(2.dp))
+
+                                    val shareRatio = if (isSelected && memberCount > 0) {
+                                        (1f / memberCount.toFloat()).coerceIn(0f, 1f)
+                                    } else 0f
+                                    ExpressiveGapLinearProgressIndicator(
+                                        progress = { shareRatio },
+                                        modifier = Modifier
+                                            .width(42.dp)
+                                            .height(3.dp),
+                                        color = if (isSelected) QuickExpenseThemeTokens.SageBorder else keypadBorder,
+                                        trackColor = keypadBorder.copy(alpha = 0.45f),
+                                        gapSize = 3.dp,
+                                        stopSize = 2.dp,
+                                        strokeWidth = 3.dp
+                                    )
                                 }
                             }
                         }
@@ -1230,6 +1266,17 @@ fun QuickExpenseScreen(
                 // 2. BOTTOM UNIFIED CLUSTER: Hero ₹ 0 Amount Display + Split Pill + Tactile Calculator Keypad
                 // Grouping the amount display and numeric keypad together so the user's thumb & eye stay coupled
                 // ==================================================================
+                var activeSplitMode by remember { mutableStateOf(QuickSplitMode.EQUAL) }
+                val isZeroDriftVerified = memberCount > 0 && (remainderPaise == 0L || isRemainderEquallySplit)
+                val badgeMorphProgress by animateFloatAsState(
+                    targetValue = if (isZeroDriftVerified) 1f else 0f,
+                    animationSpec = SplitMateMotion.defaultSpatial(),
+                    label = "ZeroDriftBadgeMorph"
+                )
+                val badgeMorph = remember {
+                    Morph(MaterialShapes.SoftBurst, MaterialShapes.Cookie9Sided)
+                }
+
                 Surface(
                     shape = RoundedCornerShape(24.dp),
                     color = surfaceColor,
@@ -1245,6 +1292,19 @@ fun QuickExpenseScreen(
                             .fillMaxWidth()
                             .padding(horizontal = 12.dp, vertical = 10.dp)
                     ) {
+                        ConnectedButtonGroup(
+                            options = QuickSplitMode.entries,
+                            selectedIndex = QuickSplitMode.entries.indexOf(activeSplitMode),
+                            onSelect = { _, mode ->
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                activeSplitMode = mode
+                            },
+                            labelProvider = { it.label },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 6.dp)
+                        )
+
                         // Hero Tabular Amount Display wrapped in Gm3AuroraEnergySurface (1.2s pulse on math reconciliation + keystroke dynamicIntensity)
                         com.splitmate.app.ui.components.Gm3AuroraEnergySurface(
                             state = mathEnergyState,
@@ -1309,13 +1369,24 @@ fun QuickExpenseScreen(
                                             verticalAlignment = Alignment.CenterVertically,
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                         ) {
-                                            Icon(
-                                                imageVector = if (memberCount > 0) Icons.Rounded.CheckCircle else Icons.Rounded.ErrorOutline,
-                                                contentDescription = null,
-                                                tint = if (memberCount > 0) QuickExpenseThemeTokens.SageText else QuickExpenseThemeTokens.TerracottaText,
-                                                modifier = Modifier.size(13.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(18.dp)
+                                                    .clip(MorphPolygonShape(badgeMorph, badgeMorphProgress))
+                                                    .background(
+                                                        if (memberCount > 0) QuickExpenseThemeTokens.SageBorder.copy(alpha = 0.18f)
+                                                        else QuickExpenseThemeTokens.TerracottaText.copy(alpha = 0.18f)
+                                                    ),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (memberCount > 0) Icons.Rounded.CheckCircle else Icons.Rounded.ErrorOutline,
+                                                    contentDescription = null,
+                                                    tint = if (memberCount > 0) QuickExpenseThemeTokens.SageText else QuickExpenseThemeTokens.TerracottaText,
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(5.dp))
                                             Text(
                                                 text = if (memberCount > 0) {
                                                     "$currencySymbol${formatPaiseForSplitBadge(perPersonPaise)}/person · Exact Split"
@@ -1332,6 +1403,35 @@ fun QuickExpenseScreen(
                                     }
                                 }
 
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                val allocatedRatio = if (memberCount > 0) {
+                                    if (remainderPaise == 0L || isRemainderEquallySplit) 1f else 0.92f
+                                } else 0f
+                                LinearWavyProgressIndicator(
+                                    progress = { allocatedRatio },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(6.dp),
+                                    color = if (isZeroDriftVerified) QuickExpenseThemeTokens.SageBorder else activePalette.secondary,
+                                    trackColor = keypadBorder.copy(alpha = 0.45f),
+                                    amplitude = if (isZeroDriftVerified) 0f else 1f,
+                                    wavelength = 24.dp,
+                                    gapSize = 4.dp,
+                                    stopSize = 4.dp,
+                                    strokeWidth = 5.dp
+                                )
+
+                                Spacer(modifier = Modifier.height(3.dp))
+
+                                Text(
+                                    text = "0.00¢ DRIFT • EVERY PENNY ACCOUNTED FOR",
+                                    style = SplitMateExpressiveTypography.labelSmallEmphasized.merge(SplitMateMonospaceTextStyle),
+                                    fontSize = 9.5.sp,
+                                    color = if (isZeroDriftVerified) QuickExpenseThemeTokens.SageText else textSecondary,
+                                    letterSpacing = 0.6.sp
+                                )
+
                                 // High-contrast Peach Remainder Banner when remainderPaise > 0L & not yet reconciled
                                 if (remainderPaise > 0L && (!isRemainderEquallySplit || remainderCoinFlightProgress.value > 0f)) {
                                     Spacer(modifier = Modifier.height(6.dp))
@@ -1342,8 +1442,8 @@ fun QuickExpenseScreen(
                                                 triggerRemainderCoinFlight()
                                             },
                                             shape = RoundedCornerShape(12.dp),
-                                            color = Color(0xFFFED8C8).copy(alpha = (1f - remainderCoinFlightProgress.value * 0.7f).coerceIn(0.2f, 1f)),
-                                            border = BorderStroke(1.dp, Color(0xFFE06B52)),
+                                            color = QuickExpenseThemeTokens.TerracottaSurface.copy(alpha = (1f - remainderCoinFlightProgress.value * 0.7f).coerceIn(0.2f, 1f)),
+                                            border = BorderStroke(1.dp, activePalette.secondary),
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
                                             Row(
@@ -1358,11 +1458,11 @@ fun QuickExpenseScreen(
                                                     fontFamily = SplitMateBrandFontFamily,
                                                     fontSize = 11.sp,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = Color(0xFF7C2D12)
+                                                    color = QuickExpenseThemeTokens.TerracottaText
                                                 )
                                                 Surface(
                                                     shape = QuickExpenseThemeTokens.RadiusPill,
-                                                    color = Color(0xFFE06B52)
+                                                    color = activePalette.secondary
                                                 ) {
                                                     Row(
                                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
@@ -1374,12 +1474,12 @@ fun QuickExpenseScreen(
                                                             fontFamily = SplitMateBrandFontFamily,
                                                             fontSize = 10.sp,
                                                             fontWeight = FontWeight.ExtraBold,
-                                                            color = Color.White
+                                                            color = activePalette.onSecondary
                                                         )
                                                         Icon(
                                                             imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
                                                             contentDescription = null,
-                                                            tint = Color.White,
+                                                            tint = activePalette.onSecondary,
                                                             modifier = Modifier.size(11.dp)
                                                         )
                                                     }
@@ -1757,18 +1857,12 @@ fun TactileSquircleKey(
 
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.94f else 1.0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessHigh
-        ),
+        animationSpec = SplitMateMotion.fastSpatial(),
         label = "KeyScale"
     )
     val morphCorner by androidx.compose.animation.core.animateDpAsState(
         targetValue = if (isPressed) 12.dp else 24.dp,
-        animationSpec = spring(
-            dampingRatio = 0.62f,
-            stiffness = 520f
-        ),
+        animationSpec = SplitMateMotion.fastSpatial(),
         label = "GM3KeyCornerMorph"
     )
 

@@ -5,9 +5,12 @@ import android.net.Uri
 import android.os.Build
 import android.provider.ContactsContract
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -40,6 +43,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import kotlinx.coroutines.launch
 import com.splitmate.app.SplitMateTheme
+import com.splitmate.app.ui.components.ContainedLoadingIndicator
+import com.splitmate.app.ui.components.SplitMateMotion
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,6 +60,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.googlefonts.Font
 import androidx.compose.ui.text.googlefonts.GoogleFont
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.splitmate.app.R
@@ -62,9 +68,176 @@ import java.net.URLEncoder
 import java.util.Locale
 
 // ==============================================================================
+// 3-THEME MATERIAL 3 EXPRESSIVE ENGINE (v2.3.0)
+// ==============================================================================
+enum class SplitMateThemeMode(
+    val id: String,
+    val displayName: String,
+    val subtitle: String,
+    val isDark: Boolean
+) {
+    SUNLIT_BUCKWHEAT(
+        id = "SUNLIT_BUCKWHEAT",
+        displayName = "Sunlit Buckwheat",
+        subtitle = "Warm Cream Expressive Daylight",
+        isDark = false
+    ),
+    WARM_ESPRESSO_NIGHT(
+        id = "WARM_ESPRESSO_NIGHT",
+        displayName = "Warm Espresso Night",
+        subtitle = "Tactile Amber-on-Espresso Dark",
+        isDark = true
+    ),
+    KYOTO_MATCHA_YUZU(
+        id = "KYOTO_MATCHA_YUZU",
+        displayName = "Kyoto Matcha & Yuzu",
+        subtitle = "Botanical Stationery & Hanko Coral",
+        isDark = false
+    );
+
+    companion object {
+        @JvmOverloads
+        fun fromId(id: String?, fallbackDark: Boolean = false): SplitMateThemeMode {
+            val clean = id?.trim().orEmpty()
+            if (clean.isEmpty()) {
+                return if (fallbackDark) WARM_ESPRESSO_NIGHT else SUNLIT_BUCKWHEAT
+            }
+            return values().firstOrNull {
+                it.id.equals(clean, ignoreCase = true) ||
+                    it.displayName.equals(clean, ignoreCase = true) ||
+                    it.name.equals(clean.replace(" ", "_"), ignoreCase = true)
+            } ?: if (fallbackDark) WARM_ESPRESSO_NIGHT else SUNLIT_BUCKWHEAT
+        }
+    }
+}
+
+data class SplitMateExpressivePalette(
+    val mode: SplitMateThemeMode,
+    val surfaceContainerLowest: Color,
+    val surfaceContainerLow: Color,
+    val surfaceContainer: Color,
+    val surfaceContainerHigh: Color,
+    val surfaceContainerHighest: Color,
+    val onSurface: Color,
+    val onSurfaceVariant: Color,
+    val primary: Color,
+    val onPrimary: Color,
+    val primaryContainer: Color,
+    val onPrimaryContainer: Color,
+    val secondary: Color,
+    val onSecondary: Color,
+    val secondaryContainer: Color,
+    val onSecondaryContainer: Color,
+    val tertiary: Color,
+    val onTertiary: Color,
+    val tertiaryContainer: Color,
+    val onTertiaryContainer: Color,
+    val outline: Color,
+    val outlineVariant: Color
+)
+
+val SunlitBuckwheatPalette = SplitMateExpressivePalette(
+    mode = SplitMateThemeMode.SUNLIT_BUCKWHEAT,
+    surfaceContainerLowest = Color(0xFFFFFFFF),
+    surfaceContainerLow = Color(0xFFFAF6F0),
+    surfaceContainer = Color(0xFFF4EFE6),
+    surfaceContainerHigh = Color(0xFFEDE6DA),
+    surfaceContainerHighest = Color(0xFFE4DCCD),
+    onSurface = Color(0xFF23201E),
+    onSurfaceVariant = Color(0xFF6E675F),
+    primary = Color(0xFF365314),
+    onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFFD9F99D),
+    onPrimaryContainer = Color(0xFF1A2E05),
+    secondary = Color(0xFFE06B52),
+    onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFFFED8C8),
+    onSecondaryContainer = Color(0xFF7C2D12),
+    tertiary = Color(0xFF3730A3),
+    onTertiary = Color(0xFFFFFFFF),
+    tertiaryContainer = Color(0xFFDCE3FD),
+    onTertiaryContainer = Color(0xFF312E81),
+    outline = Color(0xFFEDE7DF),
+    outlineVariant = Color(0xFFE2D9CC)
+)
+
+val WarmEspressoNightPalette = SplitMateExpressivePalette(
+    mode = SplitMateThemeMode.WARM_ESPRESSO_NIGHT,
+    surfaceContainerLowest = Color(0xFF14110F),
+    surfaceContainerLow = Color(0xFF1C1815),
+    surfaceContainer = Color(0xFF25201C),
+    surfaceContainerHigh = Color(0xFF302A24),
+    surfaceContainerHighest = Color(0xFF3B332C),
+    onSurface = Color(0xFFF5F0E6),
+    onSurfaceVariant = Color(0xFFB5ACA2),
+    primary = Color(0xFFA3E635),
+    onPrimary = Color(0xFF1A2E05),
+    primaryContainer = Color(0xFF283D0E),
+    onPrimaryContainer = Color(0xFFD9F99D),
+    secondary = Color(0xFFFB923C),
+    onSecondary = Color(0xFF431A08),
+    secondaryContainer = Color(0xFF431A08),
+    onSecondaryContainer = Color(0xFFFED8C8),
+    tertiary = Color(0xFFA5B4FC),
+    onTertiary = Color(0xFF1E1B4B),
+    tertiaryContainer = Color(0xFF1E1B4B),
+    onTertiaryContainer = Color(0xFFE0E7FF),
+    outline = Color(0xFF38312B),
+    outlineVariant = Color(0xFF2E2924)
+)
+
+val KyotoMatchaYuzuPalette = SplitMateExpressivePalette(
+    mode = SplitMateThemeMode.KYOTO_MATCHA_YUZU,
+    surfaceContainerLowest = Color(0xFFF9FBF7),
+    surfaceContainerLow = Color(0xFFF1F6EE),
+    surfaceContainer = Color(0xFFE5EFE0),
+    surfaceContainerHigh = Color(0xFFD8E6D1),
+    surfaceContainerHighest = Color(0xFFC9DBC0),
+    onSurface = Color(0xFF14281D),
+    onSurfaceVariant = Color(0xFF4A6353),
+    primary = Color(0xFF2E5A1C),
+    onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFFD9F99D),
+    onPrimaryContainer = Color(0xFF14281D),
+    secondary = Color(0xFFFF6B4A),
+    onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFFFFE4DC),
+    onSecondaryContainer = Color(0xFF7C2D12),
+    tertiary = Color(0xFF312E81),
+    onTertiary = Color(0xFFFFFFFF),
+    tertiaryContainer = Color(0xFFE0E7FF),
+    onTertiaryContainer = Color(0xFF1E1B4B),
+    outline = Color(0xFFCBE0C3),
+    outlineVariant = Color(0xFFD8E6D1)
+)
+
+fun SplitMateThemeMode.toPalette(): SplitMateExpressivePalette = when (this) {
+    SplitMateThemeMode.SUNLIT_BUCKWHEAT -> SunlitBuckwheatPalette
+    SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> WarmEspressoNightPalette
+    SplitMateThemeMode.KYOTO_MATCHA_YUZU -> KyotoMatchaYuzuPalette
+}
+
+val LocalSplitMatePalette = staticCompositionLocalOf { SunlitBuckwheatPalette }
+
+object SplitMateThemeState {
+    var activeThemeMode by mutableStateOf(SplitMateThemeMode.SUNLIT_BUCKWHEAT)
+    val activePalette: SplitMateExpressivePalette
+        get() = activeThemeMode.toPalette()
+}
+
+// ==============================================================================
 // CANONICAL BINDINGS TO THE 4 GOOGLE DESIGN SYSTEMS (`design_systems/`)
 // ==============================================================================
 object DesignSystemBindings {
+    var activeThemeMode: SplitMateThemeMode
+        get() = SplitMateThemeState.activeThemeMode
+        set(value) {
+            SplitMateThemeState.activeThemeMode = value
+        }
+
+    val activePalette: SplitMateExpressivePalette
+        get() = SplitMateThemeState.activePalette
+
     // 1. Google Material 3 (`design_systems/google-material-3/DESIGN.md`)
     val GM3LightBackground = Color(0xFFFAF7F2)
     val GM3LightCardSurface = Color(0xFFFFFFFF)
@@ -84,12 +257,9 @@ object DesignSystemBindings {
     val GM3ShapeLarge = RoundedCornerShape(24.dp)
     val GM3ShapePill = RoundedCornerShape(50)
 
-    // 2. Android Motion (`design_systems/android-motion/DESIGN.md`)
-    fun <T> themeColorTween() = tween<T>(durationMillis = 400, easing = FastOutSlowInEasing)
-    fun <T> tactileSpring() = spring<T>(
-        dampingRatio = Spring.DampingRatioMediumBouncy,
-        stiffness = Spring.StiffnessMediumLow
-    )
+    // 2. Android Motion (`design_systems/android-motion/DESIGN.md`) — Upgraded to M3 Expressive Springs
+    fun <T> themeColorTween(): FiniteAnimationSpec<T> = SplitMateMotion.slowEffects()
+    fun <T> tactileSpring(): SpringSpec<T> = SplitMateMotion.defaultSpatial()
 
     // 3. Elements GM3 (`design_systems/elements-3/DESIGN.md`)
     val ElementsCreditorContainer = Color(0xFFD7E8B6)
@@ -125,47 +295,72 @@ val BuckwheatLavenderContainer = Color(0xFFDCE3FD)
 val BuckwheatLavenderText = Color(0xFF3730A3)
 
 private val SplitMateLightColorScheme = lightColorScheme(
-    primary = BuckwheatOlivePrimary,
-    onPrimary = Color.White,
-    primaryContainer = BuckwheatSageContainer,
-    onPrimaryContainer = BuckwheatOlivePrimary,
-    secondary = BuckwheatTerracotta,
-    onSecondary = Color.White,
-    secondaryContainer = BuckwheatPeachContainer,
-    onSecondaryContainer = BuckwheatTerracottaDark,
-    tertiary = BuckwheatLavenderText,
-    onTertiary = Color.White,
-    tertiaryContainer = BuckwheatLavenderContainer,
-    onTertiaryContainer = BuckwheatLavenderText,
-    background = DesignSystemBindings.GM3LightBackground,
-    onBackground = DesignSystemBindings.GM3LightPrimaryText,
-    surface = DesignSystemBindings.GM3LightCardSurface,
-    onSurface = DesignSystemBindings.GM3LightPrimaryText,
-    surfaceVariant = BuckwheatSunken,
-    onSurfaceVariant = DesignSystemBindings.GM3LightSubtitleText,
-    outline = BuckwheatBorder
+    primary = SunlitBuckwheatPalette.primary,
+    onPrimary = SunlitBuckwheatPalette.onPrimary,
+    primaryContainer = SunlitBuckwheatPalette.primaryContainer,
+    onPrimaryContainer = SunlitBuckwheatPalette.onPrimaryContainer,
+    secondary = SunlitBuckwheatPalette.secondary,
+    onSecondary = SunlitBuckwheatPalette.onSecondary,
+    secondaryContainer = SunlitBuckwheatPalette.secondaryContainer,
+    onSecondaryContainer = SunlitBuckwheatPalette.onSecondaryContainer,
+    tertiary = SunlitBuckwheatPalette.tertiary,
+    onTertiary = SunlitBuckwheatPalette.onTertiary,
+    tertiaryContainer = SunlitBuckwheatPalette.tertiaryContainer,
+    onTertiaryContainer = SunlitBuckwheatPalette.onTertiaryContainer,
+    background = SunlitBuckwheatPalette.surfaceContainerLow,
+    onBackground = SunlitBuckwheatPalette.onSurface,
+    surface = SunlitBuckwheatPalette.surfaceContainerLowest,
+    onSurface = SunlitBuckwheatPalette.onSurface,
+    surfaceVariant = SunlitBuckwheatPalette.surfaceContainer,
+    onSurfaceVariant = SunlitBuckwheatPalette.onSurfaceVariant,
+    outline = SunlitBuckwheatPalette.outline,
+    outlineVariant = SunlitBuckwheatPalette.outlineVariant
 )
 
 private val SplitMateDarkColorScheme = darkColorScheme(
-    primary = Color(0xFFD7E8B6),
-    onPrimary = Color(0xFF181512),
-    primaryContainer = Color(0xFF233216),
-    onPrimaryContainer = Color(0xFFD7E8B6),
-    secondary = Color(0xFFFEB49C),
-    onSecondary = Color(0xFF3A2019),
-    secondaryContainer = Color(0xFF3A2019),
-    onSecondaryContainer = Color(0xFFFECDD3),
-    tertiary = Color(0xFFBDC5FF),
-    onTertiary = Color(0xFF1E2678),
-    tertiaryContainer = Color(0xFF2A263D),
-    onTertiaryContainer = BuckwheatLavenderContainer,
-    background = DesignSystemBindings.GM3DarkBackground,
-    onBackground = DesignSystemBindings.GM3DarkPrimaryText,
-    surface = DesignSystemBindings.GM3DarkCardSurface,
-    onSurface = DesignSystemBindings.GM3DarkPrimaryText,
-    surfaceVariant = DesignSystemBindings.GM3DarkKeypadSurface,
-    onSurfaceVariant = DesignSystemBindings.GM3DarkSubtitleText,
-    outline = DesignSystemBindings.GM3DarkBorder
+    primary = WarmEspressoNightPalette.primary,
+    onPrimary = WarmEspressoNightPalette.onPrimary,
+    primaryContainer = WarmEspressoNightPalette.primaryContainer,
+    onPrimaryContainer = WarmEspressoNightPalette.onPrimaryContainer,
+    secondary = WarmEspressoNightPalette.secondary,
+    onSecondary = WarmEspressoNightPalette.onSecondary,
+    secondaryContainer = WarmEspressoNightPalette.secondaryContainer,
+    onSecondaryContainer = WarmEspressoNightPalette.onSecondaryContainer,
+    tertiary = WarmEspressoNightPalette.tertiary,
+    onTertiary = WarmEspressoNightPalette.onTertiary,
+    tertiaryContainer = WarmEspressoNightPalette.tertiaryContainer,
+    onTertiaryContainer = WarmEspressoNightPalette.onTertiaryContainer,
+    background = WarmEspressoNightPalette.surfaceContainerLow,
+    onBackground = WarmEspressoNightPalette.onSurface,
+    surface = WarmEspressoNightPalette.surfaceContainerLowest,
+    onSurface = WarmEspressoNightPalette.onSurface,
+    surfaceVariant = WarmEspressoNightPalette.surfaceContainer,
+    onSurfaceVariant = WarmEspressoNightPalette.onSurfaceVariant,
+    outline = WarmEspressoNightPalette.outline,
+    outlineVariant = WarmEspressoNightPalette.outlineVariant
+)
+
+private val SplitMateKyotoMatchaColorScheme = lightColorScheme(
+    primary = KyotoMatchaYuzuPalette.primary,
+    onPrimary = KyotoMatchaYuzuPalette.onPrimary,
+    primaryContainer = KyotoMatchaYuzuPalette.primaryContainer,
+    onPrimaryContainer = KyotoMatchaYuzuPalette.onPrimaryContainer,
+    secondary = KyotoMatchaYuzuPalette.secondary,
+    onSecondary = KyotoMatchaYuzuPalette.onSecondary,
+    secondaryContainer = KyotoMatchaYuzuPalette.secondaryContainer,
+    onSecondaryContainer = KyotoMatchaYuzuPalette.onSecondaryContainer,
+    tertiary = KyotoMatchaYuzuPalette.tertiary,
+    onTertiary = KyotoMatchaYuzuPalette.onTertiary,
+    tertiaryContainer = KyotoMatchaYuzuPalette.tertiaryContainer,
+    onTertiaryContainer = KyotoMatchaYuzuPalette.onTertiaryContainer,
+    background = KyotoMatchaYuzuPalette.surfaceContainerLow,
+    onBackground = KyotoMatchaYuzuPalette.onSurface,
+    surface = KyotoMatchaYuzuPalette.surfaceContainerLowest,
+    onSurface = KyotoMatchaYuzuPalette.onSurface,
+    surfaceVariant = KyotoMatchaYuzuPalette.surfaceContainer,
+    onSurfaceVariant = KyotoMatchaYuzuPalette.onSurfaceVariant,
+    outline = KyotoMatchaYuzuPalette.outline,
+    outlineVariant = KyotoMatchaYuzuPalette.outlineVariant
 )
 
 private val fontProvider = GoogleFont.Provider(
@@ -205,10 +400,19 @@ fun String.toSmartTitleCase(): String {
         }
 }
 
-val PlusJakartaSansFont = FigtreeFontFamily
-val JetBrainsMonoFont = FigtreeFontFamily
+// 3-Voice Typography:
+// 1. Editorial Display (`PlusJakartaSansFont` backed by deterministic offline Figtree ExtraBold/Black)
+// 2. Conversational UI (`FigtreeFontFamily`)
+// 3. True Tabular Monospace (`JetBrainsMonoFont` / `SplitMateTnumMonospace` backed by `FontFamily.Monospace` with `"tnum, zero"`)
+val PlusJakartaSansFont: FontFamily = FigtreeFontFamily
+val JetBrainsMonoFont: FontFamily = FontFamily.Monospace
+val SplitMateTnumMonospace: FontFamily = FontFamily.Monospace
 
-val SplitMateTnumMonospace: FontFamily = FigtreeFontFamily
+val SplitMateMonospaceTextStyle = TextStyle(
+    fontFamily = FontFamily.Monospace,
+    fontWeight = FontWeight.Bold,
+    fontFeatureSettings = "tnum, zero"
+)
 
 val SplitMateTypography = Typography(
     displayLarge = TextStyle(
@@ -217,7 +421,7 @@ val SplitMateTypography = Typography(
         fontSize = 48.sp,
         lineHeight = 52.sp,
         letterSpacing = (-1.5).sp,
-        fontFeatureSettings = "tnum"
+        fontFeatureSettings = "tnum, zero"
     ),
     displayMedium = TextStyle(
         fontFamily = FigtreeFontFamily,
@@ -225,7 +429,7 @@ val SplitMateTypography = Typography(
         fontSize = 36.sp,
         lineHeight = 42.sp,
         letterSpacing = (-1.5).sp,
-        fontFeatureSettings = "tnum"
+        fontFeatureSettings = "tnum, zero"
     ),
     displaySmall = TextStyle(
         fontFamily = FigtreeFontFamily,
@@ -233,7 +437,7 @@ val SplitMateTypography = Typography(
         fontSize = 30.sp,
         lineHeight = 36.sp,
         letterSpacing = (-1.0).sp,
-        fontFeatureSettings = "tnum"
+        fontFeatureSettings = "tnum, zero"
     ),
     headlineLarge = TextStyle(
         fontFamily = FigtreeFontFamily,
@@ -241,7 +445,7 @@ val SplitMateTypography = Typography(
         fontSize = 26.sp,
         lineHeight = 32.sp,
         letterSpacing = (-0.5).sp,
-        fontFeatureSettings = "tnum"
+        fontFeatureSettings = "tnum, zero"
     ),
     headlineMedium = TextStyle(
         fontFamily = FigtreeFontFamily,
@@ -249,28 +453,28 @@ val SplitMateTypography = Typography(
         fontSize = 20.sp,
         lineHeight = 26.sp,
         letterSpacing = (-0.3).sp,
-        fontFeatureSettings = "tnum"
+        fontFeatureSettings = "tnum, zero"
     ),
     headlineSmall = TextStyle(
         fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 18.sp,
         lineHeight = 24.sp,
-        fontFeatureSettings = "tnum"
+        fontFeatureSettings = "tnum, zero"
     ),
     titleLarge = TextStyle(
         fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 24.sp,
         lineHeight = 28.sp,
-        fontFeatureSettings = "tnum"
+        fontFeatureSettings = "tnum, zero"
     ),
     titleMedium = TextStyle(
         fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 15.sp,
         lineHeight = 20.sp,
-        fontFeatureSettings = "tnum"
+        fontFeatureSettings = "tnum, zero"
     ),
     titleSmall = TextStyle(
         fontFamily = FigtreeFontFamily,
@@ -278,7 +482,7 @@ val SplitMateTypography = Typography(
         fontSize = 13.sp,
         lineHeight = 18.sp,
         letterSpacing = 0.sp,
-        fontFeatureSettings = "tnum"
+        fontFeatureSettings = "tnum, zero"
     ),
     bodyLarge = TextStyle(
         fontFamily = FigtreeFontFamily,
@@ -286,7 +490,7 @@ val SplitMateTypography = Typography(
         fontSize = 15.sp,
         lineHeight = 20.sp,
         letterSpacing = 0.sp,
-        fontFeatureSettings = "tnum"
+        fontFeatureSettings = "tnum, zero"
     ),
     bodyMedium = TextStyle(
         fontFamily = FigtreeFontFamily,
@@ -294,7 +498,7 @@ val SplitMateTypography = Typography(
         fontSize = 13.sp,
         lineHeight = 18.sp,
         letterSpacing = 0.sp,
-        fontFeatureSettings = "tnum"
+        fontFeatureSettings = "tnum, zero"
     ),
     bodySmall = TextStyle(
         fontFamily = FigtreeFontFamily,
@@ -302,7 +506,7 @@ val SplitMateTypography = Typography(
         fontSize = 12.sp,
         lineHeight = 16.sp,
         letterSpacing = 0.sp,
-        fontFeatureSettings = "tnum"
+        fontFeatureSettings = "tnum, zero"
     ),
     labelLarge = TextStyle(
         fontFamily = FigtreeFontFamily,
@@ -310,14 +514,14 @@ val SplitMateTypography = Typography(
         fontSize = 12.sp,
         lineHeight = 16.sp,
         letterSpacing = 0.5.sp,
-        fontFeatureSettings = "tnum"
+        fontFeatureSettings = "tnum, zero"
     ),
     labelMedium = TextStyle(
         fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 12.sp,
         lineHeight = 16.sp,
-        fontFeatureSettings = "tnum"
+        fontFeatureSettings = "tnum, zero"
     ),
     labelSmall = TextStyle(
         fontFamily = FigtreeFontFamily,
@@ -325,9 +529,148 @@ val SplitMateTypography = Typography(
         fontSize = 11.sp,
         lineHeight = 14.sp,
         letterSpacing = 0.sp,
-        fontFeatureSettings = "tnum"
+        fontFeatureSettings = "tnum, zero"
     )
 )
+
+/**
+ * All 15 Material 3 Expressive `*Emphasized` Typography Tokens (`displayLargeEmphasized` through `labelSmallEmphasized`).
+ */
+object SplitMateExpressiveTypography {
+    val displayLargeEmphasized = SplitMateTypography.displayLarge.copy(
+        fontFamily = PlusJakartaSansFont,
+        fontWeight = FontWeight.Black,
+        fontSize = 57.sp,
+        lineHeight = 64.sp,
+        letterSpacing = (-1.8).sp,
+        fontFeatureSettings = "tnum, zero"
+    )
+    val displayMediumEmphasized = SplitMateTypography.displayMedium.copy(
+        fontFamily = PlusJakartaSansFont,
+        fontWeight = FontWeight.Black,
+        fontSize = 45.sp,
+        lineHeight = 52.sp,
+        letterSpacing = (-1.6).sp,
+        fontFeatureSettings = "tnum, zero"
+    )
+    val displaySmallEmphasized = SplitMateTypography.displaySmall.copy(
+        fontFamily = PlusJakartaSansFont,
+        fontWeight = FontWeight.Black,
+        fontSize = 36.sp,
+        lineHeight = 44.sp,
+        letterSpacing = (-1.2).sp,
+        fontFeatureSettings = "tnum, zero"
+    )
+    val headlineLargeEmphasized = SplitMateTypography.headlineLarge.copy(
+        fontFamily = PlusJakartaSansFont,
+        fontWeight = FontWeight.Black,
+        fontSize = 32.sp,
+        lineHeight = 40.sp,
+        letterSpacing = (-0.7).sp,
+        fontFeatureSettings = "tnum, zero"
+    )
+    val headlineMediumEmphasized = SplitMateTypography.headlineMedium.copy(
+        fontFamily = PlusJakartaSansFont,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 28.sp,
+        lineHeight = 36.sp,
+        letterSpacing = (-0.4).sp,
+        fontFeatureSettings = "tnum, zero"
+    )
+    val headlineSmallEmphasized = SplitMateTypography.headlineSmall.copy(
+        fontFamily = PlusJakartaSansFont,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 24.sp,
+        lineHeight = 32.sp,
+        letterSpacing = (-0.3).sp,
+        fontFeatureSettings = "tnum, zero"
+    )
+    val titleLargeEmphasized = SplitMateTypography.titleLarge.copy(
+        fontFamily = PlusJakartaSansFont,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 22.sp,
+        lineHeight = 28.sp,
+        letterSpacing = (-0.4).sp,
+        fontFeatureSettings = "tnum, zero"
+    )
+    val titleMediumEmphasized = SplitMateTypography.titleMedium.copy(
+        fontFamily = FigtreeFontFamily,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 16.sp,
+        lineHeight = 24.sp,
+        letterSpacing = (-0.2).sp,
+        fontFeatureSettings = "tnum, zero"
+    )
+    val titleSmallEmphasized = SplitMateTypography.titleSmall.copy(
+        fontFamily = FigtreeFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        letterSpacing = (-0.1).sp,
+        fontFeatureSettings = "tnum, zero"
+    )
+    val bodyLargeEmphasized = SplitMateTypography.bodyLarge.copy(
+        fontFamily = FigtreeFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 16.sp,
+        lineHeight = 24.sp,
+        fontFeatureSettings = "tnum, zero"
+    )
+    val bodyMediumEmphasized = SplitMateTypography.bodyMedium.copy(
+        fontFamily = FigtreeFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        fontFeatureSettings = "tnum, zero"
+    )
+    val bodySmallEmphasized = SplitMateTypography.bodySmall.copy(
+        fontFamily = FigtreeFontFamily,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+        fontFeatureSettings = "tnum, zero"
+    )
+    val labelLargeEmphasized = SplitMateTypography.labelLarge.copy(
+        fontFamily = FigtreeFontFamily,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.2.sp,
+        fontFeatureSettings = "tnum, zero"
+    )
+    val labelMediumEmphasized = SplitMateTypography.labelMedium.copy(
+        fontFamily = FigtreeFontFamily,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.2.sp,
+        fontFeatureSettings = "tnum, zero"
+    )
+    val labelSmallEmphasized = SplitMateTypography.labelSmall.copy(
+        fontFamily = FigtreeFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 11.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.2.sp,
+        fontFeatureSettings = "tnum, zero"
+    )
+}
+
+val Typography.displayLargeEmphasized: TextStyle get() = SplitMateExpressiveTypography.displayLargeEmphasized
+val Typography.displayMediumEmphasized: TextStyle get() = SplitMateExpressiveTypography.displayMediumEmphasized
+val Typography.displaySmallEmphasized: TextStyle get() = SplitMateExpressiveTypography.displaySmallEmphasized
+val Typography.headlineLargeEmphasized: TextStyle get() = SplitMateExpressiveTypography.headlineLargeEmphasized
+val Typography.headlineMediumEmphasized: TextStyle get() = SplitMateExpressiveTypography.headlineMediumEmphasized
+val Typography.headlineSmallEmphasized: TextStyle get() = SplitMateExpressiveTypography.headlineSmallEmphasized
+val Typography.titleLargeEmphasized: TextStyle get() = SplitMateExpressiveTypography.titleLargeEmphasized
+val Typography.titleMediumEmphasized: TextStyle get() = SplitMateExpressiveTypography.titleMediumEmphasized
+val Typography.titleSmallEmphasized: TextStyle get() = SplitMateExpressiveTypography.titleSmallEmphasized
+val Typography.bodyLargeEmphasized: TextStyle get() = SplitMateExpressiveTypography.bodyLargeEmphasized
+val Typography.bodyMediumEmphasized: TextStyle get() = SplitMateExpressiveTypography.bodyMediumEmphasized
+val Typography.bodySmallEmphasized: TextStyle get() = SplitMateExpressiveTypography.bodySmallEmphasized
+val Typography.labelLargeEmphasized: TextStyle get() = SplitMateExpressiveTypography.labelLargeEmphasized
+val Typography.labelMediumEmphasized: TextStyle get() = SplitMateExpressiveTypography.labelMediumEmphasized
+val Typography.labelSmallEmphasized: TextStyle get() = SplitMateExpressiveTypography.labelSmallEmphasized
 
 /**
  * Extracts strictly the first 1 or 2 uppercase letters of the person's ACTUAL NAME.
@@ -1782,7 +2125,10 @@ fun ContactPickerBottomSheet(
                             .height(200.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = SplitMateTheme.PrimaryDark)
+                        ExpressiveMorphingLoader(
+                            containerColor = SplitMateTheme.SageSurface,
+                            indicatorColor = SplitMateTheme.PrimaryDark
+                        )
                     }
                 } else if (filteredContacts.isEmpty()) {
                     Surface(
@@ -1871,7 +2217,7 @@ fun ContactPickerBottomSheet(
                                         modifier = Modifier.weight(1f)
                                     ) {
                                         Box(
-                                            modifier = Modifier
+                                           modifier = Modifier
                                                 .size(40.dp)
                                                 .clip(CircleShape)
                                                 .background(
@@ -1952,13 +2298,30 @@ fun ContactPickerBottomSheet(
 }
 
 @Composable
+fun ExpressiveMorphingLoader(
+    modifier: Modifier = Modifier,
+    containerSize: Dp = 48.dp,
+    containerColor: Color = SplitMateTheme.SageSurface,
+    indicatorColor: Color = SplitMateTheme.PrimaryDark
+) {
+    ContainedLoadingIndicator(
+        modifier = modifier,
+        containerSize = containerSize,
+        containerColor = containerColor,
+        indicatorColor = indicatorColor
+    )
+}
+
+@Composable
 fun SplitMateMaterial3ExpressiveTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    themeMode: SplitMateThemeMode = if (darkTheme) SplitMateThemeMode.WARM_ESPRESSO_NIGHT else SplitMateThemeMode.SUNLIT_BUCKWHEAT,
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     SplitMateExpressiveTheme(
         darkTheme = darkTheme,
+        themeMode = themeMode,
         dynamicColor = dynamicColor,
         content = content
     )
@@ -1967,26 +2330,153 @@ fun SplitMateMaterial3ExpressiveTheme(
 @Composable
 fun SplitMateExpressiveTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    themeMode: SplitMateThemeMode = if (darkTheme) SplitMateThemeMode.WARM_ESPRESSO_NIGHT else SplitMateThemeMode.SUNLIT_BUCKWHEAT,
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
+    val effectiveMode = when {
+        themeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU && !darkTheme -> SplitMateThemeMode.KYOTO_MATCHA_YUZU
+        darkTheme || themeMode == SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> SplitMateThemeMode.WARM_ESPRESSO_NIGHT
+        else -> SplitMateThemeMode.SUNLIT_BUCKWHEAT
+    }
+
+    SplitMateTheme.isDark = effectiveMode.isDark
+    SplitMateThemeState.activeThemeMode = effectiveMode
+    DesignSystemBindings.activeThemeMode = effectiveMode
+
+    val targetPalette = effectiveMode.toPalette()
+
+    val animSurfaceLowest by animateColorAsState(
+        targetValue = targetPalette.surfaceContainerLowest,
+        animationSpec = SplitMateMotion.slowEffects(),
+        label = "ThemeSurfaceLowest"
+    )
+    val animSurfaceLow by animateColorAsState(
+        targetValue = targetPalette.surfaceContainerLow,
+        animationSpec = SplitMateMotion.slowEffects(),
+        label = "ThemeSurfaceLow"
+    )
+    val animSurfaceContainer by animateColorAsState(
+        targetValue = targetPalette.surfaceContainer,
+        animationSpec = SplitMateMotion.slowEffects(),
+        label = "ThemeSurfaceContainer"
+    )
+    val animSurfaceHigh by animateColorAsState(
+        targetValue = targetPalette.surfaceContainerHigh,
+        animationSpec = SplitMateMotion.slowEffects(),
+        label = "ThemeSurfaceHigh"
+    )
+    val animSurfaceHighest by animateColorAsState(
+        targetValue = targetPalette.surfaceContainerHighest,
+        animationSpec = SplitMateMotion.slowEffects(),
+        label = "ThemeSurfaceHighest"
+    )
+    val animOnSurface by animateColorAsState(
+        targetValue = targetPalette.onSurface,
+        animationSpec = SplitMateMotion.slowEffects(),
+        label = "ThemeOnSurface"
+    )
+    val animOnSurfaceVariant by animateColorAsState(
+        targetValue = targetPalette.onSurfaceVariant,
+        animationSpec = SplitMateMotion.slowEffects(),
+        label = "ThemeOnSurfaceVariant"
+    )
+    val animPrimary by animateColorAsState(
+        targetValue = targetPalette.primary,
+        animationSpec = SplitMateMotion.slowEffects(),
+        label = "ThemePrimary"
+    )
+    val animPrimaryContainer by animateColorAsState(
+        targetValue = targetPalette.primaryContainer,
+        animationSpec = SplitMateMotion.slowEffects(),
+        label = "ThemePrimaryContainer"
+    )
+    val animSecondary by animateColorAsState(
+        targetValue = targetPalette.secondary,
+        animationSpec = SplitMateMotion.slowEffects(),
+        label = "ThemeSecondary"
+    )
+    val animSecondaryContainer by animateColorAsState(
+        targetValue = targetPalette.secondaryContainer,
+        animationSpec = SplitMateMotion.slowEffects(),
+        label = "ThemeSecondaryContainer"
+    )
+    val animTertiary by animateColorAsState(
+        targetValue = targetPalette.tertiary,
+        animationSpec = SplitMateMotion.slowEffects(),
+        label = "ThemeTertiary"
+    )
+    val animTertiaryContainer by animateColorAsState(
+        targetValue = targetPalette.tertiaryContainer,
+        animationSpec = SplitMateMotion.slowEffects(),
+        label = "ThemeTertiaryContainer"
+    )
+    val animOutline by animateColorAsState(
+        targetValue = targetPalette.outline,
+        animationSpec = SplitMateMotion.slowEffects(),
+        label = "ThemeOutline"
+    )
+
+    val animatedPalette = targetPalette.copy(
+        surfaceContainerLowest = animSurfaceLowest,
+        surfaceContainerLow = animSurfaceLow,
+        surfaceContainer = animSurfaceContainer,
+        surfaceContainerHigh = animSurfaceHigh,
+        surfaceContainerHighest = animSurfaceHighest,
+        onSurface = animOnSurface,
+        onSurfaceVariant = animOnSurfaceVariant,
+        primary = animPrimary,
+        primaryContainer = animPrimaryContainer,
+        secondary = animSecondary,
+        secondaryContainer = animSecondaryContainer,
+        tertiary = animTertiary,
+        tertiaryContainer = animTertiaryContainer,
+        outline = animOutline
+    )
+
+    val baseScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            if (effectiveMode.isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-        darkTheme -> SplitMateDarkColorScheme
+        effectiveMode == SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> SplitMateDarkColorScheme
+        effectiveMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU -> SplitMateKyotoMatchaColorScheme
         else -> SplitMateLightColorScheme
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = SplitMateTypography
-    ) {
-        ProvideTextStyle(
-            value = TextStyle(fontFamily = FigtreeFontFamily),
-            content = content
-        )
+    val colorScheme = baseScheme.copy(
+        primary = animPrimary,
+        onPrimary = targetPalette.onPrimary,
+        primaryContainer = animPrimaryContainer,
+        onPrimaryContainer = targetPalette.onPrimaryContainer,
+        secondary = animSecondary,
+        onSecondary = targetPalette.onSecondary,
+        secondaryContainer = animSecondaryContainer,
+        onSecondaryContainer = targetPalette.onSecondaryContainer,
+        tertiary = animTertiary,
+        onTertiary = targetPalette.onTertiary,
+        tertiaryContainer = animTertiaryContainer,
+        onTertiaryContainer = targetPalette.onTertiaryContainer,
+        background = animSurfaceLow,
+        onBackground = animOnSurface,
+        surface = animSurfaceLowest,
+        onSurface = animOnSurface,
+        surfaceVariant = animSurfaceContainer,
+        onSurfaceVariant = animOnSurfaceVariant,
+        outline = animOutline,
+        outlineVariant = targetPalette.outlineVariant
+    )
+
+    CompositionLocalProvider(LocalSplitMatePalette provides animatedPalette) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = SplitMateTypography
+        ) {
+            ProvideTextStyle(
+                value = TextStyle(fontFamily = FigtreeFontFamily),
+                content = content
+            )
+        }
     }
 }
 

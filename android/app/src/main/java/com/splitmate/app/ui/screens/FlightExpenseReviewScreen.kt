@@ -53,8 +53,16 @@ import com.splitmate.app.SplitMateTheme
 import com.splitmate.app.data.GroupMemberEntity
 import com.splitmate.app.data.PnrNetworkRepository
 import com.splitmate.app.data.UniversalFlightTicketExtractor
+import com.splitmate.app.ui.DesignSystemBindings
 import com.splitmate.app.ui.ParsedTravelTicket
+import com.splitmate.app.ui.SplitMateThemeMode
 import com.splitmate.app.ui.SplitMateViewModel
+import com.splitmate.app.ui.components.ConnectedButtonGroup
+import com.splitmate.app.ui.components.ContainedLoadingIndicator
+import com.splitmate.app.ui.components.ExpressiveGapLinearProgressIndicator
+import com.splitmate.app.ui.components.SplitMateMotion
+import com.splitmate.app.ui.components.rememberAnimatedSegmentedIslandItemShape
+import com.splitmate.app.ui.components.segmentedIslandItemShape
 import com.splitmate.app.ui.extractInitialsFromNameOrSeed
 import com.splitmate.app.ui.formatTravelExpenseTitle
 import kotlinx.coroutines.Dispatchers
@@ -69,43 +77,63 @@ import kotlin.math.sin
 import kotlin.random.Random
 
 // ==============================================================================
-// 1. MATERIAL 3 EXPRESSIVE & LUXURY AVIATION TOKENS (LIGHT & DARK ADAPTIVE)
+// 1. MATERIAL 3 EXPRESSIVE & LUXURY AVIATION TOKENS (3-THEME ADAPTIVE)
 // ==============================================================================
 object FlightPassTokens {
     val AppBackground: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF141311) else Color(0xFFFAF7F2)
+        get() = DesignSystemBindings.activePalette.surfaceContainerLow
     val PrimaryDark: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFFF4EFEA) else Color(0xFF23201E)
-    val AviationNavy = Color(0xFF2B2768)             // Warm Periwinkle-Indigo Dusk Header
-    val AviationNavyGradient = Color(0xFF1B1849)     // Deep Periwinkle Midnight
+        get() = DesignSystemBindings.activePalette.onSurface
+    val AviationNavy: Color
+        get() = when (DesignSystemBindings.activeThemeMode) {
+            SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Color(0xFF2B2768)
+            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF1F1C52)
+            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF23383B)
+        }
+    val AviationNavyGradient: Color
+        get() = when (DesignSystemBindings.activeThemeMode) {
+            SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Color(0xFF1B1849)
+            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF141236)
+            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF162527)
+        }
     val SkyBlue: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF282552) else Color(0xFFEEF2FF)
+        get() = DesignSystemBindings.activePalette.tertiaryContainer
     val SkyBlueText: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFFDCE3FD) else Color(0xFF2B2768)
+        get() = DesignSystemBindings.activePalette.onTertiaryContainer
     val SkyBlueBorder: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF4E48A6) else Color(0xFFC7D2FE)
+        get() = when (DesignSystemBindings.activeThemeMode) {
+            SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Color(0xFFC7D2FE)
+            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF4E48A6)
+            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFFB4D4D8)
+        }
     val TicketPaperWhite: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF1F1D1A) else Color(0xFFFFFFFF)
+        get() = DesignSystemBindings.activePalette.surfaceContainerLowest
     val TicketPaperEdge: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF38342E) else Color(0xFFEAE6DF)
+        get() = DesignSystemBindings.activePalette.outline
     val StatusGreenSurface: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF233316) else Color(0xFFEAF3DC)
+        get() = DesignSystemBindings.activePalette.primaryContainer
     val StatusGreenText: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFFD7E8B6) else Color(0xFF2D4810)
+        get() = DesignSystemBindings.activePalette.onPrimaryContainer
     val StatusGreenBorder: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF3D5428) else Color(0xFFC7E2A4)
-    val StatusGreenDot = Color(0xFF4CAF50)           // Active Live Status Beacon
+        get() = when (DesignSystemBindings.activeThemeMode) {
+            SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Color(0xFFC7E2A4)
+            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF3D5428)
+            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFFA8C6A3)
+        }
+    val StatusGreenDot: Color
+        get() = DesignSystemBindings.activePalette.primaryContainer
     val BorderSubtle: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF322E28) else Color(0xFFEFECE6)
+        get() = DesignSystemBindings.activePalette.surfaceContainer
     val BorderDashed: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF4A443C) else Color(0xFFD6CFC3)
+        get() = DesignSystemBindings.activePalette.outlineVariant
     val TextSecondary: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFFB8B0A4) else Color(0xFF756F68)
+        get() = DesignSystemBindings.activePalette.onSurfaceVariant
     val TextMuted: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF857D73) else Color(0xFF9E978E)
-    val AccentSageGlow = Color(0xFFD7E8B6)           // Glowing Check Icon Accent
+        get() = DesignSystemBindings.activePalette.onSurfaceVariant
+    val AccentSageGlow: Color
+        get() = DesignSystemBindings.activePalette.primaryContainer
     val BarcodeBarColor: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFFDCE3FD) else Color(0xFF2B2768)
+        get() = DesignSystemBindings.activePalette.onTertiaryContainer
 
     // Expressive Radii
     val RadiusCardCorner = 24.dp
@@ -987,12 +1015,20 @@ fun FlightExpenseReviewScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Center
                             ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.CheckCircle,
-                                    contentDescription = null,
-                                    tint = FlightPassTokens.AccentSageGlow,
-                                    modifier = Modifier.size(22.dp)
-                                )
+                                if (isCommittingBoardingPass) {
+                                    ContainedLoadingIndicator(
+                                        containerSize = 24.dp,
+                                        containerColor = FlightPassTokens.SkyBlue,
+                                        indicatorColor = FlightPassTokens.SkyBlueText
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Rounded.CheckCircle,
+                                        contentDescription = null,
+                                        tint = FlightPassTokens.AccentSageGlow,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(
                                     text = if (existingFlightExpenseInGroup != null) {
@@ -1289,61 +1325,49 @@ fun FlightExpenseReviewScreen(
                             Spacer(modifier = Modifier.height(10.dp))
                             val isAllSelected = selectedMemberIds.size == groupMembers.size
                             val isOnlyTicketSelected = selectedMemberIds == matchedTicketMemberIds
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Surface(
-                                    onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        selectedMemberIds = groupMembers.map { it.memberId }.toSet()
-                                    },
-                                    shape = FlightPassTokens.RadiusPill,
-                                    color = if (isAllSelected) FlightPassTokens.SkyBlue else FlightPassTokens.TicketPaperWhite,
-                                    border = BorderStroke(1.dp, if (isAllSelected) FlightPassTokens.SkyBlueBorder else FlightPassTokens.BorderSubtle)
-                                ) {
-                                    Text(
-                                        text = "Split: All ${groupMembers.size} Group Members",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isAllSelected) FlightPassTokens.SkyBlueText else FlightPassTokens.TextSecondary,
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                    )
-                                }
-
-                                Surface(
-                                    onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        selectedMemberIds = matchedTicketMemberIds
-                                    },
-                                    shape = FlightPassTokens.RadiusPill,
-                                    color = if (isOnlyTicketSelected) FlightPassTokens.SkyBlue else FlightPassTokens.TicketPaperWhite,
-                                    border = BorderStroke(1.dp, if (isOnlyTicketSelected) FlightPassTokens.SkyBlueBorder else FlightPassTokens.BorderSubtle)
-                                ) {
-                                    Text(
-                                        text = "Only Ticket Passenger${if (matchedTicketMemberIds.size > 1) "s" else ""} (${matchedTicketMembers.joinToString { it.name.substringBefore(" ") }})",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isOnlyTicketSelected) FlightPassTokens.SkyBlueText else FlightPassTokens.TextSecondary,
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                    )
-                                }
-                            }
+                            val scopeOptions = listOf(
+                                "Split: All ${groupMembers.size} Group Members",
+                                "Only Ticket Passenger${if (matchedTicketMemberIds.size > 1) "s" else ""} (${matchedTicketMembers.joinToString { it.name.substringBefore(" ") }})"
+                            )
+                            ConnectedButtonGroup(
+                                options = scopeOptions,
+                                selectedIndex = when {
+                                    isAllSelected -> 0
+                                    isOnlyTicketSelected -> 1
+                                    else -> -1
+                                },
+                                onSelect = { index, _ ->
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    selectedMemberIds = if (index == 0) {
+                                        groupMembers.map { it.memberId }.toSet()
+                                    } else {
+                                        matchedTicketMemberIds
+                                    }
+                                },
+                                labelProvider = { it },
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
 
                         Spacer(modifier = Modifier.height(14.dp))
 
                         Column(
                             modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
                             val baseSharePaise = if (selectedMemberIds.isNotEmpty()) {
                                 totalAirfarePaise / selectedMemberIds.size.toLong()
                             } else 0L
-                            ledgerSplitMembers.forEach { member ->
+                            ledgerSplitMembers.forEachIndexed { index, member ->
                                 val returnsPaise = (totalAirfarePaise - member.shareAmountPaise).coerceAtLeast(0L)
                                 val absorbedPlusOnePaise = member.isSelected && member.shareAmountPaise > baseSharePaise && (totalAirfarePaise % selectedMemberIds.size.coerceAtLeast(1) != 0L)
+                                val rowShape = rememberAnimatedSegmentedIslandItemShape(
+                                    index = index,
+                                    totalCount = ledgerSplitMembers.size,
+                                    isSelected = member.isSelected,
+                                    outerCorner = 20.dp,
+                                    innerCorner = 6.dp
+                                )
                                 Surface(
                                     onClick = {
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -1353,7 +1377,7 @@ fun FlightExpenseReviewScreen(
                                             selectedMemberIds + member.id
                                         }
                                     },
-                                    shape = FlightPassTokens.RadiusInner,
+                                    shape = rowShape,
                                     color = if (member.isSelected) FlightPassTokens.TicketPaperWhite else FlightPassTokens.TicketPaperWhite.copy(alpha = 0.55f),
                                     border = BorderStroke(
                                         1.dp,
@@ -1469,14 +1493,31 @@ fun FlightExpenseReviewScreen(
                                             }
                                         }
 
-                                        Text(
-                                            text = formatFlightPaiseExact(member.shareAmountPaise),
-                                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
-                                            fontFamily = SplitMateTheme.FontDisplay,
-                                            fontSize = 16.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = if (member.isSelected) FlightPassTokens.PrimaryDark else FlightPassTokens.TextMuted
-                                        )
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            Text(
+                                                text = formatFlightPaiseExact(member.shareAmountPaise),
+                                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
+                                                fontFamily = SplitMateTheme.FontDisplay,
+                                                fontSize = 16.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = if (member.isSelected) FlightPassTokens.PrimaryDark else FlightPassTokens.TextMuted
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            val memberShareProgress = if (totalAirfarePaise > 0L) {
+                                                (member.shareAmountPaise.toFloat() / totalAirfarePaise.toFloat()).coerceIn(0f, 1f)
+                                            } else 0f
+                                            ExpressiveGapLinearProgressIndicator(
+                                                progress = { memberShareProgress },
+                                                modifier = Modifier
+                                                    .width(64.dp)
+                                                    .height(4.dp),
+                                                color = if (member.isSelected) FlightPassTokens.SkyBlueText else FlightPassTokens.BorderSubtle,
+                                                trackColor = FlightPassTokens.BorderSubtle.copy(alpha = 0.4f),
+                                                gapSize = 4.dp,
+                                                stopSize = 3.dp,
+                                                strokeWidth = 4.dp
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1707,12 +1748,20 @@ fun PnrSyncStatusBanner(
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.AutoAwesome,
-                        contentDescription = null,
-                        tint = FlightPassTokens.SkyBlueText,
-                        modifier = Modifier.size(12.dp)
-                    )
+                    if (energyState == com.splitmate.app.ui.components.Gm3EnergyState.PROCESSING) {
+                        ContainedLoadingIndicator(
+                            containerSize = 16.dp,
+                            containerColor = FlightPassTokens.SkyBlue,
+                            indicatorColor = FlightPassTokens.SkyBlueText
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Rounded.AutoAwesome,
+                            contentDescription = null,
+                            tint = FlightPassTokens.SkyBlueText,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = if (energyState == com.splitmate.app.ui.components.Gm3EnergyState.IDLE) {
@@ -1826,44 +1875,30 @@ fun AnimatedLuxuryAirlineBoardingPass(
     // 1. Scissor / Perforation Tear-Line Progress (0f -> 1f)
     val tearProgress by animateFloatAsState(
         targetValue = if (isFolded) 1f else 0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
+        animationSpec = SplitMateMotion.defaultSpatial(),
         label = "PerforationTearProgress"
     )
 
     // 2. Detached Stub Tilt & Tuck into Periwinkle Leather Wallet Pocket
     val stubTiltZ by animateFloatAsState(
         targetValue = if (isFolded) -3.4f else 0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
+        animationSpec = SplitMateMotion.defaultSpatial(),
         label = "StubDetachTiltZ"
     )
     val stubPitchX by animateFloatAsState(
         targetValue = if (isFolded) -16f else 0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
+        animationSpec = SplitMateMotion.defaultSpatial(),
         label = "StubPitchX"
     )
+    val stubFoldDegrees = stubPitchX
     val stubScale by animateFloatAsState(
         targetValue = if (isFolded) 0.93f else 1.0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
+        animationSpec = SplitMateMotion.defaultSpatial(),
         label = "StubScale"
     )
     val stubSlideY by animateFloatAsState(
         targetValue = if (isFolded) 18f else 0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
+        animationSpec = SplitMateMotion.defaultSpatial(),
         label = "StubSlideY"
     )
 
@@ -2201,20 +2236,26 @@ fun AnimatedLuxuryAirlineBoardingPass(
 
                     Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        passengers.forEach { passenger ->
+                        passengers.forEachIndexed { index, passenger ->
+                            val rowShape = segmentedIslandItemShape(
+                                index = index,
+                                totalCount = passengers.size,
+                                outerCorner = 18.dp,
+                                innerCorner = 6.dp
+                            )
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .background(
                                         FlightPassTokens.AppBackground.copy(alpha = 0.65f),
-                                        FlightPassTokens.RadiusInner
+                                        rowShape
                                     )
                                     .border(
                                         1.dp,
                                         if (passenger.isMatchedPayer) FlightPassTokens.SkyBlueBorder else FlightPassTokens.BorderSubtle,
-                                        FlightPassTokens.RadiusInner
+                                        rowShape
                                     )
                                     .padding(horizontal = 14.dp, vertical = 11.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -2495,7 +2536,21 @@ fun AnimatedLuxuryAirlineBoardingPass(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(18.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    ExpressiveGapLinearProgressIndicator(
+                        progress = { 1f },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp),
+                        color = if (isFolded) FlightPassTokens.SkyBlueText else FlightPassTokens.StatusGreenText,
+                        trackColor = FlightPassTokens.BorderSubtle,
+                        gapSize = 4.dp,
+                        stopSize = 4.dp,
+                        strokeWidth = 6.dp
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     EngravedAviationBarcode(
                         pnrNumber = pnrNumber,

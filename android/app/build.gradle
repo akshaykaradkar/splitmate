@@ -12,8 +12,8 @@ android {
         applicationId "com.splitmate.app"
         minSdk 26
         targetSdk 34
-        versionCode 47
-        versionName "2.2.5"
+        versionCode 48
+        versionName "2.3.0"
         resConfigs "en"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -80,6 +80,7 @@ dependencies {
     implementation 'androidx.compose.ui:ui-text-google-fonts:1.6.6'
     implementation 'androidx.compose.material3:material3:1.2.1'
     implementation 'androidx.compose.material:material-icons-extended'
+    implementation 'androidx.graphics:graphics-shapes:1.0.1'
 
     // Jetpack Room (Offline-First Relational Vault)
     def roomVersion = "2.6.1"

@@ -10,6 +10,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -29,6 +31,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountBalanceWallet
@@ -67,8 +70,12 @@ import com.splitmate.app.SplitMateTheme
 import com.splitmate.app.data.PnrNetworkRepository
 import com.splitmate.app.data.UniversalFlightTicketExtractor
 import com.splitmate.app.ui.ContactPickerBottomSheet
+import com.splitmate.app.ui.DesignSystemBindings
+import com.splitmate.app.ui.SplitMateExpressiveTypography
 import com.splitmate.app.ui.SplitMateViewModel
 import com.splitmate.app.ui.components.ActiveTravelPassMode
+import com.splitmate.app.ui.components.HorizontalFloatingToolbar
+import com.splitmate.app.ui.components.SplitMateMotion
 import com.splitmate.app.ui.screens.FlightExpenseReviewScreen
 import com.splitmate.app.ui.screens.PnrExpenseReviewScreen
 import com.splitmate.app.ui.screens.QuickExpenseScreen
@@ -138,6 +145,15 @@ enum class GlobalNavTab(val label: String, val icon: ImageVector) {
     LEDGERS("Ledgers", Icons.Rounded.AccountBalanceWallet),
     SETTLE("Settle", Icons.Rounded.SwapHoriz),
     AUDIT("Audit", Icons.Rounded.HistoryEdu)
+}
+
+object SplitMateNavRouteLabels {
+    const val LEDGERS = "Ledgers"
+    const val QUICK_SPLIT = "Quick Split"
+    const val ACTIVITY = "Activity"
+    const val SETTLE = "Settle"
+    const val PROFILE = "Profile"
+    const val AUDIT = "Audit"
 }
 
 // ==============================================================================
@@ -344,8 +360,8 @@ fun SplitMateAppNavHost(
         else -> null
     }
 
-    val navBarSpring = spring<IntOffset>(dampingRatio = 0.76f, stiffness = 380f)
-    val navBarFadeSpring = spring<Float>(dampingRatio = 0.76f, stiffness = 380f)
+    val navBarSpring = SplitMateMotion.defaultSpatial<IntOffset>()
+    val navBarFadeSpring = SplitMateMotion.defaultEffects<Float>()
 
     Scaffold(
         containerColor = SplitMateTheme.ScreenBg,
@@ -390,7 +406,8 @@ fun SplitMateAppNavHost(
                 if (selectedGlobalTab != null) {
                     SplitMateGlobalBottomBar(
                         selectedTab = selectedGlobalTab,
-                        onTabSelected = { tab -> switchGlobalTab(tab) }
+                        onTabSelected = { tab -> switchGlobalTab(tab) },
+                        onQuickSplitClick = { navigateTo(SplitMateRoute.QuickExpense) }
                     )
                 }
             }
@@ -405,14 +422,20 @@ fun SplitMateAppNavHost(
             AnimatedContent(
                 targetState = currentRoute,
                 transitionSpec = {
+                    val spatialOffsetSpec = SplitMateMotion.defaultSpatial<IntOffset>()
+                    val effectsFadeInSpec = SplitMateMotion.defaultEffects<Float>()
+                    val effectsFadeOutSpec = SplitMateMotion.fastEffects<Float>()
                     if (targetState is SplitMateRoute.TripHub ||
                         targetState is SplitMateRoute.TrainPnrReview ||
                         targetState is SplitMateRoute.FlightPdfReview
                     ) {
-                        (slideInHorizontally(initialOffsetX = { it / 3 }) + fadeIn()) togetherWith
-                            (slideOutHorizontally(targetOffsetX = { -it / 3 }) + fadeOut())
+                        (slideInHorizontally(animationSpec = spatialOffsetSpec, initialOffsetX = { it / 3 }) +
+                            fadeIn(animationSpec = effectsFadeInSpec)) togetherWith
+                            (slideOutHorizontally(animationSpec = spatialOffsetSpec, targetOffsetX = { -it / 3 }) +
+                                fadeOut(animationSpec = effectsFadeOutSpec))
                     } else {
-                        fadeIn(animationSpec = tween(220)) togetherWith fadeOut(animationSpec = tween(180))
+                        fadeIn(animationSpec = effectsFadeInSpec) togetherWith
+                            fadeOut(animationSpec = effectsFadeOutSpec)
                     }
                 },
                 label = "ScreenNavigationRouter"
@@ -693,67 +716,117 @@ fun ConnectedTripHubContainer(
 }
 
 // ==============================================================================
-// 4. GLOBAL BOTTOM NAVIGATION BAR COMPONENT (WCAG 2.5.5 48.dp Touch Targets)
+// 4. GLOBAL BOTTOM NAVIGATION BAR COMPONENT (M3 Expressive HorizontalFloatingToolbar)
 // ==============================================================================
 @Composable
 fun SplitMateGlobalBottomBar(
     selectedTab: GlobalNavTab,
     onTabSelected: (GlobalNavTab) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onQuickSplitClick: () -> Unit = {}
 ) {
-    val isDark = SplitMateTheme.isDark
-    val selectedPillBg = if (isDark) Color(0xFF233216) else Color(0xFFD7E8B6)
-    val selectedContentColor = if (isDark) Color(0xFFD7E8B6) else Color(0xFF23201E)
-    val unselectedContentColor = SplitMateTheme.TextSecondary
+    val activePalette = DesignSystemBindings.activePalette
+    val selectedPillBg = activePalette.primaryContainer
+    val selectedContentColor = activePalette.onPrimaryContainer
+    val unselectedContentColor = activePalette.onSurfaceVariant
 
-    Surface(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .navigationBarsPadding(),
-        color = SplitMateTheme.SurfaceWhite,
-        shadowElevation = 8.dp,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        border = BorderStroke(1.dp, SplitMateTheme.BorderLight)
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceAround,
-            verticalAlignment = Alignment.CenterVertically
+        HorizontalFloatingToolbar(
+            expanded = true,
+            floatingActionButton = {
+                Surface(
+                    onClick = onQuickSplitClick,
+                    shape = CircleShape,
+                    color = activePalette.primary,
+                    contentColor = activePalette.onPrimary,
+                    shadowElevation = 6.dp,
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .size(52.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Rounded.ElectricBolt,
+                            contentDescription = SplitMateNavRouteLabels.QUICK_SPLIT,
+                            tint = activePalette.onPrimary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+            }
         ) {
             GlobalNavTab.entries.forEach { tab ->
                 val isSelected = selectedTab == tab
-                Surface(
-                    onClick = { onTabSelected(tab) },
-                    shape = RoundedCornerShape(999.dp),
-                    color = if (isSelected) selectedPillBg else Color.Transparent,
-                    modifier = Modifier
-                        .minimumInteractiveComponentSize()
-                        .defaultMinSize(minWidth = 64.dp, minHeight = 48.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = tab.icon,
-                            contentDescription = tab.label,
-                            tint = if (isSelected) selectedContentColor else unselectedContentColor,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        AnimatedVisibility(visible = isSelected) {
-                            Text(
-                                text = "  ${tab.label}",
-                                color = selectedContentColor,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 13.sp,
-                                fontFamily = SplitMateTheme.FontRounded
-                            )
-                        }
-                    }
-                }
+                ExpressiveFloatingToolbarItem(
+                    label = tab.label,
+                    icon = tab.icon,
+                    isSelected = isSelected,
+                    selectedPillBg = selectedPillBg,
+                    selectedContentColor = selectedContentColor,
+                    unselectedContentColor = unselectedContentColor,
+                    onClick = { onTabSelected(tab) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ExpressiveFloatingToolbarItem(
+    label: String,
+    icon: ImageVector,
+    isSelected: Boolean,
+    selectedPillBg: Color,
+    selectedContentColor: Color,
+    unselectedContentColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val pillCorner by animateDpAsState(
+        targetValue = if (isSelected) 16.dp else 28.dp,
+        animationSpec = SplitMateMotion.fastSpatial(),
+        label = "FloatingToolbarPillCorner_$label"
+    )
+    val pillColor by animateColorAsState(
+        targetValue = if (isSelected) selectedPillBg else Color.Transparent,
+        animationSpec = SplitMateMotion.fastEffects(),
+        label = "FloatingToolbarPillColor_$label"
+    )
+
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(pillCorner),
+        color = pillColor,
+        modifier = modifier
+            .minimumInteractiveComponentSize()
+            .defaultMinSize(minWidth = 64.dp, minHeight = 48.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = if (isSelected) selectedContentColor else unselectedContentColor,
+                modifier = Modifier.size(20.dp)
+            )
+            AnimatedVisibility(visible = isSelected) {
+                Text(
+                    text = "  $label",
+                    style = SplitMateExpressiveTypography.labelLargeEmphasized,
+                    color = selectedContentColor,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 13.sp,
+                    fontFamily = SplitMateTheme.FontRounded
+                )
             }
         }
     }

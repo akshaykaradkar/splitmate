@@ -55,12 +55,19 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.splitmate.app.data.GroupMemberEntity
+import com.splitmate.app.ui.DesignSystemBindings
 import com.splitmate.app.ui.FigtreeFontFamily
 import com.splitmate.app.ui.LivePnrPassenger
 import com.splitmate.app.SplitMateTheme
 import com.splitmate.app.ui.LivePnrStatusSnapshot
 import com.splitmate.app.ui.ParsedTravelTicket
+import com.splitmate.app.ui.SplitMateThemeMode
 import com.splitmate.app.ui.SplitMateViewModel
+import com.splitmate.app.ui.components.ContainedLoadingIndicator
+import com.splitmate.app.ui.components.ExpressiveGapLinearProgressIndicator
+import com.splitmate.app.ui.components.SplitMateMotion
+import com.splitmate.app.ui.components.rememberAnimatedSegmentedIslandItemShape
+import com.splitmate.app.ui.components.segmentedIslandItemShape
 import com.splitmate.app.ui.fetchLivePnrAndTrainStatus
 import com.splitmate.app.ui.formatTravelExpenseTitle
 import androidx.compose.animation.core.spring
@@ -72,52 +79,96 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 
 // ============================================================================
-// 1. DESIGN TOKENS — "TACTILE LUXURY PAPER BOARDING PASS" (LIGHT & DARK ADAPTIVE)
+// 1. DESIGN TOKENS — "TACTILE LUXURY PAPER BOARDING PASS" (3-THEME EXPRESSIVE)
 // ============================================================================
 object TactilePaperPassTokens {
     val CanvasBackground: Color
-        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF141311) else Color(0xFFFAF7F2)
+        get() = DesignSystemBindings.activePalette.surfaceContainerLow
     val PaperSurface: Color
-        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF1F1D1A) else Color(0xFFFFFDF9)
+        get() = DesignSystemBindings.activePalette.surfaceContainerLowest
     val PaperStubSurface: Color
-        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF282521) else Color(0xFFF6F2EA)
+        get() = DesignSystemBindings.activePalette.surfaceContainer
     val HairlineBorder: Color
-        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF38342E) else Color(0xFFE5DEC9)
+        get() = DesignSystemBindings.activePalette.outline
     val PerforationLine: Color
-        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF4A443C) else Color(0xFFD6CEBE)
+        get() = when (DesignSystemBindings.activeThemeMode) {
+            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF4A443C)
+            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFFB5CCA8)
+            SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Color(0xFFD6CEBE)
+        }
 
-    val ForestTop = Color(0xFF264010)              // Deep Organic Forest Green
-    val ForestBottom = Color(0xFF1B2E0B)           // Richer Pine Shadow
-    val ForestBadgeFill = Color(0xFF345418)        // Translucent pill surface
-    val ForestBadgeStroke = Color(0xFF4A7325)      // Crisp moss highlight
+    val ForestTop: Color
+        get() = when (DesignSystemBindings.activeThemeMode) {
+            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF1F3D1C)
+            else -> Color(0xFF264010)
+        }
+    val ForestBottom: Color
+        get() = when (DesignSystemBindings.activeThemeMode) {
+            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF142812)
+            else -> Color(0xFF1B2E0B)
+        }
+    val ForestBadgeFill: Color
+        get() = when (DesignSystemBindings.activeThemeMode) {
+            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF2B5427)
+            else -> Color(0xFF345418)
+        }
+    val ForestBadgeStroke: Color
+        get() = when (DesignSystemBindings.activeThemeMode) {
+            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF437A3D)
+            else -> Color(0xFF4A7325)
+        }
 
     val AmberChartBg: Color
-        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF332610) else Color(0xFFFEF3D6)
+        get() = when (DesignSystemBindings.activeThemeMode) {
+            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF332610)
+            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFFFEF9C3)
+            SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Color(0xFFFEF3D6)
+        }
     val AmberChartBorder: Color
-        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF6B4E1B) else Color(0xFFF7D788)
+        get() = when (DesignSystemBindings.activeThemeMode) {
+            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF6B4E1B)
+            else -> Color(0xFFF7D788)
+        }
     val AmberChartText: Color
-        @Composable get() = if (SplitMateTheme.isDark) Color(0xFFFCD34D) else Color(0xFF9E5808)
+        get() = when (DesignSystemBindings.activeThemeMode) {
+            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFFFCD34D)
+            else -> Color(0xFF9E5808)
+        }
 
     val TerracottaWaitlistBg: Color
-        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF3A1F18) else Color(0xFFFDECE6)
+        get() = DesignSystemBindings.activePalette.secondaryContainer
     val TerracottaWaitlistBorder: Color
-        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF7C3725) else Color(0xFFF7C6B5)
+        get() = when (DesignSystemBindings.activeThemeMode) {
+            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF7C3725)
+            else -> Color(0xFFF7C6B5)
+        }
     val TerracottaWaitlistText: Color
-        @Composable get() = if (SplitMateTheme.isDark) Color(0xFFFED8C8) else Color(0xFFB53C1A)
+        get() = DesignSystemBindings.activePalette.onSecondaryContainer
 
     val SageConfirmedBg: Color
-        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF233316) else Color(0xFFE4F2D5)
+        get() = DesignSystemBindings.activePalette.primaryContainer
     val SageConfirmedBorder: Color
-        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF426128) else Color(0xFFC2E0A3)
+        get() = when (DesignSystemBindings.activeThemeMode) {
+            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF426128)
+            else -> Color(0xFFC2E0A3)
+        }
     val SageConfirmedText: Color
-        @Composable get() = if (SplitMateTheme.isDark) Color(0xFFD7E8B6) else Color(0xFF2B520D)
+        get() = if (DesignSystemBindings.activePalette.mode.isDark) {
+            DesignSystemBindings.activePalette.onPrimaryContainer
+        } else {
+            DesignSystemBindings.activePalette.primary
+        }
 
     val InkPrimary: Color
-        @Composable get() = if (SplitMateTheme.isDark) Color(0xFFF4EFEA) else Color(0xFF1E1C1A)
+        get() = DesignSystemBindings.activePalette.onSurface
     val InkSecondary: Color
-        @Composable get() = if (SplitMateTheme.isDark) Color(0xFFB8B0A4) else Color(0xFF6B655E)
+        get() = DesignSystemBindings.activePalette.onSurfaceVariant
     val InkMuted: Color
-        @Composable get() = if (SplitMateTheme.isDark) Color(0xFF857D73) else Color(0xFF9C9488)
+        get() = when (DesignSystemBindings.activeThemeMode) {
+            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF857D73)
+            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF6B7C68)
+            SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Color(0xFF9C9488)
+        }
 
     @Composable
     fun tactileTextFieldColors(): TextFieldColors = OutlinedTextFieldDefaults.colors(
@@ -653,14 +704,23 @@ fun PnrExpenseReviewScreen(
                                 .fillMaxWidth()
                                 .height(56.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Rounded.CheckCircle,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
+                            if (isSubmitting) {
+                                ContainedLoadingIndicator(
+                                    containerSize = 20.dp,
+                                    containerColor = TactilePaperPassTokens.ForestBadgeFill,
+                                    indicatorColor = Color(0xFFD7E8B6)
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Rounded.CheckCircle,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = when {
+                                    isSubmitting -> "Saving Pass..."
                                     selectedMemberIds.isEmpty() -> "Select At Least 1 Group Member Below"
                                     effectiveTotalPaise <= 0L -> "Enter Ticket Fare Above to Split"
                                     selectedExistingExpense != null -> "Update Split & Save Changes · ${formatPaiseDisplay(effectiveTotalPaise)}"
@@ -999,7 +1059,8 @@ fun PnrExpenseReviewScreen(
                     perMemberShareDisplay = formatPaiseDisplay(perSelectedMemberSharePaise),
                     payerReimbursementDisplay = formatPaiseDisplay(
                         (effectiveTotalPaise - payerSharePaise).coerceAtLeast(0L)
-                    )
+                    ),
+                    effectiveTotalPaise = effectiveTotalPaise
                 )
             }
 
@@ -1123,10 +1184,10 @@ fun PnrSearchLookupCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (isFetching) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(14.dp),
-                            strokeWidth = 2.dp,
-                            color = Color.White
+                        ContainedLoadingIndicator(
+                            containerSize = 20.dp,
+                            containerColor = TactilePaperPassTokens.ForestBadgeFill,
+                            indicatorColor = Color(0xFFD7E8B6)
                         )
                     } else {
                         Icon(
@@ -1456,112 +1517,124 @@ fun TactilePaperBoardingPass(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 passengers.forEachIndexed { index, pax ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                    val paxIslandShape = segmentedIslandItemShape(
+                        index = index,
+                        totalCount = passengers.size,
+                        isSelected = pax.isConfirmed
+                    )
+                    Surface(
+                        shape = paxIslandShape,
+                        color = TactilePaperPassTokens.PaperStubSurface.copy(alpha = 0.65f),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            TactilePaperPassTokens.HairlineBorder.copy(alpha = 0.55f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            com.splitmate.app.AvatarToken(
-                                initials = pax.name,
-                                bg = if (pax.isPayer) TactilePaperPassTokens.SageConfirmedBg else if (SplitMateTheme.isDark) Color(0xFF2E2A25) else Color(0xFFF0ECE1),
-                                textColor = if (pax.isPayer) TactilePaperPassTokens.SageConfirmedText else TactilePaperPassTokens.InkSecondary,
-                                size = 34
-                            )
-
-                            Spacer(modifier = Modifier.width(8.dp))
-
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (pax.isPayer) TactilePaperPassTokens.SageConfirmedBg else if (SplitMateTheme.isDark) Color(0xFF2E2A25) else Color(0xFFF0ECE1),
-                                border = androidx.compose.foundation.BorderStroke(
-                                    1.dp,
-                                    if (pax.isPayer) TactilePaperPassTokens.SageConfirmedBorder else TactilePaperPassTokens.HairlineBorder
-                                )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
                             ) {
-                                Text(
-                                    text = pax.id,
-                                    fontFamily = FigtreeFontFamily,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 11.sp,
-                                    color = if (pax.isPayer) TactilePaperPassTokens.SageConfirmedText else TactilePaperPassTokens.InkSecondary,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                com.splitmate.app.AvatarToken(
+                                    initials = pax.name,
+                                    bg = if (pax.isPayer) TactilePaperPassTokens.SageConfirmedBg else if (SplitMateTheme.isDark) Color(0xFF2E2A25) else Color(0xFFF0ECE1),
+                                    textColor = if (pax.isPayer) TactilePaperPassTokens.SageConfirmedText else TactilePaperPassTokens.InkSecondary,
+                                    size = 34
                                 )
-                            }
 
-                            Spacer(modifier = Modifier.width(8.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
 
-                            Column {
-                                Text(
-                                    text = pax.name,
-                                    fontFamily = FigtreeFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = TactilePaperPassTokens.InkPrimary
-                                )
-                                Text(
-                                    text = "Per-Passenger Share: $perPersonShareDisplay",
-                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
-                                    fontFamily = FigtreeFontFamily,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 11.sp,
-                                    color = TactilePaperPassTokens.SageConfirmedText
-                                )
-                            }
-                        }
-
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = pax.bookingStatus,
-                                fontFamily = FigtreeFontFamily,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 12.sp,
-                                textDecoration = if (pax.bookingStatus != pax.currentStatus) TextDecoration.LineThrough else TextDecoration.None,
-                                color = TactilePaperPassTokens.InkMuted
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (pax.isConfirmed) TactilePaperPassTokens.SageConfirmedBg else TactilePaperPassTokens.TerracottaWaitlistBg,
-                                border = androidx.compose.foundation.BorderStroke(
-                                    1.dp,
-                                    if (pax.isConfirmed) TactilePaperPassTokens.SageConfirmedBorder else TactilePaperPassTokens.TerracottaWaitlistBorder
-                                )
-                            ) {
-                                val statusColor = if (pax.isConfirmed) TactilePaperPassTokens.SageConfirmedText else TactilePaperPassTokens.TerracottaWaitlistText
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
-                                        contentDescription = null,
-                                        tint = statusColor,
-                                        modifier = Modifier.size(12.dp)
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (pax.isPayer) TactilePaperPassTokens.SageConfirmedBg else if (SplitMateTheme.isDark) Color(0xFF2E2A25) else Color(0xFFF0ECE1),
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        1.dp,
+                                        if (pax.isPayer) TactilePaperPassTokens.SageConfirmedBorder else TactilePaperPassTokens.HairlineBorder
                                     )
+                                ) {
                                     Text(
-                                        text = pax.currentStatus,
+                                        text = pax.id,
                                         fontFamily = FigtreeFontFamily,
                                         fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 12.sp,
-                                        color = statusColor
+                                        fontSize = 11.sp,
+                                        color = if (pax.isPayer) TactilePaperPassTokens.SageConfirmedText else TactilePaperPassTokens.InkSecondary,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                                     )
+                                }
+
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                Column {
+                                    Text(
+                                        text = pax.name,
+                                        fontFamily = FigtreeFontFamily,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = TactilePaperPassTokens.InkPrimary
+                                    )
+                                    Text(
+                                        text = "Per-Passenger Share: $perPersonShareDisplay",
+                                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
+                                        fontFamily = FigtreeFontFamily,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 11.sp,
+                                        color = TactilePaperPassTokens.SageConfirmedText
+                                    )
+                                }
+                            }
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = pax.bookingStatus,
+                                    fontFamily = FigtreeFontFamily,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 12.sp,
+                                    textDecoration = if (pax.bookingStatus != pax.currentStatus) TextDecoration.LineThrough else TextDecoration.None,
+                                    color = TactilePaperPassTokens.InkMuted
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (pax.isConfirmed) TactilePaperPassTokens.SageConfirmedBg else TactilePaperPassTokens.TerracottaWaitlistBg,
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        1.dp,
+                                        if (pax.isConfirmed) TactilePaperPassTokens.SageConfirmedBorder else TactilePaperPassTokens.TerracottaWaitlistBorder
+                                    )
+                                ) {
+                                    val statusColor = if (pax.isConfirmed) TactilePaperPassTokens.SageConfirmedText else TactilePaperPassTokens.TerracottaWaitlistText
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                                            contentDescription = null,
+                                            tint = statusColor,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Text(
+                                            text = pax.currentStatus,
+                                            fontFamily = FigtreeFontFamily,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 12.sp,
+                                            color = statusColor
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
 
                     if (index < passengers.lastIndex) {
-                        HorizontalDivider(
-                            color = TactilePaperPassTokens.HairlineBorder.copy(alpha = 0.55f),
-                            thickness = 1.dp
-                        )
+                        Spacer(modifier = Modifier.height(2.dp))
                     }
                 }
             }
@@ -1584,80 +1657,99 @@ fun TactilePaperBoardingPass(
             }
 
             // SECTION D: BOTTOM TICKET STUB (TOTAL ALL-INCLUSIVE FARE, PER-PASSENGER SHARE & BARCODE)
-            Row(
+            val confirmedRatio = remember(passengers) {
+                if (passengers.isEmpty()) 1f
+                else (passengers.count { it.isConfirmed }.toFloat() / passengers.size.toFloat()).coerceIn(0.15f, 1f)
+            }
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(TactilePaperPassTokens.PaperStubSurface)
                     .padding(horizontal = 20.dp, vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "ALL-INCLUSIVE IRCTC FARE ($passengerCount PASSENGERS)",
-                        fontFamily = FigtreeFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 10.sp,
-                        letterSpacing = 0.8.sp,
-                        color = TactilePaperPassTokens.InkMuted
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Row(verticalAlignment = Alignment.Bottom) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = totalFareDisplay,
-                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
+                            text = "ALL-INCLUSIVE IRCTC FARE ($passengerCount PASSENGERS)",
                             fontFamily = FigtreeFontFamily,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 24.sp,
-                            letterSpacing = (-0.5).sp,
-                            color = TactilePaperPassTokens.InkPrimary
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp,
+                            letterSpacing = 0.8.sp,
+                            color = TactilePaperPassTokens.InkMuted
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = TactilePaperPassTokens.SageConfirmedBg
-                        ) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Row(verticalAlignment = Alignment.Bottom) {
                             Text(
-                                text = "$perPersonShareDisplay / each",
+                                text = totalFareDisplay,
                                 style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                                 fontFamily = FigtreeFontFamily,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 11.sp,
-                                color = TactilePaperPassTokens.SageConfirmedText,
-                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                fontWeight = FontWeight.Black,
+                                fontSize = 24.sp,
+                                letterSpacing = (-0.5).sp,
+                                color = TactilePaperPassTokens.InkPrimary
                             )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = TactilePaperPassTokens.SageConfirmedBg
+                            ) {
+                                Text(
+                                    text = "$perPersonShareDisplay / each",
+                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
+                                    fontFamily = FigtreeFontFamily,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 11.sp,
+                                    color = TactilePaperPassTokens.SageConfirmedText,
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                )
+                            }
                         }
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = "Base $baseFareDisplay + IRCTC Conv. $convenienceFeeDisplay + Insurance $insuranceFeeDisplay",
+                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
+                            fontFamily = FigtreeFontFamily,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 10.sp,
+                            color = TactilePaperPassTokens.InkSecondary
+                        )
                     }
-                    Spacer(modifier = Modifier.height(3.dp))
-                    Text(
-                        text = "Base $baseFareDisplay + IRCTC Conv. $convenienceFeeDisplay + Insurance $insuranceFeeDisplay",
-                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
-                        fontFamily = FigtreeFontFamily,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 10.sp,
-                        color = TactilePaperPassTokens.InkSecondary
-                    )
+
+                    Column(horizontalAlignment = Alignment.End) {
+                        TactileBarcode(
+                            modifier = Modifier
+                                .width(88.dp)
+                                .height(26.dp)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        val formattedPnr = if (pnrNumber.length == 10) {
+                            "${pnrNumber.substring(0, 4)}-${pnrNumber.substring(4, 7)}-${pnrNumber.substring(7, 10)}"
+                        } else pnrNumber
+                        Text(
+                            text = "PNR $formattedPnr",
+                            fontFamily = FigtreeFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp,
+                            letterSpacing = 0.6.sp,
+                            color = TactilePaperPassTokens.InkSecondary
+                        )
+                    }
                 }
 
-                Column(horizontalAlignment = Alignment.End) {
-                    TactileBarcode(
-                        modifier = Modifier
-                            .width(88.dp)
-                            .height(26.dp)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    val formattedPnr = if (pnrNumber.length == 10) {
-                        "${pnrNumber.substring(0, 4)}-${pnrNumber.substring(4, 7)}-${pnrNumber.substring(7, 10)}"
-                    } else pnrNumber
-                    Text(
-                        text = "PNR $formattedPnr",
-                        fontFamily = FigtreeFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 10.sp,
-                        letterSpacing = 0.6.sp,
-                        color = TactilePaperPassTokens.InkSecondary
-                    )
-                }
+                ExpressiveGapLinearProgressIndicator(
+                    progress = { confirmedRatio },
+                    color = TactilePaperPassTokens.ForestTop,
+                    trackColor = TactilePaperPassTokens.HairlineBorder,
+                    gapSize = 4.dp,
+                    stopSize = 4.dp,
+                    strokeWidth = 5.dp,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
@@ -1681,7 +1773,8 @@ private fun MemberSplitSelectionCard(
     onAddMemberToGroup: (String) -> Unit,
     totalFareDisplay: String,
     perMemberShareDisplay: String,
-    payerReimbursementDisplay: String
+    payerReimbursementDisplay: String,
+    effectiveTotalPaise: Long = 0L
 ) {
     var quickAddName by remember { mutableStateOf("") }
     val payerMemberName = remember(members, selectedPayerId) {
@@ -1848,115 +1941,145 @@ private fun MemberSplitSelectionCard(
                 val isPayer = member.memberId == selectedPayerId
                 val exactMemberCents = exactAllocationsMap[member.memberId]?.finalCents
                 val memberExactShareDisplay = if (exactMemberCents != null) formatPaise(exactMemberCents) else perMemberShareDisplay
+                val rowShape = rememberAnimatedSegmentedIslandItemShape(
+                    index = index,
+                    totalCount = members.size,
+                    isSelected = isSelected
+                )
                 val rowBg by animateColorAsState(
-                    targetValue = if (isSelected) Color.Transparent else TactilePaperPassTokens.PaperStubSurface.copy(alpha = 0.6f),
-                    animationSpec = spring(dampingRatio = 0.8f, stiffness = 380f),
+                    targetValue = if (isSelected) TactilePaperPassTokens.SageConfirmedBg.copy(alpha = 0.25f) else TactilePaperPassTokens.PaperStubSurface.copy(alpha = 0.6f),
+                    animationSpec = SplitMateMotion.defaultEffects(),
                     label = "memberRowBg"
                 )
+                val memberShareProgress = if (isSelected && effectiveTotalPaise > 0L && exactMemberCents != null) {
+                    (exactMemberCents.toFloat() / effectiveTotalPaise.toFloat()).coerceIn(0f, 1f)
+                } else if (isSelected && selectedMemberIds.isNotEmpty()) {
+                    (1f / selectedMemberIds.size.toFloat()).coerceIn(0f, 1f)
+                } else {
+                    0f
+                }
 
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(rowShape)
                         .background(rowBg)
+                        .border(
+                            width = 1.dp,
+                            color = if (isSelected) TactilePaperPassTokens.SageConfirmedBorder else TactilePaperPassTokens.HairlineBorder.copy(alpha = 0.5f),
+                            shape = rowShape
+                        )
                         .clickable {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onToggleMember(member.memberId)
                         }
-                        .padding(horizontal = 8.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .padding(horizontal = 10.dp, vertical = 9.dp)
                 ) {
                     Row(
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Box(modifier = Modifier.size(40.dp)) {
-                            com.splitmate.app.AvatarToken(
-                                initials = member.avatarSeed.ifBlank { member.name },
-                                // Dark: #2E2A25 behind #D7E8B6 initials (~11:1) instead of a light-cream disc. Light: unchanged.
-                                bg = if (isSelected) TactilePaperPassTokens.SageConfirmedBg else if (SplitMateTheme.isDark) Color(0xFF2E2A25) else Color(0xFFEAE4D7),
-                                textColor = TactilePaperPassTokens.SageConfirmedText,
-                                size = 38
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .size(16.dp)
-                                    .align(Alignment.BottomEnd)
-                                    .clip(CircleShape)
-                                    .background(
-                                        when {
-                                            !isSelected -> if (SplitMateTheme.isDark) Color(0xFF5A534A) else Color(0xFFD6CFC0)
-                                            isPayer -> TactilePaperPassTokens.ForestTop
-                                            else -> TactilePaperPassTokens.SageConfirmedText
-                                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(modifier = Modifier.size(40.dp)) {
+                                com.splitmate.app.AvatarToken(
+                                    initials = member.avatarSeed.ifBlank { member.name },
+                                    // Dark: #2E2A25 behind #D7E8B6 initials (~11:1) instead of a light-cream disc. Light: unchanged.
+                                    bg = if (isSelected) TactilePaperPassTokens.SageConfirmedBg else if (SplitMateTheme.isDark) Color(0xFF2E2A25) else Color(0xFFEAE4D7),
+                                    textColor = TactilePaperPassTokens.SageConfirmedText,
+                                    size = 38
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .align(Alignment.BottomEnd)
+                                        .clip(CircleShape)
+                                        .background(
+                                            when {
+                                                !isSelected -> if (SplitMateTheme.isDark) Color(0xFF5A534A) else Color(0xFFD6CFC0)
+                                                isPayer -> TactilePaperPassTokens.ForestTop
+                                                else -> TactilePaperPassTokens.SageConfirmedText
+                                            }
+                                        )
+                                        .border(1.5.dp, TactilePaperPassTokens.PaperSurface, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = if (isSelected) Icons.Rounded.Check else Icons.Rounded.Close,
+                                        contentDescription = if (isSelected) "Selected" else "Excluded",
+                                        tint = if (SplitMateTheme.isDark && isSelected && !isPayer) TactilePaperPassTokens.ForestBottom else Color.White,
+                                        modifier = Modifier.size(10.dp)
                                     )
-                                    .border(1.5.dp, TactilePaperPassTokens.PaperSurface, CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = if (isSelected) Icons.Rounded.Check else Icons.Rounded.Close,
-                                    contentDescription = if (isSelected) "Selected" else "Excluded",
-                                    tint = if (SplitMateTheme.isDark && isSelected && !isPayer) TactilePaperPassTokens.ForestBottom else Color.White,
-                                    modifier = Modifier.size(10.dp)
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            Column {
+                                Text(
+                                    text = if (member.isCurrentUser) "${member.name} (You)" else member.name,
+                                    fontFamily = FigtreeFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = if (isSelected) TactilePaperPassTokens.InkPrimary else TactilePaperPassTokens.InkMuted,
+                                    textDecoration = if (isSelected) TextDecoration.None else TextDecoration.LineThrough
+                                )
+                                Text(
+                                    text = when {
+                                        !isSelected && isPayer -> "Paid full $totalFareDisplay · Not on ticket"
+                                        !isSelected -> "Not on this ticket · Excluded"
+                                        isPayer -> "Paid full $totalFareDisplay"
+                                        else -> "Owes $payerMemberName $memberExactShareDisplay · via UPI"
+                                    },
+                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
+                                    fontFamily = FigtreeFontFamily,
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 12.sp,
+                                    color = if (isSelected || isPayer) TactilePaperPassTokens.InkSecondary else TactilePaperPassTokens.InkMuted
                                 )
                             }
                         }
 
-                        Spacer(modifier = Modifier.width(12.dp))
-
-                        Column {
+                        Column(horizontalAlignment = Alignment.End) {
                             Text(
-                                text = if (member.isCurrentUser) "${member.name} (You)" else member.name,
-                                fontFamily = FigtreeFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                                color = if (isSelected) TactilePaperPassTokens.InkPrimary else TactilePaperPassTokens.InkMuted,
-                                textDecoration = if (isSelected) TextDecoration.None else TextDecoration.LineThrough
-                            )
-                            Text(
-                                text = when {
-                                    !isSelected && isPayer -> "Paid full $totalFareDisplay · Not on ticket"
-                                    !isSelected -> "Not on this ticket · Excluded"
-                                    isPayer -> "Paid full $totalFareDisplay"
-                                    else -> "Owes $payerMemberName $memberExactShareDisplay · via UPI"
-                                },
+                                text = if (isSelected) memberExactShareDisplay else "₹0",
                                 style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                                 fontFamily = FigtreeFontFamily,
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 12.sp,
-                                color = if (isSelected || isPayer) TactilePaperPassTokens.InkSecondary else TactilePaperPassTokens.InkMuted
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 16.sp,
+                                color = if (isSelected) TactilePaperPassTokens.InkPrimary else TactilePaperPassTokens.InkMuted
                             )
+                            if (isPayer) {
+                                Text(
+                                    text = "Getting back $payerReimbursementDisplay",
+                                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
+                                    fontFamily = FigtreeFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp,
+                                    color = TactilePaperPassTokens.SageConfirmedText
+                                )
+                            }
                         }
                     }
 
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = if (isSelected) memberExactShareDisplay else "₹0",
-                            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
-                            fontFamily = FigtreeFontFamily,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 16.sp,
-                            color = if (isSelected) TactilePaperPassTokens.InkPrimary else TactilePaperPassTokens.InkMuted
-                        )
-                        if (isPayer) {
-                            Text(
-                                text = "Getting back $payerReimbursementDisplay",
-                                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
-                                fontFamily = FigtreeFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                color = TactilePaperPassTokens.SageConfirmedText
-                            )
-                        }
-                    }
+                    ExpressiveGapLinearProgressIndicator(
+                        progress = { memberShareProgress },
+                        color = if (isSelected) TactilePaperPassTokens.ForestTop else TactilePaperPassTokens.InkMuted,
+                        trackColor = TactilePaperPassTokens.HairlineBorder,
+                        gapSize = 4.dp,
+                        stopSize = 4.dp,
+                        strokeWidth = 4.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                    )
                 }
 
                 if (index < members.lastIndex) {
-                    HorizontalDivider(
-                        color = TactilePaperPassTokens.HairlineBorder.copy(alpha = 0.45f),
-                        thickness = 1.dp
-                    )
+                    Spacer(modifier = Modifier.height(2.dp))
                 }
             }
         }

@@ -6,8 +6,9 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
+import androidx.graphics.shapes.Morph
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -59,6 +60,7 @@ import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.PersonPin
 import androidx.compose.material.icons.rounded.PersonRemove
@@ -143,6 +145,8 @@ import com.splitmate.app.ui.FigtreeFontFamily
 import com.splitmate.app.ui.LivePnrStatusSnapshot
 import com.splitmate.app.ui.ParsedTravelTicket
 import com.splitmate.app.ui.SettlementTransferUiModel
+import com.splitmate.app.ui.SplitMateExpressiveTypography
+import com.splitmate.app.ui.SplitMateThemeMode
 import com.splitmate.app.ui.SplitMateTnumMonospace
 import com.splitmate.app.ui.SplitMateViewModel
 import com.splitmate.app.ui.buildDiceBearOpenPeepsUrl
@@ -150,7 +154,24 @@ import com.splitmate.app.ui.cleanDisplayExpenseTitle
 import com.splitmate.app.ui.cleanIndianTenDigitPhone
 import com.splitmate.app.ui.components.ActiveTravelPassMode
 import com.splitmate.app.ui.components.AnimatedTransitDeckHeroCard
+import com.splitmate.app.ui.components.ButtonGroup
+import com.splitmate.app.ui.components.CircularWavyProgressIndicator
+import com.splitmate.app.ui.components.ConnectedButtonGroup
+import com.splitmate.app.ui.components.ContainedLoadingIndicator
+import com.splitmate.app.ui.components.ExpressiveActionItem
+import com.splitmate.app.ui.components.ExpressiveFabMenuItem
+import com.splitmate.app.ui.components.ExpressiveGapLinearProgressIndicator
+import com.splitmate.app.ui.components.ExpressiveMenuAction
+import com.splitmate.app.ui.components.FloatingActionButtonMenu
+import com.splitmate.app.ui.components.LinearWavyProgressIndicator
+import com.splitmate.app.ui.components.MaterialShapes
+import com.splitmate.app.ui.components.MorphPolygonShape
+import com.splitmate.app.ui.components.RoundedPolygonShape
+import com.splitmate.app.ui.components.SplitButtonLayout
+import com.splitmate.app.ui.components.SplitMateMotion
 import com.splitmate.app.ui.components.UpiExpressPaymentSheet
+import com.splitmate.app.ui.components.rememberAnimatedSegmentedIslandItemShape
+import com.splitmate.app.ui.components.segmentedIslandItemShape
 import com.splitmate.app.ui.dialogs.TripSyncAndPerspectiveSheet
 import com.splitmate.app.ui.extractInitialsFromNameOrSeed
 import com.splitmate.app.ui.extractTravelTicketFromTitle
@@ -567,39 +588,47 @@ fun TripHubMemberAvatar(
 }
 
 // ==============================================================================
-// 2. LIGHT & DARK MODE TOKENS (`TripHubTokens`) — BUCKWHEAT & WARM ESPRESSO
+// 2. 3-THEME EXPRESSIVE TOKENS (`TripHubTokens`) — BUCKWHEAT, ESPRESSO & MATCHA
 // ==============================================================================
 
 object TripHubTokens {
     val CanvasBg: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF181512) else Color(0xFFFAF6F0)
+        get() = DesignSystemBindings.activePalette.surfaceContainerLow
     val CardSurface: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF24201C) else Color(0xFFFFFFFF)
+        get() = if (SplitMateTheme.isDark) DesignSystemBindings.activePalette.surfaceContainerLowest else Color(0xFFFFFFFF).let { DesignSystemBindings.activePalette.surfaceContainerLowest }
     val SunkenWell: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF2E2823) else Color(0xFFF4EFE6)
+        get() = DesignSystemBindings.activePalette.surfaceContainer
     val CardBorder: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF38312B) else Color(0xFFEDE7DF)
+        get() = DesignSystemBindings.activePalette.outline
     val TextPrimary: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFFFAF6F0) else Color(0xFF23201E)
+        get() = DesignSystemBindings.activePalette.onSurface
     val TextSecondary: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFFB5ACA2) else Color(0xFF6E675F)
+        get() = DesignSystemBindings.activePalette.onSurfaceVariant
     val TextMuted: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF857D73) else Color(0xFF8C857B)
+        get() = DesignSystemBindings.activePalette.onSurfaceVariant.copy(alpha = 0.78f)
 
     val ActiveTabPillBg: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFFFAF6F0) else Color(0xFF1E1C1A)
+        get() = if (SplitMateTheme.isDark) DesignSystemBindings.activePalette.primary else DesignSystemBindings.activePalette.onSurface
     val ActiveTabPillText: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF181512) else Color(0xFFFFFFFF)
+        get() = if (SplitMateTheme.isDark) DesignSystemBindings.activePalette.onPrimary else DesignSystemBindings.activePalette.surfaceContainerLowest
     val InactiveTabPillBg: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF28241F) else Color(0xFFEFEAE1)
+        get() = DesignSystemBindings.activePalette.surfaceContainer
     val InactiveTabPillText: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFFC5BDB3) else Color(0xFF4A453E)
+        get() = DesignSystemBindings.activePalette.onSurfaceVariant
 
     // Deep Forest Green Train Pass Tokens (Sunlight-Grade Contrast >= 5.8:1)
     val TrainForestTop: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF264210) else Color(0xFF2D4F12)
+        get() = when (DesignSystemBindings.activeThemeMode) {
+            SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Color(0xFF2D4F12)
+            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF264210)
+            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF1E3F24)
+        }
     val TrainForestBottom: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF1B3009) else Color(0xFF213B0C)
+        get() = when (DesignSystemBindings.activeThemeMode) {
+            SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Color(0xFF213B0C)
+            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF1B3009)
+            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF142E19)
+        }
     val TrainNextUpPillBg: Color
         get() = if (SplitMateTheme.isDark) Color(0xFF759943) else Color(0xFF84A950)
     val TrainNextUpPillText: Color
@@ -616,27 +645,35 @@ object TripHubTokens {
 
     // Aviation Periwinkle Flight Pass Tokens
     val FlightNavyTop: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF242059) else Color(0xFF2B2768)
+        get() = when (DesignSystemBindings.activeThemeMode) {
+            SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Color(0xFF2B2768)
+            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF242059)
+            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF23383B)
+        }
     val FlightNavyBottom: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF16133B) else Color(0xFF1B1849)
+        get() = when (DesignSystemBindings.activeThemeMode) {
+            SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Color(0xFF1B1849)
+            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF16133B)
+            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF162527)
+        }
     val FlightSecondaryLavender = Color(0xFFDCE3FD)
     val FlightAccentPeriwinkle = Color(0xFFC7D2FE)
 
     // Semantic Status & Category Badges
     val PositiveSageText: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFFD7E8B6) else Color(0xFF416913)
+        get() = DesignSystemBindings.activePalette.onPrimaryContainer
     val PositiveSagePillBg: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF233216) else Color(0xFFD7E8B6)
+        get() = DesignSystemBindings.activePalette.primaryContainer
     val WarningRacText: Color
         get() = if (SplitMateTheme.isDark) Color(0xFFFDBA74) else Color(0xFF9A3412)
     val TerracottaPeachBg: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF3D231B) else Color(0xFFFCE3D7)
+        get() = DesignSystemBindings.activePalette.secondaryContainer
     val TerracottaIconTint: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFFFEB49C) else Color(0xFF9A3412)
+        get() = DesignSystemBindings.activePalette.onSecondaryContainer
     val PeriwinkleBoxBg: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF282552) else Color(0xFFDCE3FD)
+        get() = DesignSystemBindings.activePalette.tertiaryContainer
     val PeriwinkleIconTint: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFFC7D2FE) else Color(0xFF3730A3)
+        get() = DesignSystemBindings.activePalette.onTertiaryContainer
 }
 
 // ==============================================================================
@@ -891,35 +928,59 @@ fun TripHomeScreen(
         classifiedExpenses.firstOrNull { it.second == TripHubBookingCategory.TRAIN }?.first?.expenseId
     }
 
+    var isFabMenuExpanded by remember { mutableStateOf(false) }
+
     Scaffold(
         containerColor = TripHubTokens.CanvasBg,
         floatingActionButton = {
             if (selectedSectionTab != TripHubSectionTab.PEOPLE && selectedSectionTab != TripHubSectionTab.MONEY) {
-                ExtendedFloatingActionButton(
-                    onClick = {
+                FloatingActionButtonMenu(
+                    expanded = isFabMenuExpanded,
+                    onToggle = {
                         performCrispTactileHaptic(context, localView, heavy = false)
-                        showAddBookingBottomSheet = true
+                        isFabMenuExpanded = !isFabMenuExpanded
                     },
-                    containerColor = TripHubTokens.ActiveTabPillBg,
-                    contentColor = TripHubTokens.ActiveTabPillText,
-                    shape = CircleShape,
-                    modifier = Modifier
-                        .minimumInteractiveComponentSize()
-                        .defaultMinSize(minHeight = 52.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Add,
-                        contentDescription = "Add Booking",
-                        modifier = Modifier.size(20.dp)
+                    toggleIcon = Icons.Rounded.Add,
+                    toggleLabel = "Add Booking",
+                    items = listOf(
+                        ExpressiveFabMenuItem(
+                            label = "IRCTC Train PNR",
+                            icon = Icons.Rounded.Train,
+                            subtitle = "10-digit live status & split",
+                            onClick = {
+                                performCrispTactileHaptic(context, localView, heavy = false)
+                                onOpenTrainPnrReviewClick("")
+                            }
+                        ),
+                        ExpressiveFabMenuItem(
+                            label = "Flight Boarding Pass",
+                            icon = Icons.Rounded.FlightTakeoff,
+                            subtitle = "3D pass & passenger seats",
+                            onClick = {
+                                performCrispTactileHaptic(context, localView, heavy = false)
+                                onOpenFlightReviewClick("")
+                            }
+                        ),
+                        ExpressiveFabMenuItem(
+                            label = "Shared Expense",
+                            icon = Icons.AutoMirrored.Rounded.ReceiptLong,
+                            subtitle = "0.00c drift calculator",
+                            onClick = {
+                                performCrispTactileHaptic(context, localView, heavy = false)
+                                onLogQuickExpenseClick()
+                            }
+                        ),
+                        ExpressiveFabMenuItem(
+                            label = "More Booking Options",
+                            icon = Icons.Rounded.ViewAgenda,
+                            subtitle = "Stay, rental, cab & invites",
+                            onClick = {
+                                performCrispTactileHaptic(context, localView, heavy = false)
+                                showAddBookingBottomSheet = true
+                            }
+                        )
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Add Booking",
-                        fontFamily = FigtreeFontFamily,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 14.sp
-                    )
-                }
+                )
             }
         },
         modifier = modifier.fillMaxSize()
@@ -951,6 +1012,10 @@ fun TripHomeScreen(
                 onManualSyncClick = {
                     performCrispTactileHaptic(context, localView, heavy = false)
                     viewModel.syncActiveGroupNow(context = context, groupId = resolvedGroupId, silent = false)
+                },
+                onCycleThemeClick = {
+                    performCrispTactileHaptic(context, localView, heavy = false)
+                    viewModel.cycleExpressiveThemeMode(context)
                 },
                 onBackClick = {
                     performCrispTactileHaptic(context, localView, heavy = false)
@@ -1254,6 +1319,7 @@ private fun TripHubTopBar(
     onSearchQueryChange: (String) -> Unit,
     onToggleSearch: () -> Unit,
     onManualSyncClick: () -> Unit = {},
+    onCycleThemeClick: () -> Unit = {},
     onBackClick: () -> Unit,
     onSwitchToClassicLedgerClick: () -> Unit,
     onOpenSyncAndPerspectiveSheet: () -> Unit
@@ -1382,12 +1448,20 @@ private fun TripHubTopBar(
                         .minimumInteractiveComponentSize()
                         .defaultMinSize(minWidth = 44.dp, minHeight = 48.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Sync,
-                        contentDescription = "Sync Trip Expenses Now",
-                        tint = if (isCloudSyncing) Color(0xFF416913) else TripHubTokens.TextPrimary,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    if (isCloudSyncing) {
+                        ContainedLoadingIndicator(
+                            containerSize = 24.dp,
+                            containerColor = TripHubTokens.PositiveSagePillBg,
+                            indicatorColor = TripHubTokens.PositiveSageText
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Rounded.Sync,
+                            contentDescription = "Sync Trip Expenses Now",
+                            tint = TripHubTokens.TextPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
 
                 IconButton(
@@ -1401,6 +1475,20 @@ private fun TripHubTopBar(
                         contentDescription = "Search Bookings and Expenses",
                         tint = TripHubTokens.TextPrimary,
                         modifier = Modifier.size(21.dp)
+                    )
+                }
+
+                IconButton(
+                    onClick = onCycleThemeClick,
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .defaultMinSize(minWidth = 44.dp, minHeight = 48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Palette,
+                        contentDescription = "Cycle Expressive Theme Mode",
+                        tint = TripHubTokens.TextPrimary,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
 
@@ -1475,49 +1563,20 @@ private fun TripHubSectionTabsRow(
     selectedTab: TripHubSectionTab,
     onSelectTab: (TripHubSectionTab) -> Unit
 ) {
-    Row(
+    val tabs = remember { TripHubSectionTab.entries.toList() }
+    val selectedIdx = tabs.indexOf(selectedTab).coerceAtLeast(0)
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 16.dp, vertical = 2.dp)
     ) {
-        TripHubSectionTab.entries.forEach { tab ->
-            val isSelected = selectedTab == tab
-            val pillBg = if (isSelected) TripHubTokens.ActiveTabPillBg else TripHubTokens.InactiveTabPillBg
-            val pillText = if (isSelected) TripHubTokens.ActiveTabPillText else TripHubTokens.InactiveTabPillText
-
-            Surface(
-                onClick = { onSelectTab(tab) },
-                shape = CircleShape,
-                color = Color.Transparent,
-                modifier = Modifier
-                    .minimumInteractiveComponentSize()
-                    .defaultMinSize(minHeight = 48.dp)
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.padding(vertical = 4.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(pillBg, CircleShape)
-                            .padding(horizontal = 18.dp, vertical = 9.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = tab.title,
-                            fontFamily = FigtreeFontFamily,
-                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
-                            fontSize = 13.sp,
-                            color = pillText
-                        )
-                    }
-                }
-            }
-        }
+        ConnectedButtonGroup(
+            options = tabs,
+            selectedIndex = selectedIdx,
+            onSelect = { _, tab -> onSelectTab(tab) },
+            labelProvider = { it.title },
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
@@ -1632,6 +1691,15 @@ private fun CompactPerspectiveNetBalanceStrip(
         activeMemberNetCents < 0L -> BuckwheatTerracottaDark
         else -> TripHubTokens.TextSecondary
     }
+    val harmonyProgress = remember(totalGroupSpendCents, activeMemberNetCents) {
+        if (activeMemberNetCents == 0L) {
+            1f
+        } else if (totalGroupSpendCents <= 0L) {
+            0.5f
+        } else {
+            (1f - (abs(activeMemberNetCents).toFloat() / totalGroupSpendCents.toFloat()).coerceIn(0f, 0.85f)).coerceIn(0.15f, 1f)
+        }
+    }
 
     Surface(
         shape = RoundedCornerShape(20.dp),
@@ -1641,89 +1709,97 @@ private fun CompactPerspectiveNetBalanceStrip(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
+                    modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text(
-                        text = "${if (isTravelGroup) "Trip Spend" else "Group Spend"}: $formattedTotalSpend",
-                        style = TextStyle(
-                            fontFamily = SplitMateTnumMonospace,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 13.sp,
-                            fontFeatureSettings = "tnum"
-                        ),
-                        color = TripHubTokens.TextPrimary
+                    CircularWavyProgressIndicator(
+                        progress = { harmonyProgress },
+                        modifier = Modifier.size(34.dp),
+                        color = if (activeMemberNetCents < 0L) TripHubTokens.TerracottaIconTint else TripHubTokens.PositiveSageText,
+                        trackColor = TripHubTokens.SunkenWell,
+                        amplitude = if (activeMemberNetCents == 0L) 0f else 0.7f,
+                        wavelength = 14.dp,
+                        strokeWidth = 3.5.dp
                     )
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = netBadgeBg
-                ) {
-                    Text(
-                        text = "$activeMemberName · $netBadgeText",
-                        style = TextStyle(
-                            fontFamily = SplitMateTnumMonospace,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
-                            fontFeatureSettings = "tnum"
-                        ),
-                        color = netBadgeTextColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
-            }
-
-            Surface(
-                onClick = onSettleUpClick,
-                shape = CircleShape,
-                color = Color.Transparent,
-                modifier = Modifier
-                    .minimumInteractiveComponentSize()
-                    .defaultMinSize(minHeight = 48.dp)
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.padding(vertical = 4.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(TripHubTokens.ActiveTabPillBg, CircleShape)
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.SwapHoriz,
-                            contentDescription = null,
-                            tint = TripHubTokens.ActiveTabPillText,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Text(
-                            text = "Settle Up",
-                            fontFamily = FigtreeFontFamily,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 12.sp,
-                            color = TripHubTokens.ActiveTabPillText
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "${if (isTravelGroup) "Trip Spend" else "Group Spend"}: $formattedTotalSpend",
+                                style = TextStyle(
+                                    fontFamily = SplitMateTnumMonospace,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 13.sp,
+                                    fontFeatureSettings = "tnum"
+                                ),
+                                color = TripHubTokens.TextPrimary
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = netBadgeBg
+                        ) {
+                            Text(
+                                text = "$activeMemberName · $netBadgeText",
+                                style = TextStyle(
+                                    fontFamily = SplitMateTnumMonospace,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp,
+                                    fontFeatureSettings = "tnum"
+                                ),
+                                color = netBadgeTextColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
                     }
                 }
+
+                Box(modifier = Modifier.width(118.dp)) {
+                    ButtonGroup(
+                        items = listOf(
+                            ExpressiveActionItem(
+                                label = "Settle Up",
+                                icon = Icons.Rounded.SwapHoriz,
+                                onClick = onSettleUpClick,
+                                isPrimary = true,
+                                containerColor = TripHubTokens.ActiveTabPillBg,
+                                contentColor = TripHubTokens.ActiveTabPillText
+                            )
+                        )
+                    )
+                }
             }
+
+            ExpressiveGapLinearProgressIndicator(
+                progress = { harmonyProgress },
+                modifier = Modifier.fillMaxWidth(),
+                color = if (activeMemberNetCents < 0L) TripHubTokens.TerracottaIconTint else TripHubTokens.PositiveSageText,
+                trackColor = TripHubTokens.SunkenWell,
+                gapSize = 4.dp,
+                stopSize = 4.dp,
+                strokeWidth = 4.dp
+            )
         }
     }
 }
@@ -1756,7 +1832,7 @@ private fun TripHubOverviewFeed(
                     onLogTrainPnrClick = { onOpenTrainPnrReviewClick("") },
                     onUploadFlightPdfClick = { onOpenFlightReviewClick("") },
                     onLogSharedExpenseClick = onLogQuickExpenseClick,
-                    modifier = Modifier.animateItemPlacement(spring(dampingRatio = 0.78f, stiffness = 380f))
+                    modifier = Modifier.animateItemPlacement(SplitMateMotion.defaultSpatial())
                 )
             }
         }
@@ -1781,7 +1857,7 @@ private fun TripHubOverviewFeed(
         ) { (expense, category) ->
             val itemModifier = Modifier
                 .fillMaxWidth()
-                .animateItemPlacement(spring(dampingRatio = 0.78f, stiffness = 380f))
+                .animateItemPlacement(SplitMateMotion.defaultSpatial())
 
             when (category) {
                 TripHubBookingCategory.TRAIN -> {
@@ -4287,7 +4363,7 @@ private fun TripHubPlanTimelineView(
                     onLogTrainPnrClick = { onOpenTrainPnrReviewClick("") },
                     onUploadFlightPdfClick = { onOpenFlightReviewClick("") },
                     onLogSharedExpenseClick = onLogQuickExpenseClick,
-                    modifier = Modifier.animateItemPlacement(spring(dampingRatio = 0.78f, stiffness = 380f))
+                    modifier = Modifier.animateItemPlacement(SplitMateMotion.defaultSpatial())
                 )
             }
         }
@@ -4313,7 +4389,7 @@ private fun TripHubPlanTimelineView(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = if (dayIndex == 0) 2.dp else 8.dp)
-                        .animateItemPlacement(spring(dampingRatio = 0.78f, stiffness = 380f)),
+                        .animateItemPlacement(SplitMateMotion.defaultSpatial()),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -4361,20 +4437,26 @@ private fun TripHubPlanTimelineView(
                 }
             }
 
-            items(
+            itemsIndexed(
                 items = dayItems,
-                key = { "plan_${it.first.expenseId}" }
-            ) { (expense, category, schedule) ->
+                key = { _, it -> "plan_${it.first.expenseId}" }
+            ) { itemIndex, (expense, category, schedule) ->
                 val payer = groupMembers.find { it.memberId == expense.payerId }
                 val timeLabel = schedule.timeLabel
+                val itemShape = segmentedIslandItemShape(
+                    index = itemIndex,
+                    totalCount = dayItems.size,
+                    outerCorner = 18.dp,
+                    innerCorner = 6.dp
+                )
 
                 Surface(
-                    shape = RoundedCornerShape(18.dp),
+                    shape = itemShape,
                     color = TripHubTokens.CardSurface,
                     border = BorderStroke(1.dp, TripHubTokens.CardBorder),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .animateItemPlacement(spring(dampingRatio = 0.78f, stiffness = 380f))
+                        .animateItemPlacement(SplitMateMotion.defaultSpatial())
                 ) {
                     Row(
                         modifier = Modifier
@@ -4391,7 +4473,7 @@ private fun TripHubPlanTimelineView(
                             Box(
                                 modifier = Modifier
                                     .size(40.dp)
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .clip(RoundedPolygonShape(MaterialShapes.Sunny))
                                     .background(TripHubTokens.SunkenWell),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -4513,7 +4595,7 @@ private fun TripHubTravelWalletView(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .animateItemPlacement(spring(dampingRatio = 0.78f, stiffness = 380f)),
+                    .animateItemPlacement(SplitMateMotion.defaultSpatial()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Row(
@@ -4569,7 +4651,7 @@ private fun TripHubTravelWalletView(
         ) { (expense, category) ->
             val itemModifier = Modifier
                 .fillMaxWidth()
-                .animateItemPlacement(spring(dampingRatio = 0.78f, stiffness = 380f))
+                .animateItemPlacement(SplitMateMotion.defaultSpatial())
 
             when (category) {
                 TripHubBookingCategory.TRAIN -> {
@@ -4646,7 +4728,7 @@ private fun TripHubMoneySettlementView(
     @Suppress("UNUSED_PARAMETER") groupName: String,
     groupMembers: List<GroupMemberEntity>,
     netBalancesMap: Map<String, Long>,
-    @Suppress("UNUSED_PARAMETER") onOpenSettleUpClick: () -> Unit
+    onOpenSettleUpClick: () -> Unit
 ) {
     val context = LocalContext.current
     val localView = LocalView.current
@@ -4669,9 +4751,20 @@ private fun TripHubMoneySettlementView(
         groupMembers.find { it.isCurrentUser }
     }
     val currentUserId = currentUserMember?.memberId
+    val unsettledTransfers = simplifiedTransfers
+    val netCents = currentUserMember?.let { netBalancesMap[it.memberId] ?: 0L } ?: 0L
+    val isAllSettled = netCents == 0L && unsettledTransfers.isEmpty()
     val (myTransfers, otherTransfers) = remember(simplifiedTransfers, currentUserId) {
         simplifiedTransfers.partition {
             currentUserId != null && (it.fromMemberId == currentUserId || it.toMemberId == currentUserId)
+        }
+    }
+    val settlementProgress = remember(isAllSettled, simplifiedTransfers.size, groupMembers.size) {
+        if (isAllSettled || simplifiedTransfers.isEmpty()) {
+            1f
+        } else {
+            val maxPossibleTransfers = (groupMembers.size - 1).coerceAtLeast(1)
+            (1f - (simplifiedTransfers.size.toFloat() / (maxPossibleTransfers + 1).toFloat())).coerceIn(0.25f, 0.9f)
         }
     }
 
@@ -4688,7 +4781,7 @@ private fun TripHubMoneySettlementView(
                 border = BorderStroke(1.dp, TripHubTokens.CardBorder),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .animateItemPlacement(spring(dampingRatio = 0.78f, stiffness = 380f))
+                    .animateItemPlacement(SplitMateMotion.defaultSpatial())
                     .animateContentSize(animationSpec = DesignSystemBindings.tactileSpring())
             ) {
                 Column(
@@ -4760,6 +4853,16 @@ private fun TripHubMoneySettlementView(
                         }
                     }
 
+                    LinearWavyProgressIndicator(
+                        progress = { settlementProgress },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = TripHubTokens.PositiveSageText,
+                        trackColor = TripHubTokens.SunkenWell,
+                        amplitude = if (simplifiedTransfers.isEmpty()) 0f else 0.75f,
+                        wavelength = 22.dp,
+                        strokeWidth = 5.dp
+                    )
+
                     if (simplifiedTransfers.isNotEmpty()) {
                         Surface(
                             shape = RoundedCornerShape(12.dp),
@@ -4823,13 +4926,21 @@ private fun TripHubMoneySettlementView(
 
         if (simplifiedTransfers.isEmpty()) {
             item(key = "all_settled_card") {
+                val settledMorph = remember {
+                    Morph(MaterialShapes.Cookie9Sided, MaterialShapes.Sunny)
+                }
+                val settledMorphProgress by animateFloatAsState(
+                    targetValue = 1f,
+                    animationSpec = SplitMateMotion.slowSpatialFloat(),
+                    label = "allSettledPolygonMorph"
+                )
                 Surface(
                     shape = RoundedCornerShape(22.dp),
                     color = TripHubTokens.CardSurface,
                     border = BorderStroke(1.dp, TripHubTokens.CardBorder),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .animateItemPlacement(spring(dampingRatio = 0.78f, stiffness = 380f))
+                        .animateItemPlacement(SplitMateMotion.defaultSpatial())
                 ) {
                     Row(
                         modifier = Modifier
@@ -4838,12 +4949,20 @@ private fun TripHubMoneySettlementView(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.CheckCircle,
-                            contentDescription = null,
-                            tint = TripHubTokens.PositiveSageText,
-                            modifier = Modifier.size(26.dp)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(MorphPolygonShape(morph = settledMorph, percentage = settledMorphProgress))
+                                .background(TripHubTokens.PositiveSagePillBg),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.CheckCircle,
+                                contentDescription = null,
+                                tint = TripHubTokens.PositiveSageText,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
                         Column {
                             Text(
                                 text = "All Group Debts Settled (₹0.00)",
@@ -4907,7 +5026,7 @@ private fun TripHubMoneySettlementView(
                         border = BorderStroke(1.dp, TripHubTokens.CardBorder),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .animateItemPlacement(spring(dampingRatio = 0.78f, stiffness = 380f))
+                            .animateItemPlacement(SplitMateMotion.defaultSpatial())
                     ) {
                         Row(
                             modifier = Modifier
@@ -4945,10 +5064,10 @@ private fun TripHubMoneySettlementView(
                     }
                 }
             } else {
-                items(
+                itemsIndexed(
                     items = myTransfers,
-                    key = { "my_${it.fromMemberId}_${it.toMemberId}_${it.amountCents}" }
-                ) { settlement ->
+                    key = { _, it -> "my_${it.fromMemberId}_${it.toMemberId}_${it.amountCents}" }
+                ) { index, settlement ->
                     val fromMember = groupMembers.find { it.memberId == settlement.fromMemberId }
                     val toMember = groupMembers.find { it.memberId == settlement.toMemberId }
                     val isCurrentUserPayer = currentUserId == settlement.fromMemberId
@@ -4968,9 +5087,15 @@ private fun TripHubMoneySettlementView(
                     )
                     val recipientFirstName = settlement.toName.trim().substringBefore(" ").ifBlank { settlement.toName }
                     var showRestrictionHint by remember(settlement.fromMemberId, settlement.toMemberId) { mutableStateOf(false) }
+                    val rowShape = segmentedIslandItemShape(
+                        index = index,
+                        totalCount = myTransfers.size,
+                        outerCorner = 20.dp,
+                        innerCorner = 6.dp
+                    )
 
                     Surface(
-                        shape = RoundedCornerShape(20.dp),
+                        shape = rowShape,
                         color = TripHubTokens.CardSurface,
                         border = BorderStroke(
                             width = 1.5.dp,
@@ -4978,8 +5103,8 @@ private fun TripHubMoneySettlementView(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .animateItemPlacement(spring(dampingRatio = 0.78f, stiffness = 380f))
-                            .animateContentSize(spring(dampingRatio = 0.8f, stiffness = 400f))
+                            .animateItemPlacement(SplitMateMotion.defaultSpatial())
+                            .animateContentSize(SplitMateMotion.defaultSpatial())
                     ) {
                         Column(
                             modifier = Modifier
@@ -5102,40 +5227,47 @@ private fun TripHubMoneySettlementView(
                             }
 
                             if (canMarkPaid) {
-                                Button(
-                                    onClick = {
-                                        performCrispTactileHaptic(context, localView, heavy = false)
-                                        viewModel.recordSettlement(
-                                            groupId = groupId,
-                                            fromMemberId = settlement.fromMemberId,
-                                            toMemberId = settlement.toMemberId,
-                                            amountCents = settlement.amountCents
-                                        )
-                                    },
-                                    shape = CircleShape,
-                                    colors = ButtonDefaults.buttonColors(
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    SplitButtonLayout(
+                                        leadingText = "Mark Paid",
+                                        leadingIcon = Icons.Rounded.CheckCircleOutline,
+                                        onLeadingClick = {
+                                            performCrispTactileHaptic(context, localView, heavy = false)
+                                            viewModel.recordSettlement(
+                                                groupId = groupId,
+                                                fromMemberId = settlement.fromMemberId,
+                                                toMemberId = settlement.toMemberId,
+                                                amountCents = settlement.amountCents
+                                            )
+                                        },
+                                        menuItems = listOf(
+                                            ExpressiveMenuAction(
+                                                label = "Confirm Full Settlement ($formattedAmount)",
+                                                icon = Icons.Rounded.CheckCircleOutline,
+                                                subtitle = "${settlement.fromName} to ${settlement.toName}",
+                                                onClick = {
+                                                    performCrispTactileHaptic(context, localView, heavy = false)
+                                                    viewModel.recordSettlement(
+                                                        groupId = groupId,
+                                                        fromMemberId = settlement.fromMemberId,
+                                                        toMemberId = settlement.toMemberId,
+                                                        amountCents = settlement.amountCents
+                                                    )
+                                                }
+                                            ),
+                                            ExpressiveMenuAction(
+                                                label = "Open Settle Up Sheet",
+                                                icon = Icons.Rounded.AccountBalanceWallet,
+                                                subtitle = "Inspect full group graph & custom settlement",
+                                                onClick = onOpenSettleUpClick
+                                            )
+                                        ),
                                         containerColor = BuckwheatOlivePrimary,
                                         contentColor = Color.White
-                                    ),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .minimumInteractiveComponentSize()
-                                        .defaultMinSize(minHeight = 44.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.CheckCircleOutline,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "Mark Paid",
-                                        fontFamily = FigtreeFontFamily,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 13.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             } else {
@@ -5213,10 +5345,10 @@ private fun TripHubMoneySettlementView(
                     }
                 }
 
-                items(
+                itemsIndexed(
                     items = otherTransfers,
-                    key = { "other_${it.fromMemberId}_${it.toMemberId}_${it.amountCents}" }
-                ) { settlement ->
+                    key = { _, it -> "other_${it.fromMemberId}_${it.toMemberId}_${it.amountCents}" }
+                ) { index, settlement ->
                     val fromMember = groupMembers.find { it.memberId == settlement.fromMemberId }
                     val toMember = groupMembers.find { it.memberId == settlement.toMemberId }
                     val isFromOnline = fromMember != null && uiState.isMemberOnline(fromMember)
@@ -5227,14 +5359,20 @@ private fun TripHubMoneySettlementView(
                         toMemberId = settlement.toMemberId,
                         state = uiState
                     )
+                    val rowShape = segmentedIslandItemShape(
+                        index = index,
+                        totalCount = otherTransfers.size,
+                        outerCorner = 18.dp,
+                        innerCorner = 6.dp
+                    )
 
                     Surface(
-                        shape = RoundedCornerShape(18.dp),
+                        shape = rowShape,
                         color = TripHubTokens.CardSurface,
                         border = BorderStroke(1.dp, TripHubTokens.CardBorder),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .animateItemPlacement(spring(dampingRatio = 0.78f, stiffness = 380f))
+                            .animateItemPlacement(SplitMateMotion.defaultSpatial())
                     ) {
                         Column(
                             modifier = Modifier
@@ -6161,7 +6299,7 @@ private fun TripHubPeoplePerspectiveView(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .animateItemPlacement(spring(dampingRatio = 0.78f, stiffness = 380f)),
+                        .animateItemPlacement(SplitMateMotion.defaultSpatial()),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Button(
@@ -6287,13 +6425,12 @@ private fun TripHubPeoplePerspectiveView(
             }
             val showQuickInviteAction = !isMe && (cleanPhone10.isEmpty() || member.inviteStatus.equals("PENDING", ignoreCase = true))
             val hasMemberActions = !isMe && (showQuickInviteAction || isCurrentUserOrganizer)
-            val isFirstItem = index == 0
-            val isLastItem = index == groupMembers.lastIndex
-            val segmentedShape = RoundedCornerShape(
-                topStart = if (isFirstItem) 20.dp else 5.dp,
-                topEnd = if (isFirstItem) 20.dp else 5.dp,
-                bottomStart = if (isLastItem) 20.dp else 5.dp,
-                bottomEnd = if (isLastItem) 20.dp else 5.dp
+            val segmentedShape = rememberAnimatedSegmentedIslandItemShape(
+                index = index,
+                totalCount = groupMembers.size,
+                isSelected = selectedMemberForActions?.memberId == member.memberId,
+                outerCorner = 20.dp,
+                innerCorner = 6.dp
             )
 
             Surface(
@@ -6311,7 +6448,7 @@ private fun TripHubPeoplePerspectiveView(
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .animateItemPlacement(spring(dampingRatio = 0.78f, stiffness = 380f))
+                    .animateItemPlacement(SplitMateMotion.defaultSpatial())
             ) {
                 Row(
                     modifier = Modifier

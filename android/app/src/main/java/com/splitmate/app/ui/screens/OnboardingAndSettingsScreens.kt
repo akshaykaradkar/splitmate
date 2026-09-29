@@ -41,42 +41,91 @@ import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
+import androidx.graphics.shapes.Morph
 import com.splitmate.app.R
 import com.splitmate.app.SplitMateTheme
 import com.splitmate.app.ui.AvatarGender
 import com.splitmate.app.ui.AvatarSeedCodec
 import com.splitmate.app.ui.DesignSystemBindings
+import com.splitmate.app.ui.OpenPeepsHeroStage
 import com.splitmate.app.ui.SplitMateAvatarColorPresets
 import com.splitmate.app.ui.SplitMateBrandFontFamily
 import com.splitmate.app.ui.SplitMateCharacterAvatar
 import com.splitmate.app.ui.SplitMateDiceBearStyles
 import com.splitmate.app.ui.SplitMateDisplayFontFamily
+import com.splitmate.app.ui.SplitMateThemeMode
+import com.splitmate.app.ui.SplitMateThemeState
 import com.splitmate.app.ui.buildDiceBearOpenPeepsUrl
+import com.splitmate.app.ui.components.ConnectedButtonGroup
+import com.splitmate.app.ui.components.MaterialShapes
+import com.splitmate.app.ui.components.MorphPolygonShape
+import com.splitmate.app.ui.components.RoundedPolygonShape
+import com.splitmate.app.ui.components.SplitMateMotion
+import com.splitmate.app.ui.components.segmentedIslandItemShape
 import com.splitmate.app.ui.extractInitialsFromNameOrSeed
 import com.splitmate.app.ui.inferGenderFromFirstName
+import com.splitmate.app.ui.toPalette
 
 // ==============================================================================
-// SPLITMATE M3 EXPRESSIVE THEME TOKENS & SHAPES (GM3 DARK ELEVATION COMPLIANT)
+// SPLITMATE M3 EXPRESSIVE THEME TOKENS & SHAPES (3-THEME EXPRESSIVE PALETTE)
 // ==============================================================================
+private val SplitMateThemeMode.shortBadgeLabel: String
+    get() = when (this) {
+        SplitMateThemeMode.SUNLIT_BUCKWHEAT -> "Buckwheat"
+        SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> "Espresso"
+        SplitMateThemeMode.KYOTO_MATCHA_YUZU -> "Matcha"
+    }
+
+private fun persistAndApplyExpressiveThemeMode(
+    context: android.content.Context,
+    mode: SplitMateThemeMode
+) {
+    SplitMateThemeState.activeThemeMode = mode
+    DesignSystemBindings.activeThemeMode = mode
+    SplitMateTheme.isDark = mode.isDark
+    runCatching {
+        context.getSharedPreferences("splitmate_prefs", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putString("expressive_theme_mode", mode.id)
+            .putBoolean("is_dark_theme", mode.isDark)
+            .apply()
+    }
+}
+
 object SplitMateThemeTokens {
+    private val resolvedPalette
+        get() = when {
+            SplitMateTheme.isDark && !DesignSystemBindings.activeThemeMode.isDark ->
+                SplitMateThemeMode.WARM_ESPRESSO_NIGHT.toPalette()
+            !SplitMateTheme.isDark && DesignSystemBindings.activeThemeMode.isDark ->
+                SplitMateThemeMode.SUNLIT_BUCKWHEAT.toPalette()
+            else -> DesignSystemBindings.activePalette
+        }
+
     val ScreenBg: Color
-        get() = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkBackground else DesignSystemBindings.GM3LightBackground
+        get() = resolvedPalette.surfaceContainerLow
     val PrimaryDark: Color
-        get() = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkPrimaryText else DesignSystemBindings.GM3LightPrimaryText
-    val AccentSage = DesignSystemBindings.ElementsPositiveContainer
-    val SageSurface = Color(0xFFEAF3DC)
-    val SageText = DesignSystemBindings.ElementsPositiveText
-    val TerracottaSurface = Color(0xFFFCECE7)
-    val TerracottaText = DesignSystemBindings.ElementsNegativeText
-    val BrandCoral = Color(0xFFE06B52)
+        get() = resolvedPalette.onSurface
+    val AccentSage: Color
+        get() = resolvedPalette.primaryContainer
+    val SageSurface: Color
+        get() = resolvedPalette.primaryContainer
+    val SageText: Color
+        get() = resolvedPalette.onPrimaryContainer
+    val TerracottaSurface: Color
+        get() = resolvedPalette.secondaryContainer
+    val TerracottaText: Color
+        get() = resolvedPalette.onSecondaryContainer
+    val BrandCoral: Color
+        get() = resolvedPalette.secondary
     val SurfaceWhite: Color
-        get() = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkCardSurface else DesignSystemBindings.GM3LightCardSurface
+        get() = resolvedPalette.surfaceContainerLowest
     val SurfaceMuted: Color
-        get() = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkKeypadSurface else DesignSystemBindings.GM3LightKeypadSurface
+        get() = resolvedPalette.surfaceContainer
     val BorderLight: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF333333) else Color(0xFFE6E1D6)
+        get() = resolvedPalette.outline
     val TextSecondary: Color
-        get() = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkSubtitleText else DesignSystemBindings.GM3LightSubtitleText
+        get() = resolvedPalette.onSurfaceVariant
 
     val RadiusHero = DesignSystemBindings.GM3ShapeExtraLarge
     val RadiusCard = DesignSystemBindings.GM3ShapeLarge
@@ -229,20 +278,40 @@ fun OnboardingSetupScreen(
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                // Avatar Preview
+                OpenPeepsHeroStage(
+                    name = compositeSeed,
+                    phone = phoneText,
+                    selectedStyleId = "open-peeps",
+                    selectedColorPresetId = "PastelWall",
+                    isCompactMode = true
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                val avatarMorph = remember {
+                    Morph(MaterialShapes.SoftBurst, MaterialShapes.Cookie9Sided)
+                }
+                val avatarMorphProgress by animateFloatAsState(
+                    targetValue = if (randomSeedSuffix % 2 == 0) 0f else 1f,
+                    animationSpec = SplitMateMotion.fastSpatial(),
+                    label = "OnboardingAvatarMorphProgress"
+                )
+
+                // Avatar Preview wrapped in MaterialShapes MorphPolygonShape
                 Box(
                     modifier = Modifier
-                        .size(112.dp)
-                        .clip(CircleShape)
+                        .size(116.dp)
+                        .clip(MorphPolygonShape(morph = avatarMorph, percentage = avatarMorphProgress))
+                        .background(SplitMateThemeTokens.SageSurface)
                         .clickable { randomSeedSuffix = (100..999).random() },
                     contentAlignment = Alignment.Center
                 ) {
                     SplitMateCharacterAvatar(
                         name = compositeSeed,
                         phone = phoneText,
-                        size = 106.dp,
+                        size = 104.dp,
                         styleId = "open-peeps",
                         colorPresetId = "PastelWall",
                         gender = selectedGender,
@@ -262,7 +331,7 @@ fun OnboardingSetupScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Input 1: Presentation Style Toggle (Male, Female, Neutral)
+                // Input 1: Presentation Style Toggle (Male, Female, Neutral) via M3 Expressive ConnectedButtonGroup
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.Start
@@ -275,46 +344,17 @@ fun OnboardingSetupScreen(
                         color = primaryText,
                         modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
                     )
-                    Surface(
-                        shape = SplitMateThemeTokens.RadiusPill,
-                        color = mutedBg,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, SplitMateThemeTokens.BorderLight, SplitMateThemeTokens.RadiusPill)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            AvatarGender.entries.forEach { genderOption ->
-                                val isSelected = selectedGender == genderOption
-                                Surface(
-                                    onClick = {
-                                        com.splitmate.app.ui.performCrispTactileHaptic(context, heavy = false)
-                                        hasUserManuallySelectedGender = true
-                                        selectedGender = genderOption
-                                    },
-                                    shape = SplitMateThemeTokens.RadiusPill,
-                                    color = if (isSelected) primaryText else Color.Transparent,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(40.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text(
-                                            text = genderOption.label,
-                                            fontFamily = SplitMateBrandFontFamily,
-                                            fontSize = 13.sp,
-                                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                            color = if (isSelected) screenBg else secondaryText
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    ConnectedButtonGroup(
+                        options = AvatarGender.entries,
+                        selectedIndex = AvatarGender.entries.indexOf(selectedGender).coerceAtLeast(0),
+                        onSelect = { _, genderOption ->
+                            com.splitmate.app.ui.performCrispTactileHaptic(context, heavy = false)
+                            hasUserManuallySelectedGender = true
+                            selectedGender = genderOption
+                        },
+                        labelProvider = { it.label },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -459,6 +499,7 @@ fun UserSettingsScreen(
     totalBalanceText: String = "₹0.00",
     activeGroupsCount: Int = 0,
     isDarkThemeInitial: Boolean = false,
+    activeThemeMode: SplitMateThemeMode = DesignSystemBindings.activeThemeMode,
     allCurrencies: List<com.splitmate.app.data.CurrencyRateEntity> = emptyList(),
     onSyncLiveRates: () -> Unit = {},
     onBackClick: () -> Unit = {},
@@ -466,12 +507,25 @@ fun UserSettingsScreen(
     onUpdateCurrencyCode: (String) -> Unit = {},
     onUpdateUserProfile: (newName: String, newPhone: String, newSeed: String) -> Unit = { _, _, _ -> },
     onThemeToggle: (isDark: Boolean) -> Unit = {},
+    onSelectThemeMode: (SplitMateThemeMode) -> Unit = {},
     onExportLedgerText: () -> String = { "" },
     onClearVaultClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val prefs = remember { com.splitmate.app.data.EncryptedPrefsProvider.get(context) }
-    var isDarkTheme by remember(isDarkThemeInitial) { mutableStateOf(isDarkThemeInitial) }
+    var selectedThemeMode by remember(activeThemeMode, isDarkThemeInitial) {
+        mutableStateOf(
+            if (isDarkThemeInitial && activeThemeMode != SplitMateThemeMode.WARM_ESPRESSO_NIGHT) {
+                SplitMateThemeMode.WARM_ESPRESSO_NIGHT
+            } else {
+                activeThemeMode
+            }
+        )
+    }
+    var isDarkTheme by remember(selectedThemeMode, isDarkThemeInitial) {
+        mutableStateOf(selectedThemeMode.isDark || isDarkThemeInitial)
+    }
+    val activePalette = remember(selectedThemeMode) { selectedThemeMode.toPalette() }
     var showResetDataDialog by remember { mutableStateOf(false) }
 
     var editedName by remember(userName) { mutableStateOf(userName) }
@@ -501,33 +555,33 @@ fun UserSettingsScreen(
     var currentSeedSuffix by remember(initialSeedSuffix) { mutableStateOf(initialSeedSuffix) }
 
     val screenBg by animateColorAsState(
-        targetValue = if (isDarkTheme) DesignSystemBindings.GM3DarkBackground else DesignSystemBindings.GM3LightBackground,
-        animationSpec = DesignSystemBindings.themeColorTween(),
+        targetValue = activePalette.surfaceContainerLow,
+        animationSpec = SplitMateMotion.defaultEffects(),
         label = "SettingsScreenBg"
     )
     val cardBg by animateColorAsState(
-        targetValue = if (isDarkTheme) DesignSystemBindings.GM3DarkCardSurface else DesignSystemBindings.GM3LightCardSurface,
-        animationSpec = DesignSystemBindings.themeColorTween(),
+        targetValue = activePalette.surfaceContainerLowest,
+        animationSpec = SplitMateMotion.defaultEffects(),
         label = "SettingsCardBg"
     )
     val mutedBg by animateColorAsState(
-        targetValue = if (isDarkTheme) DesignSystemBindings.GM3DarkKeypadSurface else DesignSystemBindings.GM3LightKeypadSurface,
-        animationSpec = DesignSystemBindings.themeColorTween(),
+        targetValue = activePalette.surfaceContainer,
+        animationSpec = SplitMateMotion.defaultEffects(),
         label = "SettingsMutedBg"
     )
     val textPrimary by animateColorAsState(
-        targetValue = if (isDarkTheme) DesignSystemBindings.GM3DarkPrimaryText else DesignSystemBindings.GM3LightPrimaryText,
-        animationSpec = DesignSystemBindings.themeColorTween(),
+        targetValue = activePalette.onSurface,
+        animationSpec = SplitMateMotion.defaultEffects(),
         label = "SettingsPrimaryText"
     )
     val textSecondary by animateColorAsState(
-        targetValue = if (isDarkTheme) DesignSystemBindings.GM3DarkSubtitleText else DesignSystemBindings.GM3LightSubtitleText,
-        animationSpec = DesignSystemBindings.themeColorTween(),
+        targetValue = activePalette.onSurfaceVariant,
+        animationSpec = SplitMateMotion.defaultEffects(),
         label = "SettingsSecondaryText"
     )
     val borderColor by animateColorAsState(
-        targetValue = if (isDarkTheme) Color(0xFF333333) else Color(0xFFE6E1D6),
-        animationSpec = DesignSystemBindings.themeColorTween(),
+        targetValue = activePalette.outline,
+        animationSpec = SplitMateMotion.defaultEffects(),
         label = "SettingsBorderColor"
     )
 
@@ -617,12 +671,26 @@ fun UserSettingsScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
+                            val settingsAvatarMorph = remember {
+                                Morph(MaterialShapes.SoftBurst, MaterialShapes.Cookie9Sided)
+                            }
+                            val settingsMorphProgress by animateFloatAsState(
+                                targetValue = if ((currentSeedSuffix.hashCode() and 1) == 0) 0f else 1f,
+                                animationSpec = SplitMateMotion.fastSpatial(),
+                                label = "SettingsAvatarMorphProgress"
+                            )
                             Box(
                                 modifier = Modifier
-                                    .size(92.dp)
+                                    .size(98.dp)
                                     .clickable { currentSeedSuffix = (100..999).random().toString() },
                                 contentAlignment = Alignment.Center
                             ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(96.dp)
+                                        .clip(MorphPolygonShape(morph = settingsAvatarMorph, percentage = settingsMorphProgress))
+                                        .background(activePalette.primaryContainer.copy(alpha = 0.45f))
+                                )
                                 SplitMateCharacterAvatar(
                                     name = effectiveSeed,
                                     phone = editedPhone,
@@ -738,42 +806,16 @@ fun UserSettingsScreen(
                                     color = textSecondary,
                                     modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
                                 )
-                                Surface(
-                                    shape = SplitMateThemeTokens.RadiusPill,
-                                    color = mutedBg,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .border(1.dp, borderColor, SplitMateThemeTokens.RadiusPill)
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(4.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        AvatarGender.entries.forEach { genderOption ->
-                                            val isSelected = selectedGender == genderOption
-                                            Surface(
-                                                onClick = { selectedGender = genderOption },
-                                                shape = SplitMateThemeTokens.RadiusPill,
-                                                color = if (isSelected) textPrimary else Color.Transparent,
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .height(38.dp)
-                                            ) {
-                                                Box(contentAlignment = Alignment.Center) {
-                                                    Text(
-                                                        text = genderOption.label,
-                                                        fontFamily = SplitMateBrandFontFamily,
-                                                        fontSize = 13.sp,
-                                                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                                        color = if (isSelected) screenBg else textSecondary
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                                val genderEntries = remember { AvatarGender.entries }
+                                ConnectedButtonGroup(
+                                    options = genderEntries,
+                                    selectedIndex = genderEntries.indexOf(selectedGender).coerceAtLeast(0),
+                                    onSelect = { _, genderOption ->
+                                        selectedGender = genderOption
+                                    },
+                                    labelProvider = { it.label },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
                             }
 
                             // B. 13 Curated Character Art Styles (Static Preview Seeds)
@@ -987,18 +1029,176 @@ fun UserSettingsScreen(
                 }
             }
 
-            // Section 3: Appearance & Haptics
+            // Section 3: Appearance, 3-Theme Expressive Studio & Haptics
             item {
                 val settingsLocalView = androidx.compose.ui.platform.LocalView.current
-                Column {
+                val themeModes = remember {
+                    listOf(
+                        SplitMateThemeMode.SUNLIT_BUCKWHEAT,
+                        SplitMateThemeMode.WARM_ESPRESSO_NIGHT,
+                        SplitMateThemeMode.KYOTO_MATCHA_YUZU
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         text = "Appearance & Haptics",
                         fontFamily = SplitMateDisplayFontFamily,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = textPrimary,
-                        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                        modifier = Modifier.padding(start = 4.dp)
                     )
+
+                    Card(
+                        shape = SplitMateThemeTokens.RadiusCard,
+                        colors = CardDefaults.cardColors(containerColor = cardBg),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, borderColor, SplitMateThemeTokens.RadiusCard)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Expressive Theme Studio",
+                                        fontFamily = SplitMateBrandFontFamily,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = textPrimary
+                                    )
+                                    Text(
+                                        text = "Curated tactile financial palettes with spring transitions",
+                                        fontFamily = SplitMateBrandFontFamily,
+                                        fontSize = 12.sp,
+                                        color = textSecondary
+                                    )
+                                }
+                                Surface(
+                                    shape = SplitMateThemeTokens.RadiusPill,
+                                    color = activePalette.primaryContainer,
+                                    border = BorderStroke(1.dp, activePalette.primary.copy(alpha = 0.25f))
+                                ) {
+                                    Text(
+                                        text = selectedThemeMode.shortBadgeLabel,
+                                        fontFamily = SplitMateBrandFontFamily,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = activePalette.onPrimaryContainer,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+
+                            ConnectedButtonGroup(
+                                options = themeModes,
+                                selectedIndex = themeModes.indexOf(selectedThemeMode).coerceAtLeast(0),
+                                onSelect = { _, mode ->
+                                    selectedThemeMode = mode
+                                    isDarkTheme = mode.isDark
+                                    persistAndApplyExpressiveThemeMode(context, mode)
+                                    onSelectThemeMode(mode)
+                                    onThemeToggle(mode.isDark)
+                                    com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = false)
+                                },
+                                labelProvider = { it.shortBadgeLabel },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                themeModes.forEachIndexed { idx, mode ->
+                                    val modePalette = mode.toPalette()
+                                    val isSelected = selectedThemeMode == mode
+                                    val rowShape = segmentedIslandItemShape(
+                                        index = idx,
+                                        totalCount = themeModes.size,
+                                        isSelected = isSelected,
+                                        outerCorner = 20.dp,
+                                        innerCorner = 6.dp
+                                    )
+                                    Surface(
+                                        onClick = {
+                                            selectedThemeMode = mode
+                                            isDarkTheme = mode.isDark
+                                            persistAndApplyExpressiveThemeMode(context, mode)
+                                            onSelectThemeMode(mode)
+                                            onThemeToggle(mode.isDark)
+                                            com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = false)
+                                        },
+                                        shape = rowShape,
+                                        color = if (isSelected) activePalette.primaryContainer.copy(alpha = 0.48f) else mutedBg.copy(alpha = 0.55f),
+                                        border = BorderStroke(
+                                            width = if (isSelected) 1.5.dp else 1.dp,
+                                            color = if (isSelected) activePalette.primary else borderColor
+                                        ),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Row(horizontalArrangement = Arrangement.spacedBy((-6).dp)) {
+                                                    listOf(
+                                                        modePalette.surfaceContainerLow,
+                                                        modePalette.primaryContainer,
+                                                        modePalette.secondaryContainer,
+                                                        modePalette.tertiaryContainer
+                                                    ).forEach { swatch ->
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .size(20.dp)
+                                                                .clip(CircleShape)
+                                                                .background(swatch)
+                                                                .border(1.dp, modePalette.onSurface.copy(alpha = 0.25f), CircleShape)
+                                                        )
+                                                    }
+                                                }
+                                                Column {
+                                                    Text(
+                                                        text = mode.displayName,
+                                                        fontFamily = SplitMateBrandFontFamily,
+                                                        fontSize = 13.sp,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        color = textPrimary
+                                                    )
+                                                    Text(
+                                                        text = mode.subtitle,
+                                                        fontFamily = SplitMateBrandFontFamily,
+                                                        fontSize = 11.sp,
+                                                        color = textSecondary
+                                                    )
+                                                }
+                                            }
+                                            if (isSelected) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.CheckCircle,
+                                                    contentDescription = "Active Theme",
+                                                    tint = activePalette.primary,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     Card(
                         shape = SplitMateThemeTokens.RadiusCard,
@@ -1021,6 +1221,16 @@ fun UserSettingsScreen(
                                         checked = isDarkTheme,
                                         onCheckedChange = {
                                             isDarkTheme = it
+                                            val targetMode = if (it) {
+                                                SplitMateThemeMode.WARM_ESPRESSO_NIGHT
+                                            } else if (selectedThemeMode == SplitMateThemeMode.WARM_ESPRESSO_NIGHT) {
+                                                SplitMateThemeMode.SUNLIT_BUCKWHEAT
+                                            } else {
+                                                selectedThemeMode
+                                            }
+                                            selectedThemeMode = targetMode
+                                            persistAndApplyExpressiveThemeMode(context, targetMode)
+                                            onSelectThemeMode(targetMode)
                                             onThemeToggle(it)
                                             com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = false)
                                         },
@@ -1033,8 +1243,17 @@ fun UserSettingsScreen(
                                     )
                                 },
                                 onClick = {
-                                    isDarkTheme = !isDarkTheme
-                                    onThemeToggle(isDarkTheme)
+                                    val nextDark = !isDarkTheme
+                                    isDarkTheme = nextDark
+                                    val targetMode = if (nextDark) {
+                                        SplitMateThemeMode.WARM_ESPRESSO_NIGHT
+                                    } else {
+                                        SplitMateThemeMode.SUNLIT_BUCKWHEAT
+                                    }
+                                    selectedThemeMode = targetMode
+                                    persistAndApplyExpressiveThemeMode(context, targetMode)
+                                    onSelectThemeMode(targetMode)
+                                    onThemeToggle(nextDark)
                                     com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = false)
                                 }
                             )
@@ -1080,16 +1299,16 @@ fun UserSettingsScreen(
                 }
             }
 
-            // Section 3: Data Management (Reset App Data)
+            // Section 4: Data Management (Reset App Data)
             item {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         text = "Data Management",
                         fontFamily = SplitMateDisplayFontFamily,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = textPrimary,
-                        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                        modifier = Modifier.padding(start = 4.dp)
                     )
 
                     Card(
@@ -1118,6 +1337,18 @@ fun UserSettingsScreen(
                             onClick = { showResetDataDialog = true }
                         )
                     }
+
+                    Text(
+                        text = "SplitMate v2.3.0 | Material 3 Expressive (Build 48)",
+                        fontFamily = SplitMateBrandFontFamily,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = textSecondary,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp)
+                    )
                 }
             }
         }

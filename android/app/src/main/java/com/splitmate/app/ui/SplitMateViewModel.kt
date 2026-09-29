@@ -82,6 +82,7 @@ data class SplitMateUiState(
     val userUpiId: String = "",
     val userPhone: String = "",
     val isDarkTheme: Boolean = false,
+    val activeThemeMode: SplitMateThemeMode = SplitMateThemeMode.SUNLIT_BUCKWHEAT,
     val activeCurrencyCode: String = "INR",
     val isOfflineMode: Boolean = false,
     val isSyncingRates: Boolean = false,
@@ -110,6 +111,9 @@ data class SplitMateUiState(
     val discoveredCloudProfile: com.splitmate.app.data.CloudUserProfileRecord? = null,
     val memberPresenceByPhone: Map<String, Long> = emptyMap()
 ) {
+    val activeExpressiveTheme: SplitMateThemeMode
+        get() = activeThemeMode
+
     val avatarSeed: String
         get() = currentUserSeed
 
@@ -347,7 +351,8 @@ data class SettlementTransferUiModel(
 
 class SplitMateViewModel(
     private val dao: SplitMateDao? = null,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val appContext: android.content.Context? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -504,7 +509,11 @@ class SplitMateViewModel(
     private var isRoomHydrated: Boolean = (dao == null)
     private val pendingColdStartSyncRequests = mutableListOf<Pair<String, Boolean>>()
 
+    @Volatile
+    private var hasExplicitPersistedThemeMode: Boolean = false
+
     init {
+        loadInitialPersistedThemeFromPrefs(appContext)
         if (dao != null) {
             observeRoomDatabase(dao)
         }
@@ -729,7 +738,12 @@ class SplitMateViewModel(
                     avatarStyleId = initDesc.styleId,
                     avatarColorPresetId = initDesc.presetId,
                     avatarGender = initDesc.gender,
-                    isDarkTheme = initialProfile?.isDarkTheme ?: curr.isDarkTheme,
+                    isDarkTheme = if (hasExplicitPersistedThemeMode) curr.isDarkTheme else (initialProfile?.isDarkTheme ?: curr.isDarkTheme),
+                    activeThemeMode = resolveThemeModeWithProfileDark(
+                        currentMode = curr.activeThemeMode,
+                        profileDark = initialProfile?.isDarkTheme,
+                        respectExplicitThemePref = hasExplicitPersistedThemeMode
+                    ),
                     groups = initialGroups,
                     activeGroupId = nextActiveGroup,
                     members = initialMembers,
@@ -789,7 +803,12 @@ class SplitMateViewModel(
                                 avatarStyleId = pDesc.styleId,
                                 avatarColorPresetId = pDesc.presetId,
                                 avatarGender = pDesc.gender,
-                                isDarkTheme = profile.isDarkTheme,
+                                isDarkTheme = if (hasExplicitPersistedThemeMode && curr.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU && !profile.isDarkTheme) false else profile.isDarkTheme,
+                                activeThemeMode = resolveThemeModeWithProfileDark(
+                                    currentMode = curr.activeThemeMode,
+                                    profileDark = profile.isDarkTheme,
+                                    respectExplicitThemePref = hasExplicitPersistedThemeMode
+                                ),
                                 members = syncedMembers
                             )
                         }
@@ -1005,8 +1024,129 @@ class SplitMateViewModel(
         }
     }
 
+    private fun resolveThemeModeWithProfileDark(
+        currentMode: SplitMateThemeMode,
+        profileDark: Boolean?,
+        respectExplicitThemePref: Boolean
+    ): SplitMateThemeMode {
+        if (profileDark == null) return currentMode
+        if (profileDark) return SplitMateThemeMode.WARM_ESPRESSO_NIGHT
+        if (respectExplicitThemePref && currentMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) {
+            return SplitMateThemeMode.KYOTO_MATCHA_YUZU
+        }
+        return if (currentMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) {
+            SplitMateThemeMode.KYOTO_MATCHA_YUZU
+        } else {
+            SplitMateThemeMode.SUNLIT_BUCKWHEAT
+        }
+    }
+
+    @JvmOverloads
+    fun loadInitialPersistedThemeFromPrefs(context: android.content.Context? = appContext) {
+        val ctx = context?.applicationContext ?: context ?: appContext ?: return
+        runCatching {
+            val prefs = ctx.getSharedPreferences(PREFS_NAME_SPLITMATE, android.content.Context.MODE_PRIVATE) ?: return
+            val rawModeId = prefs.getString(PREF_KEY_EXPRESSIVE_THEME_MODE, null)
+            val hasDarkKey = prefs.contains(PREF_KEY_IS_DARK_THEME)
+            val savedDark = if (hasDarkKey) prefs.getBoolean(PREF_KEY_IS_DARK_THEME, false) else _uiState.value.isDarkTheme
+            if (!rawModeId.isNullOrBlank()) {
+                val resolved = SplitMateThemeMode.fromId(rawModeId, fallbackDark = savedDark)
+                hasExplicitPersistedThemeMode = true
+                SplitMateThemeState.activeThemeMode = resolved
+                com.splitmate.app.SplitMateTheme.isDark = resolved.isDark
+                _uiState.update {
+                    it.copy(
+                        activeThemeMode = resolved,
+                        isDarkTheme = resolved.isDark
+                    )
+                }
+            } else if (hasDarkKey) {
+                val resolved = SplitMateThemeMode.fromId(null, fallbackDark = savedDark)
+                hasExplicitPersistedThemeMode = true
+                SplitMateThemeState.activeThemeMode = resolved
+                com.splitmate.app.SplitMateTheme.isDark = savedDark
+                _uiState.update {
+                    it.copy(
+                        activeThemeMode = resolved,
+                        isDarkTheme = savedDark
+                    )
+                }
+            }
+        }
+    }
+
+    private fun persistThemeModeToPrefs(mode: SplitMateThemeMode, context: android.content.Context? = appContext) {
+        val ctx = context?.applicationContext ?: context ?: appContext ?: return
+        runCatching {
+            val prefs = ctx.getSharedPreferences(PREFS_NAME_SPLITMATE, android.content.Context.MODE_PRIVATE) ?: return
+            prefs.edit()
+                .putString(PREF_KEY_EXPRESSIVE_THEME_MODE, mode.id)
+                .putBoolean(PREF_KEY_IS_DARK_THEME, mode.isDark)
+                .apply()
+        }
+    }
+
+    @JvmOverloads
+    fun setExpressiveThemeMode(
+        mode: SplitMateThemeMode,
+        context: android.content.Context? = null
+    ) {
+        hasExplicitPersistedThemeMode = true
+        SplitMateThemeState.activeThemeMode = mode
+        com.splitmate.app.SplitMateTheme.isDark = mode.isDark
+        _uiState.update {
+            it.copy(
+                activeThemeMode = mode,
+                isDarkTheme = mode.isDark
+            )
+        }
+        persistThemeModeToPrefs(mode, context ?: appContext)
+        viewModelScope.launch(ioDispatcher) {
+            val existing = dao?.getUserProfile()
+            if (existing != null && existing.isDarkTheme != mode.isDark) {
+                dao?.upsertUserProfile(existing.copy(isDarkTheme = mode.isDark))
+            }
+        }
+    }
+
+    @JvmOverloads
+    fun selectExpressiveTheme(
+        mode: SplitMateThemeMode,
+        context: android.content.Context? = null
+    ) = setExpressiveThemeMode(mode = mode, context = context)
+
+    @JvmOverloads
+    fun cycleExpressiveThemeMode(
+        context: android.content.Context? = null
+    ): SplitMateThemeMode {
+        val modes = SplitMateThemeMode.values()
+        val currentIdx = modes.indexOf(_uiState.value.activeThemeMode).coerceAtLeast(0)
+        val nextMode = modes[(currentIdx + 1) % modes.size]
+        setExpressiveThemeMode(mode = nextMode, context = context)
+        return nextMode
+    }
+
     fun toggleDarkTheme(isDark: Boolean) {
-        _uiState.update { it.copy(isDarkTheme = isDark) }
+        hasExplicitPersistedThemeMode = true
+        val targetMode = if (isDark) {
+            SplitMateThemeMode.WARM_ESPRESSO_NIGHT
+        } else {
+            val currMode = _uiState.value.activeThemeMode
+            if (currMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) {
+                SplitMateThemeMode.KYOTO_MATCHA_YUZU
+            } else {
+                SplitMateThemeMode.SUNLIT_BUCKWHEAT
+            }
+        }
+        SplitMateThemeState.activeThemeMode = targetMode
+        com.splitmate.app.SplitMateTheme.isDark = isDark
+        _uiState.update {
+            it.copy(
+                isDarkTheme = isDark,
+                activeThemeMode = targetMode
+            )
+        }
+        persistThemeModeToPrefs(targetMode, appContext)
         viewModelScope.launch(ioDispatcher) {
             val existing = dao?.getUserProfile()
             if (existing != null) {
@@ -4962,6 +5102,10 @@ class SplitMateViewModel(
     )
 
     companion object {
+        const val PREFS_NAME_SPLITMATE = "splitmate_prefs"
+        const val PREF_KEY_EXPRESSIVE_THEME_MODE = "expressive_theme_mode"
+        const val PREF_KEY_IS_DARK_THEME = "is_dark_theme"
+
         private fun urlEnc(raw: String): String = URLEncoder.encode(raw, Charsets.UTF_8.name())
         private fun urlDec(encoded: String): String = URLDecoder.decode(encoded, Charsets.UTF_8.name())
 
@@ -4972,7 +5116,7 @@ class SplitMateViewModel(
         fun extractSyncTokenFromRawInput(rawInput: String): String? {
             if (rawInput.isBlank()) return null
             val match = Regex("""SM2_[A-Za-z0-9_-]+""").find(rawInput)
-            return match?.value?.trim()?.takeIf { it.length > 8 }
+            return match?.value?.trim()?.takeIf { it.length > 10 }
         }
 
         /**

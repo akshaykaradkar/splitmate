@@ -80,6 +80,9 @@ import com.splitmate.app.ui.DesignSystemBindings
 import com.splitmate.app.ui.FigtreeFontFamily
 import com.splitmate.app.ui.SplitMateTnumMonospace
 import com.splitmate.app.ui.SplitMateViewModel
+import com.splitmate.app.ui.components.ButtonGroup
+import com.splitmate.app.ui.components.ExpressiveActionItem
+import com.splitmate.app.ui.components.SplitMateMotion
 import com.splitmate.app.ui.extractInitialsFromNameOrSeed
 import com.splitmate.app.ui.formatIndianRupeesFromCents
 import com.splitmate.app.ui.performCrispTactileHaptic
@@ -286,7 +289,7 @@ fun TripSyncAndPerspectiveSheet(
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 8.dp)
-                .animateContentSize(animationSpec = DesignSystemBindings.tactileSpring()),
+                .animateContentSize(animationSpec = SplitMateMotion.defaultSpatial()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Sheet Header
@@ -506,6 +509,67 @@ fun TripSyncAndPerspectiveSheet(
                             append(fallbackCapsule)
                         }
                     }.trim()
+
+                    ButtonGroup(
+                        items = listOf(
+                            ExpressiveActionItem(
+                                label = "Copy Code",
+                                icon = Icons.Rounded.ContentCopy,
+                                isPrimary = false,
+                                onClick = {
+                                    performCrispTactileHaptic(context, localView, heavy = false)
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                    clipboard?.setPrimaryClip(
+                                        ClipData.newPlainText("SplitMate Trip Code", formattedJoinCode)
+                                    )
+                                    isFeedbackError = false
+                                    feedbackBannerText = "Copied Trip Code $formattedJoinCode to clipboard"
+                                }
+                            ),
+                            ExpressiveActionItem(
+                                label = "WhatsApp",
+                                icon = Icons.Rounded.Share,
+                                isPrimary = true,
+                                onClick = {
+                                    performCrispTactileHaptic(context, localView, heavy = false)
+                                    val whatsappIntent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_TEXT, activeShareText)
+                                        setPackage("com.whatsapp")
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    try {
+                                        context.startActivity(whatsappIntent)
+                                    } catch (_: Exception) {
+                                        val fallbackIntent = Intent.createChooser(
+                                            Intent(Intent.ACTION_SEND).apply {
+                                                type = "text/plain"
+                                                putExtra(Intent.EXTRA_TEXT, activeShareText)
+                                            },
+                                            "Share SplitMate Trip Invite"
+                                        ).apply {
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        }
+                                        runCatching { context.startActivity(fallbackIntent) }
+                                    }
+                                }
+                            ),
+                            ExpressiveActionItem(
+                                label = "Sync & Copy",
+                                icon = Icons.Rounded.Sync,
+                                isPrimary = false,
+                                onClick = {
+                                    performCrispTactileHaptic(context, localView, heavy = false)
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                    clipboard?.setPrimaryClip(
+                                        ClipData.newPlainText("SplitMate Trip Sync", activeShareText)
+                                    )
+                                    isFeedbackError = false
+                                    feedbackBannerText = "Copied full invite message to clipboard"
+                                }
+                            )
+                        )
+                    )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
