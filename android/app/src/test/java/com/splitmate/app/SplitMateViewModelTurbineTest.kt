@@ -142,18 +142,18 @@ class SplitMateViewModelTurbineTest {
             headerPrefix = "Split Breakdown"
         )
 
-        // Verify it divides by 3 (₹1000.00 each), NOT by 4 (₹750.00)!
+        // Verify it divides by 3 (₹1,000.00 each), NOT by 4 (₹750.00)!
         assertEquals(4, breakdown.totalMembersInGroup)
         assertEquals(3, breakdown.splittingMembersCount)
-        assertEquals("₹1000.00", breakdown.perPersonHeadlineShare)
+        assertEquals("₹1,000.00", breakdown.perPersonHeadlineShare)
         assertEquals("Split Breakdown (3 of 4 members splitting)", breakdown.headerLabel)
 
-        // Verify each of the 3 selected members owes 100,000 paise (₹1000.00)
+        // Verify each of the 3 selected members owes 100,000 paise (₹1,000.00)
         selectedThreeIds.forEach { selectedId ->
             val row = breakdown.rows.first { it.memberId == selectedId }
             assertTrue(row.isIncludedInSplit)
             assertEquals(100_000L, row.owedCents)
-            assertEquals("₹1000.00", row.formattedShare)
+            assertEquals("₹1,000.00", row.formattedShare)
         }
 
         // Verify the deselected 4th member ("Maya") is excluded and owes 0 paise

@@ -1211,8 +1211,8 @@ fun QuickExpenseScreen(
                                         if (isRemainderRecipient && isRemainderEquallySplit) {
                                             Surface(
                                                 shape = QuickExpenseThemeTokens.RadiusPill,
-                                                color = Color(0xFFD7E8B6),
-                                                border = BorderStroke(1.dp, Color(0xFF365314)),
+                                                color = QuickExpenseThemeTokens.SageSurface,
+                                                border = BorderStroke(1.dp, QuickExpenseThemeTokens.SageBorder),
                                                 modifier = Modifier.align(Alignment.TopStart)
                                             ) {
                                                 Text(
@@ -1220,7 +1220,7 @@ fun QuickExpenseScreen(
                                                     fontFamily = SplitMateBrandFontFamily,
                                                     fontSize = 8.5.sp,
                                                     fontWeight = FontWeight.ExtraBold,
-                                                    color = Color(0xFF365314),
+                                                    color = QuickExpenseThemeTokens.SageText,
                                                     modifier = Modifier.padding(horizontal = 4.5.dp, vertical = 1.dp)
                                                 )
                                             }
@@ -1492,8 +1492,8 @@ fun QuickExpenseScreen(
                                             val t = remainderCoinFlightProgress.value
                                             Surface(
                                                 shape = QuickExpenseThemeTokens.RadiusPill,
-                                                color = Color(0xFFD7E8B6),
-                                                border = BorderStroke(1.5.dp, Color(0xFF365314)),
+                                                color = QuickExpenseThemeTokens.SageSurface,
+                                                border = BorderStroke(1.5.dp, QuickExpenseThemeTokens.SageBorder),
                                                 shadowElevation = 6.dp,
                                                 modifier = Modifier
                                                     .align(Alignment.CenterStart)
@@ -1514,12 +1514,12 @@ fun QuickExpenseScreen(
                                                         fontFamily = SplitMateBrandFontFamily,
                                                         fontSize = 10.sp,
                                                         fontWeight = FontWeight.ExtraBold,
-                                                        color = Color(0xFF365314)
+                                                        color = QuickExpenseThemeTokens.SageText
                                                     )
                                                     Icon(
                                                         imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
                                                         contentDescription = null,
-                                                        tint = Color(0xFF365314),
+                                                        tint = QuickExpenseThemeTokens.SageText,
                                                         modifier = Modifier.size(11.dp)
                                                     )
                                                     Text(
@@ -1527,7 +1527,7 @@ fun QuickExpenseScreen(
                                                         fontFamily = SplitMateBrandFontFamily,
                                                         fontSize = 10.sp,
                                                         fontWeight = FontWeight.ExtraBold,
-                                                        color = Color(0xFF365314)
+                                                        color = QuickExpenseThemeTokens.SageText
                                                     )
                                                 }
                                             }
@@ -1707,11 +1707,8 @@ fun QuickExpenseScreen(
                             // Log & Split FAB spanning EXACTLY two rows in height (54dp + 8dp + 54dp = 116dp)
                             // Always 100% opaque — never transparent or washed-out white/grey when amount is 0.
                             val canCommitSplit = hasSelectedGroup && totalAmountPaise > 0L && selectedMemberIds.isNotEmpty()
-                            // Dark Mode inversion: Soft Sage #D7E8B6 container + deep olive #1E2F08 content
-                            // (~11:1 contrast). Light Mode keeps the Soft Charcoal #23201E pill with light text.
-                            // Disabled state keeps the legible SageSurface / SageText tonal pairing in both themes.
-                            val ctaEnabledContainer = if (isDark) Color(0xFFD7E8B6) else Color(0xFF23201E)
-                            val ctaEnabledContent = if (isDark) Color(0xFF1E2F08) else Color.White
+                            val ctaEnabledContainer = if (isDark) activePalette.primary else activePalette.onSurface
+                            val ctaEnabledContent = if (isDark) activePalette.onPrimary else activePalette.surfaceContainerLowest
                             val ctaContainerColor = if (canCommitSplit) {
                                 ctaEnabledContainer
                             } else {

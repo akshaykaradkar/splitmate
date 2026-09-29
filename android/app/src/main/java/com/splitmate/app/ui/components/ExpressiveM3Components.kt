@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -1132,7 +1133,8 @@ fun HorizontalFloatingToolbar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .heightIn(max = 72.dp)
+            .padding(horizontal = 12.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1143,11 +1145,11 @@ fun HorizontalFloatingToolbar(
             border = BorderStroke(1.dp, palette.outline.copy(alpha = 0.65f)),
             modifier = Modifier
                 .weight(1f, fill = false)
-                .height(64.dp)
+                .height(60.dp)
                 .shadow(elevation = 6.dp, shape = CircleShape)
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = horizontalPad, vertical = 6.dp),
+                modifier = Modifier.padding(horizontal = horizontalPad, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 content = content

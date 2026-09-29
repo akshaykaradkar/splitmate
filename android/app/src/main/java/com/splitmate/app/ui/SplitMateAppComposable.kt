@@ -43,6 +43,9 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.layout.ContentScale
@@ -573,14 +576,57 @@ fun SplitMateCloudOtpOnboardingScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = "Welcome to SplitMate",
-                fontFamily = SplitMateTheme.FontDisplay,
-                fontSize = 26.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = SplitMateTheme.PrimaryDark,
-                textAlign = TextAlign.Center
-            )
+            val onboardingStepCount = remember(
+                onboardingName,
+                discoveredProfile?.name,
+                isValidPhone10,
+                enteredPin4
+            ) {
+                var steps = 1 // Step 1: Avatar Studio ready
+                if (onboardingName.trim().isNotBlank() || !discoveredProfile?.name.isNullOrBlank()) steps++
+                if (isValidPhone10) steps++
+                if (enteredPin4.count { it.isDigit() } >= 4) steps++
+                steps.coerceIn(1, 4)
+            }
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Welcome to SplitMate",
+                        fontFamily = SplitMateTheme.FontDisplay,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = SplitMateTheme.PrimaryDark
+                    )
+                    Surface(
+                        shape = CircleShape,
+                        color = SplitMateTheme.SageSurface
+                    ) {
+                        Text(
+                            text = "STEP $onboardingStepCount OF 4",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = SplitMateTheme.SageText,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+                LinearWavyProgressIndicator(
+                    progress = onboardingStepCount / 4f,
+                    modifier = Modifier.fillMaxWidth(),
+                    color = SplitMateTheme.SageText,
+                    trackColor = SplitMateTheme.BorderLight
+                )
+            }
 
             // 1. Hybrid 5-Character Open-Peeps Hero Stage (Compacts automatically when IME or OTP challenge is active)
             OpenPeepsHeroStage(
@@ -1081,8 +1127,8 @@ fun SplitMateCloudOtpOnboardingScreen(
                         enabled = isValidPhone10 && (onboardingName.trim().isNotBlank() || !discoveredProfile?.name.isNullOrBlank()) && isPinReady && !uiState.isCloudSyncing,
                         shape = SplitMateTheme.RadiusButton,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF365314),
-                            contentColor = Color(0xFFFAF6F0)
+                            containerColor = SplitMateTheme.SageText,
+                            contentColor = Color.White
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1091,7 +1137,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                         Icon(
                             imageVector = if (hasExisting4DigitPin) Icons.Rounded.LockOpen else Icons.Rounded.VerifiedUser,
                             contentDescription = null,
-                            tint = Color(0xFFD7E8B6),
+                            tint = SplitMateTheme.SageSurface,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
@@ -1104,8 +1150,17 @@ fun SplitMateCloudOtpOnboardingScreen(
                             fontFamily = SplitMateTheme.FontRounded,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 15.sp,
-                            color = Color(0xFFFAF6F0)
+                            color = Color.White
                         )
+                        if (!uiState.isCloudSyncing) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
 
                     otpFeedbackMessage?.let { feedback ->
@@ -1119,9 +1174,9 @@ fun SplitMateCloudOtpOnboardingScreen(
                                 feedback.contains("Incorrect", ignoreCase = true) ||
                                 feedback.contains("Enter", ignoreCase = true)
                             ) {
-                                Color(0xFFE06B52)
+                                SplitMateTheme.TerracottaText
                             } else {
-                                Color(0xFF416913)
+                                SplitMateTheme.SageText
                             }
                         )
                     }
@@ -1580,10 +1635,41 @@ fun SplitMateMainDashboardScaffold(
         currentTab == SplitMateTab.LEDGERS && useTripHubV2View &&
             (uiState.openedGroupDetailId != null || isTwoPaneTabletWithGroups)
 
+    var isBottomBarHiddenByScroll by remember(currentTab, uiState.openedGroupDetailId) {
+        mutableStateOf(false)
+    }
+    val dashboardNestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (available.y < -12f) {
+                    isBottomBarHiddenByScroll = true
+                } else if (available.y > 10f) {
+                    isBottomBarHiddenByScroll = false
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
     Scaffold(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(dashboardNestedScrollConnection),
         containerColor = animatedScreenBg,
         floatingActionButton = {
-            if (currentTab == SplitMateTab.LEDGERS && !isTripHubCanvasVisible) {
+            AnimatedVisibility(
+                visible = currentTab == SplitMateTab.LEDGERS &&
+                    !isTripHubCanvasVisible &&
+                    (isMediumOrExpandedWindow || isBottomBarHiddenByScroll),
+                enter = slideInVertically(
+                    animationSpec = SplitMateMotion.defaultSpatial(),
+                    initialOffsetY = { it }
+                ) + fadeIn(animationSpec = SplitMateMotion.defaultEffects()),
+                exit = slideOutVertically(
+                    animationSpec = SplitMateMotion.defaultSpatial(),
+                    targetOffsetY = { it }
+                ) + fadeOut(animationSpec = SplitMateMotion.defaultEffects())
+            ) {
                 ExtendedFloatingActionButton(
                     onClick = {
                         viewModel.navigateToSubFlow(
@@ -1618,9 +1704,17 @@ fun SplitMateMainDashboardScaffold(
         bottomBar = {
             if (!isMediumOrExpandedWindow) {
                 AnimatedVisibility(
-                    visible = !isImmersiveTripHubOpen && currentTab != SplitMateTab.SPLIT,
-                    enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                    exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+                    visible = !isImmersiveTripHubOpen &&
+                        currentTab != SplitMateTab.SPLIT &&
+                        !isBottomBarHiddenByScroll,
+                    enter = slideInVertically(
+                        animationSpec = SplitMateMotion.defaultSpatial(),
+                        initialOffsetY = { it }
+                    ) + fadeIn(animationSpec = SplitMateMotion.defaultEffects()),
+                    exit = slideOutVertically(
+                        animationSpec = SplitMateMotion.defaultSpatial(),
+                        targetOffsetY = { it }
+                    ) + fadeOut(animationSpec = SplitMateMotion.defaultEffects())
                 ) {
                     Column(
                         modifier = Modifier
@@ -1646,8 +1740,7 @@ fun SplitMateMainDashboardScaffold(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .consumeWindowInsets(innerPadding)
+                .padding(top = innerPadding.calculateTopPadding())
                 .imePadding()
         ) {
             if (isMediumOrExpandedWindow && currentTab != SplitMateTab.SPLIT) {
@@ -1790,7 +1883,8 @@ fun SplitMateBottomNavigationBar(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .heightIn(max = 72.dp)
+            .padding(bottom = 6.dp),
         contentAlignment = Alignment.Center
     ) {
         HorizontalFloatingToolbar(
@@ -1916,7 +2010,7 @@ fun LedgersDashboardScreen(
 
     deletingExpense?.let { expToDelete ->
         val cleanExpName = extractTravelTicketFromTitle(expToDelete.title)?.cleanTitle ?: expToDelete.title
-        val formattedDeleteAmt = "₹${String.format(Locale.US, "%.2f", expToDelete.totalAmountCents / 100.0)}"
+        val formattedDeleteAmt = formatIndianRupeesFromCents(expToDelete.totalAmountCents)
         AlertDialog(
             onDismissRequest = { deletingExpense = null },
             containerColor = SplitMateTheme.SurfaceWhite,
@@ -2426,11 +2520,12 @@ fun LedgersDashboardScreen(
                                     color = SplitMateTheme.TextSecondary
                                 )
                                 Text(
-                                    text = "₹${String.format(Locale.US, "%.2f", totalGroupSpendCents / 100.0)}",
+                                    text = formatIndianRupeesFromCents(totalGroupSpendCents),
                                     fontFamily = SplitMateTheme.FontDisplay,
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = SplitMateTheme.PrimaryDark
+                                    color = SplitMateTheme.PrimaryDark,
+                                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
                                 )
                             }
                         }
@@ -3853,19 +3948,27 @@ fun LedgersDashboardScreen(
                                 }
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .clip(CircleShape)
-                                        .background(if (uiState.isOfflineMode) SplitMateTheme.BrandCoral else Color(0xFF388E3C))
-                                )
+                                if (uiState.isOfflineMode) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(SplitMateTheme.BrandCoral)
+                                    )
+                                } else {
+                                    ContainedLoadingIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        containerColor = SplitMateTheme.SageSurface,
+                                        indicatorColor = SplitMateTheme.SageText
+                                    )
+                                }
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = if (uiState.isOfflineMode) "Offline" else "Live Sync",
                                     fontFamily = SplitMateTheme.FontRounded,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (uiState.isOfflineMode) SplitMateTheme.BrandCoral else Color(0xFF388E3C)
+                                    color = if (uiState.isOfflineMode) SplitMateTheme.BrandCoral else SplitMateTheme.SageText
                                 )
                             }
                         }
@@ -3915,65 +4018,45 @@ fun LedgersDashboardScreen(
 
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        // Primary actions inside Hero Balance Card: + New Group and Join with Code (plus Settle Up when open balances exist)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
+                        // Phase 3: Promote 'Settle Up' as the sole Primary Action inside the Hero Balance Card
+                        if (totalBalance != "₹0.00") {
                             Button(
-                                onClick = { showNewGroupDialog = true },
+                                onClick = onNavigateToSettle,
                                 shape = SplitMateTheme.RadiusButton,
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = SplitMateTheme.PrimaryDark,
                                     contentColor = SplitMateTheme.ScreenBg
                                 ),
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .sizeIn(minHeight = 46.dp)
-                            ) {
-                                Icon(Icons.Rounded.Add, contentDescription = null, tint = SplitMateTheme.ScreenBg, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("+ New Group", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.ScreenBg, fontWeight = FontWeight.Bold)
-                            }
-
-                            FilledTonalButton(
-                                onClick = { showJoinByCodeDialog = true },
-                                shape = SplitMateTheme.RadiusButton,
-                                colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = SplitMateTheme.SageSurface,
-                                    contentColor = SplitMateTheme.PrimaryDark
-                                ),
-                                border = BorderStroke(1.dp, Color(0xFF416913).copy(alpha = 0.28f)),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .sizeIn(minHeight = 46.dp)
-                            ) {
-                                Icon(Icons.Rounded.GroupAdd, contentDescription = null, tint = SplitMateTheme.PrimaryDark, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Join with Code", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.PrimaryDark, fontWeight = FontWeight.Bold)
-                            }
-                        }
-
-                        if (totalBalance != "₹0.00") {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            FilledTonalButton(
-                                onClick = onNavigateToSettle,
-                                shape = SplitMateTheme.RadiusButton,
-                                colors = ButtonDefaults.filledTonalButtonColors(containerColor = SplitMateTheme.SurfaceWhite),
-                                modifier = Modifier
                                     .fillMaxWidth()
-                                    .sizeIn(minHeight = 44.dp)
+                                    .sizeIn(minHeight = 48.dp)
                             ) {
-                                Icon(Icons.Rounded.TaskAlt, contentDescription = null, tint = SplitMateTheme.PrimaryDark, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Rounded.TaskAlt, contentDescription = null, tint = SplitMateTheme.ScreenBg, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Settle Up", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.ScreenBg, fontWeight = FontWeight.Bold)
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Settle Up", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.PrimaryDark, fontWeight = FontWeight.Bold)
-                                Spacer(modifier = Modifier.width(4.dp))
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
                                     contentDescription = null,
-                                    tint = SplitMateTheme.PrimaryDark,
-                                    modifier = Modifier.size(15.dp)
+                                    tint = SplitMateTheme.ScreenBg,
+                                    modifier = Modifier.size(16.dp)
                                 )
+                            }
+                        } else {
+                            FilledTonalButton(
+                                onClick = onNavigateToSettle,
+                                shape = SplitMateTheme.RadiusButton,
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = SplitMateTheme.SurfaceWhite,
+                                    contentColor = SplitMateTheme.PrimaryDark
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .sizeIn(minHeight = 46.dp)
+                            ) {
+                                Icon(Icons.Rounded.TaskAlt, contentDescription = null, tint = SplitMateTheme.PrimaryDark, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Settle Up · All Balanced", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.PrimaryDark, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -4031,7 +4114,7 @@ fun LedgersDashboardScreen(
             )
         }
 
-        // 3. Section Header: Active Groups
+        // 3. Section Header: Active Groups + M3 Expressive SplitButtonLayout (+ New Group | Join with Code)
         item {
             Row(
                 modifier = Modifier
@@ -4067,22 +4150,27 @@ fun LedgersDashboardScreen(
                     }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "Sort by balance",
-                        fontFamily = SplitMateTheme.FontRounded,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = SplitMateTheme.TextSecondary
+                SplitButtonLayout(
+                    leadingText = "+ New Group",
+                    leadingIcon = Icons.Rounded.Add,
+                    onLeadingClick = { showNewGroupDialog = true },
+                    containerColor = SplitMateTheme.SageSurface,
+                    contentColor = SplitMateTheme.SageText,
+                    menuItems = listOf(
+                        ExpressiveMenuAction(
+                            label = "Join with Code",
+                            subtitle = "Enter a 6-digit invite code",
+                            icon = Icons.Rounded.GroupAdd,
+                            onClick = { showJoinByCodeDialog = true }
+                        ),
+                        ExpressiveMenuAction(
+                            label = "Create New Group",
+                            subtitle = "Start a shared trip or ledger",
+                            icon = Icons.Rounded.Add,
+                            onClick = { showNewGroupDialog = true }
+                        )
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(
-                        imageVector = Icons.Rounded.SwapVert,
-                        contentDescription = null,
-                        tint = SplitMateTheme.TextSecondary,
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
+                )
             }
         }
 
@@ -5878,8 +5966,8 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                     Surface(
                                         onClick = { showMaxHeapGraphInspector = !showMaxHeapGraphInspector },
                                         shape = RoundedCornerShape(inspectorCornerRadius),
-                                        color = if (showMaxHeapGraphInspector) Color(0xFF365314) else SplitMateTheme.SageSurface,
-                                        border = BorderStroke(1.dp, Color(0xFF416913).copy(alpha = 0.45f)),
+                                        color = if (showMaxHeapGraphInspector) SplitMateTheme.SageText else SplitMateTheme.SageSurface,
+                                        border = BorderStroke(1.dp, SplitMateTheme.SageText.copy(alpha = 0.45f)),
                                         modifier = Modifier
                                             .minimumInteractiveComponentSize()
                                             .size(22.dp)
@@ -5888,7 +5976,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                             Icon(
                                                 imageVector = Icons.Rounded.Info,
                                                 contentDescription = "Why were debts simplified?",
-                                                tint = if (showMaxHeapGraphInspector) Color(0xFFD7E8B6) else SplitMateTheme.SageText,
+                                                tint = if (showMaxHeapGraphInspector) SplitMateTheme.SageSurface else SplitMateTheme.SageText,
                                                 modifier = Modifier.size(13.dp)
                                             )
                                         }
@@ -5930,6 +6018,9 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                 ),
                                 label = "FlowDotProgress"
                             )
+                            val activeCoral = SplitMateTheme.BrandCoral
+                            val activeSageContainer = SplitMateTheme.SageSurface
+                            val activeSageText = SplitMateTheme.SageText
                             Surface(
                                 shape = RoundedCornerShape(16.dp),
                                 color = SplitMateTheme.SurfaceWhite,
@@ -5983,14 +6074,14 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                             }
                                             drawPath(
                                                 path = path,
-                                                color = Color(0xFFE06B52).copy(alpha = 0.55f),
+                                                color = activeCoral.copy(alpha = 0.55f),
                                                 style = androidx.compose.ui.graphics.drawscope.Stroke(
                                                     width = 1.6.dp.toPx(),
                                                     pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f), 0f)
                                                 )
                                             )
                                             drawCircle(
-                                                color = Color(0xFFE06B52),
+                                                color = activeCoral,
                                                 radius = 4.dp.toPx(),
                                                 center = startPt
                                             )
@@ -5998,13 +6089,13 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
 
                                         // Center: Max-Heap Simplifier Hub
                                         drawRoundRect(
-                                            color = Color(0xFFD7E8B6),
+                                            color = activeSageContainer,
                                             topLeft = Offset(midX - 18.dp.toPx(), midY - 14.dp.toPx()),
                                             size = androidx.compose.ui.geometry.Size(36.dp.toPx(), 28.dp.toPx()),
                                             cornerRadius = androidx.compose.ui.geometry.CornerRadius(8.dp.toPx(), 8.dp.toPx())
                                         )
                                         drawCircle(
-                                            color = Color(0xFF365314),
+                                            color = activeSageText,
                                             radius = 6.dp.toPx(),
                                             center = Offset(midX, midY)
                                         )
@@ -6026,18 +6117,18 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                             }
                                             drawPath(
                                                 path = path,
-                                                color = Color(0xFF416913),
+                                                color = activeSageText,
                                                 style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5.dp.toPx())
                                             )
                                             drawCircle(
-                                                color = Color(0xFF416913),
+                                                color = activeSageText,
                                                 radius = 5.dp.toPx(),
                                                 center = endPt
                                             )
                                             val dotX = startHub.x + (endPt.x - startHub.x) * flowProgress
                                             val dotY = startHub.y + (endPt.y - startHub.y) * flowProgress
                                             drawCircle(
-                                                color = Color(0xFFD7E8B6),
+                                                color = activeSageContainer,
                                                 radius = 4.dp.toPx(),
                                                 center = Offset(dotX, dotY)
                                             )
@@ -6395,15 +6486,15 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
 
                 // A. If the member has INCOMING payments (RECEIVES Card)
                 if (summary.hasIncoming) {
-                    val receiverCardBg = if (SplitMateTheme.isDark) {
-                        SplitMateTheme.SurfaceWhite
-                    } else {
-                        Color(0xFFF1F7E8)
+                    val receiverCardBg = when {
+                        SplitMateTheme.isDark -> SplitMateTheme.SurfaceWhite
+                        DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFFD2F4DC)
+                        else -> Color(0xFFF1F7E8)
                     }
-                    val receiverBorderColor = if (SplitMateTheme.isDark) {
-                        SplitMateTheme.BorderLight
-                    } else {
-                        Color(0xFFD8E5C2)
+                    val receiverBorderColor = when {
+                        SplitMateTheme.isDark -> SplitMateTheme.BorderLight
+                        DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF75C993)
+                        else -> Color(0xFFD8E5C2)
                     }
 
                     Card(
@@ -6654,7 +6745,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                             )
                                                         ),
                                                         modifier = Modifier.weight(1f),
-                                                        containerColor = if (isDrainingIn) Color(0xFF365314) else SplitMateTheme.PrimaryDark,
+                                                        containerColor = if (isDrainingIn) SplitMateTheme.SageText else SplitMateTheme.PrimaryDark,
                                                         contentColor = SplitMateTheme.ScreenBg
                                                     )
                                                 }
@@ -6674,15 +6765,15 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                 // B. If the member has OUTGOING payments (PAYS Card with Multi-Payment Breakdown)
                 if (summary.hasOutgoing) {
                     var isPayerExpanded by remember(summary.memberId) { mutableStateOf(true) }
-                    val peachBoxBg = if (SplitMateTheme.isDark) {
-                        SplitMateTheme.SurfaceMuted
-                    } else {
-                        Color(0xFFFDF2EE)
+                    val peachBoxBg = when {
+                        SplitMateTheme.isDark -> SplitMateTheme.SurfaceMuted
+                        DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFFFEF3C7)
+                        else -> Color(0xFFFDF2EE)
                     }
-                    val peachBoxBorder = if (SplitMateTheme.isDark) {
-                        SplitMateTheme.BorderLight
-                    } else {
-                        Color(0xFFF7E0D7)
+                    val peachBoxBorder = when {
+                        SplitMateTheme.isDark -> SplitMateTheme.BorderLight
+                        DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFFF59E0B).copy(alpha = 0.45f)
+                        else -> Color(0xFFF7E0D7)
                     }
 
                     Card(
@@ -6975,7 +7066,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                             )
                                                         ),
                                                         modifier = Modifier.fillMaxWidth(),
-                                                        containerColor = if (isDrainingOut) Color(0xFF365314) else SplitMateTheme.PrimaryDark,
+                                                        containerColor = if (isDrainingOut) SplitMateTheme.SageText else SplitMateTheme.PrimaryDark,
                                                         contentColor = SplitMateTheme.ScreenBg
                                                     )
                                                 }

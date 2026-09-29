@@ -4307,7 +4307,7 @@ class SplitMateViewModel(
             curr.copy(
                 expenses = curr.expenses.map { if (it.expenseId == expenseId) updatedExpense else it },
                 splits = curr.splits.filterNot { it.expenseId == expenseId } + updatedSplits,
-                statusBannerMessage = "Updated \"$cleanTitle\" across ${chosenMembers.size} members (₹${String.format(Locale.US, "%.2f", newTotalCents / 100.0)})"
+                statusBannerMessage = "Updated \"$cleanTitle\" across ${chosenMembers.size} members (${formatIndianRupeesFromCents(newTotalCents)})"
             )
         }
 
@@ -5142,7 +5142,14 @@ class SplitMateViewModel(
             }
 
             val perPersonAvgCents = expense.totalAmountCents / splittingCount
-            val perPersonHeadlineShare = "$currencySymbol${String.format(Locale.US, "%.2f", perPersonAvgCents / 100.0)}"
+            fun formatShareAmount(cents: Long): String {
+                return if (currencySymbol == "₹") {
+                    formatIndianRupeesFromCents(cents)
+                } else {
+                    "$currencySymbol${String.format(Locale.US, "%.2f", cents / 100.0)}"
+                }
+            }
+            val perPersonHeadlineShare = formatShareAmount(perPersonAvgCents)
 
             val headerLabel = if (hasExplicitSplits && splittingCount < groupMembers.size) {
                 "$headerPrefix ($splittingCount of ${groupMembers.size} members splitting)"
@@ -5176,7 +5183,7 @@ class SplitMateViewModel(
                         owedCents = owed,
                         plusOneCent = sp?.plusOneCent == true,
                         formattedShare = if (included) {
-                            "$currencySymbol${String.format(Locale.US, "%.2f", owed / 100.0)}"
+                            formatShareAmount(owed)
                         } else {
                             "${currencySymbol}0.00 (Excluded)"
                         }
@@ -5191,7 +5198,7 @@ class SplitMateViewModel(
                         isIncludedInSplit = true,
                         owedCents = owed,
                         plusOneCent = alloc?.plusOneCent == true,
-                        formattedShare = "$currencySymbol${String.format(Locale.US, "%.2f", owed / 100.0)}"
+                        formattedShare = formatShareAmount(owed)
                     )
                 }
             }

@@ -131,12 +131,9 @@ fun PerspectiveAndSyncHeaderPill(
 ) {
     val context = LocalContext.current
     val localView = LocalView.current
-    val isDark = SplitMateTheme.isDark
-
-    val pillBg = if (isDark) Color(0xFF233216) else BuckwheatSageContainer
-    val pillText = if (isDark) BuckwheatSageContainer else BuckwheatOlivePrimary
-    val pillBorder = if (isDark) Color(0xFF3E651E) else Color(0xFFB9D48B)
-    val displayMember = activeMemberName.trim().ifEmpty { "Select Member" }
+    val pillBg = SplitMateTheme.SageSurface
+    val pillText = SplitMateTheme.SageText
+    val pillBorder = SplitMateTheme.SageText.copy(alpha = 0.35f)
 
     Surface(
         onClick = {
@@ -307,13 +304,13 @@ fun TripSyncAndPerspectiveSheet(
                         modifier = Modifier
                             .size(40.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(if (isDark) Color(0xFF233216) else BuckwheatSageContainer),
+                            .background(SplitMateTheme.SageSurface),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.PersonAdd,
                             contentDescription = null,
-                            tint = if (isDark) BuckwheatSageContainer else BuckwheatOlivePrimary,
+                            tint = SplitMateTheme.SageText,
                             modifier = Modifier.size(22.dp)
                         )
                     }
@@ -338,18 +335,8 @@ fun TripSyncAndPerspectiveSheet(
 
             // Status / Feedback Banner
             AnimatedVisibility(visible = !feedbackBannerText.isNullOrBlank()) {
-                val bannerBg = when {
-                    isFeedbackError && isDark -> Color(0xFF3A2019)
-                    isFeedbackError -> BuckwheatPeachContainer
-                    isDark -> Color(0xFF233216)
-                    else -> BuckwheatSageContainer
-                }
-                val bannerText = when {
-                    isFeedbackError && isDark -> Color(0xFFFECDD3)
-                    isFeedbackError -> BuckwheatTerracottaDark
-                    isDark -> BuckwheatSageContainer
-                    else -> BuckwheatOlivePrimary
-                }
+                val bannerBg = if (isFeedbackError) SplitMateTheme.TerracottaSurface else SplitMateTheme.SageSurface
+                val bannerText = if (isFeedbackError) SplitMateTheme.TerracottaText else SplitMateTheme.SageText
                 Surface(
                     shape = RoundedCornerShape(14.dp),
                     color = bannerBg,
@@ -414,11 +401,11 @@ fun TripSyncAndPerspectiveSheet(
                         )
                     }
 
-                    // Oversized high-contrast Buckwheat Trip Code Card (#F4EFE6 sunken well with 1.dp #EDE7DF border)
+                    // Oversized high-contrast Trip Code Card (sunken well with soft border)
                     Surface(
                         shape = RoundedCornerShape(16.dp),
-                        color = Color(0xFFF4EFE6),
-                        border = BorderStroke(1.dp, Color(0xFFEDE7DF)),
+                        color = SplitMateTheme.SurfaceMuted,
+                        border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
@@ -434,7 +421,7 @@ fun TripSyncAndPerspectiveSheet(
                                     fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 10.sp,
-                                    color = Color(0xFF365314)
+                                    color = SplitMateTheme.SageText
                                 )
                                 Text(
                                     text = formattedJoinCode,
@@ -445,7 +432,7 @@ fun TripSyncAndPerspectiveSheet(
                                         letterSpacing = 2.sp,
                                         fontFeatureSettings = "tnum"
                                     ),
-                                    color = Color(0xFF23201E)
+                                    color = SplitMateTheme.PrimaryDark
                                 )
                                 if (exportBundle != null) {
                                     Text(
@@ -472,8 +459,8 @@ fun TripSyncAndPerspectiveSheet(
                                     feedbackBannerText = "Copied Trip Code $formattedJoinCode to clipboard"
                                 },
                                 shape = CircleShape,
-                                color = Color(0xFFDCE9B9),
-                                border = BorderStroke(1.dp, Color(0xFF416913).copy(alpha = 0.35f))
+                                color = SplitMateTheme.SageSurface,
+                                border = BorderStroke(1.dp, SplitMateTheme.SageText.copy(alpha = 0.35f))
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -483,7 +470,7 @@ fun TripSyncAndPerspectiveSheet(
                                     Icon(
                                         imageVector = Icons.Rounded.ContentCopy,
                                         contentDescription = null,
-                                        tint = Color(0xFF365314),
+                                        tint = SplitMateTheme.SageText,
                                         modifier = Modifier.size(15.dp)
                                     )
                                     Text(
@@ -491,7 +478,7 @@ fun TripSyncAndPerspectiveSheet(
                                         fontFamily = FigtreeFontFamily,
                                         fontWeight = FontWeight.ExtraBold,
                                         fontSize = 12.sp,
-                                        color = Color(0xFF365314)
+                                        color = SplitMateTheme.SageText
                                     )
                                 }
                             }
@@ -601,7 +588,7 @@ fun TripSyncAndPerspectiveSheet(
                             },
                             shape = RoundedCornerShape(14.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = BuckwheatOlivePrimary,
+                                containerColor = SplitMateTheme.SageText,
                                 contentColor = Color.White
                             ),
                             modifier = Modifier
@@ -699,10 +686,10 @@ fun TripSyncAndPerspectiveSheet(
                     if (!clipToken.isNullOrBlank()) {
                         Surface(
                             shape = RoundedCornerShape(14.dp),
-                            color = if (isDark) Color(0xFF233216) else BuckwheatSageContainer,
+                            color = SplitMateTheme.SageSurface,
                             border = BorderStroke(
                                 1.dp,
-                                if (isDark) BuckwheatSageContainer.copy(alpha = 0.4f) else BuckwheatOlivePrimary.copy(alpha = 0.35f)
+                                SplitMateTheme.SageText.copy(alpha = 0.35f)
                             ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -717,7 +704,7 @@ fun TripSyncAndPerspectiveSheet(
                                     fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 13.sp,
-                                    color = if (isDark) BuckwheatSageContainer else BuckwheatOlivePrimary
+                                    color = SplitMateTheme.SageText
                                 )
                                 Text(
                                     text = clipToken,
@@ -727,7 +714,7 @@ fun TripSyncAndPerspectiveSheet(
                                         fontSize = 11.sp,
                                         fontFeatureSettings = "tnum"
                                     ),
-                                    color = if (isDark) BuckwheatSageContainer.copy(alpha = 0.85f) else BuckwheatOlivePrimary.copy(alpha = 0.85f),
+                                    color = SplitMateTheme.SageText.copy(alpha = 0.85f),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -744,7 +731,7 @@ fun TripSyncAndPerspectiveSheet(
                                     },
                                     shape = RoundedCornerShape(12.dp),
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = BuckwheatOlivePrimary,
+                                        containerColor = SplitMateTheme.SageText,
                                         contentColor = Color.White
                                     ),
                                     modifier = Modifier
@@ -792,7 +779,7 @@ fun TripSyncAndPerspectiveSheet(
                         maxLines = 3,
                         shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = BuckwheatOlivePrimary,
+                            focusedBorderColor = SplitMateTheme.SageText,
                             unfocusedBorderColor = SplitMateTheme.BorderLight,
                             focusedContainerColor = SplitMateTheme.SurfaceMuted,
                             unfocusedContainerColor = SplitMateTheme.SurfaceMuted
@@ -859,8 +846,8 @@ fun TripSyncAndPerspectiveSheet(
                             enabled = manualPasteInput.isNotBlank(),
                             shape = RoundedCornerShape(14.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isDark) BuckwheatSageContainer else Color(0xFF23201E),
-                                contentColor = if (isDark) BuckwheatOlivePrimary else Color.White,
+                                containerColor = SplitMateTheme.PrimaryDark,
+                                contentColor = SplitMateTheme.ScreenBg,
                                 disabledContainerColor = SplitMateTheme.BorderLight,
                                 disabledContentColor = SplitMateTheme.TextSecondary
                             ),

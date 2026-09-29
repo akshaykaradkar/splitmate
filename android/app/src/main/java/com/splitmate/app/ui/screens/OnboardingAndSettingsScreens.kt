@@ -57,6 +57,7 @@ import com.splitmate.app.ui.SplitMateThemeMode
 import com.splitmate.app.ui.SplitMateThemeState
 import com.splitmate.app.ui.buildDiceBearOpenPeepsUrl
 import com.splitmate.app.ui.components.ConnectedButtonGroup
+import com.splitmate.app.ui.components.LinearWavyProgressIndicator
 import com.splitmate.app.ui.components.MaterialShapes
 import com.splitmate.app.ui.components.MorphPolygonShape
 import com.splitmate.app.ui.components.RoundedPolygonShape
@@ -276,6 +277,23 @@ fun OnboardingSetupScreen(
                     fontWeight = FontWeight.Medium,
                     color = secondaryText,
                     textAlign = TextAlign.Center
+                )
+
+                val setupStepsCompleted = remember(nameText, phoneText, hasUserManuallySelectedGender) {
+                    var step = 1
+                    if (hasUserManuallySelectedGender) step++
+                    if (nameText.trim().isNotBlank()) step++
+                    if (phoneText.count { it.isDigit() } >= 10) step++
+                    step.coerceIn(1, 4)
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                LinearWavyProgressIndicator(
+                    progress = setupStepsCompleted / 4f,
+                    modifier = Modifier.fillMaxWidth(),
+                    color = SplitMateThemeTokens.SageText,
+                    trackColor = SplitMateThemeTokens.BorderLight
                 )
 
                 Spacer(modifier = Modifier.height(10.dp))

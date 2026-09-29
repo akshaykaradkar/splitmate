@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -54,8 +55,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
@@ -362,38 +367,25 @@ fun SplitMateAppNavHost(
 
     val navBarSpring = SplitMateMotion.defaultSpatial<IntOffset>()
     val navBarFadeSpring = SplitMateMotion.defaultEffects<Float>()
+    var isBottomBarHiddenByScroll by remember(currentRoute) { mutableStateOf(false) }
+    val bottomBarNestedScroll = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (available.y < -12f) {
+                    isBottomBarHiddenByScroll = true
+                } else if (available.y > 10f) {
+                    isBottomBarHiddenByScroll = false
+                }
+                return Offset.Zero
+            }
+        }
+    }
 
     Scaffold(
         containerColor = SplitMateTheme.ScreenBg,
-        floatingActionButton = {
-            if (currentRoute is SplitMateRoute.DashboardLedgers && uiState.openedGroupDetailId == null) {
-                ExtendedFloatingActionButton(
-                    onClick = { navigateTo(SplitMateRoute.QuickExpense) },
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Rounded.ElectricBolt,
-                            contentDescription = "Log Expense",
-                            tint = SplitMateTheme.ScreenBg
-                        )
-                    },
-                    text = {
-                        Text(
-                            text = "Log Expense",
-                            fontWeight = FontWeight.ExtraBold,
-                            color = SplitMateTheme.ScreenBg,
-                            fontFamily = SplitMateTheme.FontRounded
-                        )
-                    },
-                    containerColor = SplitMateTheme.PrimaryDark,
-                    contentColor = SplitMateTheme.ScreenBg,
-                    shape = SplitMateTheme.RadiusBadge,
-                    modifier = Modifier.padding(bottom = 6.dp)
-                )
-            }
-        },
         bottomBar = {
             AnimatedVisibility(
-                visible = isGlobalTabVisible && selectedGlobalTab != null,
+                visible = isGlobalTabVisible && selectedGlobalTab != null && !isBottomBarHiddenByScroll,
                 enter = slideInVertically(
                     animationSpec = navBarSpring,
                     initialOffsetY = { it }
@@ -412,12 +404,14 @@ fun SplitMateAppNavHost(
                 }
             }
         },
-        modifier = modifier.fillMaxSize()
+        modifier = modifier
+            .fillMaxSize()
+            .nestedScroll(bottomBarNestedScroll)
     ) { innerPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = if (isGlobalTabVisible) innerPadding.calculateBottomPadding() else 0.dp)
+                .padding(top = innerPadding.calculateTopPadding())
         ) {
             AnimatedContent(
                 targetState = currentRoute,
@@ -734,7 +728,8 @@ fun SplitMateGlobalBottomBar(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .heightIn(max = 72.dp)
+            .padding(bottom = 6.dp),
         contentAlignment = Alignment.Center
     ) {
         HorizontalFloatingToolbar(
