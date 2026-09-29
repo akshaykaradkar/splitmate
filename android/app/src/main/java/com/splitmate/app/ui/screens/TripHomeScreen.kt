@@ -2602,7 +2602,9 @@ fun DeepGreenTrainTicketCard(
                                     color = TripHubTokens.TextPrimary
                                 )
                                 Text(
-                                    text = "${splitBreakdown.perPersonHeadlineShare} / traveler (${splitBreakdown.splittingMembersCount}-way split)",
+                                    text = splitBreakdown.perPersonCaption(
+                                        "${splitBreakdown.perPersonHeadlineShare} / traveler (${splitBreakdown.splittingMembersCount}-way split)"
+                                    ),
                                     style = TextStyle(
                                         fontFamily = SplitMateTnumMonospace,
                                         fontWeight = FontWeight.Bold,
@@ -2963,7 +2965,7 @@ fun ReturnTransitTrainCard(
                                 color = TripHubTokens.TextPrimary
                             )
                             Text(
-                                text = "Equal split · ${splitBreakdown.splittingMembersCount} members",
+                                text = splitBreakdown.splitModeLabel("Equal split · ${splitBreakdown.splittingMembersCount} members"),
                                 style = TextStyle(
                                     fontFamily = SplitMateTnumMonospace,
                                     fontWeight = FontWeight.Medium,
@@ -2987,7 +2989,7 @@ fun ReturnTransitTrainCard(
                             color = TripHubTokens.TextPrimary
                         )
                         Text(
-                            text = "${splitBreakdown.perPersonHeadlineShare} / traveler",
+                            text = splitBreakdown.perPersonCaption("${splitBreakdown.perPersonHeadlineShare} / traveler"),
                             style = TextStyle(
                                 fontFamily = SplitMateTnumMonospace,
                                 fontWeight = FontWeight.Bold,
@@ -3340,7 +3342,7 @@ fun PeriwinkleFlightBookingCard(
                                 color = TripHubTokens.TextPrimary
                             )
                             Text(
-                                text = "${splitBreakdown.perPersonHeadlineShare} / traveler",
+                                text = splitBreakdown.perPersonCaption("${splitBreakdown.perPersonHeadlineShare} / traveler"),
                                 style = TextStyle(
                                     fontFamily = SplitMateTnumMonospace,
                                     fontWeight = FontWeight.Bold,
@@ -3585,7 +3587,7 @@ fun LodgingBookingCard(
                                 color = TripHubTokens.TextSecondary
                             )
                             Text(
-                                text = "${splitBreakdown.splittingMembersCount} Travelers · Exact Split",
+                                text = splitBreakdown.splitModeLabel("${splitBreakdown.splittingMembersCount} Travelers · Exact Split"),
                                 style = TextStyle(
                                     fontFamily = SplitMateTnumMonospace,
                                     fontWeight = FontWeight.Bold,
@@ -3632,7 +3634,7 @@ fun LodgingBookingCard(
                                 color = TripHubTokens.TextPrimary
                             )
                             Text(
-                                text = "All ${splitBreakdown.splittingMembersCount} shared equally",
+                                text = splitBreakdown.splitModeLabel("All ${splitBreakdown.splittingMembersCount} shared equally"),
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Medium,
                                 fontSize = 11.sp,
@@ -3653,7 +3655,7 @@ fun LodgingBookingCard(
                             color = TripHubTokens.TextPrimary
                         )
                         Text(
-                            text = "${splitBreakdown.perPersonHeadlineShare} / person",
+                            text = splitBreakdown.perPersonCaption("${splitBreakdown.perPersonHeadlineShare} / person"),
                             style = TextStyle(
                                 fontFamily = SplitMateTnumMonospace,
                                 fontWeight = FontWeight.Bold,
@@ -3955,7 +3957,7 @@ fun GroundMobilityBookingCard(
                             color = TripHubTokens.TextPrimary
                         )
                         Text(
-                            text = "${splitBreakdown.perPersonHeadlineShare} / $unitSuffix",
+                            text = splitBreakdown.perPersonCaption("${splitBreakdown.perPersonHeadlineShare} / $unitSuffix"),
                             style = TextStyle(
                                 fontFamily = SplitMateTnumMonospace,
                                 fontWeight = FontWeight.Bold,
@@ -4088,7 +4090,7 @@ fun GeneralSharedExpenseCard(
                         horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         Text(
-                            text = "${splitBreakdown.perPersonHeadlineShare}/pax",
+                            text = splitBreakdown.perPersonCaption("${splitBreakdown.perPersonHeadlineShare}/pax"),
                             style = TextStyle(
                                 fontFamily = SplitMateTnumMonospace,
                                 fontWeight = FontWeight.Bold,

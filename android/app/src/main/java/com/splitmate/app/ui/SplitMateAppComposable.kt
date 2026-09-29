@@ -3272,7 +3272,11 @@ fun LedgersDashboardScreen(
                                             color = SplitMateTheme.PrimaryDark
                                         )
                                         Text(
-                                            text = "Paid by ${payer?.name ?: "You"} · $perPersonShare / person (${breakdown.splittingMembersCount} splitting)",
+                                            // v2.3.3: PERSONAL / ON_BEHALF read naturally; SHARED unchanged.
+                                            text = breakdown.paidBySubtitle(
+                                                payerName = payer?.name ?: "You",
+                                                sharedDetail = "$perPersonShare / person (${breakdown.splittingMembersCount} splitting)"
+                                            ),
                                             fontFamily = SplitMateTheme.FontRounded,
                                             fontWeight = FontWeight.Medium,
                                             letterSpacing = 0.sp,
@@ -5796,6 +5800,11 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
     val orderedMemberSummaries = remember(myMemberSummaries, otherMemberSummaries) {
         myMemberSummaries + otherMemberSummaries
     }
+    // v2.3.3: "truly settled" is computed from the UNFILTERED summaries; a filter that only hides
+    // rows yields a context-aware empty state instead of a false "You're all settled up".
+    val yourSettlementsPresentation = remember(memberSummaries, selectedBalanceFilterIndex) {
+        com.splitmate.app.SettlementFilterPresentation.resolve(memberSummaries, selectedBalanceFilterIndex)
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -6357,13 +6366,13 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                         )
                         Surface(
                             shape = SplitMateTheme.RadiusBadge,
-                            color = if (myMemberSummaries.isEmpty()) SplitMateTheme.SageSurface else SplitMateTheme.SurfaceMuted
+                            color = if (yourSettlementsPresentation.showSettledCard) SplitMateTheme.SageSurface else SplitMateTheme.SurfaceMuted
                         ) {
                             Text(
-                                text = if (myMemberSummaries.isEmpty()) "All settled" else "Priority view",
+                                text = if (yourSettlementsPresentation.showSettledCard) "All settled" else "Priority view",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (myMemberSummaries.isEmpty()) SplitMateTheme.SageText else SplitMateTheme.TextSecondary,
+                                color = if (yourSettlementsPresentation.showSettledCard) SplitMateTheme.SageText else SplitMateTheme.TextSecondary,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                             )
                         }
@@ -6386,7 +6395,17 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                 }
             }
 
-            if (myMemberSummaries.isEmpty()) {
+            val myFilterEmptyState = yourSettlementsPresentation.myFilterEmptyState
+            if (!yourSettlementsPresentation.showSettledCard && myFilterEmptyState != null) {
+                item(key = "your_settlements_filter_empty") {
+                    SettlementFilterEmptyStateCard(
+                        state = myFilterEmptyState,
+                        onSwitchFilter = { selectedBalanceFilterIndex = it }
+                    )
+                }
+            }
+
+            if (yourSettlementsPresentation.showSettledCard) {
                 item(key = "your_settlements_settled_card") {
                     Surface(
                         shape = RoundedCornerShape(18.dp),
@@ -7073,6 +7092,30 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                 }
                             }
                         }
+                    }
+                }
+            }
+
+            // v2.3.3: other travelers exist but none match the active filter -> explain instead of a blank gap.
+            val othersFilterEmptyState = yourSettlementsPresentation.othersFilterEmptyState
+            if (othersFilterEmptyState != null) {
+                item(key = "other_travelers_filter_empty") {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "Other Travelers' Settlements",
+                            fontFamily = SplitMateTheme.FontDisplay,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = SplitMateTheme.PrimaryDark,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
+                        SettlementFilterEmptyStateCard(
+                            state = othersFilterEmptyState,
+                            onSwitchFilter = { selectedBalanceFilterIndex = it }
+                        )
                     }
                 }
             }
@@ -7980,7 +8023,11 @@ fun AuditVaultScreen(
                                         )
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            text = "Paid by $payerFirstName · ${breakdown.splittingMembersCount} splitting ($perPersonShare/ea)",
+                                            // v2.3.3: "Personal · not split" replaces "1 splitting (₹x/ea)".
+                                            text = breakdown.historyRowSubtitle(
+                                                payerName = payerFirstName,
+                                                sharedDetail = "${breakdown.splittingMembersCount} splitting ($perPersonShare/ea)"
+                                            ),
                                             fontFamily = SplitMateTheme.FontRounded,
                                             fontSize = 12.sp,
                                             color = SplitMateTheme.TextSecondary,
@@ -8093,3 +8140,65 @@ fun AuditVaultScreen(
     }
 }
 
+/**
+ * v2.3.3: Context-aware empty state for the "Gets Back" / "Owes" settlement filters. Shown when the
+ * filter hides rows but the user is NOT settled; tapping jumps to the filter that has their balance.
+ */
+@Composable
+private fun SettlementFilterEmptyStateCard(
+    state: com.splitmate.app.SettlementFilterPresentation.FilterEmptyState,
+    onSwitchFilter: (Int) -> Unit
+) {
+    val targetIndex = state.switchToFilterIndex
+    Surface(
+        onClick = { if (targetIndex != null) onSwitchFilter(targetIndex) },
+        enabled = targetIndex != null,
+        shape = RoundedCornerShape(18.dp),
+        color = SplitMateTheme.SurfaceMuted,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                imageVector = when (targetIndex) {
+                    com.splitmate.app.SettlementFilterPresentation.FILTER_OWES -> Icons.AutoMirrored.Rounded.TrendingDown
+                    com.splitmate.app.SettlementFilterPresentation.FILTER_GETS_BACK -> Icons.AutoMirrored.Rounded.TrendingUp
+                    else -> Icons.Rounded.Groups
+                },
+                contentDescription = null,
+                tint = SplitMateTheme.TextSecondary,
+                modifier = Modifier.size(20.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = state.title,
+                    fontFamily = SplitMateTheme.FontDisplay,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 14.sp,
+                    color = SplitMateTheme.PrimaryDark
+                )
+                Text(
+                    text = state.subtitle,
+                    fontSize = 11.sp,
+                    color = SplitMateTheme.TextSecondary,
+                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                )
+            }
+            if (targetIndex != null) {
+                Icon(
+                    imageVector = Icons.Rounded.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = SplitMateTheme.TextSecondary,
+                    modifier = Modifier
+                        .size(18.dp)
+                        .graphicsLayer { rotationZ = -90f }
+                )
+            }
+        }
+    }
+}

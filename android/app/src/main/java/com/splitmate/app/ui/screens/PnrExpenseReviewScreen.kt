@@ -478,6 +478,14 @@ fun PnrExpenseReviewScreen(
     val perSelectedMemberSharePaise = if (selectedMembersList.isNotEmpty()) effectiveTotalPaise / selectedMembersList.size else perPersonTicketSharePaise
     val payerSharePaise = exactAllocationsMap[selectedPayerId]?.finalCents
         ?: if (selectedMembersList.any { it.memberId == selectedPayerId }) perSelectedMemberSharePaise else 0L
+    // v2.3.3: UI-only split nature for review copy (no effect on the committed split).
+    val reviewSplitNature = remember(selectedPayerId, selectedMemberIds) {
+        com.splitmate.app.ExpenseSplitClassifier.classifySelection(selectedPayerId, selectedMemberIds)
+    }
+    val reviewSoleMember = selectedMembersList.singleOrNull()
+    val reviewSoleLabel = com.splitmate.app.ExpenseSplitCopy.beneficiaryLabel(
+        reviewSoleMember?.name, reviewSoleMember?.isCurrentUser == true
+    )
 
     // Build PassengerTicketRow list strictly from snapshot.structuredPassengers + selected group members
     val passengerRows = remember(snapshot, selectedMembersList, selectedPayerId) {
@@ -659,7 +667,11 @@ fun PnrExpenseReviewScreen(
                                         fromStation = fromCode,
                                         toStation = toCode,
                                         departureTime = snapshot.departureTime,
-                                        coachAndSeats = "Class ${snapshot.travelClass.ifBlank { "SL/3A" }} · ${selectedMemberIds.size} Pax (${formatPaiseDisplay(perSelectedMemberSharePaise)}/person)",
+                                        coachAndSeats = "Class ${snapshot.travelClass.ifBlank { "SL/3A" }} · ${selectedMemberIds.size} Pax" + when (reviewSplitNature) {
+                                            com.splitmate.app.ExpenseSplitNature.PERSONAL -> " · ${com.splitmate.app.ExpenseSplitCopy.PERSONAL_EXPENSE}"
+                                            com.splitmate.app.ExpenseSplitNature.ON_BEHALF -> " · for ${com.splitmate.app.ExpenseSplitCopy.beneficiaryLabel(reviewSoleMember?.name, false)}"
+                                            com.splitmate.app.ExpenseSplitNature.SHARED -> " (${formatPaiseDisplay(perSelectedMemberSharePaise)}/person)"
+                                        },
                                         bookingStatus = snapshot.bookingStatusBadge,
                                         chartStatus = chartText
                                     )
@@ -724,6 +736,10 @@ fun PnrExpenseReviewScreen(
                                     selectedMemberIds.isEmpty() -> "Select At Least 1 Group Member Below"
                                     effectiveTotalPaise <= 0L -> "Enter Ticket Fare Above to Split"
                                     selectedExistingExpense != null -> "Update Split & Save Changes · ${formatPaiseDisplay(effectiveTotalPaise)}"
+                                    reviewSplitNature == com.splitmate.app.ExpenseSplitNature.PERSONAL ->
+                                        "Confirm & Add ${formatPaiseDisplay(effectiveTotalPaise)} · ${com.splitmate.app.ExpenseSplitCopy.PERSONAL_EXPENSE}"
+                                    reviewSplitNature == com.splitmate.app.ExpenseSplitNature.ON_BEHALF ->
+                                        "Confirm & Add ${formatPaiseDisplay(effectiveTotalPaise)} · for $reviewSoleLabel"
                                     else -> "Confirm & Add ${formatPaiseDisplay(effectiveTotalPaise)} (${formatPaiseDisplay(perSelectedMemberSharePaise)}/person)"
                                 },
                                 style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
@@ -1030,7 +1046,12 @@ fun PnrExpenseReviewScreen(
                     insuranceFeeDisplay = formatPaiseDisplay(insuranceFeePaise),
                     perPersonShareDisplay = formatPaiseDisplay(perSelectedMemberSharePaise),
                     passengerCount = ticketPassengerCount,
-                    passengers = passengerRows
+                    passengers = passengerRows,
+                    splitNatureCaption = when (reviewSplitNature) {
+                        com.splitmate.app.ExpenseSplitNature.PERSONAL -> com.splitmate.app.ExpenseSplitCopy.PERSONAL_NOT_SPLIT
+                        com.splitmate.app.ExpenseSplitNature.ON_BEHALF -> "Paid for $reviewSoleLabel"
+                        com.splitmate.app.ExpenseSplitNature.SHARED -> null
+                    }
                 )
 
                 // 3. INTERACTIVE MEMBER SELECTION CARD: ASK WHICH MEMBERS FROM THE GROUP ARE ON THIS TICKET
@@ -1237,7 +1258,9 @@ fun TactilePaperBoardingPass(
     insuranceFeeDisplay: String,
     perPersonShareDisplay: String,
     passengerCount: Int,
-    passengers: List<PassengerTicketRow>
+    passengers: List<PassengerTicketRow>,
+    // v2.3.3: non-null for PERSONAL / ON_BEHALF tickets; replaces per-person share captions.
+    splitNatureCaption: String? = null
 ) {
     val ticketShape = remember { TactilePaperPerforatedShape(perforationRatio = 0.76f) }
     val isChartPrepared = chartStatus.lowercase(Locale.US).let {
@@ -1581,7 +1604,7 @@ fun TactilePaperBoardingPass(
                                         color = TactilePaperPassTokens.InkPrimary
                                     )
                                     Text(
-                                        text = "Per-Passenger Share: $perPersonShareDisplay",
+                                        text = splitNatureCaption ?: "Per-Passenger Share: $perPersonShareDisplay",
                                         style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                                         fontFamily = FigtreeFontFamily,
                                         fontWeight = FontWeight.SemiBold,
@@ -1724,7 +1747,7 @@ fun TactilePaperBoardingPass(
                         color = TactilePaperPassTokens.SageConfirmedBg
                     ) {
                         Text(
-                            text = "$perPersonShareDisplay / each",
+                            text = splitNatureCaption ?: "$perPersonShareDisplay / each",
                             style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.ExtraBold,

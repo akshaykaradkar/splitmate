@@ -1112,9 +1112,21 @@ fun FlightExpenseReviewScreen(
                     val bcbpGiven = firstPax.substringBeforeLast(" ", "").uppercase(Locale.US).ifBlank { "PAX" }
                     val bcbpDisplay = "M1$bcbpSurname/$bcbpGiven E${extractedTicket.originIata}${extractedTicket.destinationIata}${extractedTicket.flightNumber} · PNR $pnrCode"
 
+                    // v2.3.3: UI-only split nature — solo / on-behalf tickets never show "× 1 Split".
+                    val reviewSplitNature = com.splitmate.app.ExpenseSplitClassifier.classifySelection(selectedPayerId, selectedMemberIds)
                     val perSeatDisplay = if (selectedMemberIds.isNotEmpty()) {
                         val perMemberFloorPaise = totalAirfarePaise / selectedMemberIds.size.coerceAtLeast(1).toLong()
-                        "${formatFlightPaiseExact(perMemberFloorPaise)} × ${selectedMemberIds.size} Split · Paid by $payerMemberName"
+                        val soleMember = if (reviewSplitNature == com.splitmate.app.ExpenseSplitNature.SHARED) null
+                            else groupMembers.find { it.memberId == selectedMemberIds.singleOrNull() }
+                        com.splitmate.app.ExpenseSplitCopy.paidBySubtitle(
+                            nature = reviewSplitNature,
+                            payerName = payerMemberName,
+                            beneficiaryName = soleMember?.name,
+                            beneficiaryIsCurrentUser = soleMember?.isCurrentUser == true,
+                            beneficiaryShare = formatFlightPaiseExact(totalAirfarePaise),
+                            sharedDetail = ""
+                        ).takeIf { reviewSplitNature != com.splitmate.app.ExpenseSplitNature.SHARED }
+                            ?: "${formatFlightPaiseExact(perMemberFloorPaise)} × ${selectedMemberIds.size} Split · Paid by $payerMemberName"
                     } else {
                         "Taxes & Airport Fees Included"
                     }

@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.FlightTakeoff
+import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Train
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -40,6 +41,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.splitmate.app.data.ExpenseEntity
 import com.splitmate.app.data.GroupMemberEntity
+import com.splitmate.app.ExpenseSplitCopy
+import com.splitmate.app.ExpenseSplitNature
 import com.splitmate.app.SplitMateTheme
 import com.splitmate.app.ui.SplitMateTnumMonospace
 import com.splitmate.app.ui.SplitMateViewModel.ExpenseSplitBreakdownSummary
@@ -110,7 +113,11 @@ fun ActivityDetailSheet(
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = "Paid by ${payer?.name ?: "You"} · ${breakdown.perPersonHeadlineShare}/person",
+                // v2.3.3: "Paid by X · Personal expense" / "Paid by X for Y · Y owes ₹Z"; SHARED unchanged.
+                text = breakdown.paidBySubtitle(
+                    payerName = payer?.name ?: "You",
+                    sharedDetail = "${breakdown.perPersonHeadlineShare}/person"
+                ),
                 fontFamily = SplitMateTheme.FontRounded,
                 fontSize = 12.sp,
                 color = SplitMateTheme.TextSecondary,
@@ -186,6 +193,11 @@ fun ActivityDetailSheet(
             // M3E spacing (no divider): the section break is carried by whitespace alone.
             Spacer(modifier = Modifier.height(24.dp))
 
+            if (breakdown.splitNature == ExpenseSplitNature.PERSONAL) {
+                // v2.3.3: a personal expense has nothing to split — one calm row, no "1 of N" count
+                // and no per-person math.
+                PersonalExpenseNotSplitRow(payerName = payer?.name ?: "You")
+            } else {
             Text(
                 text = breakdown.headerLabel,
                 fontFamily = SplitMateTheme.FontDisplay,
@@ -250,6 +262,7 @@ fun ActivityDetailSheet(
                     }
                 }
             }
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -279,6 +292,55 @@ fun ActivityDetailSheet(
                 fillWidth = true
             )
             Spacer(modifier = Modifier.height(12.dp))
+        }
+    }
+}
+
+/**
+ * v2.3.3: Single tasteful row for PERSONAL expenses (sole participant == payer). Replaces the
+ * "Individual Share Breakdown (1 of N members splitting)" list — there is nothing to split.
+ */
+@Composable
+private fun PersonalExpenseNotSplitRow(payerName: String) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Person,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = ExpenseSplitCopy.PERSONAL_EXPENSE_NOT_SPLIT,
+                    fontFamily = SplitMateTheme.FontDisplay,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Text(
+                    text = if (payerName == "You") {
+                        "Your own cost · no one else owes anything"
+                    } else {
+                        "$payerName's own cost · no one else owes anything"
+                    },
+                    fontFamily = SplitMateTheme.FontRounded,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }

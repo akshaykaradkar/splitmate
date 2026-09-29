@@ -5098,8 +5098,44 @@ class SplitMateViewModel(
         val splittingMembersCount: Int,
         val perPersonHeadlineShare: String,
         val headerLabel: String,
-        val rows: List<MemberSplitBreakdownRow>
-    )
+        val rows: List<MemberSplitBreakdownRow>,
+        // v2.3.3: UI-only classification (PERSONAL / ON_BEHALF / SHARED); never affects balances.
+        val splitNature: com.splitmate.app.ExpenseSplitNature = com.splitmate.app.ExpenseSplitNature.SHARED,
+        val soleParticipantMemberId: String? = null,
+        val soleParticipantName: String? = null,
+        val soleParticipantIsCurrentUser: Boolean = false,
+        val soleParticipantShare: String = ""
+    ) {
+        /** Full "Paid by …" subtitle; SHARED keeps [sharedDetail] verbatim. */
+        fun paidBySubtitle(payerName: String, sharedDetail: String): String =
+            com.splitmate.app.ExpenseSplitCopy.paidBySubtitle(
+                splitNature, payerName, soleParticipantName, soleParticipantIsCurrentUser, soleParticipantShare, sharedDetail
+            )
+
+        /** Compact history-row subtitle; SHARED keeps [sharedDetail] verbatim. */
+        fun historyRowSubtitle(payerName: String, sharedDetail: String): String =
+            com.splitmate.app.ExpenseSplitCopy.historyRowSubtitle(
+                splitNature, payerName, soleParticipantName, soleParticipantIsCurrentUser, soleParticipantShare, sharedDetail
+            )
+
+        /** Short label replacing per-person figures; SHARED keeps [sharedDetail] verbatim. */
+        fun compactDetail(sharedDetail: String): String =
+            com.splitmate.app.ExpenseSplitCopy.compactDetail(
+                splitNature, soleParticipantName, soleParticipantIsCurrentUser, sharedDetail
+            )
+
+        /** Caption replacing "₹x / traveler"; SHARED keeps [sharedDetail] verbatim. */
+        fun perPersonCaption(sharedDetail: String): String =
+            com.splitmate.app.ExpenseSplitCopy.perPersonCaption(
+                splitNature, soleParticipantName, soleParticipantIsCurrentUser, soleParticipantShare, sharedDetail
+            )
+
+        /** Label replacing "Equal split · N members"; SHARED keeps [sharedDetail] verbatim. */
+        fun splitModeLabel(sharedDetail: String): String =
+            com.splitmate.app.ExpenseSplitCopy.splitModeLabel(
+                splitNature, soleParticipantName, soleParticipantIsCurrentUser, sharedDetail
+            )
+    }
 
     companion object {
         const val PREFS_NAME_SPLITMATE = "splitmate_prefs"
@@ -5203,12 +5239,41 @@ class SplitMateViewModel(
                 }
             }
 
+            // v2.3.3: UI-only split nature (PERSONAL / ON_BEHALF / SHARED), derived from the same
+            // non-zero shares shown above. Cents, rows and balances are untouched.
+            val participantShareCents: Map<String, Long> = if (hasExplicitSplits) {
+                expenseSplits.associate { it.memberId to it.finalOwedCents }
+            } else {
+                rows.filter { it.isIncludedInSplit }.associate { it.memberId to it.owedCents }
+            }
+            val splitNature = com.splitmate.app.ExpenseSplitClassifier.classify(expense.payerId, participantShareCents)
+            val soleParticipantId = if (splitNature == com.splitmate.app.ExpenseSplitNature.SHARED) {
+                null
+            } else {
+                com.splitmate.app.ExpenseSplitClassifier.soleParticipantId(participantShareCents)
+            }
+            val soleMember = soleParticipantId?.let { id -> groupMembers.find { it.memberId == id } }
+            val soleShareCents = soleParticipantId?.let { participantShareCents[it] } ?: 0L
+            val resolvedHeaderLabel = when (splitNature) {
+                com.splitmate.app.ExpenseSplitNature.PERSONAL -> com.splitmate.app.ExpenseSplitCopy.PERSONAL_EXPENSE_NOT_SPLIT
+                com.splitmate.app.ExpenseSplitNature.ON_BEHALF -> {
+                    val who = com.splitmate.app.ExpenseSplitCopy.beneficiaryLabel(soleMember?.name, soleMember?.isCurrentUser == true)
+                    "$headerPrefix (paid in full for $who)"
+                }
+                com.splitmate.app.ExpenseSplitNature.SHARED -> headerLabel
+            }
+
             return ExpenseSplitBreakdownSummary(
                 totalMembersInGroup = groupMembers.size,
                 splittingMembersCount = splittingCount,
                 perPersonHeadlineShare = perPersonHeadlineShare,
-                headerLabel = headerLabel,
-                rows = rows
+                headerLabel = resolvedHeaderLabel,
+                rows = rows,
+                splitNature = splitNature,
+                soleParticipantMemberId = soleParticipantId,
+                soleParticipantName = soleMember?.name,
+                soleParticipantIsCurrentUser = soleMember?.isCurrentUser == true,
+                soleParticipantShare = if (soleParticipantId != null) formatShareAmount(soleShareCents) else ""
             )
         }
 

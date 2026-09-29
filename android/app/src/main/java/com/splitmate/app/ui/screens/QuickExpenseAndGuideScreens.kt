@@ -241,6 +241,9 @@ fun QuickExpenseScreen(
 
     val memberCount = selectedMemberIds.size
     val perPersonPaise = if (memberCount > 0) totalAmountPaise / memberCount else 0L
+    // v2.3.3: UI-only split nature for the badge copy (math above is untouched).
+    val quickSplitNature = com.splitmate.app.ExpenseSplitClassifier.classifySelection(selectedPayerId, selectedMemberIds)
+    val quickSoleMember = activeMembers.firstOrNull { it.memberId == selectedMemberIds.singleOrNull() }
     val remainderPaise = if (memberCount > 0) totalAmountPaise % memberCount else 0L
     val payerExtraPaise = if (remainderPaise > 0L) 1L else 0L
     val remainderRecipientIds = remember(totalAmountPaise, selectedMemberIds, selectedPayerId, activeMembers) {
@@ -1389,7 +1392,12 @@ fun QuickExpenseScreen(
                                             Spacer(modifier = Modifier.width(5.dp))
                                             Text(
                                                 text = if (memberCount > 0) {
-                                                    "$currencySymbol${formatPaiseForSplitBadge(perPersonPaise)}/person · Exact Split"
+                                                    com.splitmate.app.ExpenseSplitCopy.compactDetail(
+                                                        nature = quickSplitNature,
+                                                        beneficiaryName = quickSoleMember?.name,
+                                                        beneficiaryIsCurrentUser = quickSoleMember?.isCurrentUser == true,
+                                                        sharedDetail = "$currencySymbol${formatPaiseForSplitBadge(perPersonPaise)}/person · Exact Split"
+                                                    )
                                                 } else {
                                                     "Pick ≥1"
                                                 },
