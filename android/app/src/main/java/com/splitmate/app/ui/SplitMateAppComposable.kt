@@ -1635,15 +1635,18 @@ fun SplitMateMainDashboardScaffold(
         currentTab == SplitMateTab.LEDGERS && useTripHubV2View &&
             (uiState.openedGroupDetailId != null || isTwoPaneTabletWithGroups)
 
-    var isBottomBarHiddenByScroll by remember(currentTab, uiState.openedGroupDetailId) {
+    var isBottomBarHiddenByScroll by remember {
         mutableStateOf(false)
     }
-    val dashboardNestedScrollConnection = remember {
+    LaunchedEffect(currentTab, uiState.openedGroupDetailId) {
+        isBottomBarHiddenByScroll = false
+    }
+    val dashboardNestedScrollConnection = remember(currentTab, uiState.openedGroupDetailId) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (available.y < -12f) {
+                if (available.y < -4f) {
                     isBottomBarHiddenByScroll = true
-                } else if (available.y > 10f) {
+                } else if (available.y > 5f) {
                     isBottomBarHiddenByScroll = false
                 }
                 return Offset.Zero
@@ -1651,6 +1654,7 @@ fun SplitMateMainDashboardScaffold(
         }
     }
 
+    val activeFabPalette = DesignSystemBindings.activePalette
     Scaffold(
         modifier = Modifier
             .fillMaxSize()
@@ -1658,9 +1662,10 @@ fun SplitMateMainDashboardScaffold(
         containerColor = animatedScreenBg,
         floatingActionButton = {
             AnimatedVisibility(
-                visible = currentTab == SplitMateTab.LEDGERS &&
-                    !isTripHubCanvasVisible &&
-                    (isMediumOrExpandedWindow || isBottomBarHiddenByScroll),
+                visible = (
+                    (currentTab == SplitMateTab.LEDGERS && !isTripHubCanvasVisible) ||
+                        currentTab == SplitMateTab.AUDIT
+                    ) && (isMediumOrExpandedWindow || isBottomBarHiddenByScroll),
                 enter = slideInVertically(
                     animationSpec = SplitMateMotion.defaultSpatial(),
                     initialOffsetY = { it }
@@ -1681,23 +1686,27 @@ fun SplitMateMainDashboardScaffold(
                         Icon(
                             imageVector = Icons.Rounded.ElectricBolt,
                             contentDescription = "Log Expense",
-                            tint = animatedScreenBg
+                            tint = activeFabPalette.onPrimary
                         )
                     },
                     text = {
                         Text(
                             text = "Log Expense",
                             fontWeight = FontWeight.ExtraBold,
-                            color = animatedScreenBg,
+                            color = activeFabPalette.onPrimary,
                             fontFamily = SplitMateTheme.FontRounded
                         )
                     },
-                    containerColor = animatedPrimaryDark,
-                    contentColor = animatedScreenBg,
-                    shape = SplitMateTheme.RadiusBadge,
+                    containerColor = activeFabPalette.primary,
+                    contentColor = activeFabPalette.onPrimary,
+                    shape = RoundedCornerShape(20.dp),
+                    elevation = FloatingActionButtonDefaults.elevation(
+                        defaultElevation = 6.dp,
+                        pressedElevation = 10.dp
+                    ),
                     modifier = Modifier
-                        .padding(bottom = 6.dp)
-                        .shadow(10.dp, SplitMateTheme.RadiusBadge)
+                        .navigationBarsPadding()
+                        .padding(bottom = 8.dp)
                 )
             }
         },
@@ -7506,17 +7515,23 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
 // ==============================================================================
 // TAB 4: ACTIVITY & HISTORY (Chronological Timeline + Flattened Cards + Detail Sheet)
 // ==============================================================================
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AuditVaultScreen(
     viewModel: SplitMateViewModel,
     onOpenPnrWithTicket: (groupId: String, pnr: String) -> Unit = { _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val activePalette = DesignSystemBindings.activePalette
+    val haptic = LocalHapticFeedback.current
     val sym = "₹"
     var selectedGroupFilterId by remember { mutableStateOf<String?>(null) }
     var selectedExpenseForDetailSheet by remember { mutableStateOf<com.splitmate.app.data.ExpenseEntity?>(null) }
     var editingExpenseEntity by remember { mutableStateOf<com.splitmate.app.data.ExpenseEntity?>(null) }
+
+    // M3 Expressive spring-driven swipe & neighbour-pull physics state
+    var activeDraggingExpenseId by remember { mutableStateOf<String?>(null) }
+    var activeDragOffsetPx by remember { mutableFloatStateOf(0f) }
 
     val filteredExpenses = remember(uiState.expenses, selectedGroupFilterId) {
         val base = if (selectedGroupFilterId == null) {
@@ -7527,7 +7542,7 @@ fun AuditVaultScreen(
         base.sortedWith(compareByDescending<com.splitmate.app.data.ExpenseEntity> { it.createdAt }.thenByDescending { it.expenseId })
     }
 
-    // Group expenses chronologically by day with friendly labels ("Today · 25 Sep", "Yesterday · 24 Sep", etc.)
+    // Group expenses chronologically by day with friendly labels ("Today · 29 Sep", "Yesterday · 28 Sep", etc.)
     val groupedExpensesByDate = remember(filteredExpenses) {
         val dayKeyFormat = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val displayDayFormat = java.text.SimpleDateFormat("dd MMM", Locale.US)
@@ -7551,55 +7566,80 @@ fun AuditVaultScreen(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(top = 12.dp, bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(top = 12.dp, bottom = 140.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        // 1. Header + Direct Horizontal Filter Chip Strip (Removed redundant outer white card wrapper)
-        item {
-            Column {
+        // 1. Header + Direct Horizontal Tonal Filter Chip Strip
+        item(key = "audit_vault_top_header") {
+            Column(modifier = Modifier.padding(bottom = 6.dp)) {
                 Text(
                     text = "Activity & History",
                     fontFamily = SplitMateTheme.FontDisplay,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = (-0.6).sp,
                     color = SplitMateTheme.PrimaryDark
                 )
                 Text(
-                    text = "Tap any expense for split breakdown, boarding pass, or edit",
+                    text = "Tap any row for split breakdown · Swipe left for boarding pass or quick edit",
                     fontFamily = SplitMateTheme.FontRounded,
                     fontSize = 12.sp,
                     color = SplitMateTheme.TextSecondary
                 )
 
                 if (uiState.groups.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        item {
+                        item(key = "filter_chip_all_groups") {
                             val allSelected = selectedGroupFilterId == null
                             val allCornerRadius by animateDpAsState(
-                                targetValue = if (allSelected) 10.dp else 20.dp,
-                                animationSpec = spring(dampingRatio = 0.65f, stiffness = 480f),
+                                targetValue = if (allSelected) 12.dp else 20.dp,
+                                animationSpec = SplitMateMotion.fastSpatial(),
                                 label = "allGroupsChipCornerMorph"
+                            )
+                            val allChipBg by animateColorAsState(
+                                targetValue = if (allSelected) activePalette.tertiaryContainer else activePalette.surfaceContainerLowest,
+                                animationSpec = SplitMateMotion.fastEffects(),
+                                label = "allGroupsChipBg"
+                            )
+                            val allChipContent by animateColorAsState(
+                                targetValue = if (allSelected) activePalette.onTertiaryContainer else activePalette.onSurfaceVariant,
+                                animationSpec = SplitMateMotion.fastEffects(),
+                                label = "allGroupsChipContent"
+                            )
+                            val allChipBorder by animateColorAsState(
+                                targetValue = if (allSelected) activePalette.tertiary.copy(alpha = 0.45f) else activePalette.outlineVariant,
+                                animationSpec = SplitMateMotion.fastEffects(),
+                                label = "allGroupsChipBorder"
                             )
                             Surface(
                                 onClick = { selectedGroupFilterId = null },
                                 shape = RoundedCornerShape(allCornerRadius),
-                                color = if (allSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.SurfaceWhite,
-                                border = BorderStroke(1.dp, if (allSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.BorderLight),
+                                color = allChipBg,
+                                border = BorderStroke(1.dp, allChipBorder),
                                 modifier = Modifier
                                     .minimumInteractiveComponentSize()
-                                    .heightIn(min = 32.dp)
+                                    .heightIn(min = 36.dp)
                             ) {
-                                Box(
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                                    contentAlignment = Alignment.Center
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
+                                    if (allSelected) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            tint = allChipContent,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
                                     Text(
                                         text = "All Groups (${uiState.expenses.size})",
                                         fontFamily = SplitMateTheme.FontRounded,
                                         fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (allSelected) SplitMateTheme.ScreenBg else SplitMateTheme.PrimaryDark,
+                                        fontWeight = if (allSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                        color = allChipContent,
                                         style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
                                     )
                                 }
@@ -7609,29 +7649,53 @@ fun AuditVaultScreen(
                             val isSelected = selectedGroupFilterId == grp.groupId
                             val count = uiState.expenses.count { it.groupId == grp.groupId }
                             val chipCornerRadius by animateDpAsState(
-                                targetValue = if (isSelected) 10.dp else 20.dp,
-                                animationSpec = spring(dampingRatio = 0.65f, stiffness = 480f),
+                                targetValue = if (isSelected) 12.dp else 20.dp,
+                                animationSpec = SplitMateMotion.fastSpatial(),
                                 label = "groupFilterChipCornerMorph"
+                            )
+                            val chipBg by animateColorAsState(
+                                targetValue = if (isSelected) activePalette.tertiaryContainer else activePalette.surfaceContainerLowest,
+                                animationSpec = SplitMateMotion.fastEffects(),
+                                label = "groupFilterChipBg"
+                            )
+                            val chipContent by animateColorAsState(
+                                targetValue = if (isSelected) activePalette.onTertiaryContainer else activePalette.onSurfaceVariant,
+                                animationSpec = SplitMateMotion.fastEffects(),
+                                label = "groupFilterChipContent"
+                            )
+                            val chipBorder by animateColorAsState(
+                                targetValue = if (isSelected) activePalette.tertiary.copy(alpha = 0.45f) else activePalette.outlineVariant,
+                                animationSpec = SplitMateMotion.fastEffects(),
+                                label = "groupFilterChipBorder"
                             )
                             Surface(
                                 onClick = { selectedGroupFilterId = if (isSelected) null else grp.groupId },
                                 shape = RoundedCornerShape(chipCornerRadius),
-                                color = if (isSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.SurfaceWhite,
-                                border = BorderStroke(1.dp, if (isSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.BorderLight),
+                                color = chipBg,
+                                border = BorderStroke(1.dp, chipBorder),
                                 modifier = Modifier
                                     .minimumInteractiveComponentSize()
-                                    .heightIn(min = 32.dp)
+                                    .heightIn(min = 36.dp)
                             ) {
-                                Box(
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                                    contentAlignment = Alignment.Center
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            tint = chipContent,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
                                     Text(
                                         text = "${grp.name.toSmartTitleCase()} ($count)",
                                         fontFamily = SplitMateTheme.FontRounded,
                                         fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isSelected) SplitMateTheme.ScreenBg else SplitMateTheme.PrimaryDark,
+                                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                        color = chipContent,
                                         style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
                                     )
                                 }
@@ -7643,13 +7707,14 @@ fun AuditVaultScreen(
         }
 
         if (filteredExpenses.isEmpty()) {
-            item {
+            item(key = "audit_vault_empty_state") {
+                Spacer(modifier = Modifier.height(8.dp))
                 Card(
-                    shape = SplitMateTheme.RadiusCard,
+                    shape = RoundedCornerShape(24.dp),
                     colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusCard)
+                        .border(1.dp, SplitMateTheme.BorderLight, RoundedCornerShape(24.dp))
                 ) {
                     Column(
                         modifier = Modifier
@@ -7666,32 +7731,52 @@ fun AuditVaultScreen(
             }
         }
 
-        // 2. Chronological Date Dividers + Flattened Single-Level Expense Cards
+        // 2. Editorial Sticky Date Headers + Day-Grouped Dynamic Corner Radius Islands (24dp outer / 4dp inner)
         groupedExpensesByDate.forEach { (dateHeaderLabel, dateExpenses) ->
-            item(key = "date_header_$dateHeaderLabel") {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp, bottom = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+            val dayTotalCents = dateExpenses.sumOf { it.totalAmountCents }
+            val formattedDayTotal = formatIndianRupeesFromCents(
+                cents = dayTotalCents,
+                includePlusSign = false,
+                currencySymbol = sym
+            )
+
+            stickyHeader(key = "date_header_$dateHeaderLabel") {
+                Surface(
+                    color = SplitMateTheme.ScreenBg.copy(alpha = 0.96f),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = dateHeaderLabel,
-                        fontFamily = SplitMateTheme.FontDisplay,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = SplitMateTheme.TextSecondary,
-                        style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
-                    )
-                    Text(
-                        text = if (dateExpenses.size == 1) "1 entry" else "${dateExpenses.size} entries",
-                        fontFamily = SplitMateTheme.FontRounded,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = SplitMateTheme.TextSecondary,
-                        style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 18.dp, bottom = 8.dp),
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = dateHeaderLabel,
+                            style = SplitMateExpressiveTypography.headlineMediumEmphasized,
+                            fontFamily = SplitMateTheme.FontDisplay,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = (-0.5).sp,
+                            color = SplitMateTheme.PrimaryDark
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = activePalette.surfaceContainerHigh,
+                            border = BorderStroke(1.dp, activePalette.outlineVariant.copy(alpha = 0.6f))
+                        ) {
+                            Text(
+                                text = "${if (dateExpenses.size == 1) "1 entry" else "${dateExpenses.size} entries"} · $formattedDayTotal",
+                                fontFamily = SplitMateTheme.FontRounded,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = activePalette.onSurfaceVariant,
+                                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
                 }
             }
 
@@ -7719,134 +7804,244 @@ fun AuditVaultScreen(
                 val parsedTravelTicket = remember(expense.title) {
                     extractTravelTicketFromTitle(expense.title)
                 }
+                val hasTravelPass = remember(expense.title, expense.expenseCategory, parsedTravelTicket) {
+                    parsedTravelTicket != null && (
+                        parsedTravelTicket.pnr.isNotBlank() ||
+                            isFlightTicketExpense(expense.title, parsedTravelTicket) ||
+                            expense.expenseCategory.equals("FLIGHT", ignoreCase = true)
+                        )
+                }
                 val displayExpenseTitle = remember(expense.title) {
                     cleanDisplayExpenseTitle(expense.title)
                 }
                 val payerFirstName = if (isMePayer) "You" else (payer?.name?.substringBefore(" ") ?: "Member")
+
+                // Neighbour-pull spring physics calculation within the same day block
+                val draggedIdxInDay = remember(activeDraggingExpenseId, dateExpenses) {
+                    dateExpenses.indexOfFirst { it.expenseId == activeDraggingExpenseId }
+                }
+                val isThisCardDragging = activeDraggingExpenseId == expense.expenseId
+                val targetCardOffsetPx = when {
+                    isThisCardDragging -> activeDragOffsetPx
+                    draggedIdxInDay >= 0 && kotlin.math.abs(expIdx - draggedIdxInDay) == 1 -> activeDragOffsetPx * 0.18f
+                    draggedIdxInDay >= 0 && kotlin.math.abs(expIdx - draggedIdxInDay) == 2 -> activeDragOffsetPx * 0.06f
+                    else -> 0f
+                }
+                val animatedCardOffsetPx by animateFloatAsState(
+                    targetValue = targetCardOffsetPx,
+                    animationSpec = SplitMateMotion.fastSpatial(),
+                    label = "auditCardSwipeOffset_${expense.expenseId}"
+                )
+                val isActivelyPulled = kotlin.math.abs(animatedCardOffsetPx) > 10f
+
+                // M3 Expressive Dynamic Corner Radii: 24dp outer caps, 4dp inner seams (morphing to 18dp when swiped)
                 val auditIslandShape = segmentedIslandItemShape(
                     index = expIdx,
                     totalCount = dateExpenses.size,
-                    isSelected = false,
-                    outerCorner = 22.dp,
-                    innerCorner = 8.dp
+                    isSelected = isActivelyPulled,
+                    outerCorner = 24.dp,
+                    innerCorner = 4.dp
                 )
 
-                // Flattened Single-Level Card (No box-in-box ticket stub or persistent Edit/Undo buttons)
-                Card(
-                    onClick = { selectedExpenseForDetailSheet = expense },
-                    shape = auditIslandShape,
-                    colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, SplitMateTheme.BorderLight, auditIslandShape)
+                val swipeThresholdPx = -170f
+                val swipeProgress = (kotlin.math.abs(animatedCardOffsetPx) / kotlin.math.abs(swipeThresholdPx)).coerceIn(0f, 1f)
+
+                val triggerPrimarySwipeAction = {
+                    if (hasTravelPass && parsedTravelTicket != null) {
+                        val gId = expense.groupId
+                        val isFlightSel = isFlightTicketExpense(expense.title, parsedTravelTicket) ||
+                            expense.expenseCategory.equals("FLIGHT", ignoreCase = true)
+                        val pnrCode = if (isFlightSel) "EXPENSE:${expense.expenseId}" else parsedTravelTicket.pnr
+                        onOpenPnrWithTicket(gId, pnrCode)
+                    } else {
+                        selectedExpenseForDetailSheet = expense
+                    }
+                }
+
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.CenterEnd
                 ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            val (auditCatBg, auditCatTint) = resolveExpenseCategoryBadgeColors(expense.title, SplitMateTheme.isDark)
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f).padding(end = 10.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(42.dp)
-                                        .clip(CircleShape)
-                                        .background(auditCatBg),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = resolveExpenseCategoryIcon(expense.title),
-                                        contentDescription = null,
-                                        tint = auditCatTint,
-                                        modifier = Modifier.size(20.dp)
-                                    )
+                    // Hidden High-Contrast M3 Expressive Swipe Action Revealed Behind Card
+                    if (animatedCardOffsetPx < -6f) {
+                        val actionPillColor = if (hasTravelPass) activePalette.tertiary else activePalette.primary
+                        val actionContentColor = if (hasTravelPass) activePalette.onTertiary else activePalette.onPrimary
+                        val actionIcon = when {
+                            hasTravelPass && (isFlightTicketExpense(expense.title, parsedTravelTicket) || expense.expenseCategory.equals("FLIGHT", ignoreCase = true)) -> Icons.Rounded.FlightTakeoff
+                            hasTravelPass -> Icons.Rounded.Train
+                            else -> Icons.AutoMirrored.Rounded.ReceiptLong
+                        }
+                        val actionLabel = if (hasTravelPass) "Boarding Pass" else "Breakdown"
+
+                        Surface(
+                            onClick = triggerPrimarySwipeAction,
+                            shape = RoundedCornerShape(18.dp),
+                            color = actionPillColor,
+                            contentColor = actionContentColor,
+                            modifier = Modifier
+                                .padding(end = 6.dp)
+                                .graphicsLayer {
+                                    alpha = swipeProgress
+                                    val sc = 0.82f + (0.18f * swipeProgress)
+                                    scaleX = sc
+                                    scaleY = sc
                                 }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column {
-                                    Text(
-                                        text = displayExpenseTitle,
-                                        fontFamily = SplitMateTheme.FontDisplay,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 15.sp,
-                                        color = SplitMateTheme.PrimaryDark,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = "Paid by $payerFirstName · ${breakdown.splittingMembersCount} splitting ($perPersonShare/ea)",
-                                        fontFamily = SplitMateTheme.FontRounded,
-                                        fontSize = 12.sp,
-                                        color = SplitMateTheme.TextSecondary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
-                                    )
-                                    if (parsedTravelTicket != null && parsedTravelTicket.pnr.isNotBlank()) {
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = actionIcon,
+                                    contentDescription = actionLabel,
+                                    tint = actionContentColor,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = actionLabel,
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 12.sp,
+                                    color = actionContentColor
+                                )
+                            }
+                        }
+                    }
+
+                    // Foreground Transaction Card with Spring-Driven Swipe & Neighbour-Pull Physics
+                    Card(
+                        onClick = { selectedExpenseForDetailSheet = expense },
+                        shape = auditIslandShape,
+                        colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .graphicsLayer {
+                                translationX = animatedCardOffsetPx
+                            }
+                            .pointerInput(expense.expenseId) {
+                                var hasTriggeredThresholdHaptic = false
+                                detectHorizontalDragGestures(
+                                    onDragStart = {
+                                        activeDraggingExpenseId = expense.expenseId
+                                        activeDragOffsetPx = 0f
+                                        hasTriggeredThresholdHaptic = false
+                                    },
+                                    onHorizontalDrag = { change, dragAmount ->
+                                        change.consume()
+                                        val nextOffset = (activeDragOffsetPx + dragAmount * 0.85f).coerceIn(-240f, 24f)
+                                        activeDragOffsetPx = nextOffset
+                                        if (nextOffset <= swipeThresholdPx && !hasTriggeredThresholdHaptic) {
+                                            hasTriggeredThresholdHaptic = true
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        } else if (nextOffset > swipeThresholdPx && hasTriggeredThresholdHaptic) {
+                                            hasTriggeredThresholdHaptic = false
+                                        }
+                                    },
+                                    onDragEnd = {
+                                        val finalOffset = activeDragOffsetPx
+                                        activeDraggingExpenseId = null
+                                        activeDragOffsetPx = 0f
+                                        if (finalOffset <= swipeThresholdPx) {
+                                            triggerPrimarySwipeAction()
+                                        }
+                                    },
+                                    onDragCancel = {
+                                        activeDraggingExpenseId = null
+                                        activeDragOffsetPx = 0f
+                                    }
+                                )
+                            }
+                            .border(1.dp, SplitMateTheme.BorderLight, auditIslandShape)
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val (auditCatBg, auditCatTint) = resolveExpenseCategoryBadgeColors(expense.title, SplitMateTheme.isDark)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f).padding(end = 10.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(42.dp)
+                                            .clip(CircleShape)
+                                            .background(auditCatBg),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = resolveExpenseCategoryIcon(expense.title),
+                                            contentDescription = null,
+                                            tint = auditCatTint,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = displayExpenseTitle,
+                                            fontFamily = SplitMateTheme.FontDisplay,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 15.sp,
+                                            color = SplitMateTheme.PrimaryDark,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "Paid by $payerFirstName · ${breakdown.splittingMembersCount} splitting ($perPersonShare/ea)",
+                                            fontFamily = SplitMateTheme.FontRounded,
+                                            fontSize = 12.sp,
+                                            color = SplitMateTheme.TextSecondary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                                        )
+                                        if (parsedTravelTicket != null && parsedTravelTicket.pnr.isNotBlank()) {
+                                            Spacer(modifier = Modifier.height(4.dp))
                                             Surface(
                                                 shape = SplitMateTheme.RadiusBadge,
-                                                color = SplitMateTheme.SurfaceMuted
+                                                color = activePalette.tertiaryContainer.copy(alpha = 0.65f)
                                             ) {
                                                 Text(
                                                     text = "PNR ${parsedTravelTicket.pnr} · ${parsedTravelTicket.bookingStatus}",
                                                     fontFamily = SplitMateTheme.FontRounded,
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = SplitMateTheme.PrimaryDark,
+                                                    color = activePalette.onTertiaryContainer,
                                                     style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
                                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                                )
-                                            }
-                                            if (!group?.name.isNullOrBlank()) {
-                                                Text(
-                                                    text = "in ${group?.name?.toSmartTitleCase()}",
-                                                    fontFamily = SplitMateTheme.FontRounded,
-                                                    fontSize = 11.sp,
-                                                    color = SplitMateTheme.TextSecondary
                                                 )
                                             }
                                         }
                                     }
                                 }
-                            }
 
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    text = formattedSignedTotal,
-                                    fontFamily = SplitMateTheme.FontDisplay,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 16.sp,
-                                    // Restrict Forest Green strictly to positive financial balances (+₹7,525.40)
-                                    color = if (isMePayer) SplitMateTheme.SageText else SplitMateTheme.PrimaryDark,
-                                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                                ) {
+                                // Clean Right Financial Anchor (Zero cluttered inline text links)
+                                Column(horizontalAlignment = Alignment.End) {
                                     Text(
-                                        text = if (parsedTravelTicket != null) "Boarding Pass" else "Details",
-                                        fontFamily = SplitMateTheme.FontRounded,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = SplitMateTheme.TextSecondary
+                                        text = formattedSignedTotal,
+                                        fontFamily = SplitMateTheme.FontDisplay,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 16.sp,
+                                        color = if (isMePayer) SplitMateTheme.SageText else SplitMateTheme.PrimaryDark,
+                                        style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
                                     )
-                                    Icon(
-                                        imageVector = if (parsedTravelTicket != null) Icons.AutoMirrored.Rounded.OpenInNew else Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                                        contentDescription = null,
-                                        tint = SplitMateTheme.TextSecondary,
-                                        modifier = Modifier.size(13.dp)
-                                    )
+                                    if (!group?.name.isNullOrBlank()) {
+                                        Spacer(modifier = Modifier.height(3.dp))
+                                        Text(
+                                            text = group?.name?.toSmartTitleCase().orEmpty(),
+                                            fontFamily = SplitMateTheme.FontRounded,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = SplitMateTheme.TextSecondary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
                                 }
                             }
                         }

@@ -367,13 +367,16 @@ fun SplitMateAppNavHost(
 
     val navBarSpring = SplitMateMotion.defaultSpatial<IntOffset>()
     val navBarFadeSpring = SplitMateMotion.defaultEffects<Float>()
-    var isBottomBarHiddenByScroll by remember(currentRoute) { mutableStateOf(false) }
-    val bottomBarNestedScroll = remember {
+    var isBottomBarHiddenByScroll by remember { mutableStateOf(false) }
+    LaunchedEffect(currentRoute) {
+        isBottomBarHiddenByScroll = false
+    }
+    val bottomBarNestedScroll = remember(currentRoute) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (available.y < -12f) {
+                if (available.y < -4f) {
                     isBottomBarHiddenByScroll = true
-                } else if (available.y > 10f) {
+                } else if (available.y > 5f) {
                     isBottomBarHiddenByScroll = false
                 }
                 return Offset.Zero
