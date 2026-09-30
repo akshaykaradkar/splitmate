@@ -15,9 +15,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ExpenseEntity::class,
         ExpenseSplitEntity::class,
         SettlementEntity::class,
-        UserProfileEntity::class
+        UserProfileEntity::class,
+        TripGuidePackEntity::class,
+        TripPlanManifestEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class SplitMateRoomDatabase : RoomDatabase() {
@@ -159,6 +161,24 @@ abstract class SplitMateRoomDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v2.3.4 Trip Guide & Smart Loop: purely additive (two new tables, no ledger table touched,
+         * no data rewritten). The SQL mirrors exactly what Room generates for [TripGuidePackEntity]
+         * and [TripPlanManifestEntity] so post-migration schema validation passes; a JVM test
+         * compares these statements with Room's generated `_Impl` create statements.
+         */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 1. Shared offline guide packs (no FK: shared across groups, evicted by hard expiry).
+                db.execSQL("CREATE TABLE IF NOT EXISTS `trip_guide_pack` (`destinationQid` TEXT NOT NULL, `schemaVersion` INTEGER NOT NULL, `wikivoyageTitle` TEXT, `wikivoyageRevId` INTEGER, `contentHash` TEXT NOT NULL, `packGz` BLOB NOT NULL, `fetchedAtEpochMs` INTEGER NOT NULL, `softExpiryEpochMs` INTEGER NOT NULL, `hardExpiryEpochMs` INTEGER NOT NULL, PRIMARY KEY(`destinationQid`))")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_trip_guide_pack_hardExpiryEpochMs` ON `trip_guide_pack` (`hardExpiryEpochMs`)")
+
+                // 2. Per-group plan manifest (FK -> expense_groups, cascade-deleted with the group).
+                db.execSQL("CREATE TABLE IF NOT EXISTS `trip_plan_manifest` (`groupId` TEXT NOT NULL, `destinationQid` TEXT, `manifestJson` TEXT NOT NULL, `lastSyncMessageId` TEXT, `stayLocalJson` TEXT, `shareStay` INTEGER NOT NULL DEFAULT 0, `updatedAtEpochMs` INTEGER NOT NULL, `pendingPush` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`groupId`), FOREIGN KEY(`groupId`) REFERENCES `expense_groups`(`groupId`) ON UPDATE NO ACTION ON DELETE CASCADE )")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_trip_plan_manifest_destinationQid` ON `trip_plan_manifest` (`destinationQid`)")
+            }
+        }
+
         fun getInstance(context: Context): SplitMateRoomDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -166,7 +186,7 @@ abstract class SplitMateRoomDatabase : RoomDatabase() {
                     SplitMateRoomDatabase::class.java,
                     "splitmate_native_room.db"
                 )
-                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                     .fallbackToDestructiveMigrationFrom(1, 2, 3)
                     .fallbackToDestructiveMigrationOnDowngrade()
                     .build()
@@ -175,3 +195,4 @@ abstract class SplitMateRoomDatabase : RoomDatabase() {
         }
     }
 }
+

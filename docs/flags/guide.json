@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "guideEnabled": true,
+  "shortLinkParsingEnabled": true,
+  "wdqsEnabled": true,
+  "nominatimEnabled": true
+}
