@@ -1,0 +1,9 @@
+{
+  "_fixture": "SYNTHETIC: hand-authored action=parse (formatversion=2) response for an outline article with prose only and no listings. Revision id is illustrative.",
+  "parse": {
+    "title": "Dapoli",
+    "pageid": 700301,
+    "revid": 4500301,
+    "wikitext": "{{pagebanner|Dapoli banner.jpg}}\n'''Dapoli''' is a small hill town on the [[Konkan]] coast of [[Maharashtra]].\n\n==Understand==\nKnown as \"mini Mahabaleshwar\" for its mild climate.\n\n==See==\nThe beaches of '''Murud''', '''Karde''' and '''Ladghar''' are a short drive away.<ref>Local tourism office</ref>\n\n==Eat==\nFresh seafood is served at most homestays.\n\n==Sleep==\nHomestays are plentiful along the coast.\n\n{{outlinecity}}\n{{IsPartOf|Ratnagiri district}}"
+  }
+}

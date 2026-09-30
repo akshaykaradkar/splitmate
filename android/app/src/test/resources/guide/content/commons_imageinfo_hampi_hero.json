@@ -1,0 +1,29 @@
+{
+  "_fixture": "SYNTHETIC: hand-authored Commons action=query&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=1280 response (formatversion=2). Artist/licence values mimic real extmetadata HTML; file and user names are illustrative.",
+  "batchcomplete": true,
+  "query": {
+    "normalized": [ { "fromencoded": false, "from": "File:Virupaksha_Temple,_Hampi.jpg", "to": "File:Virupaksha Temple, Hampi.jpg" } ],
+    "pages": [
+      {
+        "pageid": 80000001, "ns": 6, "title": "File:Virupaksha Temple, Hampi.jpg",
+        "imagerepository": "local",
+        "imageinfo": [
+          {
+            "thumburl": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Virupaksha_Temple%2C_Hampi.jpg/1280px-Virupaksha_Temple%2C_Hampi.jpg",
+            "thumbwidth": 1280, "thumbheight": 853,
+            "responsiveUrls": { "1.5": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Virupaksha_Temple%2C_Hampi.jpg/1920px-Virupaksha_Temple%2C_Hampi.jpg" },
+            "url": "https://upload.wikimedia.org/wikipedia/commons/a/ab/Virupaksha_Temple%2C_Hampi.jpg",
+            "descriptionurl": "https://commons.wikimedia.org/wiki/File:Virupaksha_Temple,_Hampi.jpg",
+            "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=80000001",
+            "extmetadata": {
+              "Artist": { "value": "<a href=\"//commons.wikimedia.org/wiki/User:Example_Photographer\" title=\"User:Example Photographer\">Example&nbsp;Photographer</a> &amp; <span class=\"fn\">R. Rao</span>", "source": "commons-desc-page" },
+              "Credit": { "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>", "source": "commons-desc-page", "hidden": "" },
+              "LicenseShortName": { "value": "CC BY-SA 4.0", "source": "commons-desc-page", "hidden": "" },
+              "LicenseUrl": { "value": "https://creativecommons.org/licenses/by-sa/4.0", "source": "commons-desc-page", "hidden": "" }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

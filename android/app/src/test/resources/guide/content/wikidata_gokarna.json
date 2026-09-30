@@ -1,0 +1,39 @@
+{
+  "_fixture": "SYNTHETIC: hand-authored wbsearchentities + wbgetentities pair for 'Gokarna' (India town vs Nepal village). QIDs are illustrative placeholders except Q668 (India) and Q837 (Nepal).",
+  "search_response": {
+    "searchinfo": { "search": "Gokarna" },
+    "search": [
+      { "id": "Q9000302", "title": "Q9000302", "label": "Gokarna", "description": "village in Kathmandu District, Nepal" },
+      { "id": "Q9000301", "title": "Q9000301", "label": "Gokarna", "description": "town in Uttara Kannada district, Karnataka, India" }
+    ],
+    "success": 1
+  },
+  "entities_response": {
+    "entities": {
+      "Q9000301": {
+        "type": "item", "id": "Q9000301",
+        "labels": { "en": { "language": "en", "value": "Gokarna" }, "kn": { "language": "kn", "value": "ಗೋಕರ್ಣ" } },
+        "descriptions": { "en": { "language": "en", "value": "town in Uttara Kannada district, Karnataka, India" } },
+        "claims": {
+          "P31": [ { "mainsnak": { "snaktype": "value", "datavalue": { "value": { "id": "Q3957" }, "type": "wikibase-entityid" } }, "rank": "normal" } ],
+          "P17": [ { "mainsnak": { "snaktype": "value", "datavalue": { "value": { "id": "Q668" }, "type": "wikibase-entityid" } }, "rank": "normal" } ],
+          "P625": [ { "mainsnak": { "snaktype": "value", "datavalue": { "value": { "latitude": 14.5479, "longitude": 74.3188, "globe": "http://www.wikidata.org/entity/Q2" }, "type": "globecoordinate" } }, "rank": "normal" } ],
+          "P18": [ { "mainsnak": { "snaktype": "value", "datavalue": { "value": "Om Beach Gokarna.jpg", "type": "string" } }, "rank": "normal" } ]
+        },
+        "sitelinks": { "enwiki": { "site": "enwiki", "title": "Gokarna, Karnataka" }, "enwikivoyage": { "site": "enwikivoyage", "title": "Gokarna" } }
+      },
+      "Q9000302": {
+        "type": "item", "id": "Q9000302",
+        "labels": { "en": { "language": "en", "value": "Gokarna" } },
+        "descriptions": { "en": { "language": "en", "value": "village in Kathmandu District, Nepal" } },
+        "claims": {
+          "P31": [ { "mainsnak": { "snaktype": "value", "datavalue": { "value": { "id": "Q532" }, "type": "wikibase-entityid" } }, "rank": "normal" } ],
+          "P17": [ { "mainsnak": { "snaktype": "value", "datavalue": { "value": { "id": "Q837" }, "type": "wikibase-entityid" } }, "rank": "normal" } ],
+          "P625": [ { "mainsnak": { "snaktype": "value", "datavalue": { "value": { "latitude": 27.73, "longitude": 85.39, "globe": "http://www.wikidata.org/entity/Q2" }, "type": "globecoordinate" } }, "rank": "normal" } ]
+        },
+        "sitelinks": { "enwiki": { "site": "enwiki", "title": "Gokarna, Nepal" } }
+      }
+    },
+    "success": 1
+  }
+}
