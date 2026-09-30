@@ -44,7 +44,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import kotlinx.coroutines.launch
 import com.splitmate.app.SplitMateTheme
 import com.splitmate.app.ui.components.ContainedLoadingIndicator
+import com.splitmate.app.ui.components.LocalMotionScheme
+import com.splitmate.app.ui.components.LocalReducedMotion
 import com.splitmate.app.ui.components.SplitMateMotion
+import com.splitmate.app.ui.components.SplitMateMotionScheme
+import com.splitmate.app.ui.components.rememberReducedMotionEnabled
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -218,6 +222,39 @@ fun SplitMateThemeMode.toPalette(): SplitMateExpressivePalette = when (this) {
 }
 
 val LocalSplitMatePalette = staticCompositionLocalOf { SunlitBuckwheatPalette }
+
+/**
+ * v2.3.4 (Decision #6): the M3 tonal surface roles resolved from a [SplitMateExpressivePalette].
+ *
+ * Before v2.3.4 `SplitMateExpressiveTheme` never set `colorScheme.surfaceContainer*`, so any
+ * component reading them (ModalBottomSheet, DropdownMenu, AlertDialog, ElevatedCard, ...) fell
+ * back to the cool M3 baseline greys. These roles map the Buckwheat ladder instead:
+ * Lowest `#FFFFFF` card, Low `#FAF6F0` canvas, default `#F4EFE6` band, High `#EDE6DA` wells,
+ * Highest `#E4DCCD` (Espresso Night / Kyoto Matcha use their own ladders).
+ *
+ * `bright` / `dim` follow M3 semantics: light schemes are brightest at the canvas and dimmest at
+ * Highest; dark schemes are brightest at Highest and dimmest at Lowest.
+ */
+data class SplitMateSurfaceRoles(
+    val lowest: Color,
+    val low: Color,
+    val container: Color,
+    val high: Color,
+    val highest: Color,
+    val bright: Color,
+    val dim: Color
+)
+
+/** Pure mapping from a palette to the M3 tonal surface roles (see [SplitMateSurfaceRoles]). */
+fun SplitMateExpressivePalette.surfaceContainerRoles(): SplitMateSurfaceRoles = SplitMateSurfaceRoles(
+    lowest = surfaceContainerLowest,
+    low = surfaceContainerLow,
+    container = surfaceContainer,
+    high = surfaceContainerHigh,
+    highest = surfaceContainerHighest,
+    bright = if (mode.isDark) surfaceContainerHighest else surfaceContainerLow,
+    dim = if (mode.isDark) surfaceContainerLowest else surfaceContainerHighest
+)
 
 object SplitMateThemeState {
     var activeThemeMode by mutableStateOf(SplitMateThemeMode.SUNLIT_BUCKWHEAT)
@@ -2465,6 +2502,9 @@ fun SplitMateExpressiveTheme(
         else -> SplitMateLightColorScheme
     }
 
+    // v2.3.4 (Decision #6): map every surfaceContainer role to the (animated) Buckwheat ladder.
+    val surfaceRoles = animatedPalette.surfaceContainerRoles()
+
     val colorScheme = baseScheme.copy(
         primary = animPrimary,
         onPrimary = targetPalette.onPrimary,
@@ -2485,10 +2525,25 @@ fun SplitMateExpressiveTheme(
         surfaceVariant = animSurfaceContainer,
         onSurfaceVariant = animOnSurfaceVariant,
         outline = animOutline,
-        outlineVariant = targetPalette.outlineVariant
+        outlineVariant = targetPalette.outlineVariant,
+        surfaceBright = surfaceRoles.bright,
+        surfaceDim = surfaceRoles.dim,
+        surfaceContainerLowest = surfaceRoles.lowest,
+        surfaceContainerLow = surfaceRoles.low,
+        surfaceContainer = surfaceRoles.container,
+        surfaceContainerHigh = surfaceRoles.high,
+        surfaceContainerHighest = surfaceRoles.highest
     )
 
-    CompositionLocalProvider(LocalSplitMatePalette provides animatedPalette) {
+    // v2.3.4: MotionScheme shim + reduced-motion flag (ANIMATOR_DURATION_SCALE == 0 => snap).
+    val reducedMotion = rememberReducedMotionEnabled()
+    val motionScheme = if (reducedMotion) SplitMateMotionScheme.reduced() else SplitMateMotionScheme.expressive()
+
+    CompositionLocalProvider(
+        LocalSplitMatePalette provides animatedPalette,
+        LocalMotionScheme provides motionScheme,
+        LocalReducedMotion provides reducedMotion
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = SplitMateTypography
