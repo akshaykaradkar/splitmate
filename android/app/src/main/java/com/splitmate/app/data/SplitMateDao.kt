@@ -117,6 +117,9 @@ interface SplitMateDao {
         deleteExpensesForGroup(groupId)
         deleteSettlementsForGroup(groupId)
         deleteMembersForGroup(groupId)
+        // v2.3.4: the group's plan manifest (incl. its local-only stay) goes with the group. Guide
+        // packs are shared across groups and are evicted by hard expiry instead.
+        deleteTripPlanManifestForGroup(groupId)
         deleteGroupById(groupId)
     }
 
@@ -185,7 +188,44 @@ interface SplitMateDao {
         deleteAllExpenses()
         deleteAllSettlements()
         deleteAllMembers()
+        // v2.3.4: plan manifests are children of groups (FK CASCADE); clear them explicitly too.
+        deleteAllTripPlanManifests()
         deleteAllGroups()
     }
+
+    // --- v2.3.4 Trip Guide packs (shared across groups; evicted by hard expiry) ---
+    @Query("SELECT * FROM trip_guide_pack WHERE destinationQid = :destinationQid LIMIT 1")
+    suspend fun getGuidePack(destinationQid: String): TripGuidePackEntity?
+
+    @Query("SELECT * FROM trip_guide_pack WHERE destinationQid = :destinationQid LIMIT 1")
+    fun observeGuidePack(destinationQid: String): Flow<TripGuidePackEntity?>
+
+    @Upsert
+    suspend fun upsertGuidePack(pack: TripGuidePackEntity)
+
+    @Query("DELETE FROM trip_guide_pack WHERE destinationQid = :destinationQid")
+    suspend fun deleteGuidePack(destinationQid: String)
+
+    @Query("DELETE FROM trip_guide_pack WHERE hardExpiryEpochMs <= :nowEpochMs")
+    suspend fun deleteHardExpiredGuidePacks(nowEpochMs: Long): Int
+
+    // --- v2.3.4 Trip plan manifests (one per group; cascade-deleted with the group) ---
+    @Query("SELECT * FROM trip_plan_manifest WHERE groupId = :groupId LIMIT 1")
+    suspend fun getTripPlanManifest(groupId: String): TripPlanManifestEntity?
+
+    @Query("SELECT * FROM trip_plan_manifest WHERE groupId = :groupId LIMIT 1")
+    fun observeTripPlanManifest(groupId: String): Flow<TripPlanManifestEntity?>
+
+    @Query("SELECT * FROM trip_plan_manifest WHERE pendingPush = 1 ORDER BY updatedAtEpochMs ASC, groupId ASC")
+    suspend fun getPendingTripPlanManifests(): List<TripPlanManifestEntity>
+
+    @Upsert
+    suspend fun upsertTripPlanManifest(manifest: TripPlanManifestEntity)
+
+    @Query("DELETE FROM trip_plan_manifest WHERE groupId = :groupId")
+    suspend fun deleteTripPlanManifestForGroup(groupId: String)
+
+    @Query("DELETE FROM trip_plan_manifest")
+    suspend fun deleteAllTripPlanManifests()
 }
 

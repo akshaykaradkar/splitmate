@@ -1340,6 +1340,10 @@ object CloudGroupSyncRepository {
     fun groupTopicForGroupId(groupId: String): String =
         "splitmate_v2_grp_${sanitizeTopicKey(groupId)}"
 
+    /** v2.3.4: dedicated ntfy topic for the group's Trip plan manifest (never carries ledger data). */
+    fun groupPlanTopicForGroupId(groupId: String): String =
+        "splitmate_v2_plan_${sanitizeTopicKey(groupId)}"
+
     /**
      * Opens a single real-time HTTP pub/sub stream on ntfy.sh across [topics] and suspends until
      * any member on another device publishes a "message" event, returning the changed topic name

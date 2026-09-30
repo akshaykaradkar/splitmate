@@ -1,0 +1,16 @@
+{"id":"kA1open0001","time":1727600000,"event":"open","topic":"splitmate_v2_plan_g_hampi"}
+{"id":"msgOld00001","time":1727600100,"event":"message","topic":"splitmate_v2_plan_g_hampi","message":"{\"by\":\"9876500001\",\"destQid\":\"Q1066187\",\"pinned\":{\"wv:see:virupaksha-temple\":1727600000000},\"updatedAt\":1727600100000,\"v\":1,\"wvRev\":4567890}"}
+{"id":"msgGarb0001","time":1727600200,"event":"message","topic":"splitmate_v2_plan_g_hampi","message":"hello world"}
+{"id":"msgForn0001","time":1727600300,"event":"message","topic":"splitmate_v2_plan_g_hampi","message":"{\"hello\":1}"}
+{"id":"msgVer20001","time":1727600400,"event":"message","topic":"splitmate_v2_plan_g_hampi","message":"{\"v\":2,\"updatedAt\":1727600400000,\"destQid\":\"Q1066187\"}"}
+{"id":"msgAtt000001","time":1727600500,"event":"message","topic":"splitmate_v2_plan_g_hampi","message":"You received a file: a.json","attachment":{"name":"a.json","url":"https://ntfy.sh/file/abc.json","size":5000}}
+{"id":"msgTrunc0001","time":1727600600,"event":"mess
+{"id":"kA2keep0001","time":1727600700,"event":"keepalive","topic":"splitmate_v2_plan_g_hampi"}
+{"id":"msgOther0001","time":1727609999,"event":"message","topic":"splitmate_v2_plan_other","message":"{\"by\":\"9876500009\",\"destQid\":\"Q42\",\"updatedAt\":1727609999000,\"v\":1}"}
+{"id":"msgNew00001","time":1727600800,"event":"message","topic":"splitmate_v2_plan_g_hampi","message":"{\"by\":\"9876500002\",\"days\":{\"wv:see:virupaksha-temple\":1},\"destQid\":\"Q1066187\",\"hidden\":{\"wd:Q12345\":1727600700000},\"pinned\":{\"wv:eat:mango-tree\":1727600750000,\"wv:see:virupaksha-temple\":1727600000000},\"stay\":{\"at\":1727600600000,\"by\":\"9876500002\",\"label\":\"Our stay\",\"lat\":15.335,\"lng\":76.46,\"prec\":\"EXACT\"},\"updatedAt\":1727600800000,\"v\":1,\"wvRev\":4567890}"}
+{"id":"msgBadQid001","time":1727600900,"event":"message","topic":"splitmate_v2_plan_g_hampi","message":"{\"destQid\":\"<script>alert(1)</script>\",\"updatedAt\":1727600900000,\"v\":1}"}
+{"id":"msgObj000001","time":1727601000,"event":"message","topic":"splitmate_v2_plan_g_hampi","message":{"v":1,"updatedAt":1727601000000}}
+
+{"id":"../../etc","time":1727601100,"event":"message","topic":"splitmate_v2_plan_g_hampi","message":"{\"updatedAt\":1727601100000,\"v\":1}"}
+[1,2,3]
+not json at all
