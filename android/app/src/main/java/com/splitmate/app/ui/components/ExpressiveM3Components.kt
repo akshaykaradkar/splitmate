@@ -88,6 +88,24 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.draw.drawWithContent
 import androidx.graphics.shapes.Morph
+import android.os.SystemClock
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.SpringSpec
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.progressSemantics
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.graphics.shapes.RoundedPolygon
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import com.splitmate.app.ui.FigtreeFontFamily
 import com.splitmate.app.ui.LocalSplitMatePalette
 import com.splitmate.app.ui.SplitMateExpressiveTypography
@@ -96,6 +114,16 @@ import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
 
+/**
+ * Opt-in marker for SplitMate's local Material 3 Expressive look-alike components.
+ *
+ * material3 is frozen at 1.2.1, which has none of the official Expressive APIs, so this package
+ * ships look-alikes with matching names. Every look-alike is annotated with this marker so the
+ * v3.0 swap surface is explicit. The module opts in globally via
+ * `-opt-in=com.splitmate.app.ui.components.ExperimentalMaterial3ExpressiveApi` in
+ * `android/app/build.gradle`; after the upgrade, point the flag at
+ * `androidx.compose.material3.ExperimentalMaterial3ExpressiveApi`.
+ */
 @RequiresOptIn(message = "This Material 3 Expressive API is experimental.")
 @Retention(AnnotationRetention.BINARY)
 annotation class ExperimentalMaterial3ExpressiveApi
@@ -110,6 +138,22 @@ object WavyProgressIndicatorDefaults {
 
     val trackColor: Color
         @Composable get() = MaterialTheme.colorScheme.surfaceVariant
+
+    /** Duration of one indeterminate cycle (two travelling segments), in milliseconds. */
+    const val INDETERMINATE_CYCLE_MILLIS: Int = 1750
+
+    /** Cycle window, as fractions of one cycle, during which each indeterminate segment travels. */
+    const val FIRST_SEGMENT_WINDOW_END: Float = 0.75f
+    const val SECOND_SEGMENT_WINDOW_START: Float = 0.45f
+
+    /** Segments shorter than this fraction of the track are not drawn. */
+    const val MIN_SEGMENT_FRACTION: Float = 0.001f
+
+    /** Minimum on-screen time for an in-flight wavy bar, to avoid flicker (audit 5.3). */
+    const val MIN_VISIBLE_MILLIS: Long = 400L
+
+    /** Static, flat segment drawn by the indeterminate bar when reduced motion is on. */
+    val ReducedMotionSegment: WavySegment = WavySegment(start = 0f, end = 0.4f)
 }
 
 /**
@@ -118,6 +162,7 @@ object WavyProgressIndicatorDefaults {
  * Wave amplitude smoothly dampens to `0f` via [SplitMateMotion.defaultSpatial] when
  * progress reaches `1f` (`100%` settled or `0.00c` receipt equilibrium) or `0f`.
  */
+@ExperimentalMaterial3ExpressiveApi
 @Composable
 fun LinearWavyProgressIndicator(
     progress: () -> Float,
@@ -249,6 +294,7 @@ fun LinearWavyProgressIndicator(
     }
 }
 
+@ExperimentalMaterial3ExpressiveApi
 @Composable
 fun LinearWavyProgressIndicator(
     progress: Float,
@@ -277,9 +323,300 @@ fun LinearWavyProgressIndicator(
 }
 
 /**
+ * INDETERMINATE Material 3 Expressive `LinearWavyProgressIndicator` (no `progress` parameter),
+ * mirroring the official material3 1.4 indeterminate overload.
+ *
+ * Two phase-shifted segments travel from the start edge to the end edge of the track (see
+ * [indeterminateWavySegments]); each segment carries a travelling sine wave. The wave amplitude
+ * is constant while running and animates to `0f` (a flat bar) when reduced motion is enabled
+ * (`ANIMATOR_DURATION_SCALE == 0`), in which case a static segment is drawn instead.
+ *
+ * Usage rule (GEMINI.md v2.3.4 addendum): ONLY for in-flight network work. Prefer
+ * [InFlightWavyProgressIndicator], which adds the 400ms minimum visibility and the exit animation.
+ *
+ * @param contentDescription TalkBack label (e.g. "Loading guide"); announced politely when set.
+ */
+@ExperimentalMaterial3ExpressiveApi
+@Composable
+fun LinearWavyProgressIndicator(
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    trackColor: Color = MaterialTheme.colorScheme.surfaceVariant,
+    amplitude: Float = 1f,
+    wavelength: Dp = 24.dp,
+    waveSpeed: Dp = 24.dp,
+    gapSize: Dp = 4.dp,
+    strokeWidth: Dp = 6.dp,
+    contentDescription: String? = null
+) {
+    val reducedMotion = rememberReducedMotionEnabled()
+    val effectiveAmplitude by animateFloatAsState(
+        targetValue = if (reducedMotion) 0f else amplitude.coerceIn(0f, 1f),
+        animationSpec = SplitMateMotion.defaultSpatial(),
+        label = "LinearWavyIndeterminateAmplitude"
+    )
+    val animatedActiveColor by animateColorAsState(
+        targetValue = color,
+        animationSpec = SplitMateMotion.defaultEffects(),
+        label = "LinearWavyIndeterminateActiveColor"
+    )
+    val animatedTrackColor by animateColorAsState(
+        targetValue = trackColor,
+        animationSpec = SplitMateMotion.defaultEffects(),
+        label = "LinearWavyIndeterminateTrackColor"
+    )
+
+    val phaseDurationMs = remember(wavelength, waveSpeed) {
+        val speedRatio = if (waveSpeed.value > 0f) wavelength.value / waveSpeed.value else 1f
+        (speedRatio * 1000f).toInt().coerceIn(450, 4000)
+    }
+    // Continuous loaders legitimately run on a linear clock: the per-segment easing is applied
+    // by indeterminateWavySegments(), so the raw cycle fraction must advance uniformly.
+    val infiniteTransition = rememberInfiniteTransition(label = "LinearWavyIndeterminateTransition")
+    val phase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2.0 * PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = phaseDurationMs, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "LinearWavyIndeterminatePhase"
+    )
+    val cycle by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = WavyProgressIndicatorDefaults.INDETERMINATE_CYCLE_MILLIS,
+                easing = LinearEasing
+            ),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "LinearWavyIndeterminateCycle"
+    )
+
+    val wavePath = remember { Path() }
+    val description = contentDescription
+    val labelModifier = if (description != null) {
+        Modifier.semantics {
+            this.contentDescription = description
+            liveRegion = LiveRegionMode.Polite
+        }
+    } else {
+        Modifier
+    }
+
+    Canvas(
+        modifier = modifier
+            .progressSemantics()
+            .then(labelModifier)
+            .fillMaxWidth()
+            .height(strokeWidth + 8.dp)
+    ) {
+        val strokePx = strokeWidth.toPx().coerceAtLeast(2f)
+        val halfStroke = strokePx / 2f
+        val centerY = size.height / 2f
+        val startX = halfStroke
+        val endX = (size.width - halfStroke).coerceAtLeast(startX)
+        val totalSpan = (endX - startX).coerceAtLeast(0f)
+        val gapPx = gapSize.toPx()
+        val maxWaveHeightPx = ((size.height - strokePx) / 2f).coerceAtLeast(0f)
+        val waveAmpPx = maxWaveHeightPx * effectiveAmplitude
+        val wavelengthPx = wavelength.toPx().coerceAtLeast(8f)
+        // State reads happen in the draw phase only: the running loader redraws, never recomposes.
+        val segments = if (reducedMotion) {
+            listOf(WavyProgressIndicatorDefaults.ReducedMotionSegment)
+        } else {
+            indeterminateWavySegments(cycle)
+        }
+        val currentPhase = if (reducedMotion) 0f else phase
+
+        var trackCursor = startX
+        segments.forEach { segment ->
+            val segmentStartX = startX + totalSpan * segment.start
+            val segmentEndX = startX + totalSpan * segment.end
+            val trackEndX = segmentStartX - gapPx - strokePx
+            if (trackEndX > trackCursor) {
+                drawLine(
+                    color = animatedTrackColor,
+                    start = Offset(trackCursor, centerY),
+                    end = Offset(trackEndX, centerY),
+                    strokeWidth = strokePx,
+                    cap = StrokeCap.Round
+                )
+            }
+            drawWavySegment(
+                path = wavePath,
+                startX = segmentStartX,
+                endX = segmentEndX,
+                centerY = centerY,
+                amplitudePx = waveAmpPx,
+                wavelengthPx = wavelengthPx,
+                phase = currentPhase,
+                color = animatedActiveColor,
+                strokePx = strokePx
+            )
+            trackCursor = max(trackCursor, segmentEndX + gapPx + strokePx)
+        }
+        if (trackCursor < endX) {
+            drawLine(
+                color = animatedTrackColor,
+                start = Offset(trackCursor, centerY),
+                end = Offset(endX, centerY),
+                strokeWidth = strokePx,
+                cap = StrokeCap.Round
+            )
+        }
+    }
+}
+
+/** Draws one active segment as a sine wave (or a flat rounded line when the amplitude is ~0). */
+private fun DrawScope.drawWavySegment(
+    path: Path,
+    startX: Float,
+    endX: Float,
+    centerY: Float,
+    amplitudePx: Float,
+    wavelengthPx: Float,
+    phase: Float,
+    color: Color,
+    strokePx: Float
+) {
+    if (endX <= startX) return
+    if (amplitudePx <= 0.2f) {
+        drawLine(
+            color = color,
+            start = Offset(startX, centerY),
+            end = Offset(endX, centerY),
+            strokeWidth = strokePx,
+            cap = StrokeCap.Round
+        )
+        return
+    }
+    path.reset()
+    val stepPx = 2.dp.toPx().coerceAtLeast(1.5f)
+    var x = startX
+    path.moveTo(x, centerY + amplitudePx * sin((2f * PI.toFloat() * x / wavelengthPx) + phase))
+    while (x < endX) {
+        x = (x + stepPx).coerceAtMost(endX)
+        path.lineTo(x, centerY + amplitudePx * sin((2f * PI.toFloat() * x / wavelengthPx) + phase))
+    }
+    drawPath(
+        path = path,
+        color = color,
+        style = Stroke(width = strokePx, cap = StrokeCap.Round)
+    )
+}
+
+/** One active segment of an indeterminate bar, as fractions `[start, end]` of the track (0..1). */
+data class WavySegment(val start: Float, val end: Float) {
+    val length: Float get() = end - start
+}
+
+/**
+ * Pure, deterministic geometry of the indeterminate bar at [cycleFraction] (wrapped into 0..1).
+ *
+ * Two segments travel edge-to-edge in overlapping windows of the cycle (`[0, 0.75]` and
+ * `[0.45, 1]`). Inside its window a segment's head follows `1 - (1 - u)^2` (decelerating) and its
+ * tail follows `u^2` (accelerating), so it grows from the start edge, peaks at half the track and
+ * shrinks into the end edge. Result: at most 2 segments, sorted by start, never overlapping,
+ * all within 0..1. Non-finite input returns an empty list.
+ */
+fun indeterminateWavySegments(cycleFraction: Float): List<WavySegment> {
+    if (cycleFraction.isNaN() || cycleFraction.isInfinite()) return emptyList()
+    val t = cycleFraction.mod(1f)
+    return listOfNotNull(
+        indeterminateWindowSegment(t, 0f, WavyProgressIndicatorDefaults.FIRST_SEGMENT_WINDOW_END),
+        indeterminateWindowSegment(t, WavyProgressIndicatorDefaults.SECOND_SEGMENT_WINDOW_START, 1f)
+    ).sortedBy { it.start }
+}
+
+private fun indeterminateWindowSegment(t: Float, windowStart: Float, windowEnd: Float): WavySegment? {
+    if (windowEnd <= windowStart || t < windowStart || t > windowEnd) return null
+    val u = ((t - windowStart) / (windowEnd - windowStart)).coerceIn(0f, 1f)
+    val head = 1f - (1f - u) * (1f - u)
+    val tail = u * u
+    if (head - tail < WavyProgressIndicatorDefaults.MIN_SEGMENT_FRACTION) return null
+    return WavySegment(start = tail.coerceIn(0f, 1f), end = head.coerceIn(0f, 1f))
+}
+
+/**
+ * Pure rule behind [rememberMinimumVisibility]: how much longer (ms) an indicator shown at
+ * [shownAtMillis] must stay visible at [nowMillis] to honour [minVisibleMillis]. Clamped to
+ * `0..minVisibleMillis` (a clock that runs backwards never extends the wait beyond the minimum).
+ */
+fun remainingMinVisibleMillis(shownAtMillis: Long, nowMillis: Long, minVisibleMillis: Long): Long {
+    val minimum = minVisibleMillis.coerceAtLeast(0L)
+    val elapsed = nowMillis - shownAtMillis
+    return (minimum - elapsed).coerceIn(0L, minimum)
+}
+
+/**
+ * Returns `true` while [active] is true, and keeps returning `true` after [active] turns false
+ * until the indicator has been visible for at least [minVisibleMillis] (anti-flicker rule).
+ */
+@Composable
+fun rememberMinimumVisibility(
+    active: Boolean,
+    minVisibleMillis: Long = WavyProgressIndicatorDefaults.MIN_VISIBLE_MILLIS
+): Boolean {
+    var visible by remember { mutableStateOf(active) }
+    var shownAtMillis by remember { mutableLongStateOf(if (active) SystemClock.uptimeMillis() else 0L) }
+    LaunchedEffect(active, minVisibleMillis) {
+        if (active) {
+            if (!visible) {
+                shownAtMillis = SystemClock.uptimeMillis()
+                visible = true
+            }
+        } else if (visible) {
+            val wait = remainingMinVisibleMillis(shownAtMillis, SystemClock.uptimeMillis(), minVisibleMillis)
+            if (wait > 0L) delay(wait)
+            visible = false
+        }
+    }
+    return visible
+}
+
+/**
+ * The sanctioned Trip Guide wait-state bar: an indeterminate [LinearWavyProgressIndicator] that is
+ * visible while [inFlight] (an in-flight network job), stays up for at least [minVisibleMillis]
+ * and animates out with `shrinkVertically + fadeOut` ([SplitMateMotion.fastEffects]).
+ * Never drive [inFlight] from cached or offline data.
+ */
+@ExperimentalMaterial3ExpressiveApi
+@Composable
+fun InFlightWavyProgressIndicator(
+    inFlight: Boolean,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    trackColor: Color = MaterialTheme.colorScheme.surfaceVariant,
+    minVisibleMillis: Long = WavyProgressIndicatorDefaults.MIN_VISIBLE_MILLIS,
+    contentDescription: String? = "Loading"
+) {
+    val visible = rememberMinimumVisibility(active = inFlight, minVisibleMillis = minVisibleMillis)
+    AnimatedVisibility(
+        visible = visible,
+        modifier = modifier,
+        enter = fadeIn(animationSpec = SplitMateMotion.fastEffects()) +
+            expandVertically(animationSpec = SplitMateMotion.fastEffects()),
+        exit = shrinkVertically(animationSpec = SplitMateMotion.fastEffects()) +
+            fadeOut(animationSpec = SplitMateMotion.fastEffects()),
+        label = "InFlightWavyProgressVisibility"
+    ) {
+        LinearWavyProgressIndicator(
+            modifier = Modifier.fillMaxWidth(),
+            color = color,
+            trackColor = trackColor,
+            contentDescription = contentDescription
+        )
+    }
+}
+
+/**
  * Material 3 Expressive `CircularWavyProgressIndicator` for Trip Harmony settlement meters
  * and per-traveler contribution rings.
  */
+@ExperimentalMaterial3ExpressiveApi
 @Composable
 fun CircularWavyProgressIndicator(
     progress: () -> Float,
@@ -393,6 +730,7 @@ fun CircularWavyProgressIndicator(
     }
 }
 
+@ExperimentalMaterial3ExpressiveApi
 @Composable
 fun CircularWavyProgressIndicator(
     progress: Float,
@@ -483,6 +821,7 @@ data class ExpressiveActionItem(
  * horizontal weight by [expandedWeightBoost] via [SplitMateMotion.fastSpatial] while
  * sibling buttons gently compress.
  */
+@ExperimentalMaterial3ExpressiveApi
 @Composable
 fun ButtonGroup(
     items: List<ExpressiveActionItem>,
@@ -593,6 +932,7 @@ fun ButtonGroup(
  *   to `50%` (`CircleShape`) via [SplitMateMotion.fastSpatial] and applies
  *   [SplitMateExpressiveTypography.labelLargeEmphasized].
  */
+@ExperimentalMaterial3ExpressiveApi
 @Composable
 fun <T> ConnectedButtonGroup(
     options: List<T>,
@@ -744,6 +1084,7 @@ data class ExpressiveFabMenuItem(
  * Material 3 Expressive `ToggleFloatingActionButton` that morphs from a `20.dp` squircle/pill
  * into a full `CircleShape` (`28.dp`) close button when [checked] is true.
  */
+@ExperimentalMaterial3ExpressiveApi
 @Composable
 fun ToggleFloatingActionButton(
     checked: Boolean,
@@ -822,6 +1163,7 @@ fun ToggleFloatingActionButton(
  * Material 3 Expressive `FloatingActionButtonMenu` that fans out staggered pill items
  * above a morphing [ToggleFloatingActionButton] using [SplitMateMotion.defaultSpatial].
  */
+@ExperimentalMaterial3ExpressiveApi
 @Composable
 fun FloatingActionButtonMenu(
     expanded: Boolean,
@@ -917,18 +1259,102 @@ fun FloatingActionButtonMenu(
 // ==============================================================================
 
 /**
- * Material 3 Expressive `ContainedLoadingIndicator` that cycles smoothly through
- * [MaterialShapes.morphSequence] (`SoftBurst` -> `Cookie9Sided` -> `Pentagon` -> `Pill`
- * -> `Sunny` -> `Clover4Leaf` -> `Oval`) inside a tonal `CircleShape` container.
+ * Default polygon sets and spring tokens for [ContainedLoadingIndicator] and [LoadingIndicator].
  */
+object LoadingIndicatorDefaults {
+    /**
+     * The house 7-shape sequence (`MaterialShapes.morphSequence`: `SoftBurst` -> `Cookie9Sided`
+     * -> `Pentagon` -> `Pill` -> `Sunny` -> `Clover4Leaf` -> `Oval`). Default for every loader.
+     */
+    val IndeterminateIndicatorPolygons: List<RoundedPolygon>
+        get() = MaterialShapes.morphSequence
+
+    /** Trip Guide hero-image loader shapes (audit 5.3): Circle -> Square -> Cookie9Sided -> SoftBurst. */
+    val GuideHeroPolygons: List<RoundedPolygon> by lazy {
+        listOf(
+            MaterialShapes.Circle,
+            MaterialShapes.Square,
+            MaterialShapes.Cookie9Sided,
+            MaterialShapes.SoftBurst
+        )
+    }
+
+    /** Spatial spring for each shape-to-shape morph (slight overshoot, settles in ~0.5s). */
+    const val MORPH_DAMPING: Float = 0.6f
+    const val MORPH_STIFFNESS: Float = 200f
+    const val MORPH_VISIBILITY_THRESHOLD: Float = 0.002f
+
+    /** Pause on each settled shape before the next morph starts. */
+    const val MORPH_HOLD_MILLIS: Long = 90L
+
+    /** Rotation added per morph stage. */
+    const val DEGREES_PER_STAGE: Float = 90f
+
+    /**
+     * The stage counter is wrapped every `polygons.size * STAGE_WRAP_CYCLES` stages to keep float
+     * precision. `STAGE_WRAP_CYCLES * DEGREES_PER_STAGE` is a multiple of 360, so the wrap is
+     * visually seamless.
+     */
+    const val STAGE_WRAP_CYCLES: Int = 64
+
+    fun morphSpring(): SpringSpec<Float> = spring(
+        dampingRatio = MORPH_DAMPING,
+        stiffness = MORPH_STIFFNESS,
+        visibilityThreshold = MORPH_VISIBILITY_THRESHOLD
+    )
+}
+
+/** One rendered frame of a morphing loader: which `Morph` to draw, its progress and rotation. */
+data class LoadingIndicatorFrame(
+    val morphIndex: Int,
+    val morphProgress: Float,
+    val rotationDegrees: Float
+)
+
+/**
+ * Pure mapping from the spring-driven stage value to a loader frame. The loader animates
+ * [animatedStage] towards the integer [targetStage]; morph `targetStage - 1` (polygon
+ * `(targetStage - 1) % n` -> the next polygon) is drawn at progress
+ * `animatedStage - (targetStage - 1)`, clamped to 0..1 so spring overshoot never distorts the
+ * outline. Rotation follows the unclamped stage, so the overshoot reads as a lively spin.
+ */
+fun loadingIndicatorFrame(
+    animatedStage: Float,
+    targetStage: Int,
+    polygonCount: Int,
+    degreesPerStage: Float = LoadingIndicatorDefaults.DEGREES_PER_STAGE
+): LoadingIndicatorFrame {
+    if (polygonCount <= 1 || targetStage <= 0 || animatedStage.isNaN() || animatedStage.isInfinite()) {
+        return LoadingIndicatorFrame(morphIndex = 0, morphProgress = 0f, rotationDegrees = 0f)
+    }
+    val fromStage = targetStage - 1
+    return LoadingIndicatorFrame(
+        morphIndex = fromStage.mod(polygonCount),
+        morphProgress = (animatedStage - fromStage).coerceIn(0f, 1f),
+        rotationDegrees = (animatedStage * degreesPerStage).mod(360f)
+    )
+}
+
+/**
+ * Material 3 Expressive `ContainedLoadingIndicator`: morphs sequentially through [polygons]
+ * (default [LoadingIndicatorDefaults.IndeterminateIndicatorPolygons]) inside a tonal
+ * [containerShape]. Each morph is driven by a spatial spring ([LoadingIndicatorDefaults.morphSpring])
+ * rather than a linear tween. With reduced motion (`ANIMATOR_DURATION_SCALE == 0`) the first
+ * polygon is drawn statically. Pass [contentDescription] (e.g. "Loading guide") to expose a
+ * TalkBack label on a polite live region.
+ */
+@ExperimentalMaterial3ExpressiveApi
 @Composable
 fun ContainedLoadingIndicator(
     modifier: Modifier = Modifier,
     containerSize: Dp = 48.dp,
     containerColor: Color = MaterialTheme.colorScheme.primaryContainer,
-    indicatorColor: Color = MaterialTheme.colorScheme.onPrimaryContainer
+    indicatorColor: Color = MaterialTheme.colorScheme.onPrimaryContainer,
+    containerShape: Shape = CircleShape,
+    polygons: List<RoundedPolygon> = LoadingIndicatorDefaults.IndeterminateIndicatorPolygons,
+    contentDescription: String? = null
 ) {
-    val sequence = MaterialShapes.morphSequence
+    val sequence = remember(polygons) { polygons.ifEmpty { MaterialShapes.morphSequence } }
     val morphs = remember(sequence) {
         sequence.indices.map { idx ->
             val start = sequence[idx]
@@ -936,48 +1362,61 @@ fun ContainedLoadingIndicator(
             Morph(start, end)
         }
     }
+    val reducedMotion = rememberReducedMotionEnabled()
+    val stage = remember(sequence) { Animatable(0f) }
+    var targetStage by remember(sequence) { mutableIntStateOf(0) }
 
-    val infiniteTransition = rememberInfiniteTransition(label = "ContainedLoadingTransition")
-    val stageFloat by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = sequence.size.toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = sequence.size * 650, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "ContainedLoadingMorphStage"
-    )
-    val rotationDegrees by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 4200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "ContainedLoadingRotation"
-    )
+    LaunchedEffect(sequence, reducedMotion) {
+        if (reducedMotion || sequence.size < 2) return@LaunchedEffect
+        val wrapStage = sequence.size * LoadingIndicatorDefaults.STAGE_WRAP_CYCLES
+        while (isActive) {
+            var next = targetStage + 1
+            if (next > wrapStage) {
+                // Seamless wrap: same polygon and same rotation (wrapStage * 90deg % 360 == 0).
+                stage.snapTo(stage.value - wrapStage)
+                next -= wrapStage
+            }
+            targetStage = next
+            stage.animateTo(
+                targetValue = next.toFloat(),
+                animationSpec = LoadingIndicatorDefaults.morphSpring()
+            )
+            delay(LoadingIndicatorDefaults.MORPH_HOLD_MILLIS)
+        }
+    }
 
-    val stageIndex = stageFloat.toInt().mod(morphs.size)
-    val localProgress = (stageFloat - stageFloat.toInt()).coerceIn(0f, 1f)
-    val activeMorph = morphs[stageIndex]
+    val description = contentDescription
+    val labelModifier = if (description != null) {
+        Modifier.semantics {
+            this.contentDescription = description
+            liveRegion = LiveRegionMode.Polite
+        }
+    } else {
+        Modifier
+    }
+    val indicatorShape: Shape = if (reducedMotion || sequence.size < 2) {
+        remember(sequence) { sequence.first().toShape() }
+    } else {
+        val frame = loadingIndicatorFrame(stage.value, targetStage, sequence.size)
+        MorphPolygonShape(
+            morph = morphs[frame.morphIndex],
+            percentage = frame.morphProgress,
+            rotationDegrees = frame.rotationDegrees
+        )
+    }
 
     Box(
         modifier = modifier
+            .then(labelModifier)
             .size(containerSize)
-            .clip(CircleShape)
-            .background(containerColor, CircleShape),
+            .clip(containerShape)
+            .background(containerColor, containerShape),
         contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
                 .size(containerSize * 0.62f)
-                .clip(
-                    MorphPolygonShape(
-                        morph = activeMorph,
-                        percentage = localProgress,
-                        rotationDegrees = rotationDegrees
-                    )
-                )
+                .clip(indicatorShape)
                 .background(indicatorColor)
         )
     }
@@ -1000,6 +1439,7 @@ data class ExpressiveMenuAction(
  * and rotates `Icons.Rounded.ExpandMore` by `180deg` via [SplitMateMotion.fastSpatial]
  * when its dropdown menu opens.
  */
+@ExperimentalMaterial3ExpressiveApi
 @Composable
 fun SplitButtonLayout(
     leadingText: String,
@@ -1147,6 +1587,201 @@ fun SplitButtonLayout(
     }
 }
 
+/**
+ * Slot-based Material 3 Expressive `SplitButtonLayout`, mirroring the official material3 1.4
+ * signature `SplitButtonLayout(leadingButton, trailingButton, modifier, spacing)` so the v3.0
+ * upgrade is an import swap (used by the Trip Guide "Directions" button, audit 5.8).
+ *
+ * Pair it with [SplitButtonDefaults.LeadingButton] and [SplitButtonDefaults.TrailingButton]. The
+ * trailing button owns the menu expanded state (`checked`) and morphs its inner corners into a
+ * full pill while the menu is open. The optional [menuContent] renders a `DropdownMenu`
+ * anchored to the whole split button, shown while [menuExpanded] is true:
+ *
+ * ```
+ * var menuOpen by remember { mutableStateOf(false) }
+ * SplitButtonLayout(
+ *     leadingButton = {
+ *         SplitButtonDefaults.LeadingButton(onClick = onDirections) { Text("Directions") }
+ *     },
+ *     trailingButton = {
+ *         SplitButtonDefaults.TrailingButton(checked = menuOpen, onCheckedChange = { menuOpen = it })
+ *     },
+ *     menuExpanded = menuOpen,
+ *     onMenuDismissRequest = { menuOpen = false },
+ *     menuContent = { DropdownMenuItem(text = { Text("Walk") }, onClick = onWalk) }
+ * )
+ * ```
+ *
+ * @param fillWidth when true the layout fills the width and the leading slot takes the remaining
+ *   space (its min width is propagated, so the leading button stretches).
+ */
+@ExperimentalMaterial3ExpressiveApi
+@Composable
+fun SplitButtonLayout(
+    leadingButton: @Composable () -> Unit,
+    trailingButton: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    spacing: Dp = SplitButtonDefaults.Spacing,
+    fillWidth: Boolean = false,
+    menuExpanded: Boolean = false,
+    onMenuDismissRequest: () -> Unit = {},
+    menuContent: (@Composable ColumnScope.() -> Unit)? = null
+) {
+    Box(modifier = modifier) {
+        Row(
+            modifier = if (fillWidth) Modifier.fillMaxWidth() else Modifier,
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(spacing)
+        ) {
+            if (fillWidth) {
+                Box(modifier = Modifier.weight(1f), propagateMinConstraints = true) {
+                    leadingButton()
+                }
+            } else {
+                leadingButton()
+            }
+            trailingButton()
+        }
+        if (menuContent != null) {
+            DropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = onMenuDismissRequest,
+                content = menuContent
+            )
+        }
+    }
+}
+
+/**
+ * Defaults and building blocks for the slot-based [SplitButtonLayout], mirroring the official
+ * `SplitButtonDefaults.LeadingButton` / `TrailingButton`. Visible height defaults to 40.dp; the
+ * M3 minimum interactive size still guarantees a 48.dp touch target.
+ */
+object SplitButtonDefaults {
+    /** Gap between the leading and trailing buttons. */
+    val Spacing: Dp = 2.dp
+
+    /** Default visible container height (M3E "small" split button). */
+    val ContainerHeight: Dp = 40.dp
+
+    /** Full-width sheet actions use the M3E "medium" height. */
+    val MediumContainerHeight: Dp = 48.dp
+
+    /** Inner (facing) corner radius of both buttons while the menu is closed. */
+    val InnerCornerSize: Dp = 4.dp
+
+    /** Default width of the trailing (menu) button. */
+    val TrailingButtonWidth: Dp = 40.dp
+
+    /**
+     * Leading action of a split button: pill-shaped outer start corners, [InnerCornerSize]
+     * inner end corners.
+     */
+    @ExperimentalMaterial3ExpressiveApi
+    @Composable
+    fun LeadingButton(
+        onClick: () -> Unit,
+        modifier: Modifier = Modifier,
+        enabled: Boolean = true,
+        containerColor: Color = MaterialTheme.colorScheme.primary,
+        contentColor: Color = MaterialTheme.colorScheme.onPrimary,
+        height: Dp = ContainerHeight,
+        contentPadding: PaddingValues = PaddingValues(start = 16.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+        content: @Composable RowScope.() -> Unit
+    ) {
+        val outerCorner = height / 2
+        Button(
+            onClick = onClick,
+            modifier = modifier.height(height),
+            enabled = enabled,
+            shape = RoundedCornerShape(
+                topStart = outerCorner,
+                bottomStart = outerCorner,
+                topEnd = InnerCornerSize,
+                bottomEnd = InnerCornerSize
+            ),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = containerColor,
+                contentColor = contentColor
+            ),
+            contentPadding = contentPadding,
+            content = content
+        )
+    }
+
+    /**
+     * Trailing menu toggle of a split button. [checked] is the menu expanded state: when true the
+     * inner corners spring ([SplitMateMotion.fastSpatial]) from [InnerCornerSize] to a full pill.
+     * Exposes the expanded/collapsed state to TalkBack via `stateDescription`.
+     */
+    @ExperimentalMaterial3ExpressiveApi
+    @Composable
+    fun TrailingButton(
+        checked: Boolean,
+        onCheckedChange: (Boolean) -> Unit,
+        modifier: Modifier = Modifier,
+        enabled: Boolean = true,
+        containerColor: Color = MaterialTheme.colorScheme.primary,
+        contentColor: Color = MaterialTheme.colorScheme.onPrimary,
+        height: Dp = ContainerHeight,
+        width: Dp = TrailingButtonWidth,
+        expandedStateDescription: String = "Menu expanded",
+        collapsedStateDescription: String = "Menu collapsed",
+        content: @Composable () -> Unit = { TrailingIcon(checked = checked) }
+    ) {
+        val outerCorner = height / 2
+        val innerCorner by animateDpAsState(
+            targetValue = if (checked) outerCorner else InnerCornerSize,
+            animationSpec = SplitMateMotion.fastSpatial(),
+            label = "SplitButtonSlotTrailingInnerCorner"
+        )
+        val stateText = if (checked) expandedStateDescription else collapsedStateDescription
+        Surface(
+            onClick = { onCheckedChange(!checked) },
+            modifier = modifier
+                .height(height)
+                .width(width)
+                .semantics { stateDescription = stateText },
+            enabled = enabled,
+            shape = RoundedCornerShape(
+                topStart = innerCorner,
+                bottomStart = innerCorner,
+                topEnd = outerCorner,
+                bottomEnd = outerCorner
+            ),
+            color = containerColor,
+            contentColor = contentColor
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                content()
+            }
+        }
+    }
+
+    /** Chevron for [TrailingButton] that rotates 180 degrees while the menu is open. */
+    @ExperimentalMaterial3ExpressiveApi
+    @Composable
+    fun TrailingIcon(
+        checked: Boolean,
+        modifier: Modifier = Modifier,
+        contentDescription: String? = "More options",
+        iconSize: Dp = 18.dp
+    ) {
+        val rotation by animateFloatAsState(
+            targetValue = if (checked) 180f else 0f,
+            animationSpec = SplitMateMotion.fastSpatial(),
+            label = "SplitButtonSlotChevronRotation"
+        )
+        Icon(
+            imageVector = Icons.Rounded.ExpandMore,
+            contentDescription = contentDescription,
+            modifier = modifier
+                .size(iconSize)
+                .graphicsLayer { rotationZ = rotation }
+        )
+    }
+}
+
 // ==============================================================================
 // 7. HORIZONTAL FLOATING TOOLBAR (WITH ADJACENT FAB & NESTED SCROLL)
 // ==============================================================================
@@ -1201,6 +1836,7 @@ fun Modifier.floatingToolbarVerticalNestedScroll(
  * bar in a `CircleShape` pill container (`LocalSplitMatePalette.current.surfaceContainerHigh`,
  * `6.dp` shadow elevation), paired side-by-side with an optional adjacent [floatingActionButton].
  */
+@ExperimentalMaterial3ExpressiveApi
 @Composable
 fun HorizontalFloatingToolbar(
     expanded: Boolean,
@@ -1260,6 +1896,7 @@ fun HorizontalFloatingToolbar(
  * Material 3 Expressive `VerticalFloatingToolbar` for edge-docked quick actions
  * and foldable/tablet vertical toolbars, paired with an optional [floatingActionButton].
  */
+@ExperimentalMaterial3ExpressiveApi
 @Composable
 fun VerticalFloatingToolbar(
     expanded: Boolean,
@@ -1316,19 +1953,25 @@ fun VerticalFloatingToolbar(
 
 /**
  * Material 3 Expressive uncontained `LoadingIndicator` cycling through
- * [MaterialShapes.morphSequence] without an outer circular container.
+ * [polygons] (default [LoadingIndicatorDefaults.IndeterminateIndicatorPolygons]) without an
+ * outer container. Honours reduced motion and [contentDescription] like [ContainedLoadingIndicator].
  */
+@ExperimentalMaterial3ExpressiveApi
 @Composable
 fun LoadingIndicator(
     modifier: Modifier = Modifier,
     size: Dp = 38.dp,
-    color: Color = MaterialTheme.colorScheme.primary
+    color: Color = MaterialTheme.colorScheme.primary,
+    polygons: List<RoundedPolygon> = LoadingIndicatorDefaults.IndeterminateIndicatorPolygons,
+    contentDescription: String? = null
 ) {
     ContainedLoadingIndicator(
         modifier = modifier,
         containerSize = size,
         containerColor = Color.Transparent,
-        indicatorColor = color
+        indicatorColor = color,
+        polygons = polygons,
+        contentDescription = contentDescription
     )
 }
 

@@ -1,12 +1,20 @@
 package com.splitmate.app.ui.components
 
+import android.content.Context
+import android.provider.Settings
+import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Matrix
@@ -81,6 +89,165 @@ object SplitMateMotion {
     fun fastEffectsColor(): SpringSpec<Color> = fastEffects()
     fun defaultEffectsColor(): SpringSpec<Color> = defaultEffects()
     fun slowEffectsColor(): SpringSpec<Color> = slowEffects()
+}
+
+// ==============================================================================
+// v2.3.4 MOTIONSCHEME SHIM (mirrors the material3 1.4 `MotionScheme` member names)
+// ==============================================================================
+
+/**
+ * Local stand-in for the official Material 3 Expressive `MotionScheme` interface, which does not
+ * exist in material3 1.2.1. Member names match the official API (`fastSpatialSpec()` ...
+ * `slowEffectsSpec()`) so the v3.0 upgrade is a near-mechanical swap to
+ * `MaterialTheme.motionScheme`. The short aliases (`fastSpatial()` ...) mirror [SplitMateMotion].
+ *
+ * - Spatial specs animate geometry (position, size, corner radii, polygon morphs) and may overshoot.
+ * - Effects specs animate colour, alpha and elevation and are critically damped (no overshoot).
+ *
+ * Read the active scheme through [LocalMotionScheme], which `SplitMateExpressiveTheme` provides.
+ */
+@ExperimentalMaterial3ExpressiveApi
+@Stable
+interface SplitMateMotionScheme {
+    fun <T> defaultSpatialSpec(): FiniteAnimationSpec<T>
+    fun <T> fastSpatialSpec(): FiniteAnimationSpec<T>
+    fun <T> slowSpatialSpec(): FiniteAnimationSpec<T>
+    fun <T> defaultEffectsSpec(): FiniteAnimationSpec<T>
+    fun <T> fastEffectsSpec(): FiniteAnimationSpec<T>
+    fun <T> slowEffectsSpec(): FiniteAnimationSpec<T>
+
+    fun <T> defaultSpatial(): FiniteAnimationSpec<T> = defaultSpatialSpec()
+    fun <T> fastSpatial(): FiniteAnimationSpec<T> = fastSpatialSpec()
+    fun <T> slowSpatial(): FiniteAnimationSpec<T> = slowSpatialSpec()
+    fun <T> defaultEffects(): FiniteAnimationSpec<T> = defaultEffectsSpec()
+    fun <T> fastEffects(): FiniteAnimationSpec<T> = fastEffectsSpec()
+    fun <T> slowEffects(): FiniteAnimationSpec<T> = slowEffectsSpec()
+
+    companion object {
+        /** Expressive scheme: bouncy spatial springs, backed 1:1 by [SplitMateMotion]. */
+        fun expressive(): SplitMateMotionScheme = ExpressiveSplitMateMotionScheme
+
+        /** Standard scheme: M3 standard tokens (spatial damping 0.9, no visible bounce). */
+        fun standard(): SplitMateMotionScheme = StandardSplitMateMotionScheme
+
+        /** Reduced-motion scheme: every spec snaps (used when the animator duration scale is 0). */
+        fun reduced(): SplitMateMotionScheme = ReducedSplitMateMotionScheme
+    }
+}
+
+/** Spatial spring tokens for [SplitMateMotionScheme.standard] (M3 standard motion scheme). */
+object SplitMateStandardMotionTokens {
+    const val FAST_SPATIAL_DAMPING = 0.9f
+    const val FAST_SPATIAL_STIFFNESS = 1400f
+
+    const val DEFAULT_SPATIAL_DAMPING = 0.9f
+    const val DEFAULT_SPATIAL_STIFFNESS = 700f
+
+    const val SLOW_SPATIAL_DAMPING = 0.9f
+    const val SLOW_SPATIAL_STIFFNESS = 300f
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+private object ExpressiveSplitMateMotionScheme : SplitMateMotionScheme {
+    override fun <T> defaultSpatialSpec(): FiniteAnimationSpec<T> = SplitMateMotion.defaultSpatial()
+    override fun <T> fastSpatialSpec(): FiniteAnimationSpec<T> = SplitMateMotion.fastSpatial()
+    override fun <T> slowSpatialSpec(): FiniteAnimationSpec<T> = SplitMateMotion.slowSpatial()
+    override fun <T> defaultEffectsSpec(): FiniteAnimationSpec<T> = SplitMateMotion.defaultEffects()
+    override fun <T> fastEffectsSpec(): FiniteAnimationSpec<T> = SplitMateMotion.fastEffects()
+    override fun <T> slowEffectsSpec(): FiniteAnimationSpec<T> = SplitMateMotion.slowEffects()
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+private object StandardSplitMateMotionScheme : SplitMateMotionScheme {
+    override fun <T> defaultSpatialSpec(): FiniteAnimationSpec<T> = spring(
+        dampingRatio = SplitMateStandardMotionTokens.DEFAULT_SPATIAL_DAMPING,
+        stiffness = SplitMateStandardMotionTokens.DEFAULT_SPATIAL_STIFFNESS
+    )
+
+    override fun <T> fastSpatialSpec(): FiniteAnimationSpec<T> = spring(
+        dampingRatio = SplitMateStandardMotionTokens.FAST_SPATIAL_DAMPING,
+        stiffness = SplitMateStandardMotionTokens.FAST_SPATIAL_STIFFNESS
+    )
+
+    override fun <T> slowSpatialSpec(): FiniteAnimationSpec<T> = spring(
+        dampingRatio = SplitMateStandardMotionTokens.SLOW_SPATIAL_DAMPING,
+        stiffness = SplitMateStandardMotionTokens.SLOW_SPATIAL_STIFFNESS
+    )
+
+    // Effects tokens are identical in the M3 standard and expressive schemes.
+    override fun <T> defaultEffectsSpec(): FiniteAnimationSpec<T> = SplitMateMotion.defaultEffects()
+    override fun <T> fastEffectsSpec(): FiniteAnimationSpec<T> = SplitMateMotion.fastEffects()
+    override fun <T> slowEffectsSpec(): FiniteAnimationSpec<T> = SplitMateMotion.slowEffects()
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+private object ReducedSplitMateMotionScheme : SplitMateMotionScheme {
+    override fun <T> defaultSpatialSpec(): FiniteAnimationSpec<T> = snap()
+    override fun <T> fastSpatialSpec(): FiniteAnimationSpec<T> = snap()
+    override fun <T> slowSpatialSpec(): FiniteAnimationSpec<T> = snap()
+    override fun <T> defaultEffectsSpec(): FiniteAnimationSpec<T> = snap()
+    override fun <T> fastEffectsSpec(): FiniteAnimationSpec<T> = snap()
+    override fun <T> slowEffectsSpec(): FiniteAnimationSpec<T> = snap()
+}
+
+/**
+ * CompositionLocal carrying the active [SplitMateMotionScheme]. `SplitMateExpressiveTheme`
+ * provides [SplitMateMotionScheme.expressive] (or [SplitMateMotionScheme.reduced] when the
+ * system animator duration scale is 0). Mirrors the official `MaterialTheme.motionScheme`.
+ */
+@ExperimentalMaterial3ExpressiveApi
+val LocalMotionScheme = staticCompositionLocalOf { SplitMateMotionScheme.expressive() }
+
+// ==============================================================================
+// v2.3.4 REDUCED MOTION (Settings.Global.ANIMATOR_DURATION_SCALE == 0)
+// ==============================================================================
+
+/**
+ * Optional override for the reduced-motion flag (previews, screenshot tests). `null` means
+ * "read the system setting". `SplitMateExpressiveTheme` provides the resolved system value.
+ */
+val LocalReducedMotion = compositionLocalOf<Boolean?> { null }
+
+/** Pure rule: animations count as disabled when the animator duration scale is 0 (or below). */
+fun isReducedMotionScale(animatorDurationScale: Float): Boolean = animatorDurationScale <= 0f
+
+/**
+ * Reads `Settings.Global.ANIMATOR_DURATION_SCALE` (the "Remove animations" accessibility toggle
+ * and the developer option). Returns `false` if the setting cannot be read.
+ */
+fun isReducedMotionEnabled(context: Context): Boolean = try {
+    isReducedMotionScale(
+        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
+    )
+} catch (_: Exception) {
+    false
+}
+
+/**
+ * Composable accessor for the reduced-motion flag. [LocalReducedMotion] wins when set; otherwise
+ * the system animator duration scale is read once per context. When `true`, look-alike loaders
+ * render a static shape, wavy bars render flat (amplitude 0) and [LocalMotionScheme] snaps.
+ */
+@Composable
+fun rememberReducedMotionEnabled(): Boolean {
+    val context = LocalContext.current
+    val systemValue = remember(context) { isReducedMotionEnabled(context) }
+    return LocalReducedMotion.current ?: systemValue
+}
+
+// ==============================================================================
+// v2.3.4 TRIP GUIDE GEOMETRY TOKENS (Decision #5)
+// ==============================================================================
+
+/**
+ * Trip Guide geometry tokens. Member avatars stay [MaterialShapes.Cookie9Sided] /
+ * [MaterialShapes.SoftBurst] (v2.3.2 P4_02); 16.dp squircles are ONLY for place/POI thumbnails.
+ */
+object GuideShapeTokens {
+    val PlaceThumbnailCorner: Dp = 16.dp
+    val PlaceThumbnail: RoundedCornerShape = RoundedCornerShape(PlaceThumbnailCorner)
+    val MemberAvatarPolygon: RoundedPolygon get() = MaterialShapes.Cookie9Sided
+    val MemberAvatarAltPolygon: RoundedPolygon get() = MaterialShapes.SoftBurst
 }
 
 /**
