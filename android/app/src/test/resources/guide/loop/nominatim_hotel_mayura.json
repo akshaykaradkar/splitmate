@@ -1,0 +1,18 @@
+[
+  {
+    "place_id": 123456789,
+    "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+    "osm_type": "way",
+    "osm_id": 987654321,
+    "lat": "15.3179821",
+    "lon": "76.4705134",
+    "category": "tourism",
+    "type": "hotel",
+    "place_rank": 30,
+    "importance": 0.00008,
+    "addresstype": "tourism",
+    "name": "Hotel Mayura Bhuvaneshwari",
+    "display_name": "Hotel Mayura Bhuvaneshwari, Kamalapur, Hosapete taluk, Vijayanagara, Karnataka, 583221, India",
+    "boundingbox": ["15.3178000", "15.3181000", "76.4703000", "76.4707000"]
+  }
+]

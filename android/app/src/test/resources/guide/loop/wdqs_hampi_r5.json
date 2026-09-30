@@ -1,0 +1,72 @@
+{
+  "head": {
+    "vars": ["place", "placeLabel", "coord", "dist", "class"]
+  },
+  "results": {
+    "bindings": [
+      {
+        "place": {"type": "uri", "value": "http://www.wikidata.org/entity/Q1050711"},
+        "placeLabel": {"xml:lang": "en", "type": "literal", "value": "Virupaksha Temple"},
+        "coord": {"datatype": "http://www.opengis.net/ont/geosparql#wktLiteral", "type": "literal", "value": "Point(76.4599 15.335)"},
+        "dist": {"datatype": "http://www.w3.org/2001/XMLSchema#double", "type": "literal", "value": "0.012"},
+        "class": {"type": "uri", "value": "http://www.wikidata.org/entity/Q44539"}
+      },
+      {
+        "place": {"type": "uri", "value": "http://www.wikidata.org/entity/Q1050711"},
+        "placeLabel": {"xml:lang": "en", "type": "literal", "value": "Virupaksha Temple"},
+        "coord": {"datatype": "http://www.opengis.net/ont/geosparql#wktLiteral", "type": "literal", "value": "Point(76.4599 15.335)"},
+        "dist": {"datatype": "http://www.w3.org/2001/XMLSchema#double", "type": "literal", "value": "0.012"},
+        "class": {"type": "uri", "value": "http://www.wikidata.org/entity/Q570116"}
+      },
+      {
+        "place": {"type": "uri", "value": "http://www.wikidata.org/entity/Q5639020"},
+        "placeLabel": {"xml:lang": "en", "type": "literal", "value": "Hampi Bazaar"},
+        "coord": {"datatype": "http://www.opengis.net/ont/geosparql#wktLiteral", "type": "literal", "value": "Point(76.4610 15.3365)"},
+        "dist": {"datatype": "http://www.w3.org/2001/XMLSchema#double", "type": "literal", "value": "0.204"},
+        "class": {"type": "uri", "value": "http://www.wikidata.org/entity/Q570116"}
+      },
+      {
+        "place": {"type": "uri", "value": "http://www.wikidata.org/entity/Q98765432"},
+        "placeLabel": {"type": "literal", "value": "Q98765432"},
+        "coord": {"datatype": "http://www.opengis.net/ont/geosparql#wktLiteral", "type": "literal", "value": "Point(76.4620 15.3370)"},
+        "dist": {"datatype": "http://www.w3.org/2001/XMLSchema#double", "type": "literal", "value": "0.310"},
+        "class": {"type": "uri", "value": "http://www.wikidata.org/entity/Q44539"}
+      },
+      {
+        "place": {"type": "uri", "value": "http://www.wikidata.org/entity/Q5710432"},
+        "placeLabel": {"xml:lang": "en", "type": "literal", "value": "Hemakuta Hill"},
+        "coord": {"datatype": "http://www.opengis.net/ont/geosparql#wktLiteral", "type": "literal", "value": "Point(76.4575 15.3342)"},
+        "dist": {"datatype": "http://www.w3.org/2001/XMLSchema#double", "type": "literal", "value": "0.389"},
+        "class": {"type": "uri", "value": "http://www.wikidata.org/entity/Q22698"}
+      },
+      {
+        "place": {"type": "uri", "value": "http://www.wikidata.org/entity/Q5710432"},
+        "placeLabel": {"xml:lang": "en", "type": "literal", "value": "Hemakuta Hill"},
+        "coord": {"datatype": "http://www.opengis.net/ont/geosparql#wktLiteral", "type": "literal", "value": "Point(76.4575 15.3342)"},
+        "dist": {"datatype": "http://www.w3.org/2001/XMLSchema#double", "type": "literal", "value": "0.389"},
+        "class": {"type": "uri", "value": "http://www.wikidata.org/entity/Q839954"}
+      },
+      {
+        "place": {"type": "uri", "value": "http://www.wikidata.org/entity/Q111222333"},
+        "placeLabel": {"xml:lang": "en", "type": "literal", "value": "Mango Tree Restaurant"},
+        "coord": {"datatype": "http://www.opengis.net/ont/geosparql#wktLiteral", "type": "literal", "value": "Point(76.4580 15.3380)"},
+        "dist": {"datatype": "http://www.w3.org/2001/XMLSchema#double", "type": "literal", "value": "0.598"},
+        "class": {"type": "uri", "value": "http://www.wikidata.org/entity/Q11707"}
+      },
+      {
+        "place": {"type": "uri", "value": "http://www.wikidata.org/entity/Q222333444"},
+        "placeLabel": {"xml:lang": "en", "type": "literal", "value": "Lunar crater (bad globe)"},
+        "coord": {"datatype": "http://www.opengis.net/ont/geosparql#wktLiteral", "type": "literal", "value": "<http://www.wikidata.org/entity/Q405> Point(10 10)"},
+        "dist": {"datatype": "http://www.w3.org/2001/XMLSchema#double", "type": "literal", "value": "0.700"},
+        "class": {"type": "uri", "value": "http://www.wikidata.org/entity/Q570116"}
+      },
+      {
+        "place": {"type": "uri", "value": "http://www.wikidata.org/entity/Q3500123"},
+        "placeLabel": {"xml:lang": "kn", "type": "literal", "value": "  ಕಮಲಾಪುರ\u202e ಕೆರೆ  "},
+        "coord": {"datatype": "http://www.opengis.net/ont/geosparql#wktLiteral", "type": "literal", "value": "Point(76.4700 15.3050)"},
+        "dist": {"datatype": "http://www.w3.org/2001/XMLSchema#double", "type": "literal", "value": "3.420"},
+        "class": {"type": "uri", "value": "http://www.wikidata.org/entity/Q22698"}
+      }
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "head": {"vars": ["place", "placeLabel", "coord", "dist", "class"]},
+  "results": {
+    "bindings": [
+      {"place": {"type": "uri", "value": "http://www.wikidata.org/entity/Q1050711"}, "placeLabel": {"xml:lang": "en", "type": "literal", "value": "Virupaksha Temple"}, "coord": {"type": "literal", "value": "Point(76.4599 15.335)"}, "dist": {"type": "literal", "value": "0.012"}, "class": {"type": "uri", "value": "http://www.wikidata.org/entity/Q44539"}},
+      {"place": {"type": "uri", "value": "http://www.wikidata.org/entity/Q5639020"}, "placeLabel": {"xml:lang": "en", "type": "literal", "value": "Hampi Bazaar"}, "coord": {"type": "literal", "value": "Point(76.4610 15.3365)"}, "dist": {"type": "literal", "value": "0.204"}, "class": {"type": "uri", "value": "http://www.wikidata.org/entity/Q570116"}},
+      {"place": {"type": "uri", "value": "http://www.wikidata.org/entity/Q5710432"}, "placeLabel": {"xml:lang": "en", "type": "literal", "value": "Hemakuta Hill"}, "coord": {"type": "literal", "value": "Point(76.4575 15.3342)"}, "dist": {"type": "literal", "value": "0.389"}, "class": {"type": "uri", "value": "http://www.wikidata.org/entity/Q839954"}},
+      {"place": {"type": "uri", "value": "http://www.wikidata.org/entity/Q111222333"}, "placeLabel": {"xml:lang": "en", "type": "literal", "value": "Mango Tree Restaurant"}, "coord": {"type": "literal", "value": "Point(76.4580 15.3380)"}, "dist": {"type": "literal", "value": "0.598"}, "class": {"type": "uri", "value": "http://www.wikidata.org/entity/Q11707"}},
+      {"place": {"type": "uri", "value": "http://www.wikidata.org/entity/Q3500123"}, "placeLabel": {"xml:lang": "kn", "type": "literal", "value": "ಕಮಲಾಪುರ ಕೆರೆ"}, "coord": {"type": "literal", "value": "Point(76.4700 15.3050)"}, "dist": {"type": "literal", "value": "3.420"}, "class": {"type": "uri", "value": "http://www.wikidata.org/entity/Q22698"}},
+      {"place": {"type": "uri", "value": "http://www.wikidata.org/entity/Q4763318"}, "placeLabel": {"xml:lang": "en", "type": "literal", "value": "Anegundi Fort"}, "coord": {"type": "literal", "value": "Point(76.4930 15.3530)"}, "dist": {"type": "literal", "value": "6.810"}, "class": {"type": "uri", "value": "http://www.wikidata.org/entity/Q57821"}},
+      {"place": {"type": "uri", "value": "http://www.wikidata.org/entity/Q7128974"}, "placeLabel": {"xml:lang": "en", "type": "literal", "value": "Pampa Sarovar"}, "coord": {"type": "literal", "value": "Point(76.4800 15.3900)"}, "dist": {"type": "literal", "value": "8.900"}, "class": {"type": "uri", "value": "http://www.wikidata.org/entity/Q44539"}}
+    ]
+  }
+}
