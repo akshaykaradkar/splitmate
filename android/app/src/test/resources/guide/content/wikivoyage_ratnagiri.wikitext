@@ -1,0 +1,18 @@
+{{pagebanner|Ratnagiri banner.jpg}}
+<!-- SYNTHETIC FIXTURE: hand-authored in Wikivoyage style for SplitMate unit tests; not the live article. -->
+'''Ratnagiri''' is a port city on the [[Konkan]] coast of [[Maharashtra]], famous for Alphonso mangoes.
+
+==Get in==
+Ratnagiri station is on the [[Konkan Railway]].
+
+==See==
+{{see|name=Ratnadurg Fort|lat=16.9967|long=73.2728|content=Sea fort with a lighthouse and views of the harbour.}}
+{{see|name=Thibaw Palace|lat=16.9870|long=73.2980|content=Built for the exiled last king of Burma.}}
+
+==Eat==
+Try ''Alphonso'' mangoes in season and a Malvani fish thali anywhere near the bus stand.
+
+==Sleep==
+{{sleep|name=MTDC Ganpatipule|lat=17.1450|long=73.2660|content=Beach resort 25 km north of the city.}}
+
+{{outlinecity}}

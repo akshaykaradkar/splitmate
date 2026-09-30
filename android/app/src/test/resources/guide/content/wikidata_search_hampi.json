@@ -1,0 +1,41 @@
+{
+  "_fixture": "SYNTHETIC: hand-authored wbsearchentities (formatversion=2) response. QIDs Q90001xx are illustrative placeholders, not verified live ids.",
+  "searchinfo": { "search": "Hampi" },
+  "search": [
+    {
+      "id": "Q9000101", "title": "Q9000101", "pageid": 90001010,
+      "concepturi": "http://www.wikidata.org/entity/Q9000101", "repository": "wikidata",
+      "url": "//www.wikidata.org/wiki/Q9000101",
+      "display": { "label": { "value": "Hampi", "language": "en" }, "description": { "value": "village in Vijayanagara district, Karnataka, India", "language": "en" } },
+      "label": "Hampi", "description": "village in Vijayanagara district, Karnataka, India",
+      "match": { "type": "label", "language": "en", "text": "Hampi" }
+    },
+    {
+      "id": "Q9000102", "title": "Q9000102", "pageid": 90001020,
+      "concepturi": "http://www.wikidata.org/entity/Q9000102", "repository": "wikidata",
+      "url": "//www.wikidata.org/wiki/Q9000102",
+      "label": "Group of Monuments at Hampi", "description": "UNESCO World Heritage Site in Karnataka, India",
+      "match": { "type": "alias", "language": "en", "text": "Hampi" }, "aliases": ["Hampi"]
+    },
+    {
+      "id": "Q9000103", "title": "Q9000103", "pageid": 90001030,
+      "label": "Hampi Express", "description": "train service in India",
+      "match": { "type": "label", "language": "en", "text": "Hampi Express" }
+    },
+    {
+      "id": "Q9000104", "title": "Q9000104", "pageid": 90001040,
+      "label": "Hampi", "description": "Wikimedia disambiguation page",
+      "match": { "type": "label", "language": "en", "text": "Hampi" }
+    },
+    {
+      "id": "Q9000105", "title": "Q9000105", "pageid": 90001050,
+      "label": "Kannada University, Hampi", "description": "public university in Karnataka, India",
+      "match": { "type": "alias", "language": "en", "text": "Hampi University" }
+    },
+    {
+      "id": "not-a-qid", "title": "junk", "label": "Should be skipped"
+    }
+  ],
+  "search-continue": 7,
+  "success": 1
+}

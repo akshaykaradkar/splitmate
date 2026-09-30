@@ -1,0 +1,40 @@
+{
+  "_fixture": "SYNTHETIC: hand-authored wbgetentities response for the Ratnagiri search (city vs district vs station). QIDs are illustrative placeholders.",
+  "entities": {
+    "Q9000201": {
+      "type": "item", "id": "Q9000201",
+      "labels": { "en": { "language": "en", "value": "Ratnagiri" }, "mr": { "language": "mr", "value": "रत्नागिरी" } },
+      "descriptions": { "en": { "language": "en", "value": "city in Maharashtra, India" } },
+      "claims": {
+        "P31": [ { "mainsnak": { "snaktype": "value", "property": "P31", "datavalue": { "value": { "entity-type": "item", "numeric-id": 515, "id": "Q515" }, "type": "wikibase-entityid" } }, "type": "statement", "rank": "normal" } ],
+        "P17": [ { "mainsnak": { "snaktype": "value", "property": "P17", "datavalue": { "value": { "entity-type": "item", "numeric-id": 668, "id": "Q668" }, "type": "wikibase-entityid" } }, "type": "statement", "rank": "normal" } ],
+        "P625": [ { "mainsnak": { "snaktype": "value", "property": "P625", "datavalue": { "value": { "latitude": 16.99, "longitude": 73.3, "globe": "http://www.wikidata.org/entity/Q2" }, "type": "globecoordinate" } }, "type": "statement", "rank": "normal" } ]
+      },
+      "sitelinks": { "enwiki": { "site": "enwiki", "title": "Ratnagiri", "badges": [] }, "enwikivoyage": { "site": "enwikivoyage", "title": "Ratnagiri", "badges": [] } }
+    },
+    "Q9000202": {
+      "type": "item", "id": "Q9000202",
+      "labels": { "en": { "language": "en", "value": "Ratnagiri district" } },
+      "descriptions": { "en": { "language": "en", "value": "district of Maharashtra, India" } },
+      "claims": {
+        "P31": [ { "mainsnak": { "snaktype": "value", "property": "P31", "datavalue": { "value": { "entity-type": "item", "numeric-id": 1149652, "id": "Q1149652" }, "type": "wikibase-entityid" } }, "type": "statement", "rank": "normal" } ],
+        "P17": [ { "mainsnak": { "snaktype": "value", "property": "P17", "datavalue": { "value": { "entity-type": "item", "numeric-id": 668, "id": "Q668" }, "type": "wikibase-entityid" } }, "type": "statement", "rank": "normal" } ],
+        "P625": [ { "mainsnak": { "snaktype": "value", "property": "P625", "datavalue": { "value": { "latitude": 17.0, "longitude": 73.5, "globe": "http://www.wikidata.org/entity/Q2" }, "type": "globecoordinate" } }, "type": "statement", "rank": "normal" } ],
+        "P18": [ { "mainsnak": { "snaktype": "value", "property": "P18", "datavalue": { "value": "Ratnagiri coast.jpg", "type": "string" } }, "type": "statement", "rank": "normal" } ]
+      },
+      "sitelinks": { "enwiki": { "site": "enwiki", "title": "Ratnagiri district", "badges": [] }, "enwikivoyage": { "site": "enwikivoyage", "title": "Ratnagiri district", "badges": [] } }
+    },
+    "Q9000203": {
+      "type": "item", "id": "Q9000203",
+      "labels": { "en": { "language": "en", "value": "Ratnagiri railway station" } },
+      "descriptions": { "en": { "language": "en", "value": "railway station in Maharashtra, India" } },
+      "claims": {
+        "P31": [ { "mainsnak": { "snaktype": "value", "property": "P31", "datavalue": { "value": { "entity-type": "item", "numeric-id": 55488, "id": "Q55488" }, "type": "wikibase-entityid" } }, "type": "statement", "rank": "normal" } ],
+        "P17": [ { "mainsnak": { "snaktype": "value", "property": "P17", "datavalue": { "value": { "entity-type": "item", "numeric-id": 668, "id": "Q668" }, "type": "wikibase-entityid" } }, "type": "statement", "rank": "normal" } ],
+        "P625": [ { "mainsnak": { "snaktype": "value", "property": "P625", "datavalue": { "value": { "latitude": 16.97, "longitude": 73.35, "globe": "http://www.wikidata.org/entity/Q2" }, "type": "globecoordinate" } }, "type": "statement", "rank": "normal" } ]
+      },
+      "sitelinks": { "enwiki": { "site": "enwiki", "title": "Ratnagiri railway station", "badges": [] } }
+    }
+  },
+  "success": 1
+}

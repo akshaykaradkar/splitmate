@@ -1,0 +1,64 @@
+{{pagebanner|Hampi banner.jpg|caption=Boulders and ruins at dawn}}
+<!-- SYNTHETIC FIXTURE: hand-authored in Wikivoyage style for SplitMate unit tests. Not a verbatim copy of the live article; QIDs and revision ids are illustrative. -->
+'''Hampi''' is a village in [[Karnataka]] and the site of the ruins of the capital of the [[w:Vijayanagara Empire|Vijayanagara Empire]].
+
+==Understand==
+Hampi sits on the south bank of the [[Tungabhadra]] river.<ref>ASI survey, 2019.</ref> The ruins are a [[UNESCO World Heritage Site]].
+
+==Get in==
+{{listing|type=go|name=Hospet Junction|lat=15.2689|long=76.3909|content=Nearest railway station, 13 km away.}}
+
+==See==
+<!-- Listings sorted by area -->
+===Hampi Bazaar===
+{{see
+| name=Virupaksha Temple | alt=Pampapathi Temple | url= | email=
+| address=Hampi Bazaar | lat=15.3350 | long=76.4600 | directions=West end of the bazaar
+| phone= | tollfree= | fax=
+| hours=6AM–1PM, 5PM–9PM | price=Free; camera ₹50
+| wikipedia=Virupaksha Temple, Hampi | image=Virupaksha_Temple,_Hampi.jpg | wikidata=Q9000111
+| lastedit=2024-01-15
+| content=The '''oldest''' functioning temple in Hampi, dedicated to [[Shiva|Lord Shiva]]. Its 50-metre ''gopuram'' dominates the bazaar.<ref name="asi">[https://asi.nic.in ASI]</ref> Temple elephant ''Lakshmi'' blesses visitors in the morning.
+}}
+* {{see | name=Hemakuta Hill | lat=15.3342 | long=76.4585 | image=Hemakuta hill temples.jpg | content=Cluster of early temples; the best '''sunset''' spot near the bazaar,
+{{km|0.5}} south of Virupaksha.<!-- verify distance --> }}
+{{see|name=Sasivekalu Ganesha|lat=15.3336|long=76.4584|content=A 2.4-m monolithic Ganesha; see [[File:Sasivekalu.jpg|thumb|Statue [[Ganesha|image]]]] nearby.}}
+
+===Royal Centre===
+{{see|name=Lotus Mahal|alt=Kamal Mahal|lat=15.3190|long=76.4715|hours=8AM–5:30PM|price=Indians ₹40, foreigners ₹600 (combined ticket with [[#Vittala Temple|Vittala Temple]])|content=An elegant two-storey pavilion mixing Hindu and Islamic styles, inside the [[Zenana Enclosure]].}}
+{{see|name=Elephant Stables|lat=15.3196|long=76.4739|content=Eleven domed chambers that housed the royal elephants.}}
+
+===Vittala area===
+{{see|name=Vittala Temple|lat=15.3432|long=76.4751|price=₹40|wikidata=q9000112|content=Home to the iconic '''[[Stone Chariot (Hampi)|stone chariot]]''' and the musical pillars. <!-- hidden note --> The {{lang|kn|ವಿಠ್ಠಲ}} temple complex is Hampi's showpiece; arrive early to beat the crowds, since tour buses arrive by 10AM and the site gets crowded and hot. The 56 musical pillars are cordoned off after damage by visitors, but guides will still explain how they were played. The complex is a pleasant 2-km walk along the river from the bazaar, past the King's Balance and several smaller shrines.}}
+{{see|name=Hampi Archaeological Museum|lat=|long=|hours=10AM–5PM, closed Fridays|content=Sculptures and a scale model of the ruins, at [[Kamalapura]].}}
+{{see|name=Virupaksha Temple|content=Duplicate-name listing to test id collision.}}
+
+== Do ==
+{{do|name=Coracle ride|alt=|lat=15.3445|long=76.4712|price=₹100 per person|content=Ride a round ''parisal'' basket boat on the Tungabhadra.}}
+{{listing|type=do|name=Bouldering at Hampi|content=World-class granite boulders around [[Virupapur Gaddi]].}}
+{{buy|name=Hampi Bazaar stalls|content=Should be ignored.}}
+
+==Buy==
+{{listing|name=Souvenir shop|content=In a Buy section; a listing without type here is ignored.}}
+
+==Eat==
+{{eat|name=Mango Tree|lat=15.3371|long=76.4588|hours=7:30AM–9:30PM|price=Mains ₹150–300|content=A Hampi institution with river views; thali recommended. &nbsp;Cash only &amp; no alcohol.}}
+{{eat|name=Laughing Buddha|lat=15.3399|long=76.4602|content=Chill café across the river at <b>Virupapur Gaddi</b>.<br/>Reach by ferry.}}
+{{listing|type=eat|name=Gopi Rooftop|content=Multi-cuisine rooftop.<script>alert(1)</script>}}
+
+==Drink==
+{{drink|name=Chai Point Hampi|content=Tea stall by the bus stand.}}
+
+==Sleep==
+{{sleep|name=Evolve Back Kamalapura Palace|lat=15.2926|long=76.4670|price=₹25,000+|address=Kamalapura|image=File:Evolve Back Hampi.jpg|content=Luxury resort built in the style of the Vijayanagara palaces.}}
+{{sleep|name=Hampi's Boulders|lat=15.3502|long=76.4211|content=Eco resort near the river.}}
+===Budget===
+{{listing|type=sleep|name=Gopi Guest House|address=Hampi Bazaar|content=Popular backpacker guest house.}}
+{{sleep|name=|content=Nameless listing is skipped.}}
+
+==Stay safe==
+Watch out for monkeys near the temples.
+
+{{usablecity}}
+{{geo|15.335|76.46|zoom=13}}
+{{IsPartOf|Vijayanagara district}}

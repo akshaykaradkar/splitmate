@@ -1,0 +1,74 @@
+{
+  "_fixture": "SYNTHETIC: hand-authored wbgetentities (props=labels|descriptions|claims|sitelinks, languages=en|hi|kn|mr, sitefilter=enwikivoyage|enwiki) response. Claims trimmed to the properties the guide reads (P17, P18, P31, P625). QIDs are illustrative placeholders.",
+  "entities": {
+    "Q9000101": {
+      "type": "item", "id": "Q9000101",
+      "labels": { "en": { "language": "en", "value": "Hampi" }, "hi": { "language": "hi", "value": "हम्पी" }, "kn": { "language": "kn", "value": "ಹಂಪೆ" } },
+      "descriptions": { "en": { "language": "en", "value": "village in Vijayanagara district, Karnataka, India" } },
+      "claims": {
+        "P31": [ { "mainsnak": { "snaktype": "value", "property": "P31", "datavalue": { "value": { "entity-type": "item", "numeric-id": 532, "id": "Q532" }, "type": "wikibase-entityid" }, "datatype": "wikibase-item" }, "type": "statement", "rank": "normal" } ],
+        "P17": [ { "mainsnak": { "snaktype": "value", "property": "P17", "datavalue": { "value": { "entity-type": "item", "numeric-id": 668, "id": "Q668" }, "type": "wikibase-entityid" }, "datatype": "wikibase-item" }, "type": "statement", "rank": "normal" } ],
+        "P625": [
+          { "mainsnak": { "snaktype": "value", "property": "P625", "datavalue": { "value": { "latitude": 0, "longitude": 0, "altitude": null, "precision": 1, "globe": "http://www.wikidata.org/entity/Q2" }, "type": "globecoordinate" }, "datatype": "globe-coordinate" }, "type": "statement", "rank": "deprecated" },
+          { "mainsnak": { "snaktype": "value", "property": "P625", "datavalue": { "value": { "latitude": 15.335, "longitude": 76.46, "altitude": null, "precision": 0.0001, "globe": "http://www.wikidata.org/entity/Q2" }, "type": "globecoordinate" }, "datatype": "globe-coordinate" }, "type": "statement", "rank": "normal" }
+        ],
+        "P18": [ { "mainsnak": { "snaktype": "value", "property": "P18", "datavalue": { "value": "Virupaksha Temple, Hampi.jpg", "type": "string" }, "datatype": "commonsMedia" }, "type": "statement", "rank": "normal" } ]
+      },
+      "sitelinks": {
+        "enwiki": { "site": "enwiki", "title": "Hampi", "badges": [] },
+        "enwikivoyage": { "site": "enwikivoyage", "title": "Hampi", "badges": [] }
+      }
+    },
+    "Q9000102": {
+      "type": "item", "id": "Q9000102",
+      "labels": { "en": { "language": "en", "value": "Group of Monuments at Hampi" } },
+      "descriptions": { "en": { "language": "en", "value": "UNESCO World Heritage Site in Karnataka, India" } },
+      "claims": {
+        "P31": [
+          { "mainsnak": { "snaktype": "value", "property": "P31", "datavalue": { "value": { "entity-type": "item", "numeric-id": 9259, "id": "Q9259" }, "type": "wikibase-entityid" } }, "type": "statement", "rank": "normal" },
+          { "mainsnak": { "snaktype": "value", "property": "P31", "datavalue": { "value": { "entity-type": "item", "numeric-id": 570116, "id": "Q570116" }, "type": "wikibase-entityid" } }, "type": "statement", "rank": "normal" }
+        ],
+        "P17": [ { "mainsnak": { "snaktype": "value", "property": "P17", "datavalue": { "value": { "entity-type": "item", "numeric-id": 668, "id": "Q668" }, "type": "wikibase-entityid" } }, "type": "statement", "rank": "normal" } ],
+        "P625": [ { "mainsnak": { "snaktype": "value", "property": "P625", "datavalue": { "value": { "latitude": 15.3144, "longitude": 76.4712, "altitude": null, "precision": 0.0001, "globe": "http://www.wikidata.org/entity/Q2" }, "type": "globecoordinate" } }, "type": "statement", "rank": "normal" } ],
+        "P18": [ { "mainsnak": { "snaktype": "value", "property": "P18", "datavalue": { "value": "Hampi Stone Chariot.jpg", "type": "string" } }, "type": "statement", "rank": "normal" } ]
+      },
+      "sitelinks": { "enwiki": { "site": "enwiki", "title": "Group of Monuments at Hampi", "badges": [] } }
+    },
+    "Q9000103": {
+      "type": "item", "id": "Q9000103",
+      "labels": { "en": { "language": "en", "value": "Hampi Express" } },
+      "descriptions": { "en": { "language": "en", "value": "train service in India" } },
+      "claims": {
+        "P31": [ { "mainsnak": { "snaktype": "value", "property": "P31", "datavalue": { "value": { "entity-type": "item", "numeric-id": 9999001, "id": "Q9999001" }, "type": "wikibase-entityid" } }, "type": "statement", "rank": "normal" } ],
+        "P17": [ { "mainsnak": { "snaktype": "value", "property": "P17", "datavalue": { "value": { "entity-type": "item", "numeric-id": 668, "id": "Q668" }, "type": "wikibase-entityid" } }, "type": "statement", "rank": "normal" } ]
+      },
+      "sitelinks": { "enwiki": { "site": "enwiki", "title": "Hampi Express", "badges": [] } }
+    },
+    "Q9000104": {
+      "type": "item", "id": "Q9000104",
+      "labels": { "en": { "language": "en", "value": "Hampi" } },
+      "descriptions": { "en": { "language": "en", "value": "Wikimedia disambiguation page" } },
+      "claims": {
+        "P31": [ { "mainsnak": { "snaktype": "value", "property": "P31", "datavalue": { "value": { "entity-type": "item", "numeric-id": 4167410, "id": "Q4167410" }, "type": "wikibase-entityid" } }, "type": "statement", "rank": "normal" } ]
+      },
+      "sitelinks": { "enwiki": { "site": "enwiki", "title": "Hampi (disambiguation)", "badges": [] } }
+    },
+    "Q9000105": {
+      "type": "item", "id": "Q9000105",
+      "labels": { "kn": { "language": "kn", "value": "ಕನ್ನಡ ವಿಶ್ವವಿದ್ಯಾಲಯ" }, "mr": { "language": "mr", "value": "कन्नड विद्यापीठ" } },
+      "descriptions": {},
+      "claims": {
+        "P31": [ { "mainsnak": { "snaktype": "value", "property": "P31", "datavalue": { "value": { "entity-type": "item", "numeric-id": 3918, "id": "Q3918" }, "type": "wikibase-entityid" } }, "type": "statement", "rank": "normal" } ],
+        "P17": [ { "mainsnak": { "snaktype": "value", "property": "P17", "datavalue": { "value": { "entity-type": "item", "numeric-id": 668 }, "type": "wikibase-entityid" } }, "type": "statement", "rank": "normal" } ],
+        "P625": [
+          { "mainsnak": { "snaktype": "value", "property": "P625", "datavalue": { "value": { "latitude": 15.31, "longitude": 76.41, "globe": "http://www.wikidata.org/entity/Q2" }, "type": "globecoordinate" } }, "type": "statement", "rank": "normal" },
+          { "mainsnak": { "snaktype": "value", "property": "P625", "datavalue": { "value": { "latitude": 15.3, "longitude": 76.42, "globe": "http://www.wikidata.org/entity/Q2" }, "type": "globecoordinate" } }, "type": "statement", "rank": "preferred" }
+        ],
+        "P18": [ { "mainsnak": { "snaktype": "novalue", "property": "P18" }, "type": "statement", "rank": "normal" } ]
+      },
+      "sitelinks": {}
+    },
+    "Q9000199": { "id": "Q9000199", "missing": "" }
+  },
+  "success": 1
+}

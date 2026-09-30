@@ -1,0 +1,26 @@
+{{pagebanner|Gokarna Om Beach banner.jpg|caption=Om Beach}}
+<!-- SYNTHETIC FIXTURE: hand-authored in Wikivoyage style for SplitMate unit tests; not the live article. -->
+'''Gokarna''' is a temple town and beach destination in [[Uttara Kannada]], [[Karnataka]].
+
+== Understand ==
+A pilgrimage town for centuries, Gokarna became a quieter alternative to [[Goa]] in the 1990s.
+
+==See==
+{{see|name=Mahabaleshwar Temple|alt=Mahabaleshwara|lat=14.5433|long=74.3172|hours=6AM–12:30PM, 5PM–8PM|content=Houses the ''Atmalinga''; men must remove shirts. {{nowrap|Dress code}} applies.}}
+===Beaches===
+{{see|name=Om Beach|lat= 14.5196 |long= 74.3242 |content=Shaped like the ॐ symbol.}}{{see|name=Kudle Beach|lat=14.5285|long=74.3187|content=Laid-back beach with shacks.}}
+{{listing|type=see|name=Half Moon Beach|lat=14.5114|long=74.3268|content=Reachable only on foot or by boat from [[#Om Beach|Om Beach]].}}
+{{listing|type=see|name=Paradise Beach|lat=14.5040|long=74.3285}}
+
+==Do==
+{{do|name=Beach trek|content=The 8-km coastal trek from Gokarna Beach to Paradise Beach takes about four hours.}}
+
+==Eat==
+{{eat|name=Namaste Café|lat=14.5199|long=74.3239|content=Om Beach institution.}}
+
+==Sleep==
+{{sleep|name=SwaSwara|lat=14.5236|long=74.3210|price=₹20,000+|content=Wellness resort above Om Beach.}}
+{{sleep|name=Zostel Gokarna|lat=14.5302|long=74.3178|content=Hostel on the cliff above Kudle Beach.}}
+
+{{usablecity}}
+{{IsPartOf|Uttara Kannada}}

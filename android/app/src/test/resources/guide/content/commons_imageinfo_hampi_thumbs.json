@@ -1,0 +1,39 @@
+{
+  "_fixture": "SYNTHETIC: hand-authored batched Commons imageinfo response (iiurlwidth=320) for Hampi listing thumbnails: one public-domain file with no Artist, one protocol-relative URL/licence, one missing file.",
+  "batchcomplete": true,
+  "query": {
+    "pages": [
+      {
+        "pageid": 80000002, "ns": 6, "title": "File:Hemakuta hill temples.jpg", "imagerepository": "local",
+        "imageinfo": [
+          {
+            "thumburl": "//upload.wikimedia.org/wikipedia/commons/thumb/c/cd/Hemakuta_hill_temples.jpg/320px-Hemakuta_hill_temples.jpg",
+            "thumbwidth": 320, "thumbheight": 240,
+            "url": "//upload.wikimedia.org/wikipedia/commons/c/cd/Hemakuta_hill_temples.jpg",
+            "descriptionurl": "//commons.wikimedia.org/wiki/File:Hemakuta_hill_temples.jpg",
+            "extmetadata": {
+              "Artist": { "value": "<bdi><a href=\"https://www.wikidata.org/wiki/Q000\" class=\"extiw\">Anonymous</a></bdi>", "source": "commons-desc-page" },
+              "LicenseShortName": { "value": "CC BY 2.0", "source": "commons-desc-page", "hidden": "" },
+              "LicenseUrl": { "value": "http://creativecommons.org/licenses/by/2.0", "source": "commons-desc-page", "hidden": "" }
+            }
+          }
+        ]
+      },
+      {
+        "pageid": 80000003, "ns": 6, "title": "File:Evolve Back Hampi.jpg", "imagerepository": "local",
+        "imageinfo": [
+          {
+            "thumburl": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/ef/Evolve_Back_Hampi.jpg/320px-Evolve_Back_Hampi.jpg",
+            "thumbwidth": 320, "thumbheight": 213,
+            "url": "https://upload.wikimedia.org/wikipedia/commons/e/ef/Evolve_Back_Hampi.jpg",
+            "descriptionurl": "https://commons.wikimedia.org/wiki/File:Evolve_Back_Hampi.jpg",
+            "extmetadata": {
+              "LicenseShortName": { "value": "Public domain", "source": "commons-desc-page", "hidden": "" }
+            }
+          }
+        ]
+      },
+      { "ns": 6, "title": "File:Virupaksha Temple, Hampi.jpg", "missing": true, "known": false }
+    ]
+  }
+}

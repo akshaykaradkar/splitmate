@@ -1,0 +1,10 @@
+{
+  "_fixture": "SYNTHETIC: hand-authored wbsearchentities response. Ratnagiri is both a city and a district (audit §1.1). QIDs are illustrative placeholders.",
+  "searchinfo": { "search": "Ratnagiri" },
+  "search": [
+    { "id": "Q9000201", "title": "Q9000201", "label": "Ratnagiri", "description": "city in Maharashtra, India", "match": { "type": "label", "language": "en", "text": "Ratnagiri" } },
+    { "id": "Q9000202", "title": "Q9000202", "label": "Ratnagiri district", "description": "district of Maharashtra, India", "match": { "type": "label", "language": "en", "text": "Ratnagiri district" } },
+    { "id": "Q9000203", "title": "Q9000203", "label": "Ratnagiri railway station", "description": "railway station in Maharashtra, India", "match": { "type": "label", "language": "en", "text": "Ratnagiri railway station" } }
+  ],
+  "success": 1
+}
