@@ -108,6 +108,8 @@ data class TripGuideUiState(
 sealed interface TripGuideEffect {
     /** Launch ACTION_VIEW on [primaryUri]; on ActivityNotFoundException open [fallbackUrl]. */
     data class OpenMaps(val primaryUri: String, val fallbackUrl: String) : TripGuideEffect
+    /** Launch ACTION_VIEW [primaryUri] wrapped in Intent.createChooser([chooserTitle]); fallback [fallbackUrl]. */
+    data class OpenMapsChooser(val primaryUri: String, val fallbackUrl: String, val chooserTitle: String) : TripGuideEffect
     data class OpenUrl(val url: String) : TripGuideEffect
     data class CopyToClipboard(val label: String, val text: String) : TripGuideEffect
     data class ShareText(val text: String) : TripGuideEffect
