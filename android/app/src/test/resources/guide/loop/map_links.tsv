@@ -1,0 +1,66 @@
+# Map-link / pasted-text coordinate fixtures for MapLinkCoordinateParserTest.
+# Columns (TAB separated): input <TAB> expected pattern (CoordinatePattern name or NONE) <TAB> lat <TAB> lng
+# Hand-built from real Google Maps URL shapes (audit §2.3 / §4.1). Tolerance 1e-5.
+#
+# --- Rung 1: !3d/!4d place pin (last pair wins) ---
+https://www.google.com/maps/place/Hotel+Mayura+Bhuvaneshwari/@15.3345,76.4562,17z/data=!3m1!4b1!4m9!3m8!1s0x3bb77e1ec1f4b2a5:0x6b1b5f4b0c8e1a2d!5m2!4m1!1i2!8m2!3d15.3350123!4d76.4600456!16s%2Fg%2F11c1q2	PLACE_PIN	15.3350123	76.4600456
+https://www.google.com/maps/place/Hampi/@15.30,76.40,12z/data=!4m6!3m5!1s0x0:0x0!8m2!3d15.1!4d76.1!3d15.335!4d76.46	PLACE_PIN	15.335	76.46
+https://www.google.com/maps/place/Hampi/data=%214m2%213m1%211s0x0:0x0%213d15.335%214d76.46	PLACE_PIN	15.335	76.46
+https://www.google.com/maps/place/Sydney+Opera+House/@-33.8567844,151.2152967,17z/data=!3m1!4b1!4m6!3m5!1s0x6b12ae665e892fdd:0x3133f8d75a1ac251!8m2!3d-33.8567844!4d151.2152967	PLACE_PIN	-33.8567844	151.2152967
+https://www.google.com/maps/place/Virupaksha+Temple/@15.3350,76.4589,17z/data=!4m6!3m5!1s0x0:0x0!8m2!3d15.33500!4d76.45890!16zL20vMGRnNnc	PLACE_PIN	15.335	76.4589
+https://www.google.com/maps/place/X/@15.30,76.40,15z/data=!3d95.1!4d76.4	VIEWPORT	15.30	76.40
+# --- Rung 2: explicit query parameters ---
+https://maps.google.com/?q=15.335,76.46	QUERY_PARAM	15.335	76.46
+https://maps.google.com/maps?q=15.335%2C76.46&z=15	QUERY_PARAM	15.335	76.46
+https://www.google.com/maps?q=15.335,+76.46	QUERY_PARAM	15.335	76.46
+https://www.google.com/maps/search/?api=1&query=15.335%2C76.46	QUERY_PARAM	15.335	76.46
+https://maps.google.com/?ll=15.335,76.46&z=14	QUERY_PARAM	15.335	76.46
+https://www.google.com/maps/@?api=1&map_action=map&center=15.335,76.46&zoom=12	QUERY_PARAM	15.335	76.46
+https://maps.google.com/maps?saddr=12.9716,77.5946&daddr=15.335,76.46	QUERY_PARAM	15.335	76.46
+https://www.google.co.in/maps?q=loc:15.335,76.46	QUERY_PARAM	15.335	76.46
+https://maps.google.com/?q=-33.8568,151.2153	QUERY_PARAM	-33.8568	151.2153
+https://maps.google.com/?q=15.335%252C76.46	QUERY_PARAM	15.335	76.46
+https://www.google.com/maps/dir/?api=1&destination=15.335%2C76.46&travelmode=walking	QUERY_PARAM	15.335	76.46
+# --- Rung 3: path coordinates ---
+https://www.google.com/maps/search/15.335,+76.46?entry=tts	PATH	15.335	76.46
+https://www.google.com/maps/search/15.335,76.46/@15.3,76.4,15z	PATH	15.335	76.46
+https://www.google.com/maps/place/15.335,76.46	PATH	15.335	76.46
+https://www.google.com/maps/dir/12.9716,77.5946/15.335,76.46/	PATH	15.335	76.46
+https://www.google.com/maps/dir/Current+Location/15.335,76.46/@15.2,76.3,10z/data=!4m2!4m1!3e2	PATH	15.335	76.46
+# --- Rung 4: geo: URIs ---
+geo:15.335,76.46	GEO_URI	15.335	76.46
+geo:15.335,76.46?z=17	GEO_URI	15.335	76.46
+geo:0,0?q=15.335,76.46(Hotel%20Mayura)	QUERY_PARAM	15.335	76.46
+geo:-33.8568,151.2153;u=35	GEO_URI	-33.8568	151.2153
+geo:15,76	GEO_URI	15.0	76.0
+# --- Rung 5: DMS (incl. Google DMS place URLs) ---
+15°20'06"N 76°27'36"E	DMS	15.335	76.46
+15°20'06.0"N, 76°27'36.0"E	DMS	15.335	76.46
+33°51'24.4"S 151°12'55.1"E	DMS	-33.8567778	151.2153056
+40°26′46″N 79°58′56″W	DMS	40.4461111	-79.9822222
+15°20.1'N 76°27.6'E	DMS	15.335	76.46
+https://www.google.com/maps/place/15%C2%B020'06.0%22N+76%C2%B027'36.0%22E/@15.335,76.46,17z	DMS	15.335	76.46
+# --- Rung 6: hemisphere decimals ---
+15.335° N, 76.46° E	HEMISPHERE_DECIMAL	15.335	76.46
+15.335N 76.46E	HEMISPHERE_DECIMAL	15.335	76.46
+33.8568 S, 151.2153 E	HEMISPHERE_DECIMAL	-33.8568	151.2153
+# --- Rung 7: viewport (approximate) ---
+https://www.google.com/maps/@15.335,76.46,15z	VIEWPORT	15.335	76.46
+https://www.google.com/maps/place/Hampi/@15.3350,76.4600,14z/data=!3m1!4b1	VIEWPORT	15.335	76.46
+https://www.google.com/maps/@15.335,76.46,3a,75y,90t/data=!3m6!1e1	VIEWPORT	15.335	76.46
+https://www.google.com/maps/@15.335,76.46,500m/data=!3m1!1e3	VIEWPORT	15.335	76.46
+Meet near @15.335,76.46	VIEWPORT	15.335	76.46
+# --- Rung 8: plain decimal pairs in pasted text ---
+15.335, 76.46	DECIMAL_PAIR	15.335	76.46
+Our hotel: 15.33501,76.46002 near the bazaar	DECIMAL_PAIR	15.33501	76.46002
+-33.8568 151.2153	DECIMAL_PAIR	-33.8568	151.2153
+15.335; 76.46	DECIMAL_PAIR	15.335	76.46
+# --- No coordinate ---
+https://maps.google.com/?q=Hotel+Mayura+Bhuvaneshwari,+Kamalapur&ftid=0x3bb77e1ec1f4b2a5:0x6b1b5f4b0c8e1a2d	NONE
+0.00, 0.00	NONE
+95.123, 76.46	NONE
+15.335, 190.46	NONE
+geo:0,0?q=Hotel+Mayura	NONE
+Room 12.5, floor 3.2	NONE
+https://maps.app.goo.gl/abcDEF123	NONE
+https://www.google.com/maps/place/X/data=!3d95.5!4d76.4	NONE
