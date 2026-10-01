@@ -32,6 +32,16 @@
         <package android:name="com.dreamplug.androidapp" />               <!-- CRED UPI -->
         <package android:name="in.amazon.mShop.android.shopping" />       <!-- Amazon Pay -->
         <package android:name="com.whatsapp" />                           <!-- WhatsApp UPI -->
+        <!-- v2.3.4 Trip Guide: maps hand-off (Directions / Navigate / Open in other app) -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="geo" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="google.navigation" />
+        </intent>
+        <package android:name="com.google.android.apps.maps" />           <!-- Google Maps -->
     </queries>
 
     <application
@@ -85,7 +95,8 @@
             </intent-filter>
 
             <!-- System Share Sheet Receiver for WhatsApp Sync messages (SM2_... shared as text/plain),
-                 consumed by MainActivity.handleIncomingSyncIntent via Intent.EXTRA_TEXT -->
+                 consumed by MainActivity.handleIncomingSyncIntent via Intent.EXTRA_TEXT.
+                 v2.3.4: Google Maps place shares arriving here pre-fill the trip's "Set stay" sheet. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
