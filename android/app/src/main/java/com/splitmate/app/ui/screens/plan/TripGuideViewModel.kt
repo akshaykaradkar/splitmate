@@ -134,6 +134,10 @@ class TripGuideViewModel(
     private var guideJobIsBackground = false
     private var publishJob: Job? = null
     private var heartbeatJob: Job? = null
+    /** v2.3.4 QA: only the latest stay lookup (link parse / Nominatim) may update stayFeedback. */
+    private var stayJob: Job? = null
+    /** v2.3.4 QA: only the latest stay-centred WDQS dragnet may merge into the pack. */
+    private var stayNearbyJob: Job? = null
 
     private sealed interface RetryAction {
         data class Resolve(val query: String, val hint: String?) : RetryAction
@@ -325,7 +329,8 @@ class TripGuideViewModel(
             return
         }
         setStayFeedback(StayInputFeedback.Working)
-        viewModelScope.launch { handleStayResolution(repository.resolveStayText(input), fromNominatim = false) }
+        stayJob?.cancel()
+        stayJob = viewModelScope.launch { handleStayResolution(repository.resolveStayText(input), fromNominatim = false) }
     }
 
     override fun searchStayByName(nameHint: String) {
@@ -340,7 +345,8 @@ class TripGuideViewModel(
             return
         }
         setStayFeedback(StayInputFeedback.Working)
-        viewModelScope.launch {
+        stayJob?.cancel()
+        stayJob = viewModelScope.launch {
             val result = repository.geocodeStay(name, stored?.pack?.destination?.label)
             handleStayResolution(result, fromNominatim = true)
         }
@@ -352,6 +358,7 @@ class TripGuideViewModel(
             setStayFeedback(StayInputFeedback.Rejected(MSG_LISTING_NO_LOCATION))
             return
         }
+        stayJob?.cancel()
         previewFromNominatim = false
         setStayFeedback(StayInputFeedback.Preview(loc, PlanManifestCodec.sanitizeLabel(place.name), approximate = false))
     }
@@ -584,7 +591,8 @@ class TripGuideViewModel(
     private fun fetchNearbyAroundStay(stay: StayPin) {
         val pack = stored?.pack ?: return
         if (!network.state.value.online || !flags.wdqsEnabled) return
-        viewModelScope.launch {
+        stayNearbyJob?.cancel()
+        stayNearbyJob = viewModelScope.launch {
             val merged = withNetwork { repository.fetchNearbyInto(pack, stay.location) } ?: return@launch
             val saved = repository.persist(merged) ?: transientStored(merged)
             if (hydratingQid == null && stored?.pack?.destination?.qid == merged.destination.qid) {
