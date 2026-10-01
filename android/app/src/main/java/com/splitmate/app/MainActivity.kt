@@ -30,6 +30,7 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         val database = SplitMateRoomDatabase.getInstance(applicationContext)
+        com.splitmate.app.ui.category.CustomExpenseCategoryStore.ensureLoaded(applicationContext)
         splitMateViewModel = ViewModelProvider(
             this,
             object : ViewModelProvider.Factory {

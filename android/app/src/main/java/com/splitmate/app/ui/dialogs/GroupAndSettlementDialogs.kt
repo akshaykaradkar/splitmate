@@ -69,6 +69,11 @@ import com.splitmate.app.ui.components.MaterialShapes
 import com.splitmate.app.ui.components.toShape
 import com.splitmate.app.ui.extractTravelTicketFromTitle
 import com.splitmate.app.ui.formatTravelExpenseTitle
+import com.splitmate.app.ui.category.CustomExpenseCategoryStore
+import com.splitmate.app.ui.category.ExpenseCategoryIcons
+import com.splitmate.app.ui.category.ExpenseCategoryPickerSheet
+import com.splitmate.app.ui.category.MoreCategoriesChip
+import androidx.compose.runtime.collectAsState
 import java.util.Locale
 
 @Composable
@@ -110,6 +115,21 @@ fun EditLoggedExpenseDialog(
         Triple("Groceries", Icons.Rounded.ShoppingCart, false),
         Triple("Drinks & Outing", Icons.Rounded.LocalBar, false)
     )
+
+    // v2.3.4: full category catalog + user-created categories (title-based; existing data untouched).
+    val customCategories by CustomExpenseCategoryStore.categories.collectAsState()
+    var showCategorySheet by remember { mutableStateOf(false) }
+    if (showCategorySheet) {
+        ExpenseCategoryPickerSheet(
+            selectedTitle = editedTitle,
+            showTrainPnr = false,
+            onDismiss = { showCategorySheet = false },
+            onSelect = { cat ->
+                showCategorySheet = false
+                editedTitle = cat.title
+            }
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -176,6 +196,37 @@ fun EditLoggedExpenseDialog(
                                 )
                             }
                         }
+                    }
+                    // v2.3.4: the user's own categories + "More" (full catalog / create new).
+                    items(customCategories, key = { "edit_custom_${it.title}" }) { cat ->
+                        val isSelected = editedTitle.equals(cat.title, ignoreCase = true)
+                        Surface(
+                            onClick = { editedTitle = cat.title },
+                            shape = SplitMateTheme.RadiusBadge,
+                            color = if (isSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.SurfaceMuted
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = ExpenseCategoryIcons.forKey(cat.iconKey),
+                                    contentDescription = null,
+                                    tint = if (isSelected) SplitMateTheme.ScreenBg else SplitMateTheme.PrimaryDark,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = cat.title,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) SplitMateTheme.ScreenBg else SplitMateTheme.PrimaryDark
+                                )
+                            }
+                        }
+                    }
+                    item(key = "edit_more_categories") {
+                        MoreCategoriesChip(onClick = { showCategorySheet = true })
                     }
                 }
 

@@ -2590,6 +2590,11 @@ fun isFlightTicketExpense(
 }
 
 fun resolveExpenseCategoryIcon(title: String): ImageVector {
+    // v2.3.4: new built-in / user-created categories match by exact title first.
+    // Legacy preset titles never match here, so existing expenses keep their icons.
+    com.splitmate.app.ui.category.exactExpenseCategoryFor(title)?.let {
+        return com.splitmate.app.ui.category.ExpenseCategoryIcons.forKey(it.iconKey)
+    }
     val lower = title.lowercase()
     return when {
         isFlightTicketExpense(title) -> Icons.Rounded.FlightTakeoff
@@ -2622,6 +2627,9 @@ fun resolveExpenseCategoryIcon(title: String): ImageVector {
 }
 
 fun resolveExpenseCategoryBadgeColors(title: String, isDark: Boolean): Pair<Color, Color> {
+    com.splitmate.app.ui.category.exactExpenseCategoryFor(title)?.let {
+        return com.splitmate.app.ui.category.ExpenseCategoryIcons.toneColors(it.tone, isDark)
+    }
     val lower = title.lowercase()
     return when {
         isFlightTicketExpense(title) ->

@@ -181,6 +181,10 @@ abstract class SplitMateRoomDatabase : RoomDatabase() {
 
         fun getInstance(context: Context): SplitMateRoomDatabase {
             return INSTANCE ?: synchronized(this) {
+                // v2.3.4: keep a copy of the existing trips DB before the 7 -> 8 migration ever runs.
+                if (INSTANCE == null) {
+                    PreUpgradeDatabaseBackup.snapshotOnce(context.applicationContext, "splitmate_native_room.db", "before_v2.3.4")
+                }
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     SplitMateRoomDatabase::class.java,

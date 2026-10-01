@@ -211,6 +211,9 @@ fun QuickExpenseScreen(
     var expenseCategoryTitle by remember { mutableStateOf("Dinner & Food") }
     var showEditTitleDialog by remember { mutableStateOf(false) }
     var pendingCommitAfterCategorySelection by remember { mutableStateOf(false) }
+    // v2.3.4: expanded category catalog + user-created categories (title-based; no data change).
+    var showCategorySheet by remember { mutableStateOf(false) }
+    val customCategories by com.splitmate.app.ui.category.CustomExpenseCategoryStore.categories.collectAsState()
     var showGroupDropdown by remember { mutableStateOf(false) }
     var editingFriend by remember { mutableStateOf<GroupMemberEntity?>(null) }
 
@@ -260,6 +263,17 @@ fun QuickExpenseScreen(
             payerId = payerId,
             currentUserId = currentUserId
         ).filter { it.plusOneCent }.map { it.memberId }.toSet()
+    }
+
+    if (showCategorySheet) {
+        com.splitmate.app.ui.category.ExpenseCategoryPickerSheet(
+            selectedTitle = expenseCategoryTitle,
+            onDismiss = { showCategorySheet = false },
+            onSelect = { cat ->
+                showCategorySheet = false
+                if (cat.opensPnrFlow) onOpenPnrDirectSplit() else expenseCategoryTitle = cat.title
+            }
+        )
     }
 
     if (showEditTitleDialog) {
@@ -374,6 +388,23 @@ fun QuickExpenseScreen(
                 "Party & Drinks" to Icons.Rounded.LocalBar
             )
         }
+        var showDialogCategorySheet by remember { mutableStateOf(false) }
+        if (showDialogCategorySheet) {
+            com.splitmate.app.ui.category.ExpenseCategoryPickerSheet(
+                selectedTitle = draftTitle,
+                onDismiss = { showDialogCategorySheet = false },
+                onSelect = { cat ->
+                    showDialogCategorySheet = false
+                    if (cat.opensPnrFlow) {
+                        showEditTitleDialog = false
+                        onOpenPnrDirectSplit()
+                    } else {
+                        draftTitle = cat.title
+                        isTravelTicketMode = cat.title.contains("Flight", ignoreCase = true)
+                    }
+                }
+            )
+        }
         AlertDialog(
             onDismissRequest = {
                 showEditTitleDialog = false
@@ -429,6 +460,56 @@ fun QuickExpenseScreen(
                                 label = {
                                     Text(
                                         text = catLabel,
+                                        fontFamily = SplitMateBrandFontFamily,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            )
+                        }
+                        // v2.3.4: the user's own categories, then the full catalog.
+                        items(customCategories, key = { "dlg_custom_${it.title}" }) { cat ->
+                            FilterChip(
+                                selected = draftTitle.equals(cat.title, ignoreCase = true),
+                                onClick = {
+                                    com.splitmate.app.ui.performCrispTactileHaptic(context, dialogView, heavy = false)
+                                    draftTitle = cat.title
+                                    isTravelTicketMode = false
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = com.splitmate.app.ui.category.ExpenseCategoryIcons.forKey(cat.iconKey),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        text = cat.title,
+                                        fontFamily = SplitMateBrandFontFamily,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            )
+                        }
+                        item(key = "dlg_more_categories") {
+                            FilterChip(
+                                selected = false,
+                                onClick = {
+                                    com.splitmate.app.ui.performCrispTactileHaptic(context, dialogView, heavy = false)
+                                    showDialogCategorySheet = true
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.MoreHoriz,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        text = "More categories",
                                         fontFamily = SplitMateBrandFontFamily,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold
@@ -929,11 +1010,64 @@ fun QuickExpenseScreen(
                             }
                         }
 
+                        // v2.3.4: user-created categories sit right after the built-in pills.
+                        items(customCategories, key = { "custom_cat_${it.title}" }) { cat ->
+                            val isChosen = expenseCategoryTitle.equals(cat.title, ignoreCase = true)
+                            val selectedBg = if (isDark) activePalette.primary else activePalette.onSurface
+                            val selectedFg = if (isDark) activePalette.onPrimary else activePalette.surfaceContainerLowest
+                            Surface(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    expenseCategoryTitle = cat.title
+                                },
+                                shape = RoundedCornerShape(if (isChosen) 10.dp else 20.dp),
+                                color = if (isChosen) selectedBg else QuickExpenseThemeTokens.SageSurface,
+                                border = BorderStroke(1.dp, if (isChosen) selectedBg else QuickExpenseThemeTokens.AccentSage),
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .heightIn(min = 32.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = com.splitmate.app.ui.category.ExpenseCategoryIcons.forKey(cat.iconKey),
+                                        contentDescription = null,
+                                        tint = if (isChosen) selectedFg else QuickExpenseThemeTokens.SageText,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(
+                                        text = cat.shortLabel.take(16),
+                                        fontFamily = SplitMateBrandFontFamily,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isChosen) selectedFg else QuickExpenseThemeTokens.SageText
+                                    )
+                                }
+                            }
+                        }
+
+                        // v2.3.4: "More" opens the full catalog (Breakfast, Auto, Bike Rental, Fuel…) + create-your-own.
+                        item(key = "more_categories") {
+                            com.splitmate.app.ui.category.MoreCategoriesChip(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    showCategorySheet = true
+                                },
+                                modifier = Modifier.minimumInteractiveComponentSize()
+                            )
+                        }
+
                         // Inline Custom Title / Note Chip (replaces the separate terracotta banner)
                         item {
                             val isCustomNote = quickCategoryPills.none { (_, fullCat, _) ->
                                 expenseCategoryTitle.equals(fullCat, ignoreCase = true)
-                            } && expenseCategoryTitle.isNotBlank()
+                            } && customCategories.none { expenseCategoryTitle.equals(it.title, ignoreCase = true) } &&
+                                expenseCategoryTitle.isNotBlank()
+                            // A picked catalog category (e.g. "Breakfast") shows its own icon instead of the pencil.
+                            val matchedCatalogCategory = com.splitmate.app.ui.category.exactExpenseCategoryFor(expenseCategoryTitle)
                             val selectedBg = if (isDark) activePalette.primary else activePalette.onSurface
                             val selectedFg = if (isDark) activePalette.onPrimary else activePalette.surfaceContainerLowest
                             val customChipCorner by androidx.compose.animation.core.animateDpAsState(
@@ -955,8 +1089,10 @@ fun QuickExpenseScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Rounded.Edit,
-                                        contentDescription = "Custom Note",
+                                        imageVector = if (isCustomNote && matchedCatalogCategory != null) {
+                                            com.splitmate.app.ui.category.ExpenseCategoryIcons.forKey(matchedCatalogCategory.iconKey)
+                                        } else Icons.Rounded.Edit,
+                                        contentDescription = if (isCustomNote && matchedCatalogCategory != null) null else "Custom Note",
                                         tint = if (isCustomNote) selectedFg else textSecondary,
                                         modifier = Modifier.size(13.dp)
                                     )
