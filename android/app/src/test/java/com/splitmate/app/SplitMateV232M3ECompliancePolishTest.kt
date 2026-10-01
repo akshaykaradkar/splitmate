@@ -96,11 +96,11 @@ class SplitMateV232M3ECompliancePolishTest {
     // ------------------------------------------------------------------
 
     @Test
-    fun `R_01 build gradle is versionCode 51 versionName 2_3_3`() {
+    fun `R_01 build gradle is versionCode 52 versionName 2_3_4`() {
         val gradle = resolveBuildGradleFile().readText()
-        assertTrue(gradle.contains("versionCode 51"))
-        assertTrue(gradle.contains("versionName \"2.3.3\""))
-        assertFalse(gradle.contains("versionName \"2.3.2\""))
+        assertTrue(gradle.contains("versionCode 52"))
+        assertTrue(gradle.contains("versionName \"2.3.4\""))
+        assertFalse(gradle.contains("versionName \"2.3.3\""))
     }
 
     // ------------------------------------------------------------------

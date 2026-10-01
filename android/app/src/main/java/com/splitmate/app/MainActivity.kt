@@ -11,6 +11,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.splitmate.app.data.SplitMateRoomDatabase
+import com.splitmate.app.data.guide.MapShareTextDetector
+import com.splitmate.app.data.guide.TripGuideServices
 import com.splitmate.app.ui.SplitMateMaterial3ExpressiveTheme
 import com.splitmate.app.ui.SplitMateViewModel
 
@@ -105,6 +107,11 @@ class MainActivity : ComponentActivity() {
                             rawPayloadOrMessage = sharedText,
                             openGroupAfterMerge = true
                         )
+                    } else if (MapShareTextDetector.isMapShareText(sharedText)) {
+                        // v2.3.4: a Google Maps / geo: share becomes the pending "Set trip stay"
+                        // input. The open trip's Plan tab consumes it (stay preview, never auto-saved).
+                        incomingIntent.putExtra("com.splitmate.SYNC_CONSUMED", true)
+                        TripGuideServices.offerSharedStayText(sharedText)
                     }
                 }
             }

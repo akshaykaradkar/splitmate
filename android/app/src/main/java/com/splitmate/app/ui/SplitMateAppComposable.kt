@@ -283,7 +283,9 @@ fun SplitMateApp(viewModel: SplitMateViewModel) {
     }
 
     // Real-Time Live Cloud Stream (< 1s delivery whenever any group member logs/edits an expense or settles up)
-    val liveStreamTopicKey = remember(uiState.hasRegisteredProfile, uiState.userPhone, uiState.groups) {
+    // v2.3.4: the OPENED trip's plan topic rides the same stream (added early so it stays inside the
+    // 12-topic cap). A plan-topic event triggers a Plan-tab plan sync, never a ledger sync.
+    val liveStreamTopicKey = remember(uiState.hasRegisteredProfile, uiState.userPhone, uiState.groups, uiState.openedGroupDetailId) {
         if (!uiState.hasRegisteredProfile) {
             emptyList()
         } else {
@@ -292,6 +294,9 @@ fun SplitMateApp(viewModel: SplitMateViewModel) {
                 if (normPhone.length == 10) {
                     add("splitmate_v2_idx_$normPhone")
                 }
+                uiState.openedGroupDetailId
+                    ?.takeIf { opened -> uiState.groups.any { it.groupId == opened && !it.isDemoSeed } }
+                    ?.let { opened -> add(com.splitmate.app.data.CloudGroupSyncRepository.groupPlanTopicForGroupId(opened)) }
                 uiState.groups.filter { !it.isDemoSeed }.forEach { g ->
                     add(com.splitmate.app.data.CloudGroupSyncRepository.groupTopicForGroupId(g.groupId))
                 }
@@ -303,7 +308,11 @@ fun SplitMateApp(viewModel: SplitMateViewModel) {
             while (true) {
                 val changedTopic = com.splitmate.app.data.CloudGroupSyncRepository.awaitLiveCloudTopicChange(liveStreamTopicKey)
                 if (!changedTopic.isNullOrBlank()) {
-                    viewModel.handleLiveCloudTopicEvent(context, changedTopic)
+                    if (com.splitmate.app.data.guide.TripGuideServices.isPlanTopic(changedTopic)) {
+                        uiState.openedGroupDetailId?.let { com.splitmate.app.data.guide.TripGuideServices.onPlanTopicChanged(it) }
+                    } else {
+                        viewModel.handleLiveCloudTopicEvent(context, changedTopic)
+                    }
                     kotlinx.coroutines.delay(500L)
                 } else {
                     kotlinx.coroutines.delay(3_000L)

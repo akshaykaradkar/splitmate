@@ -8,6 +8,8 @@ package com.splitmate.app.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import com.splitmate.app.ui.screens.plan.PlanSubView
+import com.splitmate.app.ui.screens.plan.TripPlanTabHost
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
@@ -947,6 +949,9 @@ fun TripHomeScreen(
     }
 
     var isFabMenuExpanded by remember { mutableStateOf(false) }
+    // v2.3.4: Plan sub-view (Bookings | Explore | Loop) reported by TripPlanTabHost. The Add-Booking
+    // FAB belongs to the Bookings sub-view only, so it hides on Explore / Loop (audit 5.9).
+    var planSubView by remember(resolvedGroupId) { mutableStateOf(PlanSubView.BOOKINGS) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val openGroupDebtCents = remember(netBalancesMap) {
         netBalancesMap.values.filter { it > 0L }.sum()
@@ -1005,7 +1010,8 @@ fun TripHomeScreen(
             )
         },
         floatingActionButton = {
-            if (selectedSectionTab != TripHubSectionTab.PEOPLE && selectedSectionTab != TripHubSectionTab.MONEY) {
+            val planHidesFab = selectedSectionTab == TripHubSectionTab.PLAN && planSubView != PlanSubView.BOOKINGS
+            if (selectedSectionTab != TripHubSectionTab.PEOPLE && selectedSectionTab != TripHubSectionTab.MONEY && !planHidesFab) {
                 FloatingActionButtonMenu(
                     expanded = isFabMenuExpanded,
                     onToggle = {
@@ -1207,12 +1213,19 @@ fun TripHomeScreen(
                 }
 
                 TripHubSectionTab.PLAN -> {
-                    TripHubPlanTimelineView(
-                        classifiedExpenses = filteredClassifiedExpenses,
-                        groupMembers = groupMembers,
-                        onOpenTrainPnrReviewClick = onOpenTrainPnrReviewClick,
-                        onOpenFlightReviewClick = onOpenFlightReviewClick,
-                        onLogQuickExpenseClick = onLogQuickExpenseClick
+                    // v2.3.4: Bookings | Explore | Loop. The existing timeline is the Bookings sub-view, unchanged.
+                    TripPlanTabHost(
+                        groupId = resolvedGroupId,
+                        bookingsContent = {
+                            TripHubPlanTimelineView(
+                                classifiedExpenses = filteredClassifiedExpenses,
+                                groupMembers = groupMembers,
+                                onOpenTrainPnrReviewClick = onOpenTrainPnrReviewClick,
+                                onOpenFlightReviewClick = onOpenFlightReviewClick,
+                                onLogQuickExpenseClick = onLogQuickExpenseClick
+                            )
+                        },
+                        onSubViewChanged = { planSubView = it }
                     )
                 }
 
