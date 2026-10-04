@@ -110,7 +110,8 @@ class WikimediaGuideContentSource(
 }
 
 class NominatimStayGeocoder(private val geocoder: NominatimGeocoder) : StayGeocoder {
-    override suspend fun geocode(nameHint: String, destinationLabel: String?) = geocoder.geocode(nameHint, destinationLabel)
+    // v2.3.5 (#3): full name -> name + locality -> name + destination, limit 3, max 3 requests.
+    override suspend fun geocode(nameHint: String, destinationLabel: String?) = geocoder.geocodeSmart(nameHint, destinationLabel)
 }
 
 class NtfyPlanSyncTransport(private val sync: NtfyPlanManifestSync) : PlanSyncTransport {

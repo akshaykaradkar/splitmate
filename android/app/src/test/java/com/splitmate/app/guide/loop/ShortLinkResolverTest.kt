@@ -49,7 +49,7 @@ class ShortLinkResolverTest {
         assertEquals(76.4600456, r.location.lng, 1e-9)
         assertEquals(CoordinatePrecision.EXACT, r.precision)
         assertEquals("Hotel Mayura Bhuvaneshwari", r.label)
-        assertEquals(listOf(ProbeMethod.HEAD to "https://maps.app.goo.gl/abc123"), f.calls)
+        assertEquals(listOf(ProbeMethod.GET to "https://maps.app.goo.gl/abc123"), f.calls)
     }
 
     @Test
@@ -105,18 +105,18 @@ class ShortLinkResolverTest {
     }
 
     @Test
-    fun `HEAD refused with 405 falls back to GET`(): Unit = runBlocking {
+    fun `GET refused with 405 falls back to HEAD`(): Unit = runBlocking {
         val f = FakeRedirectFetcher { method, url ->
             when {
-                url == "https://maps.app.goo.gl/h405" && method == ProbeMethod.HEAD -> RedirectProbe(405, null)
-                url == "https://maps.app.goo.gl/h405" && method == ProbeMethod.GET -> RedirectProbe(302, placeWithPin)
+                url == "https://maps.app.goo.gl/h405" && method == ProbeMethod.GET -> RedirectProbe(405, null)
+                url == "https://maps.app.goo.gl/h405" && method == ProbeMethod.HEAD -> RedirectProbe(302, placeWithPin)
                 else -> RedirectProbe(200, null)
             }
         }
         val r = resolver(f).resolve("https://maps.app.goo.gl/h405")
         assertTrue(r is StayResolution.Resolved)
         assertEquals(
-            listOf(ProbeMethod.HEAD to "https://maps.app.goo.gl/h405", ProbeMethod.GET to "https://maps.app.goo.gl/h405"),
+            listOf(ProbeMethod.GET to "https://maps.app.goo.gl/h405", ProbeMethod.HEAD to "https://maps.app.goo.gl/h405"),
             f.calls
         )
     }

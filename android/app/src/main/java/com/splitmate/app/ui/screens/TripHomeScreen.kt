@@ -50,6 +50,9 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.automirrored.rounded.ExitToApp
 import androidx.compose.material.icons.rounded.AccountBalanceWallet
+import androidx.compose.material.icons.rounded.LocalActivity
+import androidx.compose.material.icons.rounded.LocalMall
+import androidx.compose.material.icons.rounded.Restaurant
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Apartment
 import androidx.compose.material.icons.rounded.EventSeat
@@ -223,6 +226,9 @@ enum class TripHubBookingCategory(val filterTitle: String, val icon: ImageVector
     STAY("Stays", Icons.Rounded.Apartment),
     RENTAL("Rentals", Icons.Rounded.TwoWheeler),
     CAB("Cabs", Icons.Rounded.DirectionsCar),
+    FOOD("Food & Drinks", Icons.Rounded.Restaurant),
+    ACTIVITIES("Activities", Icons.Rounded.LocalActivity),
+    SHOPPING("Shopping", Icons.Rounded.LocalMall),
     GENERAL("Other", Icons.AutoMirrored.Rounded.ReceiptLong)
 }
 
@@ -265,15 +271,28 @@ fun SplitMateViewModel.recordSettlement(
  * Strictly checks `TRAIN` before `FLIGHT` so 10-digit PNRs, 5-digit train numbers, `"Train/Flight"`
  * prefixes, and train E-Ticket PDFs without an airline/flight number are never misclassified as Flights.
  */
-fun classifyGroupExpenseForTripHub(expense: ExpenseEntity): TripHubBookingCategory {
+fun classifyGroupExpenseForTripHub(expense: ExpenseEntity, customCategories: List<com.splitmate.app.ui.category.ExpenseCategory> = emptyList()): TripHubBookingCategory {
+    // 0. Structured category written by the PNR / travel flows wins (unchanged since v2.0).
     when (expense.expenseCategory.trim().uppercase(Locale.US)) {
         "TRAIN" -> return TripHubBookingCategory.TRAIN
         "FLIGHT" -> return TripHubBookingCategory.FLIGHT
         "STAY", "HOTEL" -> return TripHubBookingCategory.STAY
         "RENTAL" -> return TripHubBookingCategory.RENTAL
         "CAB" -> return TripHubBookingCategory.CAB
-        "FOOD", "DINING", "GROCERIES", "SHOPPING", "GENERAL" -> return TripHubBookingCategory.GENERAL
+        "FOOD", "DINING" -> return TripHubBookingCategory.FOOD
+        "GROCERIES", "SHOPPING" -> return TripHubBookingCategory.SHOPPING
     }
+
+    // 0b. v2.3.5: an explicit category chip (categoryRef) is the user's intent; travel tickets still
+    // fall through to the ticket detectors below so boarding-pass / train cards are unchanged.
+    val refBucket = expense.categoryRef?.takeIf { it.isNotBlank() }?.let { ref ->
+        com.splitmate.app.ui.category.ExpenseBucketResolver.resolveRef(ref, expense.title, customCategories)
+            ?.let { com.splitmate.app.ui.category.ExpenseBucketResolver.resolveBucket(it) }
+    }
+    if (refBucket != null && refBucket != com.splitmate.app.ui.category.SpendBucket.TRAVEL_TICKETS) {
+        return tripHubCategoryForBucket(refBucket, expense.title)
+    }
+
     val rawTitle = expense.title.trim()
     val lower = rawTitle.replace(Regex("""train/flight|flight/train""", RegexOption.IGNORE_CASE), "train").lowercase(Locale.US)
     val parsedTicket = extractTravelTicketFromTitle(rawTitle)
@@ -330,8 +349,45 @@ fun classifyGroupExpenseForTripHub(expense: ExpenseEntity): TripHubBookingCatego
         return TripHubBookingCategory.CAB
     }
 
-    // 6. General Shared Expense
+    // 6. v2.3.5: anything that used to land in "Other" now goes through the category catalog
+    // (built-in exact titles + group-shared custom categories with their parent bucket), then a
+    // conservative food keyword pass (breakfast / lunch / dinner ...).
+    val titleBucket = com.splitmate.app.ui.category.ExpenseBucketResolver.resolveRef(null, rawTitle, customCategories)
+        ?.let { com.splitmate.app.ui.category.ExpenseBucketResolver.resolveBucket(it) }
+    if (titleBucket != null &&
+        titleBucket != com.splitmate.app.ui.category.SpendBucket.OTHER &&
+        titleBucket != com.splitmate.app.ui.category.SpendBucket.TRAVEL_TICKETS
+    ) {
+        return tripHubCategoryForBucket(titleBucket, rawTitle)
+    }
+    if (Regex("""\b(breakfast|lunch|dinner|brunch|snacks?|food|meal|restaurant|cafe|café|dhaba|tea|chai|coffee|drinks|juice|biryani|thali|seafood|fish)\b""").containsMatchIn(lower)) {
+        return TripHubBookingCategory.FOOD
+    }
+    if (Regex("""\b(fuel|petrol|diesel|toll|parking)\b""").containsMatchIn(lower)) {
+        return TripHubBookingCategory.CAB
+    }
+
+    // 7. General Shared Expense
     return TripHubBookingCategory.GENERAL
+}
+
+/** v2.3.5: parent spend bucket -> Trip Hub card/filter archetype. */
+internal fun tripHubCategoryForBucket(
+    bucket: com.splitmate.app.ui.category.SpendBucket,
+    title: String
+): TripHubBookingCategory = when (bucket) {
+    com.splitmate.app.ui.category.SpendBucket.STAY -> TripHubBookingCategory.STAY
+    com.splitmate.app.ui.category.SpendBucket.LOCAL_TRANSPORT ->
+        if (Regex("""\b(rental|enfield|moped|scooter|bike|scooty|two wheeler|cycle|kayak|coracle)\b""", RegexOption.IGNORE_CASE).containsMatchIn(title)) {
+            TripHubBookingCategory.RENTAL
+        } else {
+            TripHubBookingCategory.CAB
+        }
+    com.splitmate.app.ui.category.SpendBucket.FOOD -> TripHubBookingCategory.FOOD
+    com.splitmate.app.ui.category.SpendBucket.ACTIVITIES -> TripHubBookingCategory.ACTIVITIES
+    com.splitmate.app.ui.category.SpendBucket.SHOPPING -> TripHubBookingCategory.SHOPPING
+    com.splitmate.app.ui.category.SpendBucket.TRAVEL_TICKETS -> TripHubBookingCategory.GENERAL
+    com.splitmate.app.ui.category.SpendBucket.OTHER -> TripHubBookingCategory.GENERAL
 }
 
 data class ResolvedExpenseSchedule(
@@ -844,9 +900,50 @@ fun TripHomeScreen(
         }
     }
 
+    LaunchedEffect(resolvedGroupId) {
+        com.splitmate.app.data.GroupLedgerExtrasStore.load(context, resolvedGroupId)
+        com.splitmate.app.ui.category.CustomExpenseCategoryStore.bindGroup(context, resolvedGroupId)
+    }
+    val groupExtras by com.splitmate.app.data.GroupLedgerExtrasStore.extrasByGroup.collectAsStateWithLifecycle()
+    val groupCustomCategories = remember(groupExtras, resolvedGroupId) {
+        groupExtras[resolvedGroupId]?.customCategories?.filter { !it.deleted }?.map { cloudCat ->
+            com.splitmate.app.ui.category.ExpenseCategoryCatalog.custom(
+                title = cloudCat.title,
+                iconKey = cloudCat.iconKey,
+                parentBucket = com.splitmate.app.ui.category.SpendBucket.fromNameOrNull(cloudCat.parentBucket),
+                customId = cloudCat.id,
+                createdByPhone = cloudCat.createdByPhone,
+                isGroupShared = true
+            )
+        }.orEmpty()
+    }
+    val localCustomCategories by com.splitmate.app.ui.category.CustomExpenseCategoryStore.categories.collectAsStateWithLifecycle()
+    val allCustomCategories = remember(localCustomCategories, groupCustomCategories) {
+        (groupCustomCategories + localCustomCategories).distinctBy { it.customId ?: it.title.lowercase() }
+    }
+
     // Classify every real expense in Room
-    val classifiedExpenses = remember(groupExpenses) {
-        groupExpenses.map { exp -> exp to classifyGroupExpenseForTripHub(exp) }
+    val classifiedExpenses = remember(groupExpenses, allCustomCategories) {
+        groupExpenses.map { exp -> exp to classifyGroupExpenseForTripHub(exp, allCustomCategories) }
+    }
+
+    // v2.3.5 (#1): trip lifecycle (organizer wrap-up, synced through the ledger).
+    val tripLifecycleRecord = groupExtras[resolvedGroupId]?.tripLifecycle
+    val tripLastActivityMs = remember(groupExpenses) {
+        groupExpenses.maxOfOrNull { maxOf(it.createdAt, it.scheduledAtEpochMs ?: 0L) }
+    }
+    val tripFirstActivityMs = remember(groupExpenses) {
+        groupExpenses.minOfOrNull { e -> e.scheduledAtEpochMs?.takeIf { it > 0L }?.let { minOf(it, e.createdAt) } ?: e.createdAt }
+    }
+    val tripLifecycleState = remember(tripLifecycleRecord, tripLastActivityMs) {
+        com.splitmate.app.data.TripLifecycleResolver.resolve(tripLifecycleRecord, System.currentTimeMillis(), tripLastActivityMs)
+    }
+    val isTripOrganizer = remember(resolvedGroupId, uiState.groups, uiState.members, uiState.userPhone) {
+        runCatching { viewModel.isUserGroupOrganizer(resolvedGroupId, uiState) }.getOrDefault(false)
+    }
+    val tripEndedByName = remember(tripLifecycleRecord, groupMembers) {
+        val phone = tripLifecycleRecord?.endedByPhone.orEmpty()
+        if (phone.isBlank()) null else groupMembers.firstOrNull { it.userPhone == phone }?.name
     }
 
     // Adaptive terminology: travel groups ("Flight"/"Cabin" category in Room, or any logged Train/Flight
@@ -968,7 +1065,7 @@ fun TripHomeScreen(
             // =================================================================
             TripHubTopBar(
                 groupName = (group?.name ?: "Trip Hub").toSmartTitleCase(),
-                subtitle = dynamicTripSubtitle,
+                subtitle = if (tripLifecycleState == com.splitmate.app.data.TripLifecycleResolver.State.ENDED) "Ended · $dynamicTripSubtitle" else dynamicTripSubtitle,
                 activePerspectiveMember = activePerspectiveMember,
                 onlineFriendsCount = onlineFriendsCount,
                 isCloudSyncing = uiState.isCloudSyncing,
@@ -1104,6 +1201,36 @@ fun TripHomeScreen(
                 isTravelGroup = isTravelGroup
             )
 
+            // v2.3.5 (#1): wrap-up summary / organizer nudge (Overview + Money only).
+            if (selectedSectionTab == TripHubSectionTab.OVERVIEW || selectedSectionTab == TripHubSectionTab.MONEY) {
+                TripLifecycleCard(
+                    state = tripLifecycleState,
+                    record = tripLifecycleRecord,
+                    endedByName = tripEndedByName,
+                    isOrganizer = isTripOrganizer,
+                    stats = TripWrapUpStats(
+                        totalSpentCents = totalGroupSpendCents,
+                        memberCount = groupMembers.size,
+                        days = com.splitmate.app.data.TripLifecycleResolver.tripDays(tripFirstActivityMs, tripLastActivityMs),
+                        topCategories = computeTripTopCategories(classifiedExpenses),
+                        isAllSettled = isAllSettled
+                    ),
+                    onWrapUp = {
+                        performCrispTactileHaptic(context, localView, heavy = true)
+                        viewModel.wrapUpTrip(resolvedGroupId)
+                    },
+                    onReopen = {
+                        performCrispTactileHaptic(context, localView, heavy = false)
+                        viewModel.reopenTrip(resolvedGroupId)
+                    },
+                    onSettleUp = {
+                        performCrispTactileHaptic(context, localView, heavy = false)
+                        if (selectedSectionTab != TripHubSectionTab.MONEY) selectedSectionTab = TripHubSectionTab.MONEY else onOpenSettleUpClick()
+                    },
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                )
+            }
+
             // =================================================================
             // DECLINED MEMBER SHARE REASSIGNMENT BANNER (0.00c DRIFT)
             // =================================================================
@@ -1192,6 +1319,13 @@ fun TripHomeScreen(
             // =================================================================
             // SECTION BODY CONTENT (`Overview`, `Plan`, `Travel`, `Money`, `People`)
             // =================================================================
+            // v2.3.5 (#4): cards open ActivityDetailSheet -> EditLoggedExpenseDialog via this host.
+            TripHubExpenseManagementHost(
+                viewModel = viewModel,
+                uiState = uiState,
+                onOpenTrainPnrReviewClick = onOpenTrainPnrReviewClick,
+                onOpenFlightReviewClick = onOpenFlightReviewClick
+            ) {
             when (selectedSectionTab) {
                 TripHubSectionTab.OVERVIEW -> {
                     TripHubOverviewFeed(
@@ -1274,6 +1408,7 @@ fun TripHomeScreen(
                         isTravelGroup = isTravelGroup
                     )
                 }
+            }
             }
         }
     }
@@ -1913,27 +2048,40 @@ private fun TripHubOverviewFeed(
             when (category) {
                 TripHubBookingCategory.TRAIN -> {
                     val legNumber = trainLegNumberById[expense.expenseId] ?: 1
-                    DeepGreenTrainTicketCard(
-                        expense = expense,
-                        legNumber = legNumber,
-                        groupMembers = groupMembers,
-                        allSplits = allSplits,
-                        activePerspectiveMember = activePerspectiveMember,
-                        onOpenTrainPnrReviewClick = onOpenTrainPnrReviewClick,
-                        onInspectBerthChart = onInspectBerthChart,
-                        modifier = itemModifier
-                    )
+                    // v2.3.5 (#4): Train / Flight cards also get Edit / Delete.
+                    Column(modifier = itemModifier) {
+                        DeepGreenTrainTicketCard(
+                            expense = expense,
+                            legNumber = legNumber,
+                            groupMembers = groupMembers,
+                            allSplits = allSplits,
+                            activePerspectiveMember = activePerspectiveMember,
+                            onOpenTrainPnrReviewClick = onOpenTrainPnrReviewClick,
+                            onInspectBerthChart = onInspectBerthChart,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        TripHubManageExpenseRow(
+                            expense = expense,
+                            onDeleteExpense = { onDeleteExpense(expense.expenseId) }
+                        )
+                    }
                 }
 
                 TripHubBookingCategory.FLIGHT -> {
-                    PeriwinkleFlightBookingCard(
-                        expense = expense,
-                        groupMembers = groupMembers,
-                        allSplits = allSplits,
-                        activePerspectiveMember = activePerspectiveMember,
-                        onOpenFlightReviewClick = onOpenFlightReviewClick,
-                        modifier = itemModifier
-                    )
+                    Column(modifier = itemModifier) {
+                        PeriwinkleFlightBookingCard(
+                            expense = expense,
+                            groupMembers = groupMembers,
+                            allSplits = allSplits,
+                            activePerspectiveMember = activePerspectiveMember,
+                            onOpenFlightReviewClick = onOpenFlightReviewClick,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        TripHubManageExpenseRow(
+                            expense = expense,
+                            onDeleteExpense = { onDeleteExpense(expense.expenseId) }
+                        )
+                    }
                 }
 
                 TripHubBookingCategory.STAY -> {
@@ -1968,6 +2116,9 @@ private fun TripHubOverviewFeed(
                     )
                 }
 
+                TripHubBookingCategory.FOOD,
+                TripHubBookingCategory.ACTIVITIES,
+                TripHubBookingCategory.SHOPPING,
                 TripHubBookingCategory.GENERAL,
                 TripHubBookingCategory.ALL -> {
                     GeneralSharedExpenseCard(
@@ -3768,7 +3919,8 @@ fun LodgingBookingCard(
                 if (showSplitDrawer) {
                     ExpandableSplitBreakdownDrawer(
                         splitBreakdown = splitBreakdown,
-                        onDeleteExpense = onDeleteExpense
+                        onDeleteExpense = onDeleteExpense,
+                        expense = expense
                     )
                 }
             }
@@ -3985,7 +4137,8 @@ fun GroundMobilityBookingCard(
                 if (showSplitDrawer) {
                     ExpandableSplitBreakdownDrawer(
                         splitBreakdown = splitBreakdown,
-                        onDeleteExpense = onDeleteExpense
+                        onDeleteExpense = onDeleteExpense,
+                        expense = expense
                     )
                 }
             }
@@ -4022,10 +4175,17 @@ fun GeneralSharedExpenseCard(
         SimpleDateFormat("dd MMM · hh:mm a", Locale.US).format(Date(expense.createdAtEpochMs))
     }
 
+    val expenseActions = LocalTripHubExpenseActions.current
+
     Surface(
         onClick = {
             performCrispTactileHaptic(context, localView, heavy = false)
-            expanded = !expanded
+            // v2.3.5 (#4): tap opens details (Edit / Delete); the chevron toggles the inline split.
+            if (expenseActions != null) {
+                expenseActions.openDetails(expense)
+            } else {
+                expanded = !expanded
+            }
         },
         shape = RoundedCornerShape(20.dp),
         color = TripHubTokens.CardSurface,
@@ -4112,12 +4272,20 @@ fun GeneralSharedExpenseCard(
                             ),
                             color = TripHubTokens.PositiveSageText
                         )
-                        Icon(
-                            imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                            contentDescription = null,
-                            tint = TripHubTokens.TextSecondary,
-                            modifier = Modifier.size(16.dp)
-                        )
+                        IconButton(
+                            onClick = {
+                                performCrispTactileHaptic(context, localView, heavy = false)
+                                expanded = !expanded
+                            },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                                contentDescription = if (expanded) "Hide split" else "Show split",
+                                tint = TripHubTokens.TextSecondary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -4125,7 +4293,8 @@ fun GeneralSharedExpenseCard(
             if (expanded) {
                 ExpandableSplitBreakdownDrawer(
                     splitBreakdown = splitBreakdown,
-                    onDeleteExpense = onDeleteExpense
+                    onDeleteExpense = onDeleteExpense,
+                    expense = expense
                 )
             }
         }
@@ -4135,7 +4304,8 @@ fun GeneralSharedExpenseCard(
 @Composable
 private fun ExpandableSplitBreakdownDrawer(
     splitBreakdown: SplitMateViewModel.ExpenseSplitBreakdownSummary,
-    onDeleteExpense: () -> Unit
+    onDeleteExpense: () -> Unit,
+    expense: ExpenseEntity? = null
 ) {
     Surface(
         shape = RoundedCornerShape(14.dp),
@@ -4150,40 +4320,15 @@ private fun ExpandableSplitBreakdownDrawer(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = splitBreakdown.headerLabel,
-                    fontFamily = FigtreeFontFamily,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 12.sp,
-                    color = TripHubTokens.TextPrimary
-                )
-                TextButton(
-                    onClick = onDeleteExpense,
-                    modifier = Modifier
-                        .minimumInteractiveComponentSize()
-                        .defaultMinSize(minHeight = 48.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.DeleteOutline,
-                        contentDescription = "Delete Expense",
-                        tint = TripHubTokens.TerracottaIconTint,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "Delete",
-                        fontFamily = FigtreeFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
-                        color = TripHubTokens.TerracottaIconTint
-                    )
-                }
-            }
+            Text(
+                text = splitBreakdown.headerLabel,
+                fontFamily = FigtreeFontFamily,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 12.sp,
+                color = TripHubTokens.TextPrimary
+            )
+            // v2.3.5 (#4): Edit + Delete (with confirmation) instead of an instant delete.
+            TripHubManageExpenseRow(expense = expense, onDeleteExpense = onDeleteExpense)
 
             splitBreakdown.rows.filter { it.isIncludedInSplit }.forEach { row ->
                 Row(
@@ -4715,27 +4860,40 @@ private fun TripHubTravelWalletView(
             when (category) {
                 TripHubBookingCategory.TRAIN -> {
                     val legNumber = trainLegNumberById[expense.expenseId] ?: 1
-                    DeepGreenTrainTicketCard(
-                        expense = expense,
-                        legNumber = legNumber,
-                        groupMembers = groupMembers,
-                        allSplits = allSplits,
-                        activePerspectiveMember = activePerspectiveMember,
-                        onOpenTrainPnrReviewClick = onOpenTrainPnrReviewClick,
-                        onInspectBerthChart = onInspectBerthChart,
-                        modifier = itemModifier
-                    )
+                    // v2.3.5 (#4): Train / Flight cards also get Edit / Delete.
+                    Column(modifier = itemModifier) {
+                        DeepGreenTrainTicketCard(
+                            expense = expense,
+                            legNumber = legNumber,
+                            groupMembers = groupMembers,
+                            allSplits = allSplits,
+                            activePerspectiveMember = activePerspectiveMember,
+                            onOpenTrainPnrReviewClick = onOpenTrainPnrReviewClick,
+                            onInspectBerthChart = onInspectBerthChart,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        TripHubManageExpenseRow(
+                            expense = expense,
+                            onDeleteExpense = { onDeleteExpense(expense.expenseId) }
+                        )
+                    }
                 }
 
                 TripHubBookingCategory.FLIGHT -> {
-                    PeriwinkleFlightBookingCard(
-                        expense = expense,
-                        groupMembers = groupMembers,
-                        allSplits = allSplits,
-                        activePerspectiveMember = activePerspectiveMember,
-                        onOpenFlightReviewClick = onOpenFlightReviewClick,
-                        modifier = itemModifier
-                    )
+                    Column(modifier = itemModifier) {
+                        PeriwinkleFlightBookingCard(
+                            expense = expense,
+                            groupMembers = groupMembers,
+                            allSplits = allSplits,
+                            activePerspectiveMember = activePerspectiveMember,
+                            onOpenFlightReviewClick = onOpenFlightReviewClick,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        TripHubManageExpenseRow(
+                            expense = expense,
+                            onDeleteExpense = { onDeleteExpense(expense.expenseId) }
+                        )
+                    }
                 }
 
                 TripHubBookingCategory.STAY -> {
@@ -4920,6 +5078,21 @@ private fun TripHubMoneySettlementView(
                         amplitude = if (simplifiedTransfers.isEmpty()) 0f else 0.75f,
                         wavelength = 22.dp,
                         strokeWidth = 5.dp
+                    )
+
+                    // v2.3.5 (#2): share the whole settle-up (same greedy transfers as below) as an image.
+                    com.splitmate.app.ui.share.SettleUpShareButton(
+                        buildModel = {
+                            com.splitmate.app.ui.share.buildSettleUpShareModelForGroup(
+                                groupName = groupName,
+                                groupMembers = groupMembers,
+                                groupExpenses = uiState.expenses.filter { it.groupId == groupId },
+                                transfers = simplifiedTransfers,
+                                currentUserName = uiState.currentUserName,
+                                tripEnded = com.splitmate.app.data.GroupLedgerExtrasStore.tripLifecycle(groupId)?.isEnded == true
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth()
                     )
 
                     if (simplifiedTransfers.isNotEmpty()) {

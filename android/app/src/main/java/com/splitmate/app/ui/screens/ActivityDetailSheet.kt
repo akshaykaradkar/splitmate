@@ -22,8 +22,13 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.FlightTakeoff
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Train
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -66,8 +71,49 @@ fun ActivityDetailSheet(
     onDismiss: () -> Unit,
     onOpenBoardingPass: (groupId: String, pnrOrExpenseCode: String) -> Unit,
     onEditExpense: (ExpenseEntity) -> Unit,
-    onUndoExpense: (String) -> Unit
+    onUndoExpense: (String) -> Unit,
+    /** v2.3.5 (#4): false -> Edit/Delete are hidden and [readOnlyReason] is shown instead. */
+    canModify: Boolean = true,
+    readOnlyReason: String = com.splitmate.app.ExpenseEditPermission.READ_ONLY_REASON
 ) {
+    // v2.3.5 (#4): deleting an expense always asks for confirmation first.
+    var showDeleteConfirm by remember(expense.expenseId) { mutableStateOf(false) }
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = {
+                Text(
+                    text = "Delete this expense?",
+                    fontFamily = SplitMateTheme.FontDisplay,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            },
+            text = {
+                Text(
+                    text = "\"${cleanDisplayExpenseTitle(expense.title)}\" will be removed for everyone in the trip and balances will be recalculated.",
+                    fontFamily = SplitMateTheme.FontRounded
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirm = false
+                        val idToRollback = expense.expenseId
+                        onDismiss()
+                        onUndoExpense(idToRollback)
+                    }
+                ) {
+                    Text("Delete", fontWeight = FontWeight.ExtraBold, color = SplitMateTheme.TerracottaText)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel", fontWeight = FontWeight.Bold, color = SplitMateTheme.TextSecondary)
+                }
+            },
+            containerColor = SplitMateTheme.SurfaceWhite
+        )
+    }
     val parsedTravelTicket = remember(expense.title) {
         extractTravelTicketFromTitle(expense.title)
     }
@@ -266,31 +312,46 @@ fun ActivityDetailSheet(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 4. M3 Expressive SplitButtonLayout for Edit Expense (Leading) + Undo Entry (Trailing Menu)
-            SplitButtonLayout(
-                leadingText = "Edit Expense",
-                leadingIcon = Icons.Rounded.Edit,
-                onLeadingClick = {
-                    onDismiss()
-                    onEditExpense(expense)
-                },
-                menuItems = listOf(
-                    ExpressiveMenuAction(
-                        label = "Undo Entry",
-                        icon = Icons.AutoMirrored.Rounded.Undo,
-                        subtitle = "Roll back this expense from the ledger",
-                        onClick = {
-                            val idToRollback = expense.expenseId
-                            onDismiss()
-                            onUndoExpense(idToRollback)
-                        }
+            // 4. M3 Expressive SplitButtonLayout for Edit Expense (Leading) + Delete (Trailing Menu)
+            if (canModify) {
+                SplitButtonLayout(
+                    leadingText = "Edit Expense",
+                    leadingIcon = Icons.Rounded.Edit,
+                    onLeadingClick = {
+                        onDismiss()
+                        onEditExpense(expense)
+                    },
+                    menuItems = listOf(
+                        ExpressiveMenuAction(
+                            label = "Delete Expense",
+                            icon = Icons.AutoMirrored.Rounded.Undo,
+                            subtitle = "Remove this expense from the trip ledger",
+                            onClick = { showDeleteConfirm = true }
+                        )
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    fillWidth = true
+                )
+            } else {
+                // v2.3.5 (#4): read-only for members who are not payer / creator / organizer.
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    contentColor = SplitMateTheme.TextSecondary,
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = readOnlyReason,
+                        fontFamily = SplitMateTheme.FontRounded,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SplitMateTheme.TextSecondary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)
                     )
-                ),
-                modifier = Modifier.fillMaxWidth(),
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                fillWidth = true
-            )
+                }
+            }
             Spacer(modifier = Modifier.height(12.dp))
         }
     }

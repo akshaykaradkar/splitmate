@@ -475,7 +475,7 @@ fun ExpenseCategoryPickerSheet(
             },
             text = {
                 Text(
-                    "It disappears from your category list only. Expenses already logged with it stay exactly as they are.",
+                    "It disappears from the category list${if (cat.isGroupShared) " for everyone in this trip" else ""}. Expenses already logged with it stay exactly as they are.",
                     fontFamily = SplitMateBrandFontFamily,
                     fontSize = 13.sp,
                     color = SplitMateTheme.TextSecondary
@@ -584,8 +584,12 @@ fun CreateExpenseCategoryDialog(
     var iconKey by remember { mutableStateOf(ExpenseCategoryCatalog.suggestIconKey(initialName)) }
     var iconPickedManually by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // v2.3.5 (#5): parent group so the Trip Hub breakdown never dumps custom categories into "Other".
+    var bucket by remember { mutableStateOf(ExpenseBucketResolver.suggestBucket(initialName)) }
+    var bucketPickedManually by remember { mutableStateOf(false) }
+    val sharedWithTrip = CustomExpenseCategoryStore.activeGroupId.isNotBlank()
 
-    val preview = ExpenseCategoryCatalog.custom(name.ifBlank { "Your category" }, iconKey)
+    val preview = ExpenseCategoryCatalog.custom(name.ifBlank { "Your category" }, iconKey, parentBucket = bucket)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -601,7 +605,8 @@ fun CreateExpenseCategoryDialog(
                     color = SplitMateTheme.PrimaryDark
                 )
                 Text(
-                    "Name it and pick an icon. It's saved on this phone for all your trips.",
+                    if (sharedWithTrip) "Name it, pick an icon and a group. Everyone in this trip will see it."
+                    else "Name it, pick an icon and a group. It's saved on this phone for all your trips.",
                     fontFamily = SplitMateBrandFontFamily,
                     fontSize = 12.sp,
                     color = SplitMateTheme.TextSecondary
@@ -619,6 +624,7 @@ fun CreateExpenseCategoryDialog(
                         name = raw.take(ExpenseCategoryCatalog.MAX_TITLE_LENGTH)
                         error = null
                         if (!iconPickedManually) iconKey = ExpenseCategoryCatalog.suggestIconKey(raw)
+                        if (!bucketPickedManually) bucket = ExpenseBucketResolver.suggestBucket(raw, iconKey)
                     },
                     label = { Text("Category name", fontFamily = SplitMateBrandFontFamily) },
                     placeholder = { Text("e.g. Paragliding, Kerala Toll", fontFamily = SplitMateBrandFontFamily) },
@@ -655,6 +661,45 @@ fun CreateExpenseCategoryDialog(
                 }
 
                 Text(
+                    "COUNTS UNDER",
+                    fontFamily = SplitMateBrandFontFamily,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 11.sp,
+                    letterSpacing = 0.8.sp,
+                    color = SplitMateTheme.TextSecondary
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    SpendBucket.values().forEach { b ->
+                        val isPicked = b == bucket
+                        Surface(
+                            onClick = {
+                                bucket = b
+                                bucketPickedManually = true
+                            },
+                            shape = RoundedCornerShape(20.dp),
+                            color = if (isPicked) SplitMateTheme.PrimaryDark else SplitMateTheme.SurfaceMuted,
+                            border = BorderStroke(1.dp, if (isPicked) SplitMateTheme.PrimaryDark else SplitMateTheme.BorderLight),
+                            modifier = Modifier
+                                .heightIn(min = 36.dp)
+                                .semantics { selected = isPicked }
+                        ) {
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                Text(
+                                    b.label,
+                                    fontFamily = SplitMateBrandFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = if (isPicked) SplitMateTheme.SurfaceWhite else SplitMateTheme.PrimaryDark
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Text(
                     "ICON",
                     fontFamily = SplitMateBrandFontFamily,
                     fontWeight = FontWeight.ExtraBold,
@@ -672,6 +717,7 @@ fun CreateExpenseCategoryDialog(
                             onClick = {
                                 iconKey = key
                                 iconPickedManually = true
+                                if (!bucketPickedManually && name.isBlank()) bucket = ExpenseBucketResolver.suggestBucket(name, key)
                             },
                             shape = RoundedCornerShape(if (isPicked) 14.dp else 24.dp),
                             color = if (isPicked) SplitMateTheme.SageSurface else SplitMateTheme.SurfaceMuted,
@@ -702,7 +748,7 @@ fun CreateExpenseCategoryDialog(
         confirmButton = {
             Surface(
                 onClick = {
-                    CustomExpenseCategoryStore.add(context, name, iconKey)
+                    CustomExpenseCategoryStore.add(context, name, iconKey, bucket)
                         .onSuccess(onCreated)
                         .onFailure { error = it.message }
                 },

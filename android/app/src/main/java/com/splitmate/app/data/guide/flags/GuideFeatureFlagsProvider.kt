@@ -164,6 +164,8 @@ class GuideFeatureFlagsProvider(
         const val KEY_SHORT_LINK = "shortLinkParsingEnabled"
         const val KEY_WDQS = "wdqsEnabled"
         const val KEY_NOMINATIM = "nominatimEnabled"
+        /** v2.3.5 (#3): HTML body fallback in ShortLinkResolver. */
+        const val KEY_SHORT_LINK_BODY = "shortLinkBodyParseEnabled"
 
         /**
          * Parses the published flags JSON. Null when the body is not a JSON object (treated as a
@@ -177,7 +179,8 @@ class GuideFeatureFlagsProvider(
                     guideEnabled = booleanOrTrue(o, KEY_GUIDE),
                     shortLinkParsingEnabled = booleanOrTrue(o, KEY_SHORT_LINK),
                     wdqsEnabled = booleanOrTrue(o, KEY_WDQS),
-                    nominatimEnabled = booleanOrTrue(o, KEY_NOMINATIM)
+                    nominatimEnabled = booleanOrTrue(o, KEY_NOMINATIM),
+                    shortLinkBodyParseEnabled = booleanOrTrue(o, KEY_SHORT_LINK_BODY)
                 )
             } catch (_: Exception) {
                 null
@@ -193,6 +196,7 @@ class GuideFeatureFlagsProvider(
                 .put(KEY_SHORT_LINK, flags.shortLinkParsingEnabled)
                 .put(KEY_WDQS, flags.wdqsEnabled)
                 .put(KEY_NOMINATIM, flags.nominatimEnabled)
+                .put(KEY_SHORT_LINK_BODY, flags.shortLinkBodyParseEnabled)
                 .toString()
 
         internal fun decodeCache(raw: String): Pair<GuideFeatureFlags, Long>? = try {

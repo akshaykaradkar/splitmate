@@ -812,7 +812,7 @@ class SplitMateV2ZeroRegressionAndSyncTest {
         )
 
         assertEquals(
-            com.splitmate.app.ui.screens.TripHubBookingCategory.GENERAL,
+            com.splitmate.app.ui.screens.TripHubBookingCategory.FOOD,
             com.splitmate.app.ui.screens.classifyGroupExpenseForTripHub(foodNearTrainStation),
             "Expense with structured expenseCategory = FOOD must NOT be misclassified as TRAIN despite 'train' in title"
         )

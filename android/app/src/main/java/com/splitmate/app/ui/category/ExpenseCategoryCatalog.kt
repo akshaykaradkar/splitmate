@@ -37,7 +37,15 @@ data class ExpenseCategory(
     val group: ExpenseCategoryGroup,
     val isCustom: Boolean = false,
     /** Tapping this entry launches the IRCTC PNR direct-split flow instead of setting a title. */
-    val opensPnrFlow: Boolean = false
+    val opensPnrFlow: Boolean = false,
+    /** v2.3.5: stable id for custom categories (`ExpenseEntity.categoryRef = "custom:<id>"`). */
+    val customId: String? = null,
+    /** v2.3.5: parent spend bucket chosen for a custom category (null = auto-suggest). */
+    val parentBucket: SpendBucket? = null,
+    /** v2.3.5: 10-digit phone of the member who created this custom category (blank = this device). */
+    val createdByPhone: String = "",
+    /** v2.3.5: true when the category lives in the active trip's synced ledger. */
+    val isGroupShared: Boolean = false
 ) {
     val tone: ExpenseCategoryTone
         get() = when (group) {
@@ -220,18 +228,29 @@ object ExpenseCategoryCatalog {
         return Validation.Ok(clean)
     }
 
-    fun custom(title: String, iconKey: String): ExpenseCategory {
+    fun custom(
+        title: String,
+        iconKey: String,
+        parentBucket: SpendBucket? = null,
+        customId: String? = null,
+        createdByPhone: String = "",
+        isGroupShared: Boolean = false
+    ): ExpenseCategory {
         val clean = sanitizeTitle(title)
         return ExpenseCategory(
             title = clean,
             shortLabel = clean,
             iconKey = if (ExpenseCategoryIconKeys.isKnown(iconKey)) iconKey else ExpenseCategoryIconKeys.DEFAULT_CUSTOM,
             group = ExpenseCategoryGroup.CUSTOM,
-            isCustom = true
+            isCustom = true,
+            customId = customId?.takeIf { it.isNotBlank() } ?: ExpenseCategoryRefs.customIdForTitle(clean),
+            parentBucket = parentBucket,
+            createdByPhone = createdByPhone,
+            isGroupShared = isGroupShared
         )
     }
 
-    private val ICON_HINTS: List<Pair<List<String>, String>> = listOf(
+    internal val ICON_HINTS: List<Pair<List<String>, String>> = listOf(
         listOf("breakfast") to "breakfast",
         listOf("lunch") to "lunch",
         listOf("dinner") to "dinner",

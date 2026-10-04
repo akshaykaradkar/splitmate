@@ -82,11 +82,19 @@ fun EditLoggedExpenseDialog(
     groupMembers: List<GroupMemberEntity>,
     initialSplitMemberIds: Set<String> = groupMembers.map { it.memberId }.toSet(),
     onDismiss: () -> Unit,
-    onSave: (String, Double, String, List<String>) -> Unit
+    onSave: (String, Double, String, List<String>, String?) -> Unit,
+    /**
+     * v2.3.5 (#4 guard a): true for itemized receipts. Amount and split chips are locked so the
+     * edit cannot flatten tax / tip / item claims into an equal split; title + payer stay editable.
+     */
+    lockAmountAndSplit: Boolean = false
 ) {
     val existingTicket = remember(expense.title) { extractTravelTicketFromTitle(expense.title) }
     var editedTitle by remember(expense.title) {
         mutableStateOf(existingTicket?.cleanTitle ?: expense.title)
+    }
+    var editedCategoryRef by remember(expense.categoryRef) {
+        mutableStateOf(expense.categoryRef)
     }
     var editedAmountStr by remember(expense.totalAmountCents) {
         val rupees = expense.totalAmountCents / 100.0
@@ -127,6 +135,7 @@ fun EditLoggedExpenseDialog(
             onSelect = { cat ->
                 showCategorySheet = false
                 editedTitle = cat.title
+                editedCategoryRef = com.splitmate.app.ui.category.ExpenseCategoryRefs.refFor(cat)
             }
         )
     }
@@ -172,6 +181,7 @@ fun EditLoggedExpenseDialog(
                         Surface(
                             onClick = {
                                 editedTitle = cat
+                                editedCategoryRef = null
                                 if (isTrainCat) includeTravelTicket = true
                             },
                             shape = SplitMateTheme.RadiusBadge,
@@ -201,7 +211,10 @@ fun EditLoggedExpenseDialog(
                     items(customCategories, key = { "edit_custom_${it.title}" }) { cat ->
                         val isSelected = editedTitle.equals(cat.title, ignoreCase = true)
                         Surface(
-                            onClick = { editedTitle = cat.title },
+                            onClick = {
+                                editedTitle = cat.title
+                                editedCategoryRef = com.splitmate.app.ui.category.ExpenseCategoryRefs.refFor(cat)
+                            },
                             shape = SplitMateTheme.RadiusBadge,
                             color = if (isSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.SurfaceMuted
                         ) {
@@ -232,7 +245,7 @@ fun EditLoggedExpenseDialog(
 
                 OutlinedTextField(
                     value = editedTitle,
-                    onValueChange = { editedTitle = it },
+                    onValueChange = { editedTitle = it; editedCategoryRef = null },
                     label = { Text("Expense Title / Category", fontSize = 12.sp) },
                     singleLine = true,
                     shape = SplitMateTheme.RadiusPanel,
@@ -244,9 +257,26 @@ fun EditLoggedExpenseDialog(
                     onValueChange = { editedAmountStr = it.filter { ch -> ch.isDigit() || ch == '.' } },
                     label = { Text("Total Amount (₹)", fontSize = 12.sp) },
                     singleLine = true,
+                    enabled = !lockAmountAndSplit,
                     shape = SplitMateTheme.RadiusPanel,
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                if (lockAmountAndSplit) {
+                    Surface(
+                        color = SplitMateTheme.TerracottaSurface,
+                        shape = SplitMateTheme.RadiusPanel,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = ItemizedExpenseGuard.LOCKED_REASON,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = SplitMateTheme.TerracottaText,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                        )
+                    }
+                }
 
                 if (groupMembers.isNotEmpty()) {
                     Text(
@@ -274,6 +304,7 @@ fun EditLoggedExpenseDialog(
                         }
                     }
 
+                    if (!lockAmountAndSplit) {
                     Text(
                         text = "Split Equally Among (${selectedSplitMemberIds.size} of ${groupMembers.size} selected):",
                         fontSize = 11.sp,
@@ -316,6 +347,7 @@ fun EditLoggedExpenseDialog(
                                 }
                             }
                         }
+                    }
                     }
                 }
 
@@ -386,7 +418,12 @@ fun EditLoggedExpenseDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val parsedRupees = editedAmountStr.toDoubleOrNull() ?: (expense.totalAmountCents / 100.0)
+                    val parsedRupees = if (lockAmountAndSplit) {
+                        expense.totalAmountCents / 100.0
+                    } else {
+                        editedAmountStr.toDoubleOrNull() ?: (expense.totalAmountCents / 100.0)
+                    }
+                    val splitIdsToSave = if (lockAmountAndSplit) initialSplitMemberIds.toList() else selectedSplitMemberIds.toList()
                     val finalTitle = if (includeTravelTicket && (pnrNumber.isNotBlank() || trainOrFlightNo.isNotBlank() || coachAndSeats.isNotBlank())) {
                         val parsedFrom = routeFromTo.substringBefore("-").trim()
                         val parsedTo = routeFromTo.substringAfter("-", "").trim()
@@ -403,7 +440,7 @@ fun EditLoggedExpenseDialog(
                     } else {
                         editedTitle.trim().ifBlank { "Group Expense" }
                     }
-                    onSave(finalTitle, parsedRupees, selectedPayerId, selectedSplitMemberIds.toList())
+                    onSave(finalTitle, parsedRupees, selectedPayerId, splitIdsToSave, editedCategoryRef)
                 },
                 shape = SplitMateTheme.RadiusButton,
                 colors = ButtonDefaults.buttonColors(

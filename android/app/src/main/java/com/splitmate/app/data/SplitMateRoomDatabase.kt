@@ -19,7 +19,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TripGuidePackEntity::class,
         TripPlanManifestEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class SplitMateRoomDatabase : RoomDatabase() {
@@ -179,18 +179,31 @@ abstract class SplitMateRoomDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v2.3.5 categories + edit permissions: purely additive. Two nullable TEXT columns on
+         * `expenses` (no default, no rewrite of existing rows); legacy rows read as null.
+         */
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `expenses` ADD COLUMN `categoryRef` TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE `expenses` ADD COLUMN `createdByPhone` TEXT DEFAULT NULL")
+            }
+        }
+
         fun getInstance(context: Context): SplitMateRoomDatabase {
             return INSTANCE ?: synchronized(this) {
                 // v2.3.4: keep a copy of the existing trips DB before the 7 -> 8 migration ever runs.
+                // v2.3.5: and again before the additive 8 -> 9 migration.
                 if (INSTANCE == null) {
                     PreUpgradeDatabaseBackup.snapshotOnce(context.applicationContext, "splitmate_native_room.db", "before_v2.3.4")
+                    PreUpgradeDatabaseBackup.snapshotOnce(context.applicationContext, "splitmate_native_room.db", "before_v2.3.5")
                 }
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     SplitMateRoomDatabase::class.java,
                     "splitmate_native_room.db"
                 )
-                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .fallbackToDestructiveMigrationFrom(1, 2, 3)
                     .fallbackToDestructiveMigrationOnDowngrade()
                     .build()

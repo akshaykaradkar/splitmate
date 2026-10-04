@@ -5,24 +5,38 @@ import com.splitmate.app.data.guide.GuideFeatureFlags
 import com.splitmate.app.data.guide.StayLocationResolver
 import com.splitmate.app.data.guide.StayResolution
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
+import java.io.IOException
+import java.io.InterruptedIOException
+import java.net.ConnectException
+import java.net.NoRouteToHostException
+import java.net.UnknownHostException
+import javax.net.ssl.SSLException
 
 /**
  * Resolves a pasted/shared Google Maps link (or plain pasted coordinates) into a stay location.
  *
- * Policy (audit §2.3 / §4.1, decisions #12 and #13):
+ * Policy (audit §2.3 / §4.1, decisions #12 and #13; hardened in v2.3.5 #3):
  * - **Offline first:** the text is always run through [MapLinkCoordinateParser]. An exact
  *   coordinate found locally is returned without any network call. Only shorteners
- *   (`maps.app.goo.gl`, `goo.gl`, `g.co`) and legacy `maps.google.<tld>` links trigger network
- *   probing. Full `www.google.<tld>/maps/…` URLs are parsed offline only.
+ *   (`maps.app.goo.gl`, `goo.gl`, `g.co`), legacy `maps.google.<tld>` links and
+ *   `google.<tld>/maps?cid=` links trigger network probing. Other full `www.google.<tld>/maps/…`
+ *   URLs are parsed offline only.
  * - **Host allow-list** for any URL in the input: `maps.app.goo.gl`, `goo.gl/maps…`,
  *   `maps.google.<tld>`, `(www.)google.<tld>/maps…`, `g.co/kgs…`. Any other host is Rejected,
  *   even when the URL happens to contain numbers.
  * - **HTTPS only.** `http://` input or an `http://` redirect target is Rejected.
- * - **Manual redirects:** HEAD first, GET (`Range: bytes=0-0`) fallback when HEAD is refused.
- *   At most [MAX_REDIRECTS] redirects are followed. Response bodies are never read or parsed.
- *   Only `Location` headers are inspected, and every hop URL goes through the parser.
+ * - **Manual redirects (v2.3.5):** GET first with a mobile-browser identity (HEAD only when GET
+ *   is refused with 405/501), at most [MAX_REDIRECTS] redirects, one retry with a short backoff
+ *   on I/O errors/timeouts. When a shortener answers a browser with a page instead of a redirect,
+ *   it is asked once more with the app identity.
  * - **consent.google.\*** interstitials are not fetched. Their `continue=` parameter is decoded
- *   and followed instead.
+ *   and followed instead. **google.\*\/sorry** (rate-limit) pages are not fetched either: their
+ *   `continue=` URL is parsed offline and the chain stops there.
+ * - **HTML fallback (v2.3.5, approved):** when no redirect URL carries a coordinate and
+ *   [GuideFeatureFlags.shortLinkBodyParseEnabled] is on, up to 256 KB of the final Google page is
+ *   scanned by [MapsPageCoordinateExtractor] (patterns only).
  * - Every redirect target must stay on a Google host (allow-list plus `consent.` / `www.google.`).
  * - **Kill-switch:** when [GuideFeatureFlags.shortLinkParsingEnabled] is false, only the pasted
  *   text is parsed (no network). A coordinate-less Google link then yields
@@ -32,12 +46,17 @@ import kotlinx.coroutines.CancellationException
  * - [StayResolution.Resolved]: EXACT for pin/query/path/geo/DMS/decimal rungs, APPROXIMATE for a
  *   viewport-only (`@lat,lng,z`) coordinate.
  * - [StayResolution.NoCoordinates]: valid Google link with no coordinate (e.g. `q=<name>&ftid=`).
- *   Carries the final URL and a place-name hint for the Nominatim fallback.
+ *   Carries the final URL and a place-name hint for the (automatic) Nominatim fallback.
  * - [StayResolution.Rejected]: unsupported host, insecure link, too many redirects, dead link,
- *   network failure or nothing parseable. The reason is short, user-safe text.
+ *   Google refusing the request, or a network failure. Network failures are classified
+ *   ([classifyFailure]) so "offline" is only claimed when the device really is offline.
  */
 class ShortLinkResolver(
     private val fetcher: RedirectFetcher = OkHttpRedirectFetcher(),
+    /** Device connectivity: true/false when known, null when unknown (JVM tests). */
+    private val isOnline: () -> Boolean? = { null },
+    /** Backoff sleeper between the first attempt and the single retry (injectable for tests). */
+    private val sleeper: suspend (Long) -> Unit = { delay(it) },
     private val flags: () -> GuideFeatureFlags = { GuideFeatureFlags() }
 ) : StayLocationResolver {
 
@@ -77,12 +96,13 @@ class ShortLinkResolver(
         }
 
         return try {
-            follow(url, localCoord, local.placeNameHint)
+            withTimeoutOrNull(OVERALL_TIMEOUT_MS) { follow(url, localCoord, local.placeNameHint) }
+                ?: StayResolution.Rejected(if (isOnline() == false) REASON_OFFLINE else REASON_TIMEOUT)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            // IOException, timeouts, malformed URLs rejected by OkHttp, etc. No details logged.
-            StayResolution.Rejected(REASON_NETWORK)
+            // v2.3.5 (#3): classify instead of always blaming the connection. No details logged.
+            StayResolution.Rejected(classifyFailure(e, isOnline()))
         }
     }
 
@@ -96,11 +116,16 @@ class ShortLinkResolver(
         // URL-derived names (/place/<name>, q=<text>) beat free share-text prefixes.
         var urlHint: String? = null
         var redirects = 0
-        var consentUnwraps = 0
+        var unwraps = 0
+        // Set after a google.*/sorry unwrap: parse the continue URL offline, then stop.
+        var stopAfterParse = false
+        val bodyParse = flags().shortLinkBodyParseEnabled
 
         while (true) {
             val hop = MapLinkCoordinateParser.parse(current)
-            if (urlHint == null) urlHint = hop.placeNameHint
+            // consent/sorry URLs: their own `q=` is an opaque token, never a place name.
+            val interstitial = SimpleUrl.parse(current)?.let { CONSENT_HOST.matches(it.host) || isSorryPage(it) } == true
+            if (urlHint == null && !interstitial) urlHint = hop.placeNameHint
             val hint = urlHint ?: initialHint
             hop.coordinate?.let { c ->
                 if (c.precision == CoordinatePrecision.EXACT) {
@@ -108,23 +133,27 @@ class ShortLinkResolver(
                 }
                 if (approx == null) approx = c
             }
+            if (stopAfterParse) return refused(approx, hint, current)
 
             val parsed = SimpleUrl.parse(current) ?: return StayResolution.Rejected(REASON_INVALID_REDIRECT)
 
-            if (CONSENT_HOST.matches(parsed.host)) {
-                if (++consentUnwraps > MAX_REDIRECTS) return StayResolution.Rejected(REASON_TOO_MANY_REDIRECTS)
+            val consent = CONSENT_HOST.matches(parsed.host)
+            val sorry = isSorryPage(parsed)
+            if (consent || sorry) {
+                if (++unwraps > MAX_REDIRECTS) return StayResolution.Rejected(REASON_TOO_MANY_REDIRECTS)
                 val cont = parsed.rawQueryParam("continue")
-                    ?: return finish(approx, hint, current, terminalStatus = 200, redirects = redirects)
+                if (cont == null) {
+                    return if (sorry) refused(approx, hint, current) else finish(approx, hint, current, 200, redirects)
+                }
                 val next = LoopText.percentDecode(cont, plusAsSpace = false)
                 checkHop(next)?.let { return it }
                 current = next
+                // A rate-limit page would just come back if the continue URL were fetched again.
+                if (sorry) stopAfterParse = true
                 continue
             }
 
-            var probe = fetcher.probe(current, ProbeMethod.HEAD)
-            if (probe.statusCode in HEAD_REFUSED) {
-                probe = fetcher.probe(current, ProbeMethod.GET)
-            }
+            val probe = request(current, parsed, bodyParse)
 
             val location = probe.location
             if (probe.statusCode in 300..399 && !location.isNullOrBlank()) {
@@ -136,9 +165,51 @@ class ShortLinkResolver(
                 current = next
                 continue
             }
+
+            // Terminal response. Approved HTML fallback (flag-gated, 2xx only, size-capped).
+            val body = probe.body
+            if (bodyParse && probe.statusCode in 200..299 && body != null) {
+                val page = MapsPageCoordinateExtractor.extract(body)
+                val pageHint = hint ?: page.placeName
+                val c = page.coordinate
+                if (c != null && (c.precision == CoordinatePrecision.EXACT || approx == null)) {
+                    return StayResolution.Resolved(c.location, pageHint, c.precision)
+                }
+                return finish(approx, pageHint, current, probe.statusCode, redirects)
+            }
             return finish(approx, hint, current, probe.statusCode, redirects)
         }
     }
+
+    /**
+     * One hop: GET first (browser identity, optional capped body), HEAD only if GET is refused
+     * with 405/501, and, for shorteners that answered with a page instead of a redirect, one
+     * more GET with the app identity (which Google answers with a plain 30x).
+     */
+    private suspend fun request(url: String, parsed: SimpleUrl, bodyParse: Boolean): RedirectProbe {
+        val maxBody = if (bodyParse) MapsPageCoordinateExtractor.MAX_BODY_BYTES else 0
+        var probe = withRetry { fetcher.fetch(url, ProbeMethod.GET, FetchIdentity.BROWSER_MOBILE, maxBody) }
+        if (probe.statusCode in GET_REFUSED) {
+            probe = withRetry { fetcher.fetch(url, ProbeMethod.HEAD, FetchIdentity.BROWSER_MOBILE, 0) }
+        }
+        if (isShortener(parsed) && probe.statusCode !in 300..399 && probe.statusCode !in GONE) {
+            val alt = withRetry { fetcher.fetch(url, ProbeMethod.GET, FetchIdentity.APP, maxBody) }
+            if (alt.statusCode in 300..399 && !alt.location.isNullOrBlank()) return alt
+        }
+        return probe
+    }
+
+    /** Runs [block]; on an I/O error or timeout waits [RETRY_BACKOFF_MS] and tries exactly once more. */
+    private suspend fun withRetry(block: suspend () -> RedirectProbe): RedirectProbe =
+        try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IOException) {
+            if (isOnline() == false) throw e
+            sleeper(RETRY_BACKOFF_MS)
+            block()
+        }
 
     private fun finish(
         approx: ParsedCoordinate?,
@@ -148,8 +219,20 @@ class ShortLinkResolver(
         redirects: Int
     ): StayResolution {
         if (approx != null) return StayResolution.Resolved(approx.location, hint, approx.precision)
-        if (terminalStatus >= 400 && redirects == 0) return StayResolution.Rejected(REASON_DEAD_LINK)
+        if (terminalStatus == 429 || terminalStatus == 403) return refused(null, hint, finalUrl)
+        if (terminalStatus in 400..499 && redirects == 0) return StayResolution.Rejected(REASON_DEAD_LINK)
+        if (terminalStatus >= 500 && hint == null) return StayResolution.Rejected(REASON_GOOGLE_UNAVAILABLE)
         return StayResolution.NoCoordinates(finalUrl, hint)
+    }
+
+    /**
+     * Google refused/rate-limited us. A known coordinate still wins; a known place name becomes
+     * NoCoordinates so the UI can run the automatic name search; otherwise an accurate refusal.
+     */
+    private fun refused(approx: ParsedCoordinate?, hint: String?, finalUrl: String): StayResolution = when {
+        approx != null -> StayResolution.Resolved(approx.location, hint, approx.precision)
+        hint != null -> StayResolution.NoCoordinates(finalUrl, hint)
+        else -> StayResolution.Rejected(REASON_GOOGLE_REFUSED)
     }
 
     /** Returns a rejection when [next] is not an acceptable redirect target, else null. */
@@ -161,8 +244,14 @@ class ShortLinkResolver(
     }
 
     companion object {
-        /** Maximum number of HTTP redirects followed (audit §4.1). */
-        const val MAX_REDIRECTS = 5
+        /** Maximum number of HTTP redirects followed (audit §4.1; raised to 8 in v2.3.5). */
+        const val MAX_REDIRECTS = 8
+
+        /** Wait before the single retry of a failed hop. */
+        const val RETRY_BACKOFF_MS = 600L
+
+        /** Upper bound for the whole chain (hops x retries) so the sheet never spins forever. */
+        const val OVERALL_TIMEOUT_MS = 45_000L
 
         const val REASON_EMPTY = "Paste a Google Maps link or coordinates."
         const val REASON_NOTHING_FOUND = "No location found in the pasted text."
@@ -172,10 +261,49 @@ class ShortLinkResolver(
         const val REASON_INVALID_REDIRECT = "This link could not be followed."
         const val REASON_LEFT_GOOGLE = "This link leaves Google Maps, so it was not followed."
         const val REASON_DEAD_LINK = "This link no longer opens."
-        const val REASON_NETWORK = "Couldn't reach Google Maps. Check your connection."
 
-        /** HEAD responses that mean "try GET instead". */
-        private val HEAD_REFUSED = setOf(400, 403, 405, 501)
+        // v2.3.5 (#3): failure messages that say what actually happened. Only REASON_OFFLINE and
+        // REASON_CANT_CONNECT talk about connectivity, and only when that is the real cause.
+        const val REASON_OFFLINE = "You're offline. Connect and try again, or paste coordinates."
+        const val REASON_CANT_CONNECT =
+            "Couldn't connect to Google Maps on this network. Try again, or paste coordinates or search by name."
+        const val REASON_TIMEOUT =
+            "Google Maps took too long to answer. Try again, or paste coordinates or search by name."
+        const val REASON_SECURE_CONNECTION =
+            "This network blocked the secure link to Google Maps. Paste coordinates or search by name."
+        const val REASON_GOOGLE_REFUSED =
+            "Google Maps refused the request for now. Paste coordinates or search by name."
+        const val REASON_GOOGLE_UNAVAILABLE =
+            "Google Maps isn't responding right now. Paste coordinates or search by name."
+        const val REASON_NETWORK =
+            "Couldn't open this Google Maps link. Try again, or paste coordinates or search by name."
+
+        /** GET responses that mean "try HEAD instead". */
+        private val GET_REFUSED = setOf(405, 501)
+
+        /** Statuses that mean the short link itself is gone (no identity fallback). */
+        private val GONE = setOf(404, 410)
+
+        /**
+         * Maps a thrown failure to a user-facing reason. "Offline" is only claimed when the device
+         * reports no network; DNS/connect failures say we couldn't connect; TLS failures point at
+         * the network blocking us; timeouts say Google was slow.
+         */
+        internal fun classifyFailure(e: Throwable, online: Boolean?): String = when {
+            online == false -> REASON_OFFLINE
+            e is UnknownHostException || e is ConnectException || e is NoRouteToHostException -> REASON_CANT_CONNECT
+            e is SSLException -> REASON_SECURE_CONNECTION
+            e is InterruptedIOException -> REASON_TIMEOUT
+            e is IOException -> REASON_NETWORK
+            else -> REASON_INVALID_REDIRECT
+        }
+
+        /** `www.google.<tld>/sorry/...` rate-limit interstitial. */
+        internal fun isSorryPage(u: SimpleUrl): Boolean =
+            GOOGLE_WWW.matches(u.host) && (u.path == "/sorry" || u.path.startsWith("/sorry/"))
+
+        private fun isShortener(u: SimpleUrl): Boolean =
+            u.host == "maps.app.goo.gl" || u.host == "goo.gl" || u.host == "g.co"
 
         private const val GOOGLE_TLD = """(?:com|[a-z]{2}|co\.[a-z]{2}|com\.[a-z]{2})"""
         private val GOOGLE_WWW = Regex("""^(?:www\.)?google\.$GOOGLE_TLD$""")
@@ -217,11 +345,15 @@ class ShortLinkResolver(
          * Only link shorteners and legacy `maps.google.*` URLs are worth a network round-trip.
          * A full `www.google.<tld>/maps/...` URL already carries everything we are allowed to read,
          * so it is parsed offline (less traffic to Google, see ToS note in audit §2.3).
+         * v2.3.5: the exception is a `google.<tld>/maps?cid=…` / `…&ftid=…` place-id link, which
+         * never carries coordinates and must be followed to find the pin.
          */
         internal fun needsNetwork(u: SimpleUrl?): Boolean {
             if (u == null) return false
-            return u.host == "maps.app.goo.gl" || u.host == "goo.gl" || u.host == "g.co" ||
-                MAPS_GOOGLE.matches(u.host)
+            if (u.host == "maps.app.goo.gl" || u.host == "goo.gl" || u.host == "g.co" || MAPS_GOOGLE.matches(u.host)) {
+                return true
+            }
+            return GOOGLE_WWW.matches(u.host) && (u.rawQueryParam("cid") != null || u.rawQueryParam("ftid") != null)
         }
 
         /** Allow-list for redirect targets: input allow-list plus consent and any google.<tld> path. */

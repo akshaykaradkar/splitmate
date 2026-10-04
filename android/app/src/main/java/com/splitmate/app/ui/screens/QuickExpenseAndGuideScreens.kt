@@ -209,11 +209,28 @@ fun QuickExpenseScreen(
 
     var amountDigits by remember { mutableStateOf("0") }
     var expenseCategoryTitle by remember { mutableStateOf("Dinner & Food") }
+    var expenseCategoryRef by remember { mutableStateOf<String?>(null) }
     var showEditTitleDialog by remember { mutableStateOf(false) }
     var pendingCommitAfterCategorySelection by remember { mutableStateOf(false) }
     // v2.3.4: expanded category catalog + user-created categories (title-based; no data change).
     var showCategorySheet by remember { mutableStateOf(false) }
     val customCategories by com.splitmate.app.ui.category.CustomExpenseCategoryStore.categories.collectAsState()
+    // v2.3.5 (#5): show the active trip's shared categories alongside this phone's own.
+    val categoryBindContext = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(uiState?.activeGroupId) {
+        com.splitmate.app.ui.category.CustomExpenseCategoryStore.bindGroup(categoryBindContext, uiState?.activeGroupId)
+    }
+    // v2.3.5 (#1): late expenses on a wrapped-up trip are allowed after an explicit confirmation.
+    val extrasByGroup by com.splitmate.app.data.GroupLedgerExtrasStore.extrasByGroup.collectAsStateWithLifecycle()
+    val activeTripEnded = uiState?.activeGroupId?.let { gid -> extrasByGroup[gid]?.tripLifecycle?.isEnded } == true
+    var lateExpenseConfirmedFor by remember { mutableStateOf<String?>(null) }
+    if (activeTripEnded && lateExpenseConfirmedFor != uiState?.activeGroupId) {
+        LateExpenseConfirmDialog(
+            tripName = uiState?.activeGroup?.name ?: "This trip",
+            onAddAnyway = { lateExpenseConfirmedFor = uiState?.activeGroupId },
+            onCancel = onBackClick
+        )
+    }
     var showGroupDropdown by remember { mutableStateOf(false) }
     var editingFriend by remember { mutableStateOf<GroupMemberEntity?>(null) }
 
@@ -271,7 +288,12 @@ fun QuickExpenseScreen(
             onDismiss = { showCategorySheet = false },
             onSelect = { cat ->
                 showCategorySheet = false
-                if (cat.opensPnrFlow) onOpenPnrDirectSplit() else expenseCategoryTitle = cat.title
+                if (cat.opensPnrFlow) {
+                    onOpenPnrDirectSplit()
+                } else {
+                    expenseCategoryTitle = cat.title
+                    expenseCategoryRef = if (cat.isCustom) cat.customId?.let { "custom:$it" } else "builtin:${cat.title}"
+                }
             }
         )
     }
@@ -401,6 +423,7 @@ fun QuickExpenseScreen(
                     } else {
                         draftTitle = cat.title
                         isTravelTicketMode = cat.title.contains("Flight", ignoreCase = true)
+                        expenseCategoryRef = if (cat.isCustom) cat.customId?.let { "custom:$it" } else "builtin:${cat.title}"
                     }
                 }
             )
@@ -629,7 +652,8 @@ fun QuickExpenseScreen(
                                 title = finalTitle,
                                 totalAmountCents = currentAmountPaise,
                                 selectedMemberIds = selected.map { it.id },
-                                payerMemberId = selectedPayerId
+                                payerMemberId = selectedPayerId,
+                                categoryRef = com.splitmate.app.ui.category.ExpenseCategoryRefs.refForTitle(finalTitle, customCategories)
                             )
                             onSaveSplit(currentAmountPaise / 100L, selected)
                         } else {
@@ -670,6 +694,11 @@ fun QuickExpenseScreen(
             onDismiss = { editingFriend = null },
             onSave = { newName, newUpi, newAvatarSeed ->
                 viewModel?.updateFriendUpi(friend.memberId, newName, newUpi, newAvatarSeed)
+                editingFriend = null
+            },
+            // v2.3.5 (#7 RC1): "Save All Members (N)" must persist every member, not just the selected one.
+            onSaveAll = { batchUpdates ->
+                viewModel?.updateAllGroupMembers(batchUpdates)
                 editingFriend = null
             }
         )
@@ -1876,7 +1905,8 @@ fun QuickExpenseScreen(
                                                 title = expenseCategoryTitle,
                                                 totalAmountCents = totalAmountPaise,
                                                 selectedMemberIds = selected.map { it.id },
-                                                payerMemberId = selectedPayerId
+                                                payerMemberId = selectedPayerId,
+                                                categoryRef = com.splitmate.app.ui.category.ExpenseCategoryRefs.refForTitle(expenseCategoryTitle, customCategories)
                                             )
                                             onSaveSplit(totalAmountPaise / 100L, selected)
                                         }
@@ -2104,7 +2134,20 @@ private data class EditableMemberDraft(
     val memberId: String,
     val name: String,
     val style: String,
-    val upiId: String
+    val upiId: String,
+    /** v2.3.5: real VPA (e.g. `rohan@okaxis`); derived `<phone>@upi` handles show blank. */
+    val vpa: String = "",
+    /** v2.3.5: true once the user edited the UPI ID field (blank then means "clear it"). */
+    val vpaTouched: Boolean = false
+)
+
+/** v2.3.5: one place that builds a member's initial draft from the stored row (issue #7 RC2). */
+private fun initialMemberDraftOf(m: GroupMemberEntity): EditableMemberDraft = EditableMemberDraft(
+    memberId = m.memberId,
+    name = m.name,
+    style = com.splitmate.app.MemberProfileEditRules.initialGenderIdOf(m.avatarSeed, m.name),
+    upiId = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(m.userPhone, m.upiId),
+    vpa = com.splitmate.app.MemberProfileEditRules.editableVpaOf(m.upiId)
 )
 
 // ==============================================================================
@@ -2128,21 +2171,12 @@ fun EditFriendUpiDialog(
 
     // Persistent draft map across ALL members in the group so switching members never loses edits!
     // Note: EditableMemberDraft.upiId stores the 10-digit mobile number string for phone sync.
-    val memberDrafts = remember(effectiveMembers) {
+    // v2.3.5 (#7): keyed on the member ids only, so a background sync that touches member rows
+    // while the dialog is open no longer resets the user's in-progress edits.
+    val effectiveMemberIds = effectiveMembers.map { it.memberId }
+    val memberDrafts = remember(effectiveMemberIds) {
         androidx.compose.runtime.mutableStateMapOf<String, EditableMemberDraft>().apply {
-            effectiveMembers.forEach { m ->
-                val parsedDesc = com.splitmate.app.ui.AvatarSeedCodec.parse(m.avatarSeed.ifBlank { m.name })
-                val initialPhone10 = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(m.userPhone, m.upiId)
-                put(
-                    m.memberId,
-                    EditableMemberDraft(
-                        memberId = m.memberId,
-                        name = m.name,
-                        style = parsedDesc.gender.id,
-                        upiId = initialPhone10
-                    )
-                )
-            }
+            effectiveMembers.forEach { m -> put(m.memberId, initialMemberDraftOf(m)) }
         }
     }
 
@@ -2150,12 +2184,7 @@ fun EditFriendUpiDialog(
     val activeMember = remember(activeMemberId, effectiveMembers) {
         effectiveMembers.find { it.memberId == activeMemberId } ?: member
     }
-    val activeDraft = memberDrafts[activeMember.memberId] ?: EditableMemberDraft(
-        memberId = activeMember.memberId,
-        name = activeMember.name,
-        style = "Neutral",
-        upiId = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(activeMember.userPhone, activeMember.upiId)
-    )
+    val activeDraft = memberDrafts[activeMember.memberId] ?: initialMemberDraftOf(activeMember)
 
     var showInAppContactPicker by remember { mutableStateOf(false) }
     var deviceContacts by remember { mutableStateOf<List<DeviceContact>>(emptyList()) }
@@ -2290,12 +2319,7 @@ fun EditFriendUpiDialog(
                             )
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 effectiveMembers.forEach { candidate ->
-                                    val draft = memberDrafts[candidate.memberId] ?: EditableMemberDraft(
-                                        candidate.memberId,
-                                        candidate.name,
-                                        "Neutral",
-                                        com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(candidate.userPhone, candidate.upiId)
-                                    )
+                                    val draft = memberDrafts[candidate.memberId] ?: initialMemberDraftOf(candidate)
                                     val candidateBaseDesc = com.splitmate.app.ui.AvatarSeedCodec.parse(candidate.avatarSeed.ifBlank { candidate.name })
                                     val candidateCompositeSeed = com.splitmate.app.ui.AvatarSeedCodec.encode(
                                         seedKey = if (draft.name.trim() == candidate.name.trim() && candidateBaseDesc.seedKey.isNotBlank()) candidateBaseDesc.seedKey else draft.name.trim().ifEmpty { candidate.name },
@@ -2373,15 +2397,14 @@ fun EditFriendUpiDialog(
                                             }
                                             // Inline 1-Tap M / F / N pills for every member so all can be set rapidly!
                                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                listOf(
-                                                    "Masculine" to "M",
-                                                    "Feminine" to "F",
-                                                    "Neutral" to "N"
-                                                ).forEach { (fullStyle, shortCode) ->
-                                                    val selected = draft.style == fullStyle
+                                                // v2.3.5 (#7 RC2): ids are the stored AvatarGender ids (Male/Female/Neutral).
+                                                com.splitmate.app.MemberProfileEditRules.GENDER_PILLS.forEach { (fullStyle, shortCode) ->
+                                                    val selected = com.splitmate.app.MemberProfileEditRules.isGenderSelected(draft.style, fullStyle)
                                                     Surface(
                                                         onClick = {
+                                                            // v2.3.5 (#7 RC3): keep host + dialog selection in sync.
                                                             activeMemberId = candidate.memberId
+                                                            onSelectMember(candidate)
                                                             memberDrafts[candidate.memberId] = draft.copy(style = fullStyle)
                                                         },
                                                         shape = CircleShape,
@@ -2433,8 +2456,9 @@ fun EditFriendUpiDialog(
                                     .padding(4.dp),
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                listOf("Masculine", "Feminine", "Neutral").forEach { style ->
-                                    val isSelected = activeDraft.style == style
+                                // v2.3.5 (#7 RC2): stored ids (Male/Female/Neutral) with human labels.
+                                com.splitmate.app.MemberProfileEditRules.GENDER_SEGMENTS.forEach { (style, styleLabel) ->
+                                    val isSelected = com.splitmate.app.MemberProfileEditRules.isGenderSelected(activeDraft.style, style)
                                     Surface(
                                         onClick = {
                                             memberDrafts[activeMember.memberId] = activeDraft.copy(style = style)
@@ -2447,7 +2471,7 @@ fun EditFriendUpiDialog(
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
                                             Text(
-                                                text = style,
+                                                text = styleLabel,
                                                 fontFamily = SplitMateBrandFontFamily,
                                                 fontSize = 12.sp,
                                                 fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
@@ -2459,6 +2483,26 @@ fun EditFriendUpiDialog(
                             }
                         }
                     }
+
+                    // v2.3.5 (#7): editable display name for the selected member.
+                    OutlinedTextField(
+                        value = activeDraft.name,
+                        onValueChange = { newName ->
+                            memberDrafts[activeMember.memberId] = activeDraft.copy(name = newName.replace("|", " "))
+                        },
+                        label = { Text("Name", fontFamily = SplitMateBrandFontFamily, fontSize = 12.sp) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = QuickExpenseThemeTokens.SageText,
+                            unfocusedBorderColor = QuickExpenseThemeTokens.BorderLight,
+                            focusedContainerColor = QuickExpenseThemeTokens.SurfaceKeypad,
+                            unfocusedContainerColor = QuickExpenseThemeTokens.SurfaceKeypad,
+                            focusedTextColor = QuickExpenseThemeTokens.PrimaryDark,
+                            unfocusedTextColor = QuickExpenseThemeTokens.PrimaryDark
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
                     // 2. EDITABLE 10-DIGIT MOBILE NUMBER FIELD
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -2498,6 +2542,38 @@ fun EditFriendUpiDialog(
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
+
+                    // v2.3.5 (#7): optional real UPI ID. Left blank -> "<phone>@upi" is derived;
+                    // a typed VPA (e.g. rohan@okaxis) is kept and never overwritten by phone edits.
+                    OutlinedTextField(
+                        value = activeDraft.vpa,
+                        onValueChange = { newVpa ->
+                            memberDrafts[activeMember.memberId] = activeDraft.copy(vpa = newVpa.trim(), vpaTouched = true)
+                        },
+                        label = { Text("UPI ID (optional)", fontFamily = SplitMateBrandFontFamily, fontSize = 12.sp) },
+                        placeholder = {
+                            Text(
+                                text = "e.g. name@okaxis (blank = phone@upi)",
+                                fontFamily = SplitMateBrandFontFamily,
+                                fontSize = 12.sp,
+                                color = QuickExpenseThemeTokens.TextSecondary
+                            )
+                        },
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Email
+                        ),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = QuickExpenseThemeTokens.SageText,
+                            unfocusedBorderColor = QuickExpenseThemeTokens.BorderLight,
+                            focusedContainerColor = QuickExpenseThemeTokens.SurfaceKeypad,
+                            unfocusedContainerColor = QuickExpenseThemeTokens.SurfaceKeypad,
+                            focusedTextColor = QuickExpenseThemeTokens.PrimaryDark,
+                            unfocusedTextColor = QuickExpenseThemeTokens.PrimaryDark
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
                     // 3. Pick / Replace from Contacts Button (Opens In-App ContactPickerBottomSheet)
                     Button(
@@ -2544,26 +2620,20 @@ fun EditFriendUpiDialog(
                     onClick = {
                         if (onSaveAll != null) {
                             val batchUpdates = effectiveMembers.map { m ->
-                                val d = memberDrafts[m.memberId] ?: EditableMemberDraft(
-                                    m.memberId,
-                                    m.name,
-                                    "Neutral",
-                                    com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(m.userPhone, m.upiId)
-                                )
+                                val d = memberDrafts[m.memberId] ?: initialMemberDraftOf(m)
                                 val cleanName = d.name.trim().ifEmpty { m.name }
-                                val baseDesc = com.splitmate.app.ui.AvatarSeedCodec.parse(m.avatarSeed.ifBlank { m.name })
-                                val resolvedSeedKey = if (cleanName == m.name.trim() && baseDesc.seedKey.isNotBlank()) baseDesc.seedKey else cleanName
-                                val encodedSeed = com.splitmate.app.ui.AvatarSeedCodec.encode(
-                                    seedKey = resolvedSeedKey,
-                                    gender = com.splitmate.app.ui.AvatarGender.fromId(d.style),
-                                    styleId = baseDesc.styleId,
-                                    colorPresetId = baseDesc.colorPresetId
+                                val encodedSeed = com.splitmate.app.MemberProfileEditRules.resolveMemberAvatarSeed(
+                                    existingSeed = m.avatarSeed,
+                                    existingName = m.name,
+                                    draftName = cleanName,
+                                    genderId = d.style
                                 )
                                 com.splitmate.app.ui.SplitMateViewModel.BatchMemberUpdate(
                                     memberId = m.memberId,
                                     name = cleanName,
                                     upiId = d.upiId.trim(),
-                                    avatarSeed = encodedSeed
+                                    avatarSeed = encodedSeed,
+                                    vpaOverride = if (d.vpaTouched) d.vpa.trim() else null
                                 )
                             }
                             onSaveAll(batchUpdates)

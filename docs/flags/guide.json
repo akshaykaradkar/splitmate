@@ -3,5 +3,6 @@
   "guideEnabled": true,
   "shortLinkParsingEnabled": true,
   "wdqsEnabled": true,
-  "nominatimEnabled": true
+  "nominatimEnabled": true,
+  "shortLinkBodyParseEnabled": true
 }

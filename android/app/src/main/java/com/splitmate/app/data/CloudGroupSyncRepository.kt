@@ -65,7 +65,11 @@ data class CloudGroupLedgerDocument(
     val deletedMemberIds: Map<String, Long> = emptyMap(),
     val removedMemberPhones: Map<String, Long> = emptyMap(),
     val deletedSettlementIds: Map<String, Long> = emptyMap(),
-    val organizerRolesByKey: Map<String, Long> = emptyMap()
+    val organizerRolesByKey: Map<String, Long> = emptyMap(),
+    /** v2.3.5 (#5): group-shared custom categories; omitted from JSON + hash when empty. */
+    val customCategories: List<CloudCustomCategory> = emptyList(),
+    /** v2.3.5 (#1): trip lifecycle with its own LWW clock; omitted from JSON + hash when null. */
+    val tripLifecycle: TripLifecycleRecord? = null
 )
 
 data class CloudRestoreSummary(
@@ -108,6 +112,7 @@ object CloudGroupSyncRepository {
     fun init(context: Context?) {
         if (context != null) {
             appContext = context.applicationContext ?: context
+            GroupLedgerExtrasStore.init(appContext)
         }
     }
 
@@ -126,6 +131,7 @@ object CloudGroupSyncRepository {
         lastCodePublishEpochByGroup.clear()
         lastLocalMutationEpochByGroup.clear()
         pendingCloudPushByGroup.clear()
+        GroupLedgerExtrasStore.resetForTests()
     }
 
     fun isPhoneOnlineNow(
@@ -617,6 +623,9 @@ object CloudGroupSyncRepository {
                 }
                 put("syncStatus", e.syncStatus)
                 put("createdAt", e.createdAt)
+                // v2.3.5: additive, omitted when null so legacy expense JSON is byte-identical.
+                e.categoryRef?.takeIf { it.isNotBlank() }?.let { put("categoryRef", it) }
+                e.createdByPhone?.takeIf { it.isNotBlank() }?.let { put("createdByPhone", it) }
             })
         }
         root.put("expenses", expensesArr)
@@ -688,6 +697,14 @@ object CloudGroupSyncRepository {
         val presenceObj = JSONObject()
         doc.memberPresenceByPhone.forEach { (phone10, ts) -> presenceObj.put(phone10, ts) }
         root.put("memberPresenceByPhone", presenceObj)
+
+        // v2.3.5 additive keys: only written when non-empty / present.
+        if (doc.customCategories.isNotEmpty()) {
+            root.put(GroupLedgerExtrasCodec.KEY_CUSTOM_CATEGORIES, GroupLedgerExtrasCodec.encodeCustomCategories(doc.customCategories))
+        }
+        doc.tripLifecycle?.let {
+            root.put(GroupLedgerExtrasCodec.KEY_TRIP_LIFECYCLE, GroupLedgerExtrasCodec.encodeTripLifecycle(it))
+        }
 
         return root.toString()
     }
@@ -763,7 +780,10 @@ object CloudGroupSyncRepository {
                         providerName = e.optString("providerName", ""),
                         scheduledAtEpochMs = scheduledAt,
                         syncStatus = e.optString("syncStatus", "SYNCED"),
-                        createdAt = e.optLong("createdAt", System.currentTimeMillis())
+                        createdAt = e.optLong("createdAt", System.currentTimeMillis()),
+                        categoryRef = e.optString("categoryRef", "").trim().take(80).takeIf { it.isNotEmpty() },
+                        createdByPhone = PhoneIdentityValidator.normalizeIndianPhone10(e.optString("createdByPhone", ""))
+                            .takeIf { it.length == 10 }
                     )
                 )
             }
@@ -858,7 +878,13 @@ object CloudGroupSyncRepository {
                 deletedMemberIds = deletedMemberIds,
                 removedMemberPhones = removedMemberPhones,
                 deletedSettlementIds = deletedSettlementIds,
-                organizerRolesByKey = organizerRolesByKey
+                organizerRolesByKey = organizerRolesByKey,
+                customCategories = GroupLedgerExtrasCodec.decodeCustomCategories(
+                    root.optJSONArray(GroupLedgerExtrasCodec.KEY_CUSTOM_CATEGORIES)
+                ),
+                tripLifecycle = GroupLedgerExtrasCodec.decodeTripLifecycle(
+                    root.optJSONObject(GroupLedgerExtrasCodec.KEY_TRIP_LIFECYCLE)
+                )
             )
         } catch (_: Exception) {
             null
@@ -919,6 +945,9 @@ object CloudGroupSyncRepository {
                     put("travelPnr", e.travelPnr)
                     put("providerName", e.providerName)
                     put("scheduledAtEpochMs", e.scheduledAtEpochMs ?: -1L)
+                    // v2.3.5: only when present, so pre-v2.3.5 hashes stay byte-identical.
+                    e.categoryRef?.takeIf { it.isNotBlank() }?.let { put("categoryRef", it) }
+                    e.createdByPhone?.takeIf { it.isNotBlank() }?.let { put("createdByPhone", it) }
                 })
             }
             put("expenses", expensesArr)
@@ -955,6 +984,13 @@ object CloudGroupSyncRepository {
             put("deletedSettlementIds", JSONArray(doc.deletedSettlementIds.keys.sorted()))
             put("flightPnrs", JSONArray(doc.flightVaultByPnr.entries.sortedBy { it.key }.map { "${it.key}:${it.value}" }))
             put("trainPnrs", JSONArray(doc.trainSnapshotByPnr.entries.sortedBy { it.key }.map { "${it.key}:${it.value}" }))
+            // v2.3.5 additive keys: folded in ONLY when non-empty / present (legacy hashes unchanged).
+            if (doc.customCategories.isNotEmpty()) {
+                put(GroupLedgerExtrasCodec.KEY_CUSTOM_CATEGORIES, GroupLedgerExtrasCodec.canonicalCustomCategories(doc.customCategories))
+            }
+            doc.tripLifecycle?.let {
+                put(GroupLedgerExtrasCodec.KEY_TRIP_LIFECYCLE, GroupLedgerExtrasCodec.canonicalTripLifecycle(it))
+            }
         }.toString()
 
         val digest = MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray(Charsets.UTF_8))
@@ -1479,6 +1515,20 @@ object CloudGroupSyncRepository {
             storedTombstones.organizerRolesByKey
         )
 
+        // v2.3.5: union/LWW merge of group custom categories + trip lifecycle across local, remote and the
+        // durable local copy (old clients drop these keys when they push; the durable copy heals that).
+        val storedExtras = GroupLedgerExtrasStore.load(null, groupId)
+        val mergedCustomCategories = GroupLedgerExtrasCodec.mergeCustomCategories(
+            localDoc?.customCategories.orEmpty(),
+            remoteDoc?.customCategories.orEmpty(),
+            storedExtras.customCategories
+        )
+        val mergedTripLifecycle = GroupLedgerExtrasCodec.mergeTripLifecycle(
+            localDoc?.tripLifecycle,
+            remoteDoc?.tripLifecycle,
+            storedExtras.tripLifecycle
+        )
+
         // Un-tombstone phone if a genuinely new member row (memberId !in mergedDeletedMemberIds)
         // was re-invited with PENDING/JOINED at a strictly newer document timestamp
         val allMembersWithDocTime = buildList {
@@ -1520,7 +1570,9 @@ object CloudGroupSyncRepository {
                     doc = singleDoc.copy(
                         organizerPhone10 = resolvedOrgPhone,
                         joinCode6 = resolvedJoinCode,
-                        organizerRolesByKey = mergedOrganizerRolesByKey
+                        organizerRolesByKey = mergedOrganizerRolesByKey,
+                        customCategories = mergedCustomCategories,
+                        tripLifecycle = mergedTripLifecycle
                     ),
                     localUserPhone10 = normLocalPhone,
                     localUserAvatarSeed = localUserAvatarSeed,
@@ -1661,10 +1713,24 @@ object CloudGroupSyncRepository {
             .map { (_, group) ->
                 val fromLocal = localDoc?.expenses?.let { l -> group.find { l.contains(it) } }
                 val fromRemote = remoteDoc?.expenses?.let { r -> group.find { r.contains(it) } }
-                val chosen = if (fromLocal != null && fromRemote != null) {
+                val chosenRaw = if (fromLocal != null && fromRemote != null) {
                     if (localDoc.updatedAtEpochMs >= remoteDoc.updatedAtEpochMs) fromLocal else fromRemote
                 } else {
                     fromLocal ?: fromRemote!!
+                }
+                // v2.3.5: an old client that edits an expense drops categoryRef/createdByPhone; keep the
+                // other side's value instead of erasing it (never touches any money field).
+                val loser = if (chosenRaw === fromLocal) fromRemote else fromLocal
+                val chosen = if (loser != null &&
+                    ((chosenRaw.categoryRef == null && loser.categoryRef != null) ||
+                        (chosenRaw.createdByPhone == null && loser.createdByPhone != null))
+                ) {
+                    chosenRaw.copy(
+                        categoryRef = chosenRaw.categoryRef ?: loser.categoryRef,
+                        createdByPhone = chosenRaw.createdByPhone ?: loser.createdByPhone
+                    )
+                } else {
+                    chosenRaw
                 }
                 val remappedPayerId = memberIdRemap[chosen.payerId] ?: chosen.payerId
                 val finalPayerId = if (remappedPayerId !in survivingMemberIds && organizerMemberId.isNotBlank()) {
@@ -1683,7 +1749,17 @@ object CloudGroupSyncRepository {
         val survivingExpenseMap = combinedExpenses.associateBy { it.expenseId }.toMutableMap()
         val localSplitKeySet = localDoc?.splits.orEmpty().map { it.splitId }.toSet()
         val remoteSplitKeySet = remoteDoc?.splits.orEmpty().map { it.splitId }.toSet()
-        val rawMergedSplits = (localDoc?.splits.orEmpty() + remoteDoc?.splits.orEmpty())
+        // v2.3.5 (#4 guard c): for an expense present on both sides, keep only the winning side's split
+        // rows (same LWW choice as the expense row). The old union resurrected a removed participant's
+        // stale row from the losing side, so the splits no longer summed to the expense total.
+        val (winnerLocalSplits, winnerRemoteSplits) = com.splitmate.app.ExpenseSplitMergeRules.pruneLosingSideSplits(
+            localSplits = localDoc?.splits.orEmpty(),
+            remoteSplits = remoteDoc?.splits.orEmpty(),
+            localExpenseIds = localDoc?.expenses.orEmpty().map { it.expenseId }.toSet(),
+            remoteExpenseIds = remoteDoc?.expenses.orEmpty().map { it.expenseId }.toSet(),
+            localWins = localDoc != null && remoteDoc != null && localDoc.updatedAtEpochMs >= remoteDoc.updatedAtEpochMs
+        )
+        val rawMergedSplits = (winnerLocalSplits + winnerRemoteSplits)
             .filter { it.expenseId in survivingExpenseMap }
             .map { sp ->
                 val remappedMid = memberIdRemap[sp.memberId] ?: sp.memberId
@@ -1868,7 +1944,9 @@ object CloudGroupSyncRepository {
             deletedMemberIds = mergedDeletedMemberIds,
             removedMemberPhones = mergedRemovedMemberPhones,
             deletedSettlementIds = mergedDeletedSettlementIds,
-            organizerRolesByKey = mergedOrganizerRolesByKey
+            organizerRolesByKey = mergedOrganizerRolesByKey,
+            customCategories = mergedCustomCategories,
+            tripLifecycle = mergedTripLifecycle
         )
     }
 
@@ -2264,7 +2342,9 @@ object CloudGroupSyncRepository {
                 deletedMemberIds = durableTombstones.deletedMemberIds,
                 removedMemberPhones = durableTombstones.removedMemberPhones,
                 deletedSettlementIds = durableTombstones.deletedSettlementIds,
-                organizerRolesByKey = durableTombstones.organizerRolesByKey
+                organizerRolesByKey = durableTombstones.organizerRolesByKey,
+                customCategories = GroupLedgerExtrasStore.load(ctx, groupId).customCategories,
+                tripLifecycle = GroupLedgerExtrasStore.load(ctx, groupId).tripLifecycle
             )
         }
 
@@ -2290,6 +2370,12 @@ object CloudGroupSyncRepository {
             organizerPhone10 = mergedDoc.organizerPhone10,
             joinCode6 = mergedDoc.joinCode6,
             organizerRolesByKey = mergedDoc.organizerRolesByKey
+        )
+        // v2.3.5: persist merged custom categories + trip lifecycle durably and publish to the UI.
+        GroupLedgerExtrasStore.mergeAndSave(
+            ctx,
+            groupId,
+            GroupLedgerExtras(customCategories = mergedDoc.customCategories, tripLifecycle = mergedDoc.tripLifecycle)
         )
 
         // PA-4 (3-Layer Removed-User Local Purge):

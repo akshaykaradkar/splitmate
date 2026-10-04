@@ -108,7 +108,11 @@ data class ExpenseEntity(
     val providerName: String = "",
     val scheduledAtEpochMs: Long? = null,
     val syncStatus: String = "SYNCED", // "PENDING" when created offline, "SYNCED" when online
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    /** v2.3.5: stable category reference (`builtin:<key>` or `custom:<id>`); null on legacy rows (title is used). */
+    val categoryRef: String? = null,
+    /** v2.3.5: 10-digit phone of the member who logged the expense; null on legacy rows. */
+    val createdByPhone: String? = null
 )
 
 /**

@@ -84,8 +84,10 @@ private enum class StayTab(val label: String) {
 /**
  * Set-stay sheet: paste a Maps link, pick a Wikivoyage "Sleep" listing, or type coordinates.
  * A preview line confirms "lat, lng · Exact/Approximate" before anything is saved. The
- * Nominatim fallback runs only when the user taps "Search by name" (decision #12) and its result
- * carries the OpenStreetMap credit. Sharing the stay with the group is OFF by default (decision #14).
+ * Nominatim fallback runs when the user taps "Search by name" (decision #12) or, since v2.3.5
+ * (#3), automatically once when a Google link resolves to a place name without coordinates; its
+ * result is always an Approximate preview the user confirms and carries the OpenStreetMap credit.
+ * Sharing the stay with the group is OFF by default (decision #14).
  */
 @Composable
 fun StayPinSheet(
@@ -197,7 +199,7 @@ fun StayPinSheet(
 
             StayFeedbackPanel(
                 feedback = feedback,
-                showOsmCredit = searchedByName,
+                showOsmCredit = searchedByName || stayUi.attribution != null,
                 onSearchByName = { hint ->
                     searchedByName = true
                     actions.searchStayByName(hint)
@@ -472,7 +474,11 @@ private fun StayFeedbackPanel(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Rounded.LinkOff, contentDescription = null, modifier = Modifier.size(20.dp))
                     Text(
-                        text = "That link doesn't include coordinates.",
+                        text = if (feedback.placeNameHint != null) {
+                            "Google didn't share a map pin for this place."
+                        } else {
+                            "That link doesn't include a map pin."
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
@@ -498,7 +504,7 @@ private fun StayFeedbackPanel(
                         )
                     }
                     Text(
-                        text = "Searches OpenStreetMap once for this name. ${NominatimGeocoder.ATTRIBUTION}",
+                        text = "Searches OpenStreetMap for this name. ${NominatimGeocoder.ATTRIBUTION}",
                         style = MaterialTheme.typography.labelSmall
                     )
                 }
@@ -514,11 +520,22 @@ private fun StayFeedbackPanel(
                 }
             }
         }
-        is StayInputFeedback.Rejected -> PlanInlineBanner(
-            message = PlanGuideFormat.sanitizeDisplay(feedback.message) ?: "That didn't look like a location.",
-            tone = PlanBannerTone.ERROR,
-            icon = Icons.Rounded.ErrorOutline
-        )
+        // v2.3.5 (#3): the reason now says what really failed; always offer a way forward.
+        is StayInputFeedback.Rejected -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            PlanInlineBanner(
+                message = PlanGuideFormat.sanitizeDisplay(feedback.message) ?: "That didn't look like a location.",
+                tone = PlanBannerTone.ERROR,
+                icon = Icons.Rounded.ErrorOutline
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = onUseCoordinates, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text("Enter coordinates")
+                }
+                TextButton(onClick = onUseSleep, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text("Pick a Sleep listing")
+                }
+            }
+        }
     }
 }
 

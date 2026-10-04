@@ -151,7 +151,13 @@ data class GuideFeatureFlags(
     val guideEnabled: Boolean = true,
     val shortLinkParsingEnabled: Boolean = true,
     val wdqsEnabled: Boolean = true,
-    val nominatimEnabled: Boolean = true
+    val nominatimEnabled: Boolean = true,
+    /**
+     * v2.3.5 (#3): when true, [com.splitmate.app.data.guide.loop.ShortLinkResolver] may read up to
+     * 256 KB of the final Google Maps HTML page to find the pin when the redirect URLs carry no
+     * coordinates. Off = redirect headers only (v2.3.4 behaviour).
+     */
+    val shortLinkBodyParseEnabled: Boolean = true
 )
 
 // ---------------------------------------------------------------------------------------------

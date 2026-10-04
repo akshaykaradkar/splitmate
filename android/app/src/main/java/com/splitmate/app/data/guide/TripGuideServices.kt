@@ -97,7 +97,9 @@ object TripGuideServices {
         private val unmeteredSource by lazy { WikimediaGuideSource() }
         private val meteredSource by lazy { WikimediaGuideSource(heroWidth = CommonsImageClient.WIDTH_METERED) }
         private val textFetcher by lazy { OkHttpTextFetcher() }
-        val shortLinks by lazy { ShortLinkResolver(OkHttpRedirectFetcher(), flagsNow) }
+        val shortLinks by lazy {
+            ShortLinkResolver(OkHttpRedirectFetcher(), isOnline = { network.state.value.online }, flags = flagsNow)
+        }
         val nominatim by lazy { NominatimGeocoder(textFetcher, flagsNow) }
         val wdqs by lazy { WdqsNearbySource(textFetcher, flagsNow) }
         val planSync = NtfyPlanManifestSync(shareStayForGroup = { gid -> store.isShareStay(gid) })

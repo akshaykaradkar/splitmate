@@ -2104,16 +2104,18 @@ fun LedgersDashboardScreen(
             groupMembers = expGroupMembers,
             initialSplitMemberIds = expExistingSplits.map { it.memberId }.toSet().ifEmpty { expGroupMembers.map { it.memberId }.toSet() },
             onDismiss = { editingExpense = null },
-            onSave = { newTitle, newAmountRupees, newPayerId, updatedSplitMemberIds ->
+            onSave = { newTitle, newAmountRupees, newPayerId, updatedSplitMemberIds, newCategoryRef ->
                 viewModel.editExistingExpense(
                     expenseId = exp.expenseId,
                     newTitle = newTitle,
                     newTotalRupees = newAmountRupees,
                     newPayerId = newPayerId,
-                    selectedMemberIds = updatedSplitMemberIds
+                    selectedMemberIds = updatedSplitMemberIds,
+                    categoryRef = newCategoryRef
                 )
                 editingExpense = null
-            }
+            },
+            lockAmountAndSplit = viewModel.isExpenseItemized(exp, uiState)
         )
     }
 
@@ -5871,6 +5873,21 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                         }
                     }
                 }
+
+                // v2.3.5 (#2): share the whole settle-up of the selected group as an image.
+                Spacer(modifier = Modifier.height(10.dp))
+                com.splitmate.app.ui.share.SettleUpShareButton(
+                    buildModel = {
+                        com.splitmate.app.ui.share.buildSettleUpShareModelForGroup(
+                            groupName = uiState.activeGroup?.name ?: "Our trip",
+                            groupMembers = uiState.activeGroupMembers,
+                            groupExpenses = uiState.expenses.filter { it.groupId == resolvedActiveGroupId },
+                            transfers = settlementPlan.map { it.transfer },
+                            currentUserName = uiState.currentUserName,
+                            tripEnded = com.splitmate.app.data.GroupLedgerExtrasStore.tripLifecycle(resolvedActiveGroupId)?.isEnded == true
+                        )
+                    }
+                )
             }
         }
 
@@ -8122,7 +8139,8 @@ fun AuditVaultScreen(
             },
             onUndoExpense = { idToRollback ->
                 viewModel.rollbackExpense(idToRollback)
-            }
+            },
+            canModify = viewModel.canCurrentUserModifyExpense(selectedExp, uiState)
         )
     }
 
@@ -8135,16 +8153,18 @@ fun AuditVaultScreen(
             groupMembers = expGroupMembers,
             initialSplitMemberIds = expExistingSplits.map { it.memberId }.toSet().ifEmpty { expGroupMembers.map { it.memberId }.toSet() },
             onDismiss = { editingExpenseEntity = null },
-            onSave = { newTitle, newRupees, newPayerId, updatedSplitMemberIds ->
+            onSave = { newTitle, newRupees, newPayerId, updatedSplitMemberIds, newCategoryRef ->
                 viewModel.editExistingExpense(
                     expenseId = exp.expenseId,
                     newTitle = newTitle,
                     newTotalRupees = newRupees,
                     newPayerId = newPayerId,
-                    selectedMemberIds = updatedSplitMemberIds
+                    selectedMemberIds = updatedSplitMemberIds,
+                    categoryRef = newCategoryRef
                 )
                 editingExpenseEntity = null
-            }
+            },
+            lockAmountAndSplit = viewModel.isExpenseItemized(exp, uiState)
         )
     }
 }

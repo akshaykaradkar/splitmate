@@ -75,9 +75,47 @@ class NominatimGeocoder(
         }
     }
 
-    /** Builds the Nominatim `/search` URL (jsonv2, limit=1). Exposed for tests. */
-    fun buildUrl(query: String): String =
-        "$endpoint?q=${LoopText.percentEncode(query)}&format=jsonv2&limit=1&addressdetails=0"
+    /**
+     * v2.3.5 (#3) automatic fallback for a coordinate-less Google link: tries up to
+     * [MAX_SMART_QUERIES] query candidates from [smartQueries] (full name/address first, then
+     * name + locality, then name + destination), each asking for [SMART_LIMIT] results, and
+     * returns the first valid hit as APPROXIMATE. Same policy as [geocode]: one user action,
+     * shared 1 req/s limiter, kill-switch, identified UA.
+     *
+     * @return Resolved on a hit; NoCoordinates(null, name) when every query came back empty;
+     * Rejected when disabled, the hint is empty, or every request failed.
+     */
+    suspend fun geocodeSmart(nameHint: String, destination: String?): StayResolution {
+        if (!flags().nominatimEnabled) return StayResolution.Rejected(REASON_DISABLED)
+        val queries = smartQueries(nameHint, destination)
+        if (queries.isEmpty()) return StayResolution.Rejected(REASON_EMPTY)
+        val label = placeName(nameHint)
+        var failures = 0
+        for (q in queries) {
+            val result = try {
+                val response = limiter.throttle { fetcher.get(buildUrl(q, SMART_LIMIT), HEADERS) }
+                if (response.statusCode !in 200..299) null else parse(response.body, fallbackLabel = label)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+            when (result) {
+                is StayResolution.Resolved -> return result
+                is StayResolution.NoCoordinates -> Unit
+                else -> failures++
+            }
+        }
+        return if (failures == queries.size) {
+            StayResolution.Rejected(REASON_FAILED)
+        } else {
+            StayResolution.NoCoordinates(null, label)
+        }
+    }
+
+    /** Builds the Nominatim `/search` URL (jsonv2, default limit=1). Exposed for tests. */
+    fun buildUrl(query: String, limit: Int = 1): String =
+        "$endpoint?q=${LoopText.percentEncode(query)}&format=jsonv2&limit=${limit.coerceIn(1, 5)}&addressdetails=0"
 
     companion object {
         const val DEFAULT_ENDPOINT = "https://nominatim.openstreetmap.org/search"
@@ -103,24 +141,73 @@ class NominatimGeocoder(
             return if (dest == null || name.contains(dest, ignoreCase = true)) name else "$name, $dest"
         }
 
-        /** Parses a jsonv2 response array. Pure; exposed for fixture tests. */
+        /** v2.3.5: results requested per smart query. */
+        const val SMART_LIMIT = 3
+
+        /** v2.3.5: maximum Nominatim requests per automatic fallback. */
+        const val MAX_SMART_QUERIES = 3
+
+        private val POSTCODE = Regex("""\b\d{5,6}\b""")
+        private val COUNTRY_NOISE = setOf("india", "bharat")
+
+        /**
+         * v2.3.5 (#3): query candidates for a Google place hint like
+         * `"Hemprabha Bed And Breakfast, Plot 12, Mirya Road, Ratnagiri, Maharashtra 415612"`:
+         * 1. the full hint (+ destination), 2. `<name>, <locality>` (the last two meaningful
+         * address parts, postcode/country stripped), 3. `<name>, <destination>`.
+         * A hint already cut with "…" (labels are capped at 120 chars upstream) loses its partial
+         * last part instead of sending a half word to Nominatim. De-duplicated, at most
+         * [MAX_SMART_QUERIES].
+         */
+        fun smartQueries(nameHint: String, destination: String?): List<String> {
+            val raw = nameHint.trim()
+            val truncated = raw.endsWith("…") || raw.endsWith("...")
+            val base = LoopText.clean(raw.removeSuffix("…").removeSuffix("..."), maxChars = 200)
+                ?.trim()?.trimEnd(',', ';', ' ')
+                ?: return emptyList()
+            var parts = base.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+            if (truncated && parts.size > 1) parts = parts.dropLast(1)
+            val name = parts.firstOrNull() ?: return emptyList()
+            val full = parts.joinToString(", ")
+            val locality = parts.drop(1)
+                .map { it.replace(POSTCODE, "").trim() }
+                .filter { p -> p.any { it.isLetter() } && p.lowercase() !in COUNTRY_NOISE }
+                .takeLast(2)
+                .joinToString(", ")
+            val out = LinkedHashSet<String>()
+            buildQuery(full, destination)?.let { out += it }
+            if (locality.isNotEmpty()) buildQuery("$name, $locality", null)?.let { out += it }
+            buildQuery(name, destination)?.let { out += it }
+            return out.take(MAX_SMART_QUERIES)
+        }
+
+        /** The place name part of a hint (before the first comma), for labels. */
+        fun placeName(nameHint: String): String? =
+            LoopText.clean(nameHint.removeSuffix("…"), maxChars = 200)
+                ?.substringBefore(',')?.trim()?.takeIf { it.isNotEmpty() }
+                ?.let { LoopText.clean(it) }
+
+        /**
+         * Parses a jsonv2 response array and returns the first entry with valid coordinates.
+         * Pure; exposed for fixture tests.
+         */
         fun parse(body: String, fallbackLabel: String?): StayResolution {
             val arr = try {
                 JSONArray(body)
             } catch (e: JSONException) {
                 return StayResolution.Rejected(REASON_FAILED)
             }
-            if (arr.length() == 0) return StayResolution.NoCoordinates(null, fallbackLabel)
-            val first = arr.optJSONObject(0) ?: return StayResolution.NoCoordinates(null, fallbackLabel)
-            val lat = first.optString("lat").toDoubleOrNull()
-            val lng = first.optString("lon").toDoubleOrNull()
-            if (lat == null || lng == null) return StayResolution.NoCoordinates(null, fallbackLabel)
-            val ll = MapLinkCoordinateParser.validate(lat, lng)
-                ?: return StayResolution.NoCoordinates(null, fallbackLabel)
-            val label = LoopText.clean(first.optString("name").takeIf { it.isNotBlank() })
-                ?: fallbackLabel
-                ?: LoopText.clean(first.optString("display_name").substringBefore(',').takeIf { it.isNotBlank() })
-            return StayResolution.Resolved(ll, label, CoordinatePrecision.APPROXIMATE)
+            for (i in 0 until arr.length()) {
+                val item = arr.optJSONObject(i) ?: continue
+                val lat = item.optString("lat").toDoubleOrNull() ?: continue
+                val lng = item.optString("lon").toDoubleOrNull() ?: continue
+                val ll = MapLinkCoordinateParser.validate(lat, lng) ?: continue
+                val label = LoopText.clean(item.optString("name").takeIf { it.isNotBlank() })
+                    ?: fallbackLabel
+                    ?: LoopText.clean(item.optString("display_name").substringBefore(',').takeIf { it.isNotBlank() })
+                return StayResolution.Resolved(ll, label, CoordinatePrecision.APPROXIMATE)
+            }
+            return StayResolution.NoCoordinates(null, fallbackLabel)
         }
     }
 }

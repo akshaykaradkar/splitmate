@@ -330,7 +330,20 @@ class TripGuideViewModel(
         }
         setStayFeedback(StayInputFeedback.Working)
         stayJob?.cancel()
-        stayJob = viewModelScope.launch { handleStayResolution(repository.resolveStayText(input), fromNominatim = false) }
+        stayJob = viewModelScope.launch {
+            val result = repository.resolveStayText(input)
+            val hint = (result as? StayResolution.NoCoordinates)?.placeNameHint?.takeIf { it.isNotBlank() }
+            if (hint != null && flags.nominatimEnabled && network.state.value.online) {
+                // v2.3.5 (#3): Google gave a place name but no pin. Search it by name once and show
+                // an Approximate preview (with the OSM credit) for the user to confirm.
+                val geocoded = repository.geocodeStay(hint, stored?.pack?.destination?.label)
+                if (geocoded is StayResolution.Resolved) {
+                    handleStayResolution(geocoded, fromNominatim = true)
+                    return@launch
+                }
+            }
+            handleStayResolution(result, fromNominatim = false)
+        }
     }
 
     override fun searchStayByName(nameHint: String) {
@@ -765,11 +778,15 @@ class TripGuideViewModel(
             }
             is StayResolution.NoCoordinates -> {
                 previewFromNominatim = false
-                setStayFeedback(StayInputFeedback.NeedsFallback(PlanManifestCodec.sanitizeLabel(result.placeNameHint)))
+                // v2.3.5 (#3): not the 80-char manifest label cap; the sheet sanitises for display
+                // and the geocoder needs the whole "name, address" hint.
+                val hint = result.placeNameHint?.trim()?.take(MAX_STAY_HINT_CHARS)?.takeIf { it.isNotEmpty() }
+                setStayFeedback(StayInputFeedback.NeedsFallback(hint))
             }
             is StayResolution.Rejected -> {
                 previewFromNominatim = false
-                setStayFeedback(StayInputFeedback.Rejected(PlanManifestCodec.sanitizeLabel(result.reason) ?: MSG_STAY_GENERIC))
+                val reason = result.reason.trim().take(MAX_STAY_REASON_CHARS).takeIf { it.isNotEmpty() }
+                setStayFeedback(StayInputFeedback.Rejected(reason ?: MSG_STAY_GENERIC))
             }
         }
     }
@@ -852,6 +869,10 @@ class TripGuideViewModel(
         const val MIN_QUERY_CHARS = 2
         const val MAX_QUERY_CHARS = 100
         const val MAX_STAY_INPUT_CHARS = 2_000
+        /** v2.3.5 (#3): place hint kept whole for the name search (display is sanitised by the sheet). */
+        const val MAX_STAY_HINT_CHARS = 200
+        /** v2.3.5 (#3): stay failure reasons are our own copy; never cut them at the 80-char label cap. */
+        const val MAX_STAY_REASON_CHARS = 200
         const val MAX_DISAMBIGUATION = 3
         const val DEFAULT_STAY_LABEL = "Our stay"
         const val CHOOSER_TITLE = "Open with"

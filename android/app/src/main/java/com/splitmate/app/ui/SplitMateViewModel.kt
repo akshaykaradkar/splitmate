@@ -517,6 +517,10 @@ class SplitMateViewModel(
         if (dao != null) {
             observeRoomDatabase(dao)
         }
+        // v2.3.5 (#5): a category created / deleted for the trip is pushed with the ledger.
+        com.splitmate.app.ui.category.CustomExpenseCategoryStore.onGroupCategoriesChanged = { gid ->
+            runCatching { syncActiveGroupNow(groupId = gid) }
+        }
     }
 
     private data class ParsedAvatarSeedDescriptor(
@@ -1180,11 +1184,8 @@ class SplitMateViewModel(
     ) {
         val cleanName = newName.trim().ifEmpty { "Friend" }
         val extractedPhone10 = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(newUpiId, newUpiId)
-        val cleanUpi = when {
-            newUpiId.contains("@") -> newUpiId.trim()
-            extractedPhone10.length == 10 -> "${extractedPhone10}@upi"
-            else -> newUpiId.trim()
-        }
+        // v2.3.5 (#7): the stored upiId is resolved per member below via
+        // MemberProfileEditRules.resolveUpiId so a real VPA is never clobbered by "<phone>@upi".
         val effectiveSeed = newAvatarSeed?.trim()?.ifEmpty { cleanName } ?: cleanName
         var updatedTargetMember: GroupMemberEntity? = null
         _uiState.update { state ->
@@ -1201,7 +1202,10 @@ class SplitMateViewModel(
                     val updated = m.copy(
                         name = cleanName,
                         avatarSeed = effectiveSeed,
-                        upiId = cleanUpi,
+                        upiId = com.splitmate.app.MemberProfileEditRules.resolveUpiId(
+                            existingUpiId = m.upiId,
+                            phoneInput = newUpiId
+                        ),
                         userPhone = finalPhone,
                         inviteStatus = nextInviteStatus
                     )
@@ -1241,7 +1245,11 @@ class SplitMateViewModel(
                     )
                 }
             } else {
-                d?.updateMemberProfile(memberId, cleanName, cleanUpi, effectiveSeed)
+                val fallbackUpi = target?.upiId ?: com.splitmate.app.MemberProfileEditRules.resolveUpiId(
+                    existingUpiId = "",
+                    phoneInput = newUpiId
+                )
+                d?.updateMemberProfile(memberId, cleanName, fallbackUpi, effectiveSeed)
             }
         }
     }
@@ -1432,7 +1440,8 @@ class SplitMateViewModel(
         explicitCategory: String? = null,
         explicitTravelPnr: String? = null,
         explicitProviderName: String? = null,
-        explicitScheduledAtEpochMs: Long? = null
+        explicitScheduledAtEpochMs: Long? = null,
+        categoryRef: String? = null
     ) {
         if (totalAmountCents <= 0L) return
         val state = _uiState.value
@@ -1468,6 +1477,13 @@ class SplitMateViewModel(
                     )
             }
             if (existingExp != null) {
+                // v2.3.5 (#4): a member who may not edit the earlier expense must not alter it here.
+                if (!canCurrentUserModifyExpense(existingExp, state)) {
+                    _uiState.update { curr ->
+                        curr.copy(statusBannerMessage = "PNR $detectedPnr is already logged. ${com.splitmate.app.ExpenseEditPermission.READ_ONLY_REASON}")
+                    }
+                    return
+                }
                 // Do NOT count as a new expense — update the earlier logged expense in place with pure Long paise
                 editExistingExpense(
                     expenseId = existingExp.expenseId,
@@ -1520,8 +1536,14 @@ class SplitMateViewModel(
             travelPnr = inferred.travelPnr,
             providerName = inferred.providerName,
             scheduledAtEpochMs = inferred.scheduledAtEpochMs,
-            syncStatus = syncStatus
+            syncStatus = syncStatus,
+            // v2.3.5 (#4): who logged it (creator may edit/delete). Null when the user has no phone.
+            createdByPhone = com.splitmate.app.ExpenseEditPermission.creatorStampOf(
+                currentUserPhone10(state.activeGroupId, state)
+            ),
+            categoryRef = categoryRef?.takeIf { it.isNotBlank() }
         )
+        com.splitmate.app.ui.category.CustomExpenseCategoryStore.ensurePublished(appContext, state.activeGroupId, categoryRef)
 
         val splitEntities = equalAllocations.mapIndexed { idx, alloc ->
             ExpenseSplitEntity(
@@ -1593,6 +1615,36 @@ class SplitMateViewModel(
                 activeCurrencyCode = "INR"
             )
         }
+    }
+
+    fun wrapUpTrip(groupId: String) {
+        val state = _uiState.value
+        if (!runCatching { isUserGroupOrganizer(groupId, state) }.getOrDefault(false)) return
+        val record = com.splitmate.app.data.GroupLedgerExtrasStore.tripLifecycle(groupId)?.copy(
+            state = com.splitmate.app.data.TripLifecycleState.ENDED,
+            endedAtEpochMs = System.currentTimeMillis(),
+            endedByPhone = currentUserPhone10(groupId, state),
+            updatedAtEpochMs = System.currentTimeMillis()
+        ) ?: com.splitmate.app.data.TripLifecycleRecord(
+            state = com.splitmate.app.data.TripLifecycleState.ENDED,
+            endedAtEpochMs = System.currentTimeMillis(),
+            endedByPhone = currentUserPhone10(groupId, state),
+            updatedAtEpochMs = System.currentTimeMillis()
+        )
+        com.splitmate.app.data.GroupLedgerExtrasStore.setTripLifecycle(null, groupId, record)
+        syncActiveGroupNow(groupId = groupId)
+    }
+
+    fun reopenTrip(groupId: String) {
+        val state = _uiState.value
+        if (!runCatching { isUserGroupOrganizer(groupId, state) }.getOrDefault(false)) return
+        val record = com.splitmate.app.data.GroupLedgerExtrasStore.tripLifecycle(groupId)?.copy(
+            state = com.splitmate.app.data.TripLifecycleState.ACTIVE,
+            endedAtEpochMs = 0L,
+            updatedAtEpochMs = System.currentTimeMillis()
+        ) ?: return
+        com.splitmate.app.data.GroupLedgerExtrasStore.setTripLifecycle(null, groupId, record)
+        syncActiveGroupNow(groupId = groupId)
     }
 
     fun setOfflineMode(offline: Boolean) {
@@ -4080,8 +4132,54 @@ class SplitMateViewModel(
         }
     }
 
+    /**
+     * v2.3.5 (#4): the device user's 10-digit phone for audit stamps / permission checks. Prefers the
+     * profile phone, falls back to the active group's `isCurrentUser` member row.
+     */
+    fun currentUserPhone10(groupId: String? = null, state: SplitMateUiState = _uiState.value): String {
+        val profilePhone = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(state.userPhone)
+        if (profilePhone.length == 10) return profilePhone
+        val gId = groupId ?: state.activeGroupId
+        val me = state.members.firstOrNull { it.groupId == gId && it.isCurrentUser } ?: return ""
+        return com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(me.userPhone, me.upiId)
+    }
+
+    /**
+     * v2.3.5 (#4): only an organizer, the payer, or the creator may edit / delete [expense].
+     * Legacy rows (null `createdByPhone`) fall back to organizer + payer.
+     */
+    fun canCurrentUserModifyExpense(expense: ExpenseEntity, state: SplitMateUiState = _uiState.value): Boolean {
+        val groupMembers = state.members.filter { it.groupId == expense.groupId }
+        val me = groupMembers.firstOrNull { it.isCurrentUser }
+        val payer = groupMembers.firstOrNull { it.memberId == expense.payerId }
+        return com.splitmate.app.ExpenseEditPermission.canModify(
+            currentPhone = currentUserPhone10(expense.groupId, state),
+            isOrganizer = runCatching { isUserGroupOrganizer(expense.groupId, state) }.getOrDefault(false),
+            payerPhone = payer?.let { com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(it.userPhone, it.upiId) },
+            createdByPhone = expense.createdByPhone,
+            isCurrentUserPayer = me != null && me.memberId == expense.payerId
+        )
+    }
+
+    fun canCurrentUserModifyExpense(expenseId: String): Boolean {
+        val exp = _uiState.value.expenses.find { it.expenseId == expenseId } ?: return false
+        return canCurrentUserModifyExpense(exp)
+    }
+
+    /** v2.3.5 (#4): true when the quick edit dialog must lock amount + shares (itemized receipt). */
+    fun isExpenseItemized(expense: ExpenseEntity, state: SplitMateUiState = _uiState.value): Boolean =
+        com.splitmate.app.ItemizedExpenseGuard.isItemized(
+            expense,
+            state.splits.filter { it.expenseId == expense.expenseId }
+        )
+
     fun rollbackExpense(expenseId: String) {
         val removedExpense = _uiState.value.expenses.find { it.expenseId == expenseId }
+        // v2.3.5 (#4): enforce the edit/delete permission in the ViewModel, not only in the UI.
+        if (removedExpense != null && !canCurrentUserModifyExpense(removedExpense)) {
+            _uiState.update { it.copy(statusBannerMessage = com.splitmate.app.ExpenseEditPermission.READ_ONLY_REASON) }
+            return
+        }
         val targetGroupId = removedExpense?.groupId ?: _uiState.value.activeGroupId
         if (targetGroupId.isNotBlank()) {
             com.splitmate.app.data.CloudGroupSyncRepository.setGroupPendingCloudPush(null, targetGroupId, true)
@@ -4162,7 +4260,9 @@ class SplitMateViewModel(
         val memberId: String,
         val name: String,
         val upiId: String,
-        val avatarSeed: String
+        val avatarSeed: String,
+        /** v2.3.5 (#7): the "UPI ID" field when the user edited it; null = keep existing VPA rules. */
+        val vpaOverride: String? = null
     )
 
     fun updateAllGroupMembers(updates: List<BatchMemberUpdate>) {
@@ -4175,11 +4275,12 @@ class SplitMateViewModel(
                 val upd = updateMap[mbr.memberId]
                 if (upd != null) {
                     val extractedPhone10 = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(upd.upiId, upd.upiId)
-                    val cleanUpi = when {
-                        upd.upiId.contains("@") -> upd.upiId.trim()
-                        extractedPhone10.length == 10 -> "${extractedPhone10}@upi"
-                        else -> upd.upiId.trim()
-                    }
+                    // v2.3.5 (#7): only derive "<phone>@upi" when there is no real VPA to keep.
+                    val cleanUpi = com.splitmate.app.MemberProfileEditRules.resolveUpiId(
+                        existingUpiId = mbr.upiId,
+                        phoneInput = upd.upiId,
+                        vpaInput = upd.vpaOverride
+                    )
                     val finalPhone = extractedPhone10.ifBlank {
                         if (upd.upiId.isBlank()) "" else mbr.userPhone
                     }
@@ -4235,10 +4336,17 @@ class SplitMateViewModel(
         newTotalRupees: Double,
         newPayerId: String,
         selectedMemberIds: List<String>? = null,
-        newTotalCentsOverride: Long? = null
+        newTotalCentsOverride: Long? = null,
+        /** v2.3.5: new categoryRef; [KEEP_CATEGORY_REF] (default) leaves the stored one untouched. */
+        categoryRef: String? = KEEP_CATEGORY_REF
     ) {
         val state = _uiState.value
         val existing = state.expenses.find { it.expenseId == expenseId } ?: return
+        // v2.3.5 (#4): only organizer / payer / creator may edit (enforced here, not just in the UI).
+        if (!canCurrentUserModifyExpense(existing, state)) {
+            _uiState.update { it.copy(statusBannerMessage = com.splitmate.app.ExpenseEditPermission.READ_ONLY_REASON) }
+            return
+        }
         val cleanTitle = newTitle.trim().ifEmpty { existing.title }
         val inferred = inferStructuredExpenseMetadata(cleanTitle)
 
@@ -4279,20 +4387,40 @@ class SplitMateViewModel(
             currentUserId = currentUser?.memberId
         )
 
+        // v2.3.5 (#4 guard a): never silently flatten an itemized receipt (tax / tip / remainder /
+        // unequal item claims) into an equal split. Money or share changes are refused; title and
+        // payer edits keep the original split rows untouched.
+        val allExistingSplits = state.splits.filter { it.expenseId == expenseId }
+        val isItemized = com.splitmate.app.ItemizedExpenseGuard.isItemized(existing, allExistingSplits)
+        if (isItemized && com.splitmate.app.ItemizedExpenseGuard.isBlockedEdit(
+                expense = existing,
+                splits = allExistingSplits,
+                newTotalCents = newTotalCents,
+                newParticipantIds = selectedMemberIds?.filter { id -> groupMembers.any { it.memberId == id } }?.ifEmpty { null }
+            )
+        ) {
+            _uiState.update { it.copy(statusBannerMessage = com.splitmate.app.ItemizedExpenseGuard.LOCKED_REASON) }
+            return
+        }
+
         com.splitmate.app.data.CloudGroupSyncRepository.setGroupPendingCloudPush(null, existing.groupId, true)
         val updatedExpense = existing.copy(
             title = cleanTitle,
             payerId = resolvedPayerId,
-            baseSubtotalCents = newTotalCents,
-            totalAmountCents = newTotalCents,
+            baseSubtotalCents = if (isItemized) existing.baseSubtotalCents else newTotalCents,
+            totalAmountCents = if (isItemized) existing.totalAmountCents else newTotalCents,
             expenseCategory = inferred.expenseCategory.takeIf { it != "OTHER" } ?: existing.expenseCategory,
             travelPnr = inferred.travelPnr.ifBlank { existing.travelPnr },
             providerName = inferred.providerName.ifBlank { existing.providerName },
             scheduledAtEpochMs = inferred.scheduledAtEpochMs ?: existing.scheduledAtEpochMs,
-            syncStatus = if (dao != null || state.isOfflineMode) "PENDING" else "SYNCED"
+            syncStatus = if (dao != null || state.isOfflineMode) "PENDING" else "SYNCED",
+            categoryRef = if (categoryRef == KEEP_CATEGORY_REF) existing.categoryRef else categoryRef?.takeIf { it.isNotBlank() }
         )
+        if (categoryRef != KEEP_CATEGORY_REF) {
+            com.splitmate.app.ui.category.CustomExpenseCategoryStore.ensurePublished(appContext, existing.groupId, categoryRef)
+        }
 
-        val updatedSplits = equalAllocations.mapIndexed { idx, alloc ->
+        val updatedSplits = if (isItemized) allExistingSplits else equalAllocations.mapIndexed { idx, alloc ->
             ExpenseSplitEntity(
                 splitId = "${expenseId}_sp_$idx",
                 expenseId = expenseId,
@@ -4307,7 +4435,11 @@ class SplitMateViewModel(
             curr.copy(
                 expenses = curr.expenses.map { if (it.expenseId == expenseId) updatedExpense else it },
                 splits = curr.splits.filterNot { it.expenseId == expenseId } + updatedSplits,
-                statusBannerMessage = "Updated \"$cleanTitle\" across ${chosenMembers.size} members (${formatIndianRupeesFromCents(newTotalCents)})"
+                statusBannerMessage = if (isItemized) {
+                    "Updated \"$cleanTitle\" (itemized shares kept, ${formatIndianRupeesFromCents(updatedExpense.totalAmountCents)})"
+                } else {
+                    "Updated \"$cleanTitle\" across ${chosenMembers.size} members (${formatIndianRupeesFromCents(newTotalCents)})"
+                }
             )
         }
 
@@ -4853,7 +4985,15 @@ class SplitMateViewModel(
 
         val expenseMap = linkedMapOf<String, ExpenseEntity>()
         existingGroupExpenses.forEach { e -> expenseMap[e.expenseId] = e }
-        incomingGroupExpenses.forEach { inc -> expenseMap[inc.expenseId] = inc }
+        incomingGroupExpenses.forEach { inc ->
+            // v2.3.5 (#4): the SM2 capsule has no createdByPhone column; keep the local audit stamp.
+            val prior = expenseMap[inc.expenseId]
+            expenseMap[inc.expenseId] = if (inc.createdByPhone == null && prior?.createdByPhone != null) {
+                inc.copy(createdByPhone = prior.createdByPhone)
+            } else {
+                inc
+            }
+        }
         val mergedGroupExpenses = expenseMap.values.sortedWith(
             compareByDescending<ExpenseEntity> { it.createdAt }.thenBy { it.expenseId }
         )
@@ -5141,6 +5281,8 @@ class SplitMateViewModel(
         const val PREFS_NAME_SPLITMATE = "splitmate_prefs"
         const val PREF_KEY_EXPRESSIVE_THEME_MODE = "expressive_theme_mode"
         const val PREF_KEY_IS_DARK_THEME = "is_dark_theme"
+        /** v2.3.5: editExistingExpense default meaning "leave categoryRef as stored". */
+        const val KEEP_CATEGORY_REF = "\u0000keep"
 
         private fun urlEnc(raw: String): String = URLEncoder.encode(raw, Charsets.UTF_8.name())
         private fun urlDec(encoded: String): String = URLDecoder.decode(encoded, Charsets.UTF_8.name())

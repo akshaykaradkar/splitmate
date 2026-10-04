@@ -504,9 +504,12 @@ class TripGuideViewModelTest {
         assertEquals(StayInputFeedback.Rejected(TripGuideViewModel.MSG_STAY_EMPTY), vm.s.stayFeedback)
 
         g.stayResolver.result = StayResolution.NoCoordinates("https://www.google.com/maps/place/Hotel+X", "Hotel X")
+        // v2.3.5 (#3): the automatic name search runs once; it finds nothing here.
+        g.geocoder.result = StayResolution.NoCoordinates(null, "Hotel X")
         vm.submitStayInput("https://maps.app.goo.gl/noCoords1")
         advanceUntilIdle()
         assertEquals(StayInputFeedback.NeedsFallback("Hotel X"), vm.s.stayFeedback)
+        assertEquals(listOf("Hotel X" to "Hampi"), g.geocoder.calls)
 
         vm.searchStayByName(" ")
         assertEquals(StayInputFeedback.Rejected(NominatimGeocoder.REASON_EMPTY), vm.s.stayFeedback)
@@ -515,7 +518,7 @@ class TripGuideViewModelTest {
         advanceUntilIdle()
         vm.searchStayByName("Hotel X")
         assertEquals(StayInputFeedback.Rejected(TripGuideViewModel.MSG_STAY_OFFLINE), vm.s.stayFeedback)
-        assertTrue(g.geocoder.calls.isEmpty())
+        assertEquals(1, g.geocoder.calls.size, "no name search while offline")
 
         vm.chooseSleepListing(GuideVmFixtures.mayura)
         vm.confirmStayPreview()
@@ -525,6 +528,42 @@ class TripGuideViewModelTest {
         advanceUntilIdle()
         assertNull(vm.s.stay.stay)
         assertTrue(effects.contains(TripGuideEffect.Snackbar(TripGuideViewModel.MSG_STAY_CLEARED)))
+    }
+
+    @Test
+    fun `v235 link without coordinates auto-searches by name and previews approximate with OSM credit`() = runTest(dispatcher) {
+        seedCachedTrip()
+        val vm = newVm()
+        advanceUntilIdle()
+        g.stayResolver.result = StayResolution.NoCoordinates(
+            "https://www.google.com/maps?q=Hemprabha+Bed+And+Breakfast&ftid=0x1:0x2",
+            "Hemprabha Bed And Breakfast, Mirya Road, Ratnagiri"
+        )
+        vm.submitStayInput("https://maps.app.goo.gl/dkQxdkL37eLmLwiG9")
+        advanceUntilIdle()
+        assertEquals(listOf("Hemprabha Bed And Breakfast, Mirya Road, Ratnagiri" to "Hampi"), g.geocoder.calls)
+        assertEquals(StayInputFeedback.Preview(STAY_LOC, "Hampi Heritage Homestay", approximate = true), vm.s.stayFeedback)
+        assertEquals(NominatimGeocoder.ATTRIBUTION, vm.s.stay.attribution)
+    }
+
+    @Test
+    fun `v235 no auto name search when offline and long reasons are not cut`() = runTest(dispatcher) {
+        seedCachedTrip()
+        val vm = newVm()
+        advanceUntilIdle()
+        g.network.set(online = false)
+        advanceUntilIdle()
+        g.stayResolver.result = StayResolution.NoCoordinates(null, "Hotel X")
+        vm.submitStayInput("https://maps.app.goo.gl/x")
+        advanceUntilIdle()
+        assertEquals(StayInputFeedback.NeedsFallback("Hotel X"), vm.s.stayFeedback)
+        assertTrue(g.geocoder.calls.isEmpty())
+
+        val longReason = com.splitmate.app.data.guide.loop.ShortLinkResolver.REASON_CANT_CONNECT
+        g.stayResolver.result = StayResolution.Rejected(longReason)
+        vm.submitStayInput("https://maps.app.goo.gl/y")
+        advanceUntilIdle()
+        assertEquals(StayInputFeedback.Rejected(longReason), vm.s.stayFeedback)
     }
 
     @Test

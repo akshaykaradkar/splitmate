@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v2.3.5 (#2): FileProvider paths for the settle-up share image. -->
+<paths>
+    <cache-path
+        name="shared_images"
+        path="shared_images/" />
+</paths>
