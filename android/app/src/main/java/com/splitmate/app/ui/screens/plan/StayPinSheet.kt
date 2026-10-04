@@ -2,9 +2,12 @@
 
 package com.splitmate.app.ui.screens.plan
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,10 +26,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Hotel
 import androidx.compose.material.icons.rounded.LinkOff
+import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -51,6 +56,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -70,6 +76,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.splitmate.app.data.guide.CoordinatePrecision
 import com.splitmate.app.data.guide.Place
+import com.splitmate.app.data.guide.PlaceKind
+import com.splitmate.app.data.guide.PlaceSource
 import com.splitmate.app.data.guide.loop.NominatimGeocoder
 import com.splitmate.app.ui.components.InFlightWavyProgressIndicator
 import com.splitmate.app.ui.components.LocalMotionScheme
@@ -95,6 +103,7 @@ fun StayPinSheet(
     actions: TripGuideActions,
     onDismiss: () -> Unit
 ) {
+    val currentOnDismiss by rememberUpdatedState(onDismiss)
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val motion = LocalMotionScheme.current
     val stayUi = state.stay
@@ -104,17 +113,23 @@ fun StayPinSheet(
     var awaitingNewStay by rememberSaveable { mutableStateOf(false) }
     val stayAtOpen = remember { stayUi.stay }
 
+    val destinationName = remember(state.pack) {
+        val dest = state.pack?.destination
+        if (dest != null && dest.location != null) dest.label else null
+    }
+
     // Close once a confirmed or chosen stay lands in state.
     LaunchedEffect(stayUi.stay, awaitingNewStay) {
         val current = stayUi.stay
-        if (awaitingNewStay && current != null && current != stayAtOpen) onDismiss()
+        if (awaitingNewStay && current != null && current != stayAtOpen) currentOnDismiss()
     }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { currentOnDismiss() },
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
+        BackHandler { currentOnDismiss() }
         InFlightWavyProgressIndicator(
             inFlight = state.networkInFlight,
             modifier = Modifier
@@ -133,18 +148,34 @@ fun StayPinSheet(
                 .animateContentSize(motion.defaultSpatialSpec()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = "Set your stay",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.semantics { heading() }
-                )
-                Text(
-                    text = "Your day loop starts and ends here.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "Set your stay",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.semantics { heading() }
+                    )
+                    Text(
+                        text = "Your day loop starts and ends here.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                IconButton(onClick = { currentOnDismiss() }) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = "Close",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             CurrentStay(state = state, actions = actions)
@@ -182,10 +213,15 @@ fun StayPinSheet(
                 )
                 StayTab.SLEEP -> SleepListingsTab(
                     listings = stayUi.sleepListings,
+                    destinationName = destinationName,
                     onChoose = { place ->
                         searchedByName = false
                         awaitingNewStay = true
-                        actions.chooseSleepListing(place)
+                        actions.chooseStay(TripGuideActions.StaySelection.SleepListing(place))
+                    },
+                    onUseDestinationCenter = {
+                        searchedByName = false
+                        actions.chooseStay(TripGuideActions.StaySelection.DestinationCenter)
                     }
                 )
                 StayTab.COORDINATES -> CoordinatesTab(
@@ -200,9 +236,14 @@ fun StayPinSheet(
             StayFeedbackPanel(
                 feedback = feedback,
                 showOsmCredit = searchedByName || stayUi.attribution != null,
+                destinationName = destinationName,
                 onSearchByName = { hint ->
                     searchedByName = true
                     actions.searchStayByName(hint)
+                },
+                onUseDestinationCenter = {
+                    searchedByName = false
+                    actions.chooseStay(TripGuideActions.StaySelection.DestinationCenter)
                 },
                 onUseSleep = { tab = StayTab.SLEEP.ordinal },
                 onUseCoordinates = { tab = StayTab.COORDINATES.ordinal },
@@ -277,7 +318,10 @@ private fun PasteLinkTab(working: Boolean, onSubmit: (String) -> Unit) {
             value = text,
             onValueChange = { text = it.take(MAX_INPUT_CHARS) },
             label = { Text("Google Maps link or place") },
-            placeholder = { Text("maps.app.goo.gl/...") },
+            placeholder = { Text("maps.app.goo.gl/... or hotel / area name") },
+            supportingText = {
+                Text("Paste a Google Maps share link, or type your hotel or area name")
+            },
             trailingIcon = {
                 IconButton(onClick = { clipboard.getText()?.text?.let { text = it.take(MAX_INPUT_CHARS) } }) {
                     Icon(Icons.Rounded.ContentPaste, contentDescription = "Paste from clipboard")
@@ -285,7 +329,7 @@ private fun PasteLinkTab(working: Boolean, onSubmit: (String) -> Unit) {
             },
             maxLines = 3,
             shape = RoundedCornerShape(20.dp),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { submit() }),
             colors = sheetFieldColors(),
             modifier = Modifier.fillMaxWidth()
@@ -344,13 +388,31 @@ private fun CoordinatesTab(working: Boolean, onSubmit: (String) -> Unit) {
 }
 
 @Composable
-private fun SleepListingsTab(listings: List<Place>, onChoose: (Place) -> Unit) {
+private fun SleepListingsTab(
+    listings: List<Place>,
+    destinationName: String?,
+    onChoose: (Place) -> Unit,
+    onUseDestinationCenter: () -> Unit
+) {
     if (listings.isEmpty()) {
-        Text(
-            text = "This guide has no 'Sleep' listings yet. Paste a link or enter coordinates instead.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(
+                text = "This guide has no curated 'Sleep' listings yet. Type your hotel or area name in the first tab, or start from the destination center below.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (destinationName != null) {
+                val destStr = PlanGuideFormat.sanitizeDisplay(destinationName) ?: "Destination"
+                FilledTonalButton(
+                    onClick = onUseDestinationCenter,
+                    modifier = Modifier.heightIn(min = 48.dp)
+                ) {
+                    Icon(Icons.Rounded.Place, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Use $destStr center", style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
         return
     }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -402,11 +464,14 @@ private fun SleepListingsTab(listings: List<Place>, onChoose: (Place) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StayFeedbackPanel(
     feedback: StayInputFeedback,
     showOsmCredit: Boolean,
+    destinationName: String?,
     onSearchByName: (String) -> Unit,
+    onUseDestinationCenter: () -> Unit,
     onUseSleep: () -> Unit,
     onUseCoordinates: () -> Unit,
     onConfirm: () -> Unit
@@ -485,30 +550,27 @@ private fun StayFeedbackPanel(
                     )
                 }
                 val hint = PlanGuideFormat.sanitizeDisplay(feedback.placeNameHint)
-                if (hint != null) {
+                InlineStayNameSearch(
+                    destinationName = destinationName,
+                    initialQuery = hint.orEmpty(),
+                    onSearchByName = onSearchByName
+                )
+                if (destinationName != null) {
+                    val destStr = PlanGuideFormat.sanitizeDisplay(destinationName) ?: "Destination"
                     FilledTonalButton(
-                        onClick = { onSearchByName(hint) },
+                        onClick = onUseDestinationCenter,
                         colors = ButtonDefaults.filledTonalButtonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
                             contentColor = MaterialTheme.colorScheme.onSurface
                         ),
                         modifier = Modifier.heightIn(min = 48.dp)
                     ) {
-                        Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Rounded.Place, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = "Search by name: ${PlanGuideFormat.truncate(hint, 32)}",
-                            style = MaterialTheme.typography.labelLarge,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Text("Use $destStr center", style = MaterialTheme.typography.labelLarge)
                     }
-                    Text(
-                        text = "Searches OpenStreetMap for this name. ${NominatimGeocoder.ATTRIBUTION}",
-                        style = MaterialTheme.typography.labelSmall
-                    )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     TextButton(
                         onClick = onUseSleep,
                         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSecondaryContainer)
@@ -521,21 +583,100 @@ private fun StayFeedbackPanel(
             }
         }
         // v2.3.5 (#3): the reason now says what really failed; always offer a way forward.
-        is StayInputFeedback.Rejected -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        is StayInputFeedback.Rejected -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             PlanInlineBanner(
                 message = PlanGuideFormat.sanitizeDisplay(feedback.message) ?: "That didn't look like a location.",
                 tone = PlanBannerTone.ERROR,
                 icon = Icons.Rounded.ErrorOutline
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = onUseCoordinates, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text("Enter coordinates")
+            InlineStayNameSearch(
+                destinationName = destinationName,
+                initialQuery = "",
+                onSearchByName = onSearchByName
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                if (destinationName != null) {
+                    val destStr = PlanGuideFormat.sanitizeDisplay(destinationName) ?: "Destination"
+                    FilledTonalButton(
+                        onClick = onUseDestinationCenter,
+                        modifier = Modifier.heightIn(min = 48.dp)
+                    ) {
+                        Icon(Icons.Rounded.Place, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Use $destStr center", style = MaterialTheme.typography.labelLarge)
+                    }
                 }
                 TextButton(onClick = onUseSleep, modifier = Modifier.heightIn(min = 48.dp)) {
                     Text("Pick a Sleep listing")
                 }
+                TextButton(onClick = onUseCoordinates, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text("Enter coordinates")
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun InlineStayNameSearch(
+    destinationName: String?,
+    initialQuery: String,
+    onSearchByName: (String) -> Unit
+) {
+    var nameQuery by rememberSaveable(initialQuery) { mutableStateOf(initialQuery) }
+    val focusManager = LocalFocusManager.current
+    val submitSearch = {
+        val q = nameQuery.trim()
+        if (q.isNotEmpty()) {
+            focusManager.clearFocus()
+            onSearchByName(q)
+        }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        val destStr = PlanGuideFormat.sanitizeDisplay(destinationName)
+        OutlinedTextField(
+            value = nameQuery,
+            onValueChange = { nameQuery = it.take(200) },
+            label = { Text("Search hotel or area by name") },
+            placeholder = { 
+                Text(if (destStr != null) "e.g. hotel name, area, $destStr" else "Hotel name or area") 
+            },
+            singleLine = true,
+            shape = RoundedCornerShape(20.dp),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { submitSearch() }),
+            colors = sheetFieldColors(),
+            modifier = Modifier.fillMaxWidth()
+        )
+        FilledTonalButton(
+            onClick = submitSearch,
+            enabled = nameQuery.isNotBlank(),
+            colors = ButtonDefaults.filledTonalButtonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ),
+            modifier = Modifier.heightIn(min = 48.dp)
+        ) {
+            Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = if (nameQuery.isNotBlank()) {
+                    "Search by name: ${PlanGuideFormat.truncate(nameQuery.trim(), 32)}"
+                } else {
+                    "Search by name"
+                },
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Text(
+            text = "Searches OpenStreetMap for this name. ${NominatimGeocoder.ATTRIBUTION}",
+            style = MaterialTheme.typography.labelSmall
+        )
     }
 }
 

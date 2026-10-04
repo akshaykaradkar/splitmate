@@ -15,6 +15,10 @@ import com.splitmate.app.data.guide.CoordinatePrecision
  * 6. `ll=lat,lng` in embedded links ⇒ APPROXIMATE.
  * 7. `@lat,lng,<zoom>z` viewport ⇒ APPROXIMATE.
  *
+ * Place name: og:title / itemprop=name / `<title>` first; when those are generic ("Google Maps"),
+ * only proper URL fields (og:url, canonical link, an embedded `/maps/place/<name>` URL) are run
+ * through the URL hint parser. Raw HTML is never handed to the hint parser.
+ *
  * Gated by `GuideFeatureFlags.shortLinkBodyParseEnabled`. Never throws; never logs page content.
  */
 object MapsPageCoordinateExtractor {
@@ -38,6 +42,16 @@ object MapsPageCoordinateExtractor {
     private val ITEMPROP_NAME = Regex("""<meta[^>]{0,200}?content="([^"]{1,300})"[^>]{0,200}?itemprop="name"""", RegexOption.IGNORE_CASE)
     private val TITLE = Regex("""<title>([^<]{1,300})</title>""", RegexOption.IGNORE_CASE)
 
+    // URL-valued fields only (v2.3.5 #3): each match is a single https URL token.
+    private val OG_URL_A = Regex("""<meta[^>]{0,200}?content="(https://[^"<>\s]{1,600})"[^>]{0,200}?property="og:url"""", RegexOption.IGNORE_CASE)
+    private val OG_URL_B = Regex("""<meta[^>]{0,200}?property="og:url"[^>]{0,200}?content="(https://[^"<>\s]{1,600})"""", RegexOption.IGNORE_CASE)
+    private val CANONICAL_A = Regex("""<link[^>]{0,200}?rel="canonical"[^>]{0,200}?href="(https://[^"<>\s]{1,600})"""", RegexOption.IGNORE_CASE)
+    private val CANONICAL_B = Regex("""<link[^>]{0,200}?href="(https://[^"<>\s]{1,600})"[^>]{0,200}?rel="canonical"""", RegexOption.IGNORE_CASE)
+    private val EMBEDDED_PLACE_URL =
+        Regex("""https://(?:www\.)?google\.[a-z.]{2,10}/maps/place/[^\s"'<>\\]{1,300}""", RegexOption.IGNORE_CASE)
+    private val HINT_JUNK = Regex("""[<>="\\{}\[\]]""")
+    private const val MAX_EMBEDDED_URLS = 5
+
     /** Coordinate (or null) and an optional page-derived place name. */
     data class Result(val coordinate: ParsedCoordinate?, val placeName: String?)
 
@@ -48,6 +62,21 @@ object MapsPageCoordinateExtractor {
             Result(extractCoordinate(s), extractName(s))
         } catch (_: Exception) {
             Result(null, null)
+        }
+    }
+
+    /**
+     * True when [html] already yields an EXACT coordinate. The body reader may stop early only
+     * then; APPROXIMATE hints in `<head>` are not enough because the EXACT tuples and
+     * `APP_INITIALIZATION_STATE` usually live further down in `<body>`.
+     */
+    fun hasExactCoordinate(html: String?): Boolean {
+        if (html.isNullOrBlank()) return false
+        return try {
+            val s = normalize(if (html.length > MAX_BODY_BYTES) html.take(MAX_BODY_BYTES) else html)
+            extractCoordinate(s)?.precision == CoordinatePrecision.EXACT
+        } catch (_: Exception) {
+            false
         }
     }
 
@@ -89,6 +118,27 @@ object MapsPageCoordinateExtractor {
             val raw = r.find(s)?.groupValues?.get(1) ?: continue
             val name = cleanTitle(raw) ?: continue
             return name
+        }
+        return urlFieldHint(s)
+    }
+
+    /**
+     * Generic-title fallback: a place-name hint from proper URL fields only (og:url, canonical
+     * link, an embedded `google.<tld>/maps/place/<name>` URL). Each candidate is one https URL
+     * token, so markup such as `<link href=` can never become a hint.
+     */
+    private fun urlFieldHint(s: String): String? {
+        val fields = sequenceOf(OG_URL_A, OG_URL_B, CANONICAL_A, CANONICAL_B)
+            .mapNotNull { it.find(s)?.groupValues?.get(1) }
+        val embedded = EMBEDDED_PLACE_URL.findAll(s).take(MAX_EMBEDDED_URLS).map { it.value }
+        for (candidate in fields + embedded) {
+            val url = candidate.trim()
+            if (!url.startsWith("https://", ignoreCase = true)) continue
+            if (url.any { it.isWhitespace() || it == '<' || it == '>' || it == '"' }) continue
+            val hint = MapLinkCoordinateParser.extractPlaceNameHint(url) ?: continue
+            if (HINT_JUNK.containsMatchIn(hint) || hint.contains("://")) continue
+            if (hint.none { it.isLetter() } || hint.equals("Google Maps", ignoreCase = true)) continue
+            return hint
         }
         return null
     }

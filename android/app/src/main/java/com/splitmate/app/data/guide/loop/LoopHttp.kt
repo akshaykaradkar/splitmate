@@ -3,12 +3,35 @@ package com.splitmate.app.data.guide.loop
 import com.splitmate.app.data.guide.GuideHttp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
+import okhttp3.Dns
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.Request
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
+import java.net.Inet4Address
+import java.net.InetAddress
 import java.util.concurrent.TimeUnit
+
+/**
+ * Prefers IPv4 (`A`) records ahead of IPv6 (`AAAA`) records while keeping IPv6 as fallback.
+ *
+ * OkHttp 4.12 does not implement Happy Eyeballs (RFC 8305); on dual-stack Android carrier networks
+ * where IPv6 routes to Google or OpenStreetMap are blackholed, trying IPv6 first burns 10–20s per
+ * address before IPv4 is ever attempted. Putting IPv4 first avoids the blackhole while still
+ * working on IPv6-only networks.
+ */
+object Ipv4PreferredDns : Dns {
+    override fun lookup(hostname: String): List<InetAddress> {
+        val addresses = Dns.SYSTEM.lookup(hostname)
+        if (addresses.size <= 1) return addresses
+        val ipv4 = addresses.filterIsInstance<Inet4Address>()
+        if (ipv4.isEmpty() || ipv4.size == addresses.size) return addresses
+        val ipv6 = addresses.filter { it !is Inet4Address }
+        return ipv4 + ipv6
+    }
+}
 
 /*
  * Network seams for the smart-loop package. Every networked component takes one of these
@@ -20,7 +43,7 @@ enum class ProbeMethod { HEAD, GET }
 
 /**
  * Which identity a [RedirectFetcher] presents (v2.3.5 #3).
- * - [BROWSER_MOBILE]: a mobile Chrome User-Agent. Google serves normal 30x redirects / place pages
+ * - [BROWSER_MOBILE]: a browser User-Agent. Google serves normal 30x redirects / place pages
  *   to it instead of bot-style responses.
  * - [APP]: the identified SplitMate User-Agent ([GuideHttp.USER_AGENT]), kept as a fallback.
  */
@@ -61,11 +84,8 @@ interface HttpTextFetcher {
 }
 
 /**
- * OkHttp implementation of [RedirectFetcher]: `followRedirects(false)`, connect/read 10 s.
- *
- * v2.3.5 (#3): `retryOnConnectionFailure(true)` so OkHttp tries the next route (e.g. IPv4 after a
- * dead IPv6 address on carrier networks) instead of failing the whole hop; redirects are still
- * followed manually by [ShortLinkResolver].
+ * OkHttp implementation of [RedirectFetcher]: `followRedirects(false)`, IPv4-preferred DNS,
+ * HTTP/1.1 so closing a partially read 2 MB Google Maps page never stalls draining an HTTP/2 stream.
  */
 class OkHttpRedirectFetcher(
     private val client: OkHttpClient = defaultClient()
@@ -97,42 +117,89 @@ class OkHttpRedirectFetcher(
                     if (maxBodyBytes <= 0) builder.header("Range", "bytes=0-0")
                 }
             }
-            client.newCall(builder.build()).execute().use { response ->
-                val body = if (method == ProbeMethod.GET && maxBodyBytes > 0 && response.code in 200..299) {
-                    response.body?.byteStream()?.let { readTruncated(it, maxBodyBytes) }
-                } else {
-                    null
+            val call = client.newCall(builder.build())
+            try {
+                val response = call.execute()
+                try {
+                    val code = response.code
+                    val location = response.header("Location")
+                    val body = if (method == ProbeMethod.GET && maxBodyBytes > 0 && code in 200..299) {
+                        response.body?.byteStream()?.let { readTruncated(it, maxBodyBytes) }
+                    } else {
+                        null
+                    }
+                    // Cancel before closing a 2xx stream so OkHttp does not block draining unread MBs of Maps HTML/JS.
+                    if (code in 200..299) {
+                        runCatching { call.cancel() }
+                    }
+                    RedirectProbe(code, location, body)
+                } finally {
+                    runCatching { response.close() }
                 }
-                RedirectProbe(response.code, response.header("Location"), body)
+            } finally {
+                if (!call.isCanceled()) runCatching { call.cancel() }
             }
         }
 
     companion object {
-        /** Mobile Chrome identity used for Google hosts (v2.3.5 #3). */
+        /** Browser identity used for Google hosts (v2.3.5 #3). */
         const val MOBILE_BROWSER_USER_AGENT =
             "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) " +
                 "Chrome/124.0.0.0 Mobile Safari/537.36"
 
-        /** Redirect client: never follows redirects itself; 10 s connect/read (mobile networks). */
+        /** Redirect client: never follows redirects itself; IPv4-first DNS; HTTP/1.1; fast timeouts. */
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
+            .dns(Ipv4PreferredDns)
+            .protocols(listOf(Protocol.HTTP_1_1))
             .followRedirects(false)
             .followSslRedirects(false)
             .retryOnConnectionFailure(true)
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
-            .callTimeout(20, TimeUnit.SECONDS)
+            .connectTimeout(6, TimeUnit.SECONDS)
+            .readTimeout(6, TimeUnit.SECONDS)
+            .callTimeout(10, TimeUnit.SECONDS)
             .build()
 
-        /** Reads at most [max] bytes and silently truncates the rest (HTML fallback only). */
-        internal fun readTruncated(input: InputStream, max: Int): String {
+        /** Earliest point at which [readTruncated] considers stopping before [max] bytes. */
+        internal const val EARLY_STOP_MIN_BYTES = 24 * 1024
+
+        /** [readTruncated] re-checks for an EXACT coordinate at most once per this many bytes. */
+        internal const val EARLY_STOP_CHECK_INTERVAL_BYTES = 32 * 1024
+
+        /**
+         * Reads at most [max] bytes and silently truncates the rest (HTML fallback only).
+         *
+         * v2.3.5 (#3) rework: it stops before [max] only when [isComplete] says the bytes read so
+         * far already contain an EXACT coordinate (default: [MapsPageCoordinateExtractor.hasExactCoordinate]).
+         * Reaching `</head>` is not enough: the EXACT `[null,null,lat,lng]` tuples and the
+         * `APP_INITIALIZATION_STATE` array usually sit in `<body>`, after the head.
+         * If the server stalls or drops the connection after some bytes, those bytes are returned
+         * instead of throwing.
+         */
+        internal fun readTruncated(
+            input: InputStream,
+            max: Int,
+            isComplete: (String) -> Boolean = MapsPageCoordinateExtractor::hasExactCoordinate
+        ): String {
             val out = ByteArrayOutputStream()
             val buf = ByteArray(8 * 1024)
             var total = 0
-            while (total < max) {
-                val n = input.read(buf, 0, minOf(buf.size, max - total))
-                if (n < 0) break
-                total += n
-                out.write(buf, 0, n)
+            var lastCheckAt = 0
+            try {
+                while (total < max) {
+                    val n = input.read(buf, 0, minOf(buf.size, max - total))
+                    if (n < 0) break
+                    total += n
+                    out.write(buf, 0, n)
+                    if (total >= EARLY_STOP_MIN_BYTES && total < max &&
+                        (lastCheckAt == 0 || total - lastCheckAt >= EARLY_STOP_CHECK_INTERVAL_BYTES)
+                    ) {
+                        lastCheckAt = total
+                        val snapshot = String(out.toByteArray(), Charsets.UTF_8)
+                        if (isComplete(snapshot)) return snapshot
+                    }
+                }
+            } catch (e: IOException) {
+                if (out.size() == 0) throw e
             }
             return String(out.toByteArray(), Charsets.UTF_8)
         }
@@ -163,9 +230,11 @@ class OkHttpTextFetcher(
     companion object {
         const val DEFAULT_MAX_BODY_BYTES = 2 * 1024 * 1024
 
-        /** JSON client: 8 s connect, 10 s read (WDQS timeout budget), no HTTPS→HTTP redirects. */
+        /** JSON client: 8 s connect, 10 s read (WDQS timeout budget), IPv4-first DNS, no HTTPS→HTTP redirects. */
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
+            .dns(Ipv4PreferredDns)
             .followSslRedirects(false)
+            .retryOnConnectionFailure(true)
             .connectTimeout(GuideHttp.CONNECT_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
             .readTimeout(GuideHttp.READ_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
             .callTimeout(GuideHttp.READ_TIMEOUT_MS.toLong() + 2_000L, TimeUnit.MILLISECONDS)

@@ -332,12 +332,21 @@ class TripGuideViewModel(
         stayJob?.cancel()
         stayJob = viewModelScope.launch {
             val result = repository.resolveStayText(input)
+            val directNameInput = result is StayResolution.Rejected &&
+                result.reason == com.splitmate.app.data.guide.loop.ShortLinkResolver.REASON_NOTHING_FOUND &&
+                !input.contains("://") &&
+                input.any { it.isLetter() }
             val hint = (result as? StayResolution.NoCoordinates)?.placeNameHint?.takeIf { it.isNotBlank() }
+                ?: if (directNameInput) input.take(MAX_STAY_HINT_CHARS) else null
             if (hint != null && flags.nominatimEnabled && network.state.value.online) {
-                // v2.3.5 (#3): Google gave a place name but no pin. Search it by name once and show
-                // an Approximate preview (with the OSM credit) for the user to confirm.
+                // v2.3.5 (#3): Google gave a place name (or user typed a hotel/area name directly).
+                // Search it by name once and show an Approximate preview (with the OSM credit).
                 val geocoded = repository.geocodeStay(hint, stored?.pack?.destination?.label)
                 if (geocoded is StayResolution.Resolved) {
+                    handleStayResolution(geocoded, fromNominatim = true)
+                    return@launch
+                }
+                if (directNameInput && geocoded is StayResolution.NoCoordinates) {
                     handleStayResolution(geocoded, fromNominatim = true)
                     return@launch
                 }
@@ -365,15 +374,30 @@ class TripGuideViewModel(
         }
     }
 
-    override fun chooseSleepListing(place: Place) {
-        val loc = place.location
+    override fun chooseStay(selection: TripGuideActions.StaySelection) {
+        val (loc, label, approx) = when (selection) {
+            is TripGuideActions.StaySelection.SleepListing -> {
+                val p = selection.place
+                Triple(p.location, PlanManifestCodec.sanitizeLabel(p.name), false)
+            }
+            is TripGuideActions.StaySelection.DestinationCenter -> {
+                val dest = _uiState.value.pack?.destination
+                Triple(dest?.location, PlanManifestCodec.sanitizeLabel(dest?.label), true)
+            }
+        }
         if (loc == null) {
             setStayFeedback(StayInputFeedback.Rejected(MSG_LISTING_NO_LOCATION))
             return
         }
         stayJob?.cancel()
         previewFromNominatim = false
-        setStayFeedback(StayInputFeedback.Preview(loc, PlanManifestCodec.sanitizeLabel(place.name), approximate = false))
+        setStayFeedback(
+            StayInputFeedback.Preview(
+                location = loc,
+                label = label,
+                approximate = approx
+            )
+        )
     }
 
     override fun confirmStayPreview() {
@@ -401,6 +425,12 @@ class TripGuideViewModel(
             schedulePublish()
             fetchNearbyAroundStay(stay)
         }
+    }
+
+    override fun dismissStayFeedback() {
+        stayJob?.cancel()
+        previewFromNominatim = false
+        _uiState.update { it.copy(stayFeedback = StayInputFeedback.Idle) }
     }
 
     override fun clearStay() {
@@ -759,8 +789,10 @@ class TripGuideViewModel(
         _uiState.update { it.copy(phase = phase) }
     }
 
+    private var stayFeedbackCounter = 0L
+
     private fun setStayFeedback(feedback: StayInputFeedback) {
-        _uiState.update { it.copy(stayFeedback = feedback) }
+        _uiState.update { it.copy(stayFeedback = feedback, stayFeedbackRequestId = ++stayFeedbackCounter) }
         render()
     }
 
@@ -778,10 +810,21 @@ class TripGuideViewModel(
             }
             is StayResolution.NoCoordinates -> {
                 previewFromNominatim = false
-                // v2.3.5 (#3): not the 80-char manifest label cap; the sheet sanitises for display
-                // and the geocoder needs the whole "name, address" hint.
-                val hint = result.placeNameHint?.trim()?.take(MAX_STAY_HINT_CHARS)?.takeIf { it.isNotEmpty() }
-                setStayFeedback(StayInputFeedback.NeedsFallback(hint))
+                if (fromNominatim) {
+                    val dest = _uiState.value.pack?.destination?.label
+                    val hint = result.placeNameHint ?: "the place"
+                    val msg = if (dest != null) {
+                        "Couldn't find '$hint' near $dest. Try a different name or paste coordinates."
+                    } else {
+                        "Couldn't find '$hint'. Try a different name or paste coordinates."
+                    }
+                    setStayFeedback(StayInputFeedback.Rejected(msg))
+                } else {
+                    // v2.3.5 (#3): not the 80-char manifest label cap; the sheet sanitises for display
+                    // and the geocoder needs the whole "name, address" hint.
+                    val hint = result.placeNameHint?.trim()?.take(MAX_STAY_HINT_CHARS)?.takeIf { it.isNotEmpty() }
+                    setStayFeedback(StayInputFeedback.NeedsFallback(hint))
+                }
             }
             is StayResolution.Rejected -> {
                 previewFromNominatim = false

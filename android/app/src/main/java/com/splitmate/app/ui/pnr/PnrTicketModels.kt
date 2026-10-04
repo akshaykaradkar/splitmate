@@ -18,7 +18,13 @@ data class ParsedTravelTicket(
     val chartStatus: String = "Chart Prepared",
     val liveTrainRadar: String = "",
     val fareRupees: String = "",
-    val cleanTitle: String = ""
+    val cleanTitle: String = "",
+    /**
+     * `true` only when [bookingStatus] came from a real source (an explicit `Status:` segment in a
+     * reviewed expense title, a live response, or the user's confirmed review). The `"CNF"` default
+     * of [bookingStatus] is a display placeholder and must never be trusted for an offline lock.
+     */
+    val statusExplicit: Boolean = false
 ) {
     val hasTicketMetadata: Boolean
         get() = pnr.isNotBlank() || trainOrFlightNo.isNotBlank() || coachAndSeats.isNotBlank() || (fromStation.isNotBlank() && toStation.isNotBlank())
@@ -245,11 +251,15 @@ fun extractTravelTicketFromTitle(title: String): ParsedTravelTicket? {
     var dep = ""
     var seats = ""
     var status = "CNF"
+    var isExplicitStatus = false
 
     segments.forEachIndexed { idx, seg ->
         when {
             seg.startsWith("PNR:", ignoreCase = true) -> pnr = seg.substringAfter(":").trim()
-            seg.startsWith("Status:", ignoreCase = true) -> status = seg.substringAfter(":").trim()
+            seg.startsWith("Status:", ignoreCase = true) -> {
+                status = seg.substringAfter(":").trim()
+                isExplicitStatus = true
+            }
             seg.startsWith("Dep:", ignoreCase = true) -> dep = seg.substringAfter(":").trim()
             seg.startsWith("Seats:", ignoreCase = true) || seg.startsWith("Coach", ignoreCase = true) ->
                 seats = seg.substringAfter(":").trim()
@@ -334,7 +344,8 @@ fun extractTravelTicketFromTitle(title: String): ParsedTravelTicket? {
         coachAndSeats = seats,
         bookingStatus = status,
         chartStatus = if (status.contains("WL", ignoreCase = true)) "Chart Not Prepared" else "Chart Prepared",
-        cleanTitle = normalizedCleanTitle
+        cleanTitle = normalizedCleanTitle,
+        statusExplicit = isExplicitStatus
     )
     return if (parsed.hasTicketMetadata) parsed else null
 }

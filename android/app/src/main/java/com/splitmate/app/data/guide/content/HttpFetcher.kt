@@ -70,6 +70,8 @@ class OkHttpFetcher(
         const val DEFAULT_MAX_BODY_BYTES = 4 * 1024 * 1024
 
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
+            .dns(com.splitmate.app.data.guide.loop.Ipv4PreferredDns)
+            .retryOnConnectionFailure(true)
             .connectTimeout(GuideHttp.CONNECT_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
             .readTimeout(GuideHttp.READ_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
             .followRedirects(true)

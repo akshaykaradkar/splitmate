@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -65,14 +67,29 @@ fun TripPlanTab(
     // reports stay feedback (e.g. a Maps link shared into the app). A dismissed feedback value
     // doesn't reopen the sheet; the next new feedback does.
     var staySheetRequested by rememberSaveable { mutableStateOf(false) }
-    var dismissedFeedback by remember { mutableStateOf<StayInputFeedback?>(null) }
+    var dismissedFeedbackId by remember { mutableStateOf(0L) }
+    val latestStayFeedback by rememberUpdatedState(state.stayFeedback)
+    val latestFeedbackRequestId by rememberUpdatedState(state.stayFeedbackRequestId)
     val feedbackWantsSheet = state.guideEnabled &&
         state.stayFeedback != StayInputFeedback.Idle &&
-        state.stayFeedback != dismissedFeedback
+        state.stayFeedbackRequestId != dismissedFeedbackId
     val staySheetVisible = state.guideEnabled && (staySheetRequested || feedbackWantsSheet)
     val openStaySheet = {
-        dismissedFeedback = null
+        dismissedFeedbackId = 0L
         staySheetRequested = true
+    }
+    val dismissStaySheet = {
+        staySheetRequested = false
+        if (latestStayFeedback != StayInputFeedback.Idle) dismissedFeedbackId = latestFeedbackRequestId
+        actions.dismissStayFeedback()
+    }
+
+    BackHandler(enabled = staySheetVisible || state.selectedPlace != null || current != PlanSubView.BOOKINGS) {
+        when {
+            staySheetVisible -> dismissStaySheet()
+            state.selectedPlace != null -> actions.dismissPlace()
+            current != PlanSubView.BOOKINGS -> actions.selectSubView(PlanSubView.BOOKINGS)
+        }
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -142,10 +159,7 @@ fun TripPlanTab(
         StayPinSheet(
             state = state,
             actions = actions,
-            onDismiss = {
-                staySheetRequested = false
-                dismissedFeedback = state.stayFeedback.takeIf { it != StayInputFeedback.Idle }
-            }
+            onDismiss = dismissStaySheet
         )
     }
 }

@@ -586,10 +586,10 @@ class SplitMateV23ExpressiveE2ETest {
         }
 
         @Test
-        fun `F6_T1_05 buildGradle configures versionCode 53 versionName 2_3_5 and graphics-shapes 1_0_1`() {
+        fun `F6_T1_05 buildGradle configures versionCode 54 versionName 2_3_5_1 and graphics-shapes 1_0_1`() {
             val gradleText = resolveBuildGradleFile().readText()
-            assertTrue(gradleText.contains("versionCode 53") || gradleText.contains("versionCode = 53"))
-            assertTrue(gradleText.contains("versionName \"2.3.5\"") || gradleText.contains("versionName = \"2.3.5\""))
+            assertTrue(gradleText.contains("versionCode 54") || gradleText.contains("versionCode = 54"))
+            assertTrue(gradleText.contains("versionName \"2.3.5.1\"") || gradleText.contains("versionName = \"2.3.5.1\""))
             assertTrue(gradleText.contains("androidx.graphics:graphics-shapes"))
         }
 
@@ -4497,7 +4497,8 @@ class SplitMateV23ExpressiveE2ETest {
             assertEquals("BLR", reconstructed.originIata)
             assertEquals("GOI", reconstructed.destinationIata)
             assertEquals(listOf("Rohan", "Akshay", "Priya"), reconstructed.passengers.map { it.fullName })
-            assertEquals(listOf("12A", "12B", "12C"), reconstructed.passengers.map { it.seatNumber })
+            // v2.3.5 rework (audit C3): reconstruction is display-only and never invents seats.
+            assertEquals(listOf("", "", ""), reconstructed.passengers.map { it.seatNumber })
         }
 
         @Test

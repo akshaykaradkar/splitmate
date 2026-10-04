@@ -376,7 +376,8 @@ fun QuickExpenseScreen(
                             fromStation = fromStationInput,
                             toStation = toStationInput,
                             departureTime = depTimeInput,
-                            coachAndSeats = coachSeatsInput
+                            coachAndSeats = coachSeatsInput,
+                            bookingStatus = bookingStatusInput.ifBlank { "UNKNOWN" }
                         ),
                         forceManualRefresh = true,
                         context = context

@@ -25,6 +25,7 @@ import com.splitmate.app.guide.vm.GuideVmFixtures.manifest
 import com.splitmate.app.guide.vm.GuideVmFixtures.noCoords
 import com.splitmate.app.guide.vm.GuideVmFixtures.pack
 import com.splitmate.app.guide.vm.GuideVmFixtures.virupaksha
+import com.splitmate.app.ui.screens.plan.TripGuideActions
 import com.splitmate.app.ui.screens.plan.GuidePhase
 import com.splitmate.app.ui.screens.plan.PlanSubView
 import com.splitmate.app.ui.screens.plan.StayInputFeedback
@@ -520,7 +521,7 @@ class TripGuideViewModelTest {
         assertEquals(StayInputFeedback.Rejected(TripGuideViewModel.MSG_STAY_OFFLINE), vm.s.stayFeedback)
         assertEquals(1, g.geocoder.calls.size, "no name search while offline")
 
-        vm.chooseSleepListing(GuideVmFixtures.mayura)
+        vm.chooseStay(TripGuideActions.StaySelection.SleepListing(GuideVmFixtures.mayura))
         vm.confirmStayPreview()
         advanceUntilIdle()
         assertNotNull(vm.s.stay.stay)

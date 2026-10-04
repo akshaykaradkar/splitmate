@@ -1620,29 +1620,27 @@ class SplitMateViewModel(
     fun wrapUpTrip(groupId: String) {
         val state = _uiState.value
         if (!runCatching { isUserGroupOrganizer(groupId, state) }.getOrDefault(false)) return
-        val record = com.splitmate.app.data.GroupLedgerExtrasStore.tripLifecycle(groupId)?.copy(
-            state = com.splitmate.app.data.TripLifecycleState.ENDED,
-            endedAtEpochMs = System.currentTimeMillis(),
-            endedByPhone = currentUserPhone10(groupId, state),
-            updatedAtEpochMs = System.currentTimeMillis()
-        ) ?: com.splitmate.app.data.TripLifecycleRecord(
-            state = com.splitmate.app.data.TripLifecycleState.ENDED,
-            endedAtEpochMs = System.currentTimeMillis(),
-            endedByPhone = currentUserPhone10(groupId, state),
-            updatedAtEpochMs = System.currentTimeMillis()
+        val record = com.splitmate.app.data.TripLifecycleResolver.buildWrapUpRecord(
+            existing = com.splitmate.app.data.GroupLedgerExtrasStore.tripLifecycle(groupId),
+            nowEpochMs = System.currentTimeMillis(),
+            endedByPhone = currentUserPhone10(groupId, state)
         )
         com.splitmate.app.data.GroupLedgerExtrasStore.setTripLifecycle(null, groupId, record)
         syncActiveGroupNow(groupId = groupId)
     }
 
+    /**
+     * v2.3.5 (#1, C1): organizer-only. Works even when no lifecycle record exists yet (e.g. the
+     * card showed a return-ticket / quiet-trip suggestion); the reopen stamp suppresses that
+     * suggestion so it doesn't immediately reappear.
+     */
     fun reopenTrip(groupId: String) {
         val state = _uiState.value
         if (!runCatching { isUserGroupOrganizer(groupId, state) }.getOrDefault(false)) return
-        val record = com.splitmate.app.data.GroupLedgerExtrasStore.tripLifecycle(groupId)?.copy(
-            state = com.splitmate.app.data.TripLifecycleState.ACTIVE,
-            endedAtEpochMs = 0L,
-            updatedAtEpochMs = System.currentTimeMillis()
-        ) ?: return
+        val record = com.splitmate.app.data.TripLifecycleResolver.buildReopenRecord(
+            existing = com.splitmate.app.data.GroupLedgerExtrasStore.tripLifecycle(groupId),
+            nowEpochMs = System.currentTimeMillis()
+        )
         com.splitmate.app.data.GroupLedgerExtrasStore.setTripLifecycle(null, groupId, record)
         syncActiveGroupNow(groupId = groupId)
     }

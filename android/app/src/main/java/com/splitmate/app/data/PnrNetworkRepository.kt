@@ -160,33 +160,49 @@ object PnrNetworkRepository {
 
     /**
      * Normalizes either a 10-digit Indian Railways PNR (e.g., `8412659012`)
-     * or a 6-character Airline/GDS PNR (e.g., `D9GQ3Z`, `KLMNPQ`).
+     * or a 6-character Airline/GDS PNR (e.g., `D9GQ3Z`).
      */
     fun normalizePnrKey(pnr: String): String {
         val trimmed = pnr.trim()
         if (trimmed.isBlank()) return ""
+        // A value that IS a PNR (expense.travelPnr, ticket.pnr, user-typed PNR field): a single
+        // 6-char alphanumeric token is accepted as-is, including letter-only airline PNRs (e.g. "QAZWSX").
+        // Free text (expense titles) must go through [extractPnrFromFreeText] instead.
+        val compact = trimmed.replace(Regex("""[\s\-]"""), "")
+        if (compact.length == 6 && compact.all { it.isLetterOrDigit() && it.code < 128 }) {
+            return compact.uppercase(Locale.US)
+        }
+        return extractPnrFromFreeText(trimmed)
+    }
+
+    /**
+     * Extracts a PNR from free text such as an expense title. Strict on purpose (audit C2): plain
+     * words like "Dinner" or "Hotel" are never PNRs. Accepts a "PNR:"-labelled code, a 10-digit
+     * rail PNR, or a 6-char alphanumeric token that contains both letters and digits.
+     */
+    fun extractPnrFromFreeText(text: String): String {
+        val trimmed = text.trim()
+        if (trimmed.isBlank()) return ""
+        
+        // 1. Explicitly labelled "PNR:" prefix
         Regex("""PNR[:\s\-]+([A-Za-z0-9]{6,10})\b""", RegexOption.IGNORE_CASE)
             .find(trimmed)?.groupValues?.getOrNull(1)?.uppercase(Locale.US)?.let { tagged ->
                 if (tagged.length == 10 && tagged.all { it.isDigit() }) return tagged
-                if (tagged.length == 6 && tagged !in ForbiddenSixCharWords) return tagged
+                if (tagged.length == 6) return tagged
             }
+            
+        // 2. Implicit 10 digits
         Regex("""\b(\d{10})\b""").find(trimmed)?.groupValues?.getOrNull(1)?.let { return it }
-        if (!trimmed.contains(" ") && !trimmed.contains("|")) {
-            val cleanToken = trimmed.uppercase(Locale.US).replace(Regex("[^A-Z0-9]"), "")
-            if (cleanToken.length == 6 && cleanToken !in ForbiddenSixCharWords) return cleanToken
-        }
+        
+        // 3. Implicit 6 alnum containing at least one digit
         Regex("""\b([A-Za-z0-9]{6})\b""").findAll(trimmed).forEach { match ->
             val token = match.value.uppercase(Locale.US)
-            if (token !in ForbiddenSixCharWords && token.any { it.isLetter() } && token.any { it.isDigit() }) {
+            if (token.any { it.isLetter() } && token.any { it.isDigit() }) {
                 return token
             }
         }
-        val raw = trimmed.uppercase(Locale.US).replace(Regex("[^A-Z0-9]"), "")
-        if (raw.length == 6 && raw !in ForbiddenSixCharWords) return raw
-        val digitsOnly = raw.filter { it.isDigit() }
-        if (digitsOnly.length >= 10) return digitsOnly.takeLast(10)
-        if (!trimmed.contains(" ") && raw.length in 5..8 && raw.any { it.isLetter() }) return raw.take(6)
-        return digitsOnly.take(10)
+        
+        return ""
     }
 
     /**
@@ -217,6 +233,7 @@ object PnrNetworkRepository {
      * Returns `true` if a `ParsedTravelTicket` is already fully confirmed (`CNF` / Flight PDF).
      */
     fun isTicketAllConfirmed(ticket: ParsedTravelTicket): Boolean {
+        if (!ticket.statusExplicit) return false
         val key = normalizePnrKey(ticket.pnr)
         if (key.length != 6 && key.length != 10) return false
         if (ticket.trainOrFlightNo.isBlank() && ticket.fromStation.isBlank() && ticket.coachAndSeats.isBlank()) {
@@ -225,9 +242,91 @@ object PnrNetworkRepository {
         val badge = ticket.bookingStatus.trim().uppercase(Locale.US)
         val isCnf = badge.startsWith("CNF") || badge == "CONFIRMED" || (key.length == 6 && ticket.chartStatus.contains("Flight", ignoreCase = true))
         if (!isCnf) return false
+        if (badge.contains("WL") || badge.contains("RAC") || badge.contains("WAITLIST")) return false
         val seatsUpper = ticket.coachAndSeats.uppercase(Locale.US)
-        if (seatsUpper.isBlank() && key.length == 10) return false
+        if (seatsUpper.isBlank() && key.length == 10) {
+            val hasRoute = ticket.fromStation.isNotBlank() && ticket.toStation.isNotBlank()
+            val hasTrainOrDate = ticket.trainOrFlightNo.isNotBlank() || ticket.departureDate.isNotBlank() || ticket.departureTime.isNotBlank()
+            if (!hasRoute && !hasTrainOrDate) return false
+        }
         return !seatsUpper.contains("WL") && !seatsUpper.contains("RAC") && !seatsUpper.contains("WAITLIST")
+    }
+
+    /**
+     * Returns `true` when the ticket's scheduled travel date/time is already in the past
+     * (completed journey), so live PNR / flight network endpoints must never be polled again.
+     */
+    fun isTicketJourneyInPast(
+        ticket: ParsedTravelTicket,
+        cachedSnapshot: LivePnrStatusSnapshot? = null,
+        nowMs: Long = System.currentTimeMillis()
+    ): Boolean {
+        val candidates = listOfNotNull(
+            ticket.departureInfo.takeIf { it.isNotBlank() },
+            ticket.departureDate.takeIf { it.isNotBlank() },
+            ticket.departureTime.takeIf { it.isNotBlank() },
+            cachedSnapshot?.departureTime?.takeIf { it.isNotBlank() }
+        )
+        val durationMs = TicketDateTimeParser.parseDurationMs(cachedSnapshot?.durationText) ?: (12 * 3600_000L)
+
+        for (raw in candidates) {
+            val parsed = TicketDateTimeParser.parse(raw, nowMs)
+            if (parsed != null) {
+                val effectiveEpochMs = if (parsed.hasTime) {
+                    parsed.epochMs + durationMs
+                } else {
+                    parsed.epochMs + 24 * 3600_000L // end of day
+                }
+                if (effectiveEpochMs < nowMs) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    /**
+     * Proactively seeds confirmed train (10-digit PNR) and flight (6-char PNR) tickets from logged
+     * group expenses into the local offline vault so opening a trip or inspecting a ticket never
+     * triggers redundant network requests.
+     */
+    suspend fun seedConfirmedTicketsFromExpenses(
+        context: Context?,
+        expenses: List<ExpenseEntity>,
+        members: List<GroupMemberEntity> = emptyList(),
+        splits: List<ExpenseSplitEntity> = emptyList()
+    ) {
+        kotlinx.coroutines.withContext(Dispatchers.IO) {
+            for (expense in expenses) {
+                val parsed = extractTravelTicketFromTitle(expense.title)
+                val rawPnr = expense.travelPnr.trim().ifBlank { parsed?.pnr?.trim().orEmpty() }
+                val cleanPnr = normalizePnrKey(rawPnr)
+                if (cleanPnr.length == 10 && parsed != null) {
+                    val existing = loadPersistedPnrSnapshot(context, cleanPnr)
+                    if (existing != null && isSnapshotAllConfirmed(existing)) continue
+                    val enriched = if (parsed.fareRupees.isBlank() && expense.totalAmountCents > 0L) {
+                        parsed.copy(pnr = cleanPnr, fareRupees = (expense.totalAmountCents / 100L).toString())
+                    } else {
+                        parsed.copy(pnr = cleanPnr)
+                    }
+                    if (isTicketAllConfirmed(enriched) || isTicketJourneyInPast(enriched, existing)) {
+                        val promoted = buildConfirmedSnapshotFromTicket(cleanPnr, enriched)
+                        savePersistedPnrSnapshot(context, promoted)
+                    }
+                } else if (cleanPnr.length == 6) {
+                    // For flights, if it's explicitly confirmed or in the past, build a snapshot and save it
+                    if (parsed != null) {
+                        val existing = loadPersistedPnrSnapshot(context, cleanPnr)
+                        if (existing != null && isSnapshotAllConfirmed(existing)) continue
+                        val enriched = parsed.copy(pnr = cleanPnr)
+                        if (isTicketAllConfirmed(enriched) || isTicketJourneyInPast(enriched, existing)) {
+                            val promoted = buildConfirmedSnapshotFromTicket(cleanPnr, enriched)
+                            savePersistedPnrSnapshot(context, promoted)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -435,7 +534,7 @@ object PnrNetworkRepository {
         val parsed = extractTravelTicketFromTitle(expense.title)
         val rawPnr = expense.travelPnr.trim().takeIf { it.isNotBlank() }
             ?: parsed?.pnr?.trim()?.takeIf { it.isNotBlank() }
-            ?: normalizePnrKey(expense.title).takeIf { it.length == 6 }
+            ?: extractPnrFromFreeText(expense.title).takeIf { it.length == 6 }
             ?: ""
 
         if (rawPnr.length == 6) {
@@ -470,8 +569,8 @@ object PnrNetworkRepository {
                 .find(expense.title)?.value?.uppercase(Locale.US)
             ?: ""
         val airlineCode = rawFlightNo.takeWhile { it.isLetterOrDigit() }.take(2).uppercase(Locale.US)
-            .takeIf { it.length == 2 && it.any { ch -> ch.isLetter() } } ?: "6E"
-        val flightNumber = if (rawFlightNo.isNotBlank()) rawFlightNo.uppercase(Locale.US) else "$airlineCode 204"
+            .takeIf { it.length == 2 && it.any { ch -> ch.isLetter() } } ?: ""
+        val flightNumber = if (rawFlightNo.isNotBlank()) rawFlightNo.uppercase(Locale.US) else airlineCode
 
         val airlineName = UniversalFlightTicketExtractor.resolveAirlineName(airlineCode)
             ?: parsed?.trainOrCarrierName?.trim()?.takeIf {
@@ -485,7 +584,7 @@ object PnrNetworkRepository {
                 expense.title.contains("Akasa", ignoreCase = true) -> "Akasa Air"
                 expense.title.contains("SpiceJet", ignoreCase = true) -> "SpiceJet"
                 expense.title.contains("Vistara", ignoreCase = true) -> "Vistara"
-                else -> "IndiGo"
+                else -> ""
             }
 
         val parenRouteMatch = Regex("""\(([A-Z]{3})\s*(?:->|[-–])\s*([A-Z]{3})\)""").find(expense.title.uppercase(Locale.US))
@@ -493,28 +592,28 @@ object PnrNetworkRepository {
         val originIata = parsed?.fromStation?.trim()?.uppercase(Locale.US)?.takeIf { it.length == 3 }
             ?: parenRouteMatch?.groupValues?.getOrNull(1)
             ?: arrowRouteMatch?.groupValues?.getOrNull(1)
-            ?: "BOM"
+            ?: ""
         val destIata = parsed?.toStation?.trim()?.uppercase(Locale.US)?.takeIf { it.length == 3 }
             ?: parenRouteMatch?.groupValues?.getOrNull(2)
             ?: arrowRouteMatch?.groupValues?.getOrNull(2)
-            ?: "GOI"
+            ?: ""
 
         val originInfo = UniversalFlightTicketExtractor.resolveAirportInfo(originIata)
         val destInfo = UniversalFlightTicketExtractor.resolveAirportInfo(destIata)
         val originCity = originInfo?.city ?: originIata
-        val originAirportName = originInfo?.airportName ?: "$originCity Airport"
+        val originAirportName = originInfo?.airportName ?: if (originCity.isNotBlank()) "$originCity Airport" else ""
         val destCity = destInfo?.city ?: destIata
-        val destAirportName = destInfo?.airportName ?: "$destCity Airport"
+        val destAirportName = destInfo?.airportName ?: if (destCity.isNotBlank()) "$destCity Airport" else ""
 
         val fallbackEpoch = expense.scheduledAtEpochMs?.takeIf { it > 0L } ?: expense.createdAt
         val travelDate = parsed?.departureDate?.trim()?.takeIf { it.isNotBlank() }
             ?: SimpleDateFormat("dd MMM yyyy", Locale.US).format(Date(fallbackEpoch))
-        val departureTime = parsed?.departureTime?.trim()?.takeIf { it.isNotBlank() } ?: "09:30"
+        val departureTime = parsed?.departureTime?.trim()?.takeIf { it.isNotBlank() } ?: ""
 
         val rawSeatsField = parsed?.coachAndSeats?.trim().orEmpty()
         val cabinClass = rawSeatsField.substringBefore("·").trim()
             .takeIf { it.isNotBlank() && !it.contains("(") && !it.endsWith("Pax", ignoreCase = true) }
-            ?: "Economy"
+            ?: ""
 
         val expenseGroupMembers = groupMembers.filter { it.groupId == expense.groupId }.ifEmpty { groupMembers }
         val expenseSplits = allSplits.filter { it.expenseId == expense.expenseId && it.finalOwedCents > 0L }
@@ -541,13 +640,8 @@ object PnrNetworkRepository {
                 )
             }
         } else if (orderedSplittingMembers.isNotEmpty()) {
-            val seatLetters = listOf('A', 'B', 'C', 'D', 'E', 'F')
             orderedSplittingMembers.mapIndexed { idx, member ->
-                val assignedSeat = bareSeatTokens.getOrNull(idx) ?: run {
-                    val rowNum = 12 + (idx / 6)
-                    val seatCol = seatLetters[idx % seatLetters.size]
-                    "$rowNum$seatCol"
-                }
+                val assignedSeat = bareSeatTokens.getOrNull(idx) ?: ""
                 UniversalFlightTicketExtractor.ExtractedFlightPassenger(
                     fullName = member.name,
                     seatNumber = assignedSeat,
@@ -555,10 +649,10 @@ object PnrNetworkRepository {
                 )
             }
         } else {
-            val fallbackSeat = bareSeatTokens.firstOrNull() ?: "12A"
+            val fallbackSeat = bareSeatTokens.firstOrNull() ?: ""
             listOf(
                 UniversalFlightTicketExtractor.ExtractedFlightPassenger(
-                    fullName = "Confirmed Passenger",
+                    fullName = "Passenger",
                     seatNumber = fallbackSeat,
                     eTicketOrPnr = effectivePnr
                 )
@@ -567,7 +661,7 @@ object PnrNetworkRepository {
 
         val reconstructed = UniversalFlightTicketExtractor.UniversalFlightTicketResult(
             pnr = effectivePnr,
-            otaBookingId = "PNR-$effectivePnr",
+            otaBookingId = if (effectivePnr.isNotBlank()) "PNR-$effectivePnr" else "",
             airlineCode = airlineCode,
             airlineName = airlineName,
             flightNumber = flightNumber,
@@ -580,12 +674,12 @@ object PnrNetworkRepository {
             travelDate = travelDate,
             bookingDate = travelDate,
             departureTime = departureTime,
-            arrivalTime = "Scheduled",
-            durationText = "Non-Stop",
+            arrivalTime = "",
+            durationText = "",
             cabinClass = cabinClass,
-            fareType = "Confirmed",
-            cabinBaggage = "7 Kgs",
-            checkInBaggage = "15 Kgs",
+            fareType = "",
+            cabinBaggage = "",
+            checkInBaggage = "",
             passengers = passengers,
             matchedGroupMembers = orderedSplittingMembers.map { it.name },
             totalFarePaise = expense.totalAmountCents,
@@ -596,7 +690,6 @@ object PnrNetworkRepository {
         synchronized(reconstructedFlightByExpenseCache) {
             reconstructedFlightByExpenseCache[expenseCacheKey] = reconstructed
         }
-        saveConfirmedFlightTicketToVault(context, reconstructed)
         return reconstructed
     }
 
@@ -694,35 +787,35 @@ object PnrNetworkRepository {
             return reconstructFlightTicketFromExpense(context, matchedFlightExpense, members, splits)
         }
 
-        val fallbackPnr = if (cleanPnr.length == 6) cleanPnr else "FLIGHT"
+        val fallbackPnr = if (cleanPnr.length == 6) cleanPnr else ""
         return UniversalFlightTicketExtractor.UniversalFlightTicketResult(
             pnr = fallbackPnr,
-            otaBookingId = "PNR-$fallbackPnr",
-            airlineCode = "6E",
-            airlineName = "IndiGo",
-            flightNumber = "6E 204",
-            originIata = "BOM",
-            originCity = "Mumbai",
-            originAirportName = "Chhatrapati Shivaji Maharaj International Airport",
-            destinationIata = "GOI",
-            destinationCity = "Goa",
-            destinationAirportName = "Goa Dabolim International Airport",
-            travelDate = SimpleDateFormat("dd MMM yyyy", Locale.US).format(Date()),
+            otaBookingId = if (fallbackPnr.isNotBlank()) "PNR-$fallbackPnr" else "",
+            airlineCode = "",
+            airlineName = "",
+            flightNumber = "",
+            originIata = "",
+            originCity = "",
+            originAirportName = "",
+            destinationIata = "",
+            destinationCity = "",
+            destinationAirportName = "",
+            travelDate = "",
             bookingDate = "",
-            departureTime = "09:30",
-            arrivalTime = "10:45",
-            durationText = "1h 15m",
-            cabinClass = "Economy",
-            fareType = "Confirmed",
-            cabinBaggage = "7 Kgs",
-            checkInBaggage = "15 Kgs",
+            departureTime = "",
+            arrivalTime = "",
+            durationText = "",
+            cabinClass = "",
+            fareType = "",
+            cabinBaggage = "",
+            checkInBaggage = "",
             passengers = members
                 .filter { preferredGroupId == null || it.groupId == preferredGroupId }
                 .ifEmpty { members }
                 .mapIndexed { idx, m ->
                     UniversalFlightTicketExtractor.ExtractedFlightPassenger(
                         fullName = m.name,
-                        seatNumber = "${12 + idx / 6}${('A' + (idx % 6))}",
+                        seatNumber = "",
                         eTicketOrPnr = fallbackPnr
                     )
                 },
@@ -886,6 +979,9 @@ object PnrNetworkRepository {
         val cached = loadPersistedPnrSnapshot(context, cleanPnr)
         if (isSnapshotAllConfirmed(cached)) return true
 
+        // Rule 2: If the scheduled travel date/time is already in the past (completed trip), never poll the network.
+        if (isTicketJourneyInPast(ticket, cached)) return true
+
         if (context == null) return true
 
         val cal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata"))
@@ -956,6 +1052,23 @@ object PnrNetworkRepository {
             return promoted
         }
 
+        // If the ticket's journey date is already in the past (completed trip), never hit live servers.
+        // A user-initiated manual refresh is the escape hatch in case the journey date was misread.
+        if (!forceManualRefresh && isTicketJourneyInPast(fallbackTicket, cachedSnapshot)) {
+            if (cachedSnapshot != null) {
+                return cachedSnapshot.copy(
+                    sourceLabel = "Trip Completed · Saved in Offline Vault (0 Internet Used)"
+                )
+            }
+            if (fallbackTicket.hasTicketMetadata) {
+                val pastSnapshot = buildConfirmedSnapshotFromTicket(cleanPnr, fallbackTicket).copy(
+                    sourceLabel = "Trip Completed · Saved in Offline Vault (0 Internet Used)"
+                )
+                savePersistedPnrSnapshot(context, pastSnapshot)
+                return pastSnapshot
+            }
+        }
+
         // 6-character Airline PNR: never poll Indian Railways 10-digit CRIS endpoints
         if (cleanPnr.length == 6) {
             return cachedSnapshot ?: buildUnverifiedManualFallbackSnapshot(
@@ -1023,29 +1136,30 @@ object PnrNetworkRepository {
             .split(",", "|")
             .map { it.trim() }
             .filter { it.isNotBlank() }
-            .ifEmpty { listOf("P1: Confirmed (CNF)") }
+            .ifEmpty { listOf("P1: ${ticket.bookingStatus}") }
         val structured = paxRaw.mapIndexed { idx, s ->
             LivePnrPassenger(
                 passengerNumber = "P${idx + 1}",
                 initialStatus = s,
                 currentStatus = s,
-                statusLabel = "Confirmed"
+                statusLabel = ticket.bookingStatus
             )
         }
         val originCode = ticket.fromStation.ifBlank { "ORIG" }
         val destCode = ticket.toStation.ifBlank { "DEST" }
+        val isCnf = ticket.bookingStatus.startsWith("CNF", ignoreCase = true) || ticket.bookingStatus.equals("CONFIRMED", ignoreCase = true)
         return LivePnrStatusSnapshot(
             pnr = cleanPnr,
             trainNo = ticket.trainOrFlightNo,
-            trainName = ticket.trainOrCarrierName.ifBlank { if (cleanPnr.length == 6) "Confirmed Flight" else "Confirmed Train" },
+            trainName = ticket.trainOrCarrierName.ifBlank { if (cleanPnr.length == 6) "Flight" else "Train" },
             fromStation = originCode,
             toStation = destCode,
             departureTime = listOf(ticket.departureDate, ticket.departureTime).filter { it.isNotBlank() }.joinToString(" • "),
             travelClass = if (cleanPnr.length == 6) "Economy" else "3A",
             totalFareRupees = ticket.fareRupees.replace(",", "").toDoubleOrNull()?.toInt() ?: 0,
             passengerCount = paxRaw.size.coerceAtLeast(1),
-            bookingStatusBadge = "CNF (Confirmed)",
-            chartPrepared = true,
+            bookingStatusBadge = ticket.bookingStatus,
+            chartPrepared = isCnf || ticket.chartStatus == "Chart Prepared",
             passengerStatuses = paxRaw,
             structuredPassengers = structured,
             fromStationName = resolveStationDisplayName(originCode),
@@ -1053,10 +1167,10 @@ object PnrNetworkRepository {
             arrivalTime = "",
             durationText = "",
             quotaText = "GN",
-            coachPositionHint = "100% Confirmed · Permanently Locked in Offline Vault",
+            coachPositionHint = if (isCnf) "100% Confirmed · Permanently Locked in Offline Vault" else "Offline Vault",
             liveTrainLocationRadar = "Route: $originCode -> $destCode",
-            confirmationProbability = "100% Confirmed · 0 Internet Needed",
-            sourceLabel = "Confirmed Offline Vault (Permanent CNF · 0 Internet Used)",
+            confirmationProbability = if (isCnf) "100% Confirmed · 0 Internet Needed" else "",
+            sourceLabel = "Saved in Offline Vault (0 Internet Used)",
             isLiveVerified = true,
             isManualEntry = false
         )
@@ -1407,12 +1521,25 @@ object PnrNetworkRepository {
      */
     fun fetchLiveFlightStatusByNumber(
         flightNumber: String,
-        optionalPnr: String = ""
+        optionalPnr: String = "",
+        context: Context? = null,
+        forceManualRefresh: Boolean = false
     ): LivePnrStatusSnapshot? = runCatching {
         val cleanFlight = flightNumber.replace(Regex("[^A-Za-z0-9]"), "").uppercase(Locale.US)
         if (cleanFlight.length < 3) return null
+        val cleanPnr = normalizePnrKey(optionalPnr)
+        if (!forceManualRefresh && (cleanPnr.length == 6 || cleanPnr.length == 10)) {
+            loadPersistedPnrSnapshot(context, cleanPnr)?.let { cached ->
+                val stubTicket = ParsedTravelTicket(pnr = cleanPnr, statusExplicit = true) // status explicitly stored in vault
+                if (isSnapshotAllConfirmed(cached) || isTicketJourneyInPast(stubTicket, cached)) return cached
+            }
+        }
         val cacheKey = "FLIGHT_${optionalPnr.ifBlank { cleanFlight }}"
-        lruSnapshotCache.get(cacheKey)?.let { return it }
+        if (!forceManualRefresh) {
+            synchronized(lruSnapshotCache) {
+                lruSnapshotCache[cacheKey]?.let { return it }
+            }
+        }
 
         val url = URL("https://api.flightradar24.com/common/v1/flight/list.json?query=$cleanFlight&fetchBy=flight&page=1&limit=1")
         val conn = (url.openConnection() as HttpURLConnection).apply {

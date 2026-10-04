@@ -152,6 +152,15 @@ class SplitMateV235ShareImageTest {
     }
 
     @Test
+    fun initialsHandleEmojiAndDevanagariProperly() {
+        assertEquals("RM", SettleUpShareModel.initialsFor("Rohan Mehta"))
+        assertEquals("P", SettleUpShareModel.initialsFor("priya"))
+        assertEquals("अ", SettleUpShareModel.initialsFor("अक्षय"))
+        assertEquals("\uD83D\uDE00", SettleUpShareModel.initialsFor("\uD83D\uDE00 ✈️"))
+        assertEquals("?", SettleUpShareModel.initialsFor(" "))
+    }
+
+    @Test
     fun layoutGrowsWithRowsAndCapsHugeGroups() {
         fun model(n: Int): SettleUpShareModel {
             val ppl = (0..n).map { SettleUpShareMember("p$it", "Person $it") }
@@ -168,6 +177,14 @@ class SplitMateV235ShareImageTest {
         assertEquals(20, huge.hiddenTransferCount)
         assertEquals("+20 more payments", huge.moreTransfersText)
         assertTrue(SettleUpShareLayout.of(huge).height < 10_000)
+    }
+
+    @Test
+    fun hugeGroupWithNetSummaryStaysBelowMaxHeight() {
+        val ppl = (0..60).map { SettleUpShareMember("p$it", "Person $it") }
+        val transfers = (1..60).map { SimplifiedTransfer("p$it", "Person $it", "p0", "Person 0", 100L * it) }
+        val model = SettleUpShareModel.build("Trip", transfers, ppl, 1_000_000L, includeNetSummary = true)
+        assertTrue(SettleUpShareLayout.of(model).height <= 10_000)
     }
 
     @Test

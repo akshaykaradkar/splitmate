@@ -49,7 +49,10 @@ import java.util.Locale
  * v2.3.5 (#1) trip lifecycle UI for Trip Hub.
  *
  * - ENDED: "Trip wrapped up" summary (total, per-person, days, top categories, settle-up state).
- * - ENDED_SUGGESTED: organizer-only nudge to wrap up (never auto-ends).
+ *   Only reachable through an organizer's explicit wrap-up.
+ * - ENDED_SUGGESTED: organizer-only nudge to wrap up ("Return journey completed — wrap up?" or the
+ *   quiet-trip copy). Never auto-ends.
+ * - ENDING_SOON: organizer-only informational "Heading home" chip, no wrap-up CTA.
  * - ACTIVE: organizer-only compact "Trip over? Wrap it up" row.
  * Only organizers can wrap up / reopen; everyone else sees read-only info.
  */
@@ -87,7 +90,11 @@ fun TripLifecycleCard(
     onWrapUp: () -> Unit,
     onReopen: () -> Unit,
     onSettleUp: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** ENDED_SUGGESTED came from a completed return journey (vs a quiet trip); only changes the copy. */
+    isReturnJourneySuggestion: Boolean = false,
+    /** Organizer tapped "Not yet": persist the dismissal (synced reopen stamp) so it doesn't nag again. */
+    onDismissSuggestion: (() -> Unit)? = null
 ) {
     val palette = DesignSystemBindings.activePalette
     var confirmWrapUp by remember { mutableStateOf(false) }
@@ -118,11 +125,12 @@ fun TripLifecycleCard(
                                 modifier = Modifier.semantics { heading() }
                             )
                             val endedLine = buildString {
-                                if ((record?.endedAtEpochMs ?: 0L) > 0L) {
+                                val manualEndMs = record?.endedAtEpochMs ?: 0L
+                                if (manualEndMs > 0L) {
                                     append("Ended ")
-                                    append(SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(Date(record!!.endedAtEpochMs)))
+                                    append(SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(Date(manualEndMs)))
+                                    if (!endedByName.isNullOrBlank()) append(" by $endedByName")
                                 }
-                                if (!endedByName.isNullOrBlank()) append(" by $endedByName")
                             }
                             if (endedLine.isNotBlank()) {
                                 Text(endedLine, fontFamily = FigtreeFontFamily, fontSize = 12.sp, color = palette.onPrimaryContainer.copy(alpha = 0.8f))
@@ -184,7 +192,8 @@ fun TripLifecycleCard(
             }
         }
 
-        TripLifecycleResolver.State.ENDED_SUGGESTED, TripLifecycleResolver.State.ENDING_SOON -> {
+        TripLifecycleResolver.State.ENDED_SUGGESTED -> {
+            // Suggestion only (never auto-ends); organizers decide.
             if (TripLifecycleResolver.canToggle(isOrganizer) && !suggestionDismissed) {
                 Surface(
                     shape = RoundedCornerShape(20.dp),
@@ -198,19 +207,52 @@ fun TripLifecycleCard(
                         Icon(Icons.Rounded.Flag, contentDescription = null, tint = palette.onTertiaryContainer, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            "No new expenses for a few days. Is the trip over?",
+                            if (isReturnJourneySuggestion) "Return journey completed — wrap up?"
+                            else "No new expenses for a few days. Is the trip over?",
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
                             color = palette.onTertiaryContainer,
                             modifier = Modifier.weight(1f)
                         )
-                        TextButton(onClick = { suggestionDismissed = true }) {
+                        TextButton(onClick = {
+                            suggestionDismissed = true
+                            onDismissSuggestion?.invoke()
+                        }) {
                             Text("Not yet", fontFamily = FigtreeFontFamily, color = palette.onTertiaryContainer)
                         }
                         TextButton(onClick = { confirmWrapUp = true }) {
                             Text("Wrap up", fontFamily = FigtreeFontFamily, fontWeight = FontWeight.ExtraBold, color = palette.onTertiaryContainer)
                         }
+                    }
+                }
+            }
+        }
+
+        TripLifecycleResolver.State.ENDING_SOON -> {
+            // Informational only: the group is on (or about to board) its way home. No wrap-up CTA,
+            // so organizers aren't nudged to end the trip while people are still travelling.
+            if (TripLifecycleResolver.canToggle(isOrganizer)) {
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = palette.surfaceContainer,
+                    modifier = modifier.heightIn(min = 40.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Rounded.Flag, contentDescription = null, tint = palette.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "Heading home",
+                            fontFamily = FigtreeFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = palette.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
             }

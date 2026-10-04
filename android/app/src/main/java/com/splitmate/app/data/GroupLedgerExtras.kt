@@ -47,7 +47,13 @@ data class TripLifecycleRecord(
     val startDateEpochMs: Long? = null,
     val endDateEpochMs: Long? = null,
     /** Own LWW clock (independent of the ledger document clock). */
-    val updatedAtEpochMs: Long = 0L
+    val updatedAtEpochMs: Long = 0L,
+    /**
+     * v2.3.5 (#1): when an organizer last reopened the trip (0 = never). Travel legs departing
+     * before this and return arrivals before this no longer produce a wrap-up suggestion.
+     * Optional in JSON (omitted when 0) so older peers/records stay compatible.
+     */
+    val reopenedAtEpochMs: Long = 0L
 ) {
     val isEnded: Boolean get() = state == TripLifecycleState.ENDED
 }
@@ -180,6 +186,7 @@ object GroupLedgerExtrasCodec {
         rec.startDateEpochMs?.let { put("startDateEpochMs", it) }
         rec.endDateEpochMs?.let { put("endDateEpochMs", it) }
         put("updatedAtEpochMs", rec.updatedAtEpochMs)
+        if (rec.reopenedAtEpochMs > 0L) put("reopenedAtEpochMs", rec.reopenedAtEpochMs)
     }
 
     fun decodeTripLifecycle(obj: JSONObject?): TripLifecycleRecord? {
@@ -194,7 +201,8 @@ object GroupLedgerExtrasCodec {
             endedByPhone = PhoneIdentityValidator.normalizeIndianPhone10(obj.optString("endedByPhone", "")),
             startDateEpochMs = optNullableLong("startDateEpochMs"),
             endDateEpochMs = optNullableLong("endDateEpochMs"),
-            updatedAtEpochMs = obj.optLong("updatedAtEpochMs", 0L).coerceAtLeast(0L)
+            updatedAtEpochMs = obj.optLong("updatedAtEpochMs", 0L).coerceAtLeast(0L),
+            reopenedAtEpochMs = obj.optLong("reopenedAtEpochMs", 0L).coerceAtLeast(0L)
         )
     }
 
@@ -206,7 +214,9 @@ object GroupLedgerExtrasCodec {
 
     fun canonicalTripLifecycle(rec: TripLifecycleRecord): String =
         "${rec.state}:${rec.endedAtEpochMs}:${rec.endedByPhone}:${rec.startDateEpochMs ?: -1L}:" +
-            "${rec.endDateEpochMs ?: -1L}:${rec.updatedAtEpochMs}"
+            "${rec.endDateEpochMs ?: -1L}:${rec.updatedAtEpochMs}" +
+            // Appended only when set, so pre-existing records keep their exact structural hash.
+            (if (rec.reopenedAtEpochMs > 0L) ":r${rec.reopenedAtEpochMs}" else "")
 
     fun encodeExtras(extras: GroupLedgerExtras): String = JSONObject().apply {
         if (extras.customCategories.isNotEmpty()) put(KEY_CUSTOM_CATEGORIES, encodeCustomCategories(extras.customCategories))

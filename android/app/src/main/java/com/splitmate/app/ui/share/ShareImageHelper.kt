@@ -80,7 +80,7 @@ object ShareImageHelper {
     ): Result<Unit> = runCatching {
         val appContext = context.applicationContext
         val file = withContext(Dispatchers.Default) {
-            val bitmap = SettleUpImageRenderer.render(model)
+            val bitmap = SettleUpImageRenderer.render(model, appContext)
             try {
                 withContext(Dispatchers.IO) {
                     writePng(appContext, bitmap, "settle_up_${model.tripName}")

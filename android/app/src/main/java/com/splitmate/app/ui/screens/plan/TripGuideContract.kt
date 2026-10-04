@@ -100,6 +100,7 @@ data class TripGuideUiState(
     val saveOfflineSizeLabel: String? = null,            // e.g. "0.9 MB"
     val stay: StayUi = StayUi(null, false, false, null, emptyList()),
     val stayFeedback: StayInputFeedback = StayInputFeedback.Idle,
+    val stayFeedbackRequestId: Long = 0L,
     val loop: LoopUi = LoopUi(null, false, emptyList(), false, null, emptyList()),
     val selectedPlace: Place? = null                     // place detail sheet
 )
@@ -140,8 +141,14 @@ interface TripGuideActions {
 
     fun submitStayInput(text: String)          // pasted link or coordinates text
     fun searchStayByName(nameHint: String)     // user-initiated Nominatim
-    fun chooseSleepListing(place: Place)
+
+    sealed interface StaySelection {
+        data class SleepListing(val place: Place) : StaySelection
+        data object DestinationCenter : StaySelection
+    }
+    fun chooseStay(selection: StaySelection)
     fun confirmStayPreview()
+    fun dismissStayFeedback() = Unit
     fun clearStay()
     fun setShareStay(share: Boolean)
 

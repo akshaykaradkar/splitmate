@@ -2,6 +2,7 @@ package com.splitmate.app.ui.share
 
 import com.splitmate.app.SplitMateMathEngine
 import com.splitmate.app.ui.formatIndianRupeesFromCents
+import java.text.BreakIterator
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -28,7 +29,10 @@ data class SettleUpShareTransferRow(
     val fromName: String,
     val toName: String,
     val amountCents: Long,
-    val amountText: String
+    val amountText: String,
+    /** Avatar initials, grapheme-safe (never half a surrogate pair). */
+    val fromInitials: String = SettleUpShareModel.initialsFor(fromName),
+    val toInitials: String = SettleUpShareModel.initialsFor(toName)
 )
 
 enum class SettleUpNetDirection { GETS_BACK, PAYS, SETTLED }
@@ -37,7 +41,8 @@ data class SettleUpShareNetRow(
     val name: String,
     val netCents: Long,
     val direction: SettleUpNetDirection,
-    val netText: String
+    val netText: String,
+    val initials: String = SettleUpShareModel.initialsFor(name)
 )
 
 data class SettleUpShareModel(
@@ -59,7 +64,13 @@ data class SettleUpShareModel(
     val netRows: List<SettleUpShareNetRow>,
     val hiddenNetCount: Int,
     val footerText: String,
-    val footerSubText: String
+    val footerSubText: String,
+    /** Small caps line under the brand name in the header. */
+    val brandSubtitle: String = "SETTLEMENT SUMMARY",
+    /** Exact-math sub-badge inside the hero card (dropped by the renderer if it would collide). */
+    val heroDriftText: String = "0.00\u00A2 drift \u00B7 Exact math",
+    /** Directional pill between payer and receiver in each transfer row. */
+    val paysLabel: String = "PAYS \u2192"
 ) {
     val moreTransfersText: String?
         get() = if (hiddenTransferCount > 0) {
@@ -69,17 +80,37 @@ data class SettleUpShareModel(
     val moreNetText: String?
         get() = if (hiddenNetCount > 0) "+$hiddenNetCount more" else null
 
+    /** Upper-cased label drawn above the hero amount. */
+    val totalSpentHeroLabel: String
+        get() = totalSpentLabel.uppercase(Locale.ROOT)
+
+    /** Status pill in the hero card: "ALL SETTLED" or "N PAYMENTS". */
+    val heroBadgeText: String
+        get() {
+            val total = transferRows.size + hiddenTransferCount
+            return if (isAllSettled) "ALL SETTLED" else "$total ${if (total == 1) "PAYMENT" else "PAYMENTS"}"
+        }
+
+    /** True when the net-summary section (rows and/or its "+N more" row) is drawn. */
+    val hasNetSection: Boolean
+        get() = netRows.isNotEmpty() || hiddenNetCount > 0
+
     /** Every string that can end up on the bitmap (used by tests to assert privacy rules). */
     fun allVisibleText(): List<String> = buildList {
-        add(brandName); add(headline); add(tripName); add(metaLine)
+        add(brandName); add(brandSubtitle); add(headline); add(tripName); add(metaLine)
         tripEndedBadge?.let { add(it) }
         asOfLabel?.let { add(it) }
-        add(totalSpentLabel); add(totalSpentText); add(transfersTitle)
-        transferRows.forEach { add(it.fromName); add(it.toName); add(it.amountText) }
+        add(totalSpentLabel); add(totalSpentHeroLabel); add(totalSpentText)
+        add(heroBadgeText); add(heroDriftText)
+        add(transfersTitle)
+        if (transferRows.isNotEmpty()) add(paysLabel)
+        transferRows.forEach {
+            add(it.fromName); add(it.fromInitials); add(it.toName); add(it.toInitials); add(it.amountText)
+        }
         moreTransfersText?.let { add(it) }
         if (isAllSettled) { add(allSettledTitle); add(allSettledSubtitle) }
-        if (netRows.isNotEmpty()) add(netSummaryTitle)
-        netRows.forEach { add(it.name); add(it.netText) }
+        if (hasNetSection) add(netSummaryTitle)
+        netRows.forEach { add(it.name); add(it.initials); add(it.netText) }
         moreNetText?.let { add(it) }
         add(footerText); add(footerSubText)
     }
@@ -170,7 +201,15 @@ data class SettleUpShareModel(
                         .thenBy { it.name.lowercase(Locale.ROOT) }
                 )
             }
-            val visibleNet = orderedNet.take(MAX_NET_ROWS)
+            // Keep the bitmap under SettleUpShareLayout.MAX_HEIGHT: whatever height the (already
+            // capped) transfer card leaves is given to net rows, with a "+N more" row for the rest.
+            val netCap = SettleUpShareLayout.maxNetRows(
+                totalNetRows = orderedNet.size,
+                transferRowCount = visibleRows.size,
+                hasMoreTransfers = orderedRows.size > visibleRows.size,
+                isAllSettled = isAllSettled
+            )
+            val visibleNet = orderedNet.take(netCap)
 
             val travellerCount = members.size
             val metaParts = buildList {
@@ -206,6 +245,49 @@ data class SettleUpShareModel(
                 footerText = "Made with SplitMate",
                 footerSubText = "Exact to the last paisa · 0.00¢ drift"
             )
+        }
+
+        /**
+         * Avatar initials that never split a surrogate pair or grapheme cluster:
+         *  - "Rohan Mehta" -> "RM", "priya" -> "P", Devanagari / CJK -> first grapheme of each word;
+         *  - emoji-only / symbol-only names -> their first whole grapheme (e.g. one emoji);
+         *  - blank -> "?".
+         */
+        fun initialsFor(name: String): String {
+            val clean = name.trim()
+            if (clean.isEmpty()) return "?"
+            val words = clean.split(WHITESPACE).filter { it.isNotEmpty() }
+            fun letterGrapheme(word: String): String? {
+                var i = 0
+                while (i < word.length) {
+                    val cp = word.codePointAt(i)
+                    if (Character.isLetterOrDigit(cp)) return firstGrapheme(word, i)
+                    i += Character.charCount(cp)
+                }
+                return null
+            }
+            val first = letterGrapheme(words.first())
+            val second = if (words.size > 1) letterGrapheme(words.last()) else null
+            val raw = when {
+                first != null && second != null -> first + second
+                first != null -> first
+                second != null -> second
+                else -> firstGrapheme(clean, 0)
+            }
+            return raw.uppercase(Locale.ROOT)
+        }
+
+        /** The grapheme cluster starting at [start]; always at least one whole code point. */
+        internal fun firstGrapheme(text: String, start: Int): String {
+            if (start >= text.length) return ""
+            val minEnd = start + Character.charCount(text.codePointAt(start))
+            val end = runCatching {
+                val it = BreakIterator.getCharacterInstance(Locale.ROOT)
+                it.setText(text)
+                it.following(start)
+            }.getOrNull()
+            val safeEnd = if (end == null || end == BreakIterator.DONE || end < minEnd) minEnd else end
+            return text.substring(start, minOf(safeEnd, text.length))
         }
 
         private val WHITESPACE = Regex("\\s+")
@@ -280,20 +362,55 @@ data class SettleUpShareLayout(
     companion object {
         const val WIDTH = 1080
         const val PADDING = 64
-        const val BRAND_H = 72
+        const val BRAND_H = 84
         const val TRIP_H = 84
         const val META_H = 56
-        const val TOTAL_CARD_H = 196
+        const val TOTAL_CARD_H = 212
         const val SECTION_TITLE_H = 64
-        const val CARD_V_PAD = 16
-        const val TRANSFER_ROW_H = 124
-        const val MORE_ROW_H = 72
-        const val SETTLED_CARD_H = 240
-        const val NET_ROW_H = 84
-        const val FOOTER_H = 112
+        const val CARD_V_PAD = 20
+        const val TRANSFER_ROW_H = 136
+        const val MORE_ROW_H = 76
+        const val SETTLED_CARD_H = 248
+        const val NET_ROW_H = 96
+        const val FOOTER_H = 120
         const val GAP_S = 16
         const val GAP_M = 32
-        const val GAP_L = 48
+        const val GAP_L = 44
+
+        /**
+         * Hard ceiling for the bitmap height (well below the 10,000px many chat apps and
+         * decoders choke on; ~41 MB ARGB at 1080px wide).
+         */
+        const val MAX_HEIGHT = 9_600
+
+        private fun transfersCardHeight(rowCount: Int, hasMore: Boolean, isAllSettled: Boolean): Int =
+            if (isAllSettled) SETTLED_CARD_H
+            else CARD_V_PAD * 2 + rowCount * TRANSFER_ROW_H + (if (hasMore) MORE_ROW_H else 0)
+
+        /**
+         * How many net-summary rows fit under [MAX_HEIGHT] once the transfer card is placed,
+         * assuming the worst-case header (meta line present). Returns at most
+         * [SettleUpShareModel.MAX_NET_ROWS]; if not every row fits, room is kept for "+N more".
+         */
+        fun maxNetRows(
+            totalNetRows: Int,
+            transferRowCount: Int,
+            hasMoreTransfers: Boolean,
+            isAllSettled: Boolean
+        ): Int {
+            if (totalNetRows <= 0) return 0
+            val fixed = PADDING + BRAND_H + GAP_L + TRIP_H + META_H + GAP_M +
+                TOTAL_CARD_H + GAP_L + SECTION_TITLE_H + GAP_S +
+                transfersCardHeight(transferRowCount, hasMoreTransfers, isAllSettled) +
+                GAP_L + FOOTER_H + PADDING
+            val netOverhead = GAP_L + SECTION_TITLE_H + GAP_S + CARD_V_PAD * 2
+            val available = MAX_HEIGHT - fixed - netOverhead
+            if (totalNetRows <= SettleUpShareModel.MAX_NET_ROWS && totalNetRows * NET_ROW_H <= available) {
+                return totalNetRows
+            }
+            val withMoreRow = (available - MORE_ROW_H) / NET_ROW_H
+            return withMoreRow.coerceIn(0, minOf(totalNetRows, SettleUpShareModel.MAX_NET_ROWS))
+        }
 
         fun of(model: SettleUpShareModel): SettleUpShareLayout {
             var y = PADDING
@@ -310,17 +427,16 @@ data class SettleUpShareLayout(
             val transfersTitleTop = y
             y += SECTION_TITLE_H + GAP_S
             val transfersCardTop = y
-            val transfersCardH = if (model.isAllSettled) {
-                SETTLED_CARD_H
-            } else {
-                CARD_V_PAD * 2 + model.transferRows.size * TRANSFER_ROW_H +
-                    (if (model.moreTransfersText != null) MORE_ROW_H else 0)
-            }
+            val transfersCardH = transfersCardHeight(
+                rowCount = model.transferRows.size,
+                hasMore = model.moreTransfersText != null,
+                isAllSettled = model.isAllSettled
+            )
             y += transfersCardH
             var netTitleTop: Int? = null
             var netCardTop: Int? = null
             var netCardH = 0
-            if (model.netRows.isNotEmpty()) {
+            if (model.hasNetSection) {
                 y += GAP_L
                 netTitleTop = y
                 y += SECTION_TITLE_H + GAP_S

@@ -362,10 +362,47 @@ fun PnrExpenseReviewScreen(
             return
         }
         fetchError = null
+        val existingMatch = existingPnrExpensesInGroup.firstOrNull { it.title.contains(clean) || it.travelPnr == clean }
+            ?: viewModel.findExistingExpenseByPnr(clean, uiState.activeGroupId)?.first
+            ?: uiState.expenses.firstOrNull { it.title.contains(clean) || it.travelPnr == clean }
+        val existingParsed = existingMatch?.let { exp ->
+            com.splitmate.app.ui.extractTravelTicketFromTitle(exp.title)?.let { parsed ->
+                if (parsed.fareRupees.isBlank() && exp.totalAmountCents > 0L) {
+                    parsed.copy(pnr = clean, fareRupees = (exp.totalAmountCents / 100L).toString())
+                } else {
+                    parsed.copy(pnr = clean)
+                }
+            }
+        }
+        
         isFetching = true
-        val existingMatch = existingPnrExpensesInGroup.firstOrNull { it.title.contains(clean) }
-        val existingParsed = existingMatch?.let { com.splitmate.app.ui.extractTravelTicketFromTitle(it.title) }
         coroutineScope.launch {
+            // Check local vault first before showing any network spinner
+            val cachedLocal = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.splitmate.app.data.PnrNetworkRepository.loadPersistedPnrSnapshot(context, clean)
+            }
+            if (cachedLocal != null && com.splitmate.app.data.PnrNetworkRepository.isSnapshotAllConfirmed(cachedLocal)) {
+                isFetching = false
+                liveSnapshot = cachedLocal
+                if (cachedLocal.fromStation.isNotBlank() && manualFromStationInput.isBlank()) {
+                    manualFromStationInput = cachedLocal.fromStation
+                }
+                if (cachedLocal.toStation.isNotBlank() && manualToStationInput.isBlank()) {
+                    manualToStationInput = cachedLocal.toStation
+                }
+                if (existingMatch != null) {
+                    val existingSplits = uiState.splits
+                        .filter { it.expenseId == existingMatch.expenseId && it.finalOwedCents > 0L }
+                        .map { it.memberId }
+                        .toSet()
+                    if (existingSplits.isNotEmpty()) {
+                        selectedMemberIds = existingSplits
+                    }
+                    selectedPayerId = existingMatch.payerId
+                }
+                return@launch
+            }
+
             val fetched = fetchLivePnrAndTrainStatus(
                 pnr = clean,
                 fallbackTicket = existingParsed ?: ParsedTravelTicket(pnr = clean),
@@ -404,7 +441,7 @@ fun PnrExpenseReviewScreen(
                         groupMembers.take(paxCount.coerceAtLeast(groupMembers.size)).map { it.memberId }.toSet()
                     }
                 }
-            } else {
+            } else if (!fetched.isLiveVerified) {
                 fetchError = "Live IRCTC server unreachable or rate-limited — Enter ticket fare & route manually below."
             }
         }

@@ -29,7 +29,8 @@ import javax.net.ssl.SSLException
  * - **HTTPS only.** `http://` input or an `http://` redirect target is Rejected.
  * - **Manual redirects (v2.3.5):** GET first with a mobile-browser identity (HEAD only when GET
  *   is refused with 405/501), at most [MAX_REDIRECTS] redirects, one retry with a short backoff
- *   on I/O errors/timeouts. When a shortener answers a browser with a page instead of a redirect,
+ *   on I/O errors/timeouts (from the second hop on only while no coordinate or place-name hint is
+ *   known). When a shortener answers a browser with a page instead of a redirect,
  *   it is asked once more with the app identity.
  * - **consent.google.\*** interstitials are not fetched. Their `continue=` parameter is decoded
  *   and followed instead. **google.\*\/sorry** (rate-limit) pages are not fetched either: their
@@ -95,21 +96,43 @@ class ShortLinkResolver(
             }
         }
 
+        var lastApprox: ParsedCoordinate? = localCoord
+        var lastHint: String? = local.placeNameHint
+        var lastUrl: String = url
+
         return try {
-            withTimeoutOrNull(OVERALL_TIMEOUT_MS) { follow(url, localCoord, local.placeNameHint) }
-                ?: StayResolution.Rejected(if (isOnline() == false) REASON_OFFLINE else REASON_TIMEOUT)
+            withTimeoutOrNull(OVERALL_TIMEOUT_MS) {
+                follow(
+                    startUrl = url,
+                    initialApprox = localCoord,
+                    initialHint = local.placeNameHint,
+                    onProgress = { curUrl, curApprox, curHint ->
+                        lastUrl = curUrl
+                        if (curApprox != null) lastApprox = curApprox
+                        if (curHint != null) lastHint = curHint
+                    }
+                )
+            } ?: when {
+                lastApprox != null -> StayResolution.Resolved(lastApprox!!.location, lastHint, lastApprox!!.precision)
+                lastHint != null -> StayResolution.NoCoordinates(lastUrl, lastHint)
+                else -> StayResolution.Rejected(if (isOnline() == false) REASON_OFFLINE else REASON_TIMEOUT)
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            // v2.3.5 (#3): classify instead of always blaming the connection. No details logged.
-            StayResolution.Rejected(classifyFailure(e, isOnline()))
+            when {
+                lastApprox != null -> StayResolution.Resolved(lastApprox!!.location, lastHint, lastApprox!!.precision)
+                lastHint != null && isOnline() != false -> StayResolution.NoCoordinates(lastUrl, lastHint)
+                else -> StayResolution.Rejected(classifyFailure(e, isOnline()))
+            }
         }
     }
 
     private suspend fun follow(
         startUrl: String,
         initialApprox: ParsedCoordinate?,
-        initialHint: String?
+        initialHint: String?,
+        onProgress: (String, ParsedCoordinate?, String?) -> Unit = { _, _, _ -> }
     ): StayResolution {
         var current = startUrl
         var approx = initialApprox
@@ -117,6 +140,8 @@ class ShortLinkResolver(
         var urlHint: String? = null
         var redirects = 0
         var unwraps = 0
+        // Network hops performed so far (the retry policy differs for the first hop).
+        var fetches = 0
         // Set after a google.*/sorry unwrap: parse the continue URL offline, then stop.
         var stopAfterParse = false
         val bodyParse = flags().shortLinkBodyParseEnabled
@@ -133,6 +158,7 @@ class ShortLinkResolver(
                 }
                 if (approx == null) approx = c
             }
+            onProgress(current, approx, hint)
             if (stopAfterParse) return refused(approx, hint, current)
 
             val parsed = SimpleUrl.parse(current) ?: return StayResolution.Rejected(REASON_INVALID_REDIRECT)
@@ -153,7 +179,26 @@ class ShortLinkResolver(
                 continue
             }
 
-            val probe = request(current, parsed, bodyParse)
+            // v2.3.5 (#3): the first hop always gets its single retry. From the second hop on, a
+            // retry (backoff + another full timeout) only runs when nothing usable is known yet;
+            // with a coordinate or place-name hint in hand we fail fast and use the hint instead.
+            val allowRetry = fetches == 0 || (approx == null && hint == null)
+            fetches++
+            val probe = try {
+                request(current, parsed, bodyParse, allowRetry)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: IOException) {
+                val resolvedApprox = approx
+                val resolvedHint = hint
+                if (resolvedApprox != null) {
+                    return StayResolution.Resolved(resolvedApprox.location, resolvedHint, resolvedApprox.precision)
+                }
+                if (resolvedHint != null && isOnline() != false) {
+                    return StayResolution.NoCoordinates(current, resolvedHint)
+                }
+                throw e
+            }
 
             val location = probe.location
             if (probe.statusCode in 300..399 && !location.isNullOrBlank()) {
@@ -185,28 +230,32 @@ class ShortLinkResolver(
      * One hop: GET first (browser identity, optional capped body), HEAD only if GET is refused
      * with 405/501, and, for shorteners that answered with a page instead of a redirect, one
      * more GET with the app identity (which Google answers with a plain 30x).
+     * [allowRetry] = whether an I/O failure may be retried once (see [follow]).
      */
-    private suspend fun request(url: String, parsed: SimpleUrl, bodyParse: Boolean): RedirectProbe {
+    private suspend fun request(url: String, parsed: SimpleUrl, bodyParse: Boolean, allowRetry: Boolean = true): RedirectProbe {
         val maxBody = if (bodyParse) MapsPageCoordinateExtractor.MAX_BODY_BYTES else 0
-        var probe = withRetry { fetcher.fetch(url, ProbeMethod.GET, FetchIdentity.BROWSER_MOBILE, maxBody) }
+        var probe = withRetry(allowRetry) { fetcher.fetch(url, ProbeMethod.GET, FetchIdentity.BROWSER_MOBILE, maxBody) }
         if (probe.statusCode in GET_REFUSED) {
-            probe = withRetry { fetcher.fetch(url, ProbeMethod.HEAD, FetchIdentity.BROWSER_MOBILE, 0) }
+            probe = withRetry(allowRetry) { fetcher.fetch(url, ProbeMethod.HEAD, FetchIdentity.BROWSER_MOBILE, 0) }
         }
         if (isShortener(parsed) && probe.statusCode !in 300..399 && probe.statusCode !in GONE) {
-            val alt = withRetry { fetcher.fetch(url, ProbeMethod.GET, FetchIdentity.APP, maxBody) }
+            val alt = withRetry(allowRetry) { fetcher.fetch(url, ProbeMethod.GET, FetchIdentity.APP, maxBody) }
             if (alt.statusCode in 300..399 && !alt.location.isNullOrBlank()) return alt
         }
         return probe
     }
 
-    /** Runs [block]; on an I/O error or timeout waits [RETRY_BACKOFF_MS] and tries exactly once more. */
-    private suspend fun withRetry(block: suspend () -> RedirectProbe): RedirectProbe =
+    /**
+     * Runs [block]; on an I/O error or timeout waits [RETRY_BACKOFF_MS] and tries exactly once
+     * more, unless [allowRetry] is false or the device is known to be offline.
+     */
+    private suspend fun withRetry(allowRetry: Boolean, block: suspend () -> RedirectProbe): RedirectProbe =
         try {
             block()
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
-            if (isOnline() == false) throw e
+            if (!allowRetry || isOnline() == false) throw e
             sleeper(RETRY_BACKOFF_MS)
             block()
         }

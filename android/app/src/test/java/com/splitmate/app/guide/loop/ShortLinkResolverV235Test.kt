@@ -402,4 +402,34 @@ class ShortLinkResolverV235Test {
         val r = resolver(withHint).resolve(shortLink) as StayResolution.NoCoordinates
         assertEquals("Hemprabha Bed And Breakfast, Mirya Road, Ratnagiri", r.placeNameHint)
     }
+
+    @Test
+    fun `hop 2 timeout after hop 1 redirect preserves place name hint for automatic geocoding`(): Unit = runBlocking {
+        val f = FakeFetcher { c ->
+            when (c.url) {
+                shortLink -> RedirectProbe(302, ftidUrl)
+                ftidUrl -> throw SocketTimeoutException("read timed out on www.google.com")
+                else -> null
+            }
+        }
+        val r = resolver(f, online = true).resolve(shortLink) as StayResolution.NoCoordinates
+        assertEquals("Hemprabha Bed And Breakfast, Mirya Road, Ratnagiri", r.placeNameHint)
+    }
+
+    @Test
+    fun `fallback locality queries resolve street and city when small B&B name is not in OSM`(): Unit = runBlocking {
+        val text = ScriptedText(
+            listOf(
+                HttpTextResponse(200, "[]"), // full
+                HttpTextResponse(200, "[]"), // name + locality
+                HttpTextResponse(200, """[{"lat":"17.0052","lon":"73.2814","name":"Mirya Road"}]""") // locality fallback
+            )
+        )
+        val g = NominatimGeocoder(text, { GuideFeatureFlags() }, fastLimiter())
+        val r = g.geocodeSmart("Hemprabha Bed And Breakfast, Mirya Road, Ratnagiri", "Ratnagiri") as StayResolution.Resolved
+        assertEquals(17.0052, r.location.lat, 1e-9)
+        assertEquals(73.2814, r.location.lng, 1e-9)
+        assertEquals(CoordinatePrecision.APPROXIMATE, r.precision)
+    }
 }
+

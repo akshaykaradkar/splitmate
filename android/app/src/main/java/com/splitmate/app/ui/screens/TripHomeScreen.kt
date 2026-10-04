@@ -398,30 +398,6 @@ data class ResolvedExpenseSchedule(
     val hasExplicitTicketDate: Boolean
 )
 
-private val TicketDateParsePatterns = listOf(
-    "dd MMM yyyy",
-    "d MMM yyyy",
-    "dd MMMM yyyy",
-    "d MMMM yyyy",
-    "yyyy-MM-dd",
-    "dd-MM-yyyy",
-    "dd/MM/yyyy",
-    "dd-MMM-yyyy",
-    "dd-MMM-yy",
-    "MMM dd, yyyy",
-    "MMM d, yyyy",
-    "dd MMM yy"
-)
-
-private val TicketShortDateNoYearPatterns = listOf(
-    "dd MMM",
-    "d MMM",
-    "dd MMMM",
-    "d MMMM",
-    "MMM dd",
-    "MMM d"
-)
-
 private val resolvedScheduleCache = java.util.concurrent.ConcurrentHashMap<String, ResolvedExpenseSchedule>()
 
 /**
@@ -454,8 +430,6 @@ fun resolveExpenseSchedule(
     val parsedTicket = extractTravelTicketFromTitle(expense.title)
     val pnrCandidate = expense.travelPnr?.trim()?.takeIf { it.isNotBlank() }
         ?: parsedTicket?.pnr?.trim()?.takeIf { it.isNotBlank() }
-        ?: Regex("""\b(\d{10})\b""").find(expense.title)?.groupValues?.getOrNull(1)
-        ?: PnrNetworkRepository.normalizePnrKey(expense.title).takeIf { it.length == 6 || it.length == 10 }
         ?: ""
 
     val flightVault = if (context != null && (pnrCandidate.length == 6 || pnrCandidate.length == 10)) {
@@ -474,117 +448,24 @@ fun resolveExpenseSchedule(
         parsedTicket?.departureTime?.takeIf { it.isNotBlank() }
     )
 
-    val fallbackCal = Calendar.getInstance().apply { timeInMillis = expense.createdAtEpochMs }
-    val fallbackYear = fallbackCal.get(Calendar.YEAR)
-
-    var parsedDateMillis: Long? = null
-    var parsedTimeHourMin: Pair<Int, Int>? = null
-    var formattedTicketTime: String? = null
-
+    var parsedInstant: com.splitmate.app.data.TicketDateTimeParser.ParsedTicketInstant? = null
     for (rawCandidate in candidateDateTimeStrings) {
-        val cleaned = rawCandidate
-            .replace("•", " ")
-            .replace(Regex("""^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,?\s+""", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("""\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*\b""", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("""\s+"""), " ")
-            .trim()
-
-        // Extract time if present
-        if (parsedTimeHourMin == null) {
-            val m12 = Regex("""\b(0?[1-9]|1[0-2]):([0-5]\d)\s*(AM|PM)\b""", RegexOption.IGNORE_CASE).find(cleaned)
-            val m24 = Regex("""\b([01]?\d|2[0-3]):([0-5]\d)(?:\s*hrs)?\b""", RegexOption.IGNORE_CASE).find(cleaned)
-            if (m12 != null) {
-                val h12 = m12.groupValues[1].toIntOrNull() ?: 0
-                val min = m12.groupValues[2].toIntOrNull() ?: 0
-                val ampm = m12.groupValues[3].uppercase(Locale.US)
-                val h24 = when {
-                    ampm == "PM" && h12 < 12 -> h12 + 12
-                    ampm == "AM" && h12 == 12 -> 0
-                    else -> h12
-                }
-                parsedTimeHourMin = h24 to min
-                formattedTicketTime = String.format(Locale.US, "%02d:%02d %s", h12, min, ampm)
-            } else if (m24 != null) {
-                val h24 = m24.groupValues[1].toIntOrNull() ?: 0
-                val min = m24.groupValues[2].toIntOrNull() ?: 0
-                parsedTimeHourMin = h24 to min
-                val calTmp = Calendar.getInstance().apply {
-                    set(Calendar.HOUR_OF_DAY, h24)
-                    set(Calendar.MINUTE, min)
-                }
-                formattedTicketTime = SimpleDateFormat("hh:mm a", Locale.US).format(calTmp.time)
-            }
-        }
-
-        // Extract date substring by stripping time tokens
-        if (parsedDateMillis == null) {
-            val dateOnly = cleaned
-                .replace(Regex("""\b(0?[1-9]|1[0-2]):([0-5]\d)\s*(AM|PM)\b""", RegexOption.IGNORE_CASE), "")
-                .replace(Regex("""\b([01]?\d|2[0-3]):([0-5]\d)(?:\s*hrs)?\b""", RegexOption.IGNORE_CASE), "")
-                .replace(Regex("""^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,?\s+""", RegexOption.IGNORE_CASE), "")
-                .replace(Regex("""\s+"""), " ")
-                .trim()
-                .trim(',', '-', '•')
-                .trim()
-
-            if (dateOnly.isNotBlank()) {
-                for (pattern in TicketDateParsePatterns) {
-                    val parsed = runCatching {
-                        SimpleDateFormat(pattern, Locale.US).apply { isLenient = false }.parse(dateOnly)
-                    }.getOrNull()
-                    if (parsed != null) {
-                        parsedDateMillis = parsed.time
-                        break
-                    }
-                }
-                if (parsedDateMillis == null) {
-                    for (shortPattern in TicketShortDateNoYearPatterns) {
-                        val parsed = runCatching {
-                            SimpleDateFormat(shortPattern, Locale.US).apply { isLenient = false }.parse(dateOnly)
-                        }.getOrNull()
-                        if (parsed != null) {
-                            val c = Calendar.getInstance().apply {
-                                time = parsed
-                                set(Calendar.YEAR, fallbackYear)
-                            }
-                            parsedDateMillis = c.timeInMillis
-                            break
-                        }
-                    }
-                }
-            }
-        }
+        parsedInstant = com.splitmate.app.data.TicketDateTimeParser.parse(rawCandidate, expense.createdAtEpochMs)
+        if (parsedInstant != null) break
     }
 
-    val effectiveEpoch = if (parsedDateMillis != null) {
-        val cal = Calendar.getInstance().apply {
-            timeInMillis = parsedDateMillis
-            if (parsedTimeHourMin != null) {
-                set(Calendar.HOUR_OF_DAY, parsedTimeHourMin.first)
-                set(Calendar.MINUTE, parsedTimeHourMin.second)
-                set(Calendar.SECOND, 0)
-            } else {
-                set(Calendar.HOUR_OF_DAY, 12)
-                set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0)
-            }
-        }
-        cal.timeInMillis
-    } else {
-        expense.createdAtEpochMs
-    }
-
+    val effectiveEpoch = parsedInstant?.epochMs ?: expense.createdAtEpochMs
     val effectiveDate = Date(effectiveEpoch)
     val shortStr = SimpleDateFormat("dd MMM", Locale.US).format(effectiveDate)
     val fullStr = SimpleDateFormat("dd MMM yyyy", Locale.US).format(effectiveDate)
-    val timeStr = formattedTicketTime ?: SimpleDateFormat("hh:mm a", Locale.US).format(effectiveDate)
+    val timeStr = SimpleDateFormat("hh:mm a", Locale.US).format(effectiveDate)
 
     return ResolvedExpenseSchedule(
         effectiveEpochMs = effectiveEpoch,
         shortDateLabel = shortStr,
         fullDateLabel = fullStr,
         timeLabel = timeStr,
-        hasExplicitTicketDate = parsedDateMillis != null
+        hasExplicitTicketDate = parsedInstant != null
     ).also { resolvedScheduleCache[cacheKey] = it }
 }
 
@@ -922,21 +803,88 @@ fun TripHomeScreen(
         (groupCustomCategories + localCustomCategories).distinctBy { it.customId ?: it.title.lowercase() }
     }
 
+    // Proactively seed confirmed train/flight tickets into the local offline vault so opening a trip
+    // or inspecting any ticket never triggers redundant live PNR / flight network calls.
+    LaunchedEffect(groupExpenses, groupMembers.size) {
+        if (groupExpenses.isNotEmpty()) {
+            PnrNetworkRepository.seedConfirmedTicketsFromExpenses(
+                context = context,
+                expenses = groupExpenses,
+                members = groupMembers,
+                splits = groupSplits
+            )
+        }
+    }
+
     // Classify every real expense in Room
     val classifiedExpenses = remember(groupExpenses, allCustomCategories) {
         groupExpenses.map { exp -> exp to classifyGroupExpenseForTripHub(exp, allCustomCategories) }
     }
 
-    // v2.3.5 (#1): trip lifecycle (organizer wrap-up, synced through the ledger).
+    // v2.3.5 (#1): trip lifecycle (organizer wrap-up + automatic return-ticket arrival detection).
     val tripLifecycleRecord = groupExtras[resolvedGroupId]?.tripLifecycle
-    val tripLastActivityMs = remember(groupExpenses) {
-        groupExpenses.maxOfOrNull { maxOf(it.createdAt, it.scheduledAtEpochMs ?: 0L) }
-    }
-    val tripFirstActivityMs = remember(groupExpenses) {
-        groupExpenses.minOfOrNull { e -> e.scheduledAtEpochMs?.takeIf { it > 0L }?.let { minOf(it, e.createdAt) } ?: e.createdAt }
-    }
-    val tripLifecycleState = remember(tripLifecycleRecord, tripLastActivityMs) {
-        com.splitmate.app.data.TripLifecycleResolver.resolve(tripLifecycleRecord, System.currentTimeMillis(), tripLastActivityMs)
+    
+    var returnArrivalEpochMs by remember { mutableStateOf<Long?>(null) }
+    var tripLastActivityMs by remember { mutableStateOf(0L) }
+    var tripFirstActivityMs by remember { mutableStateOf(0L) }
+    var tripLifecycleState by remember { mutableStateOf(com.splitmate.app.data.TripLifecycleResolver.State.ACTIVE) }
+
+    LaunchedEffect(classifiedExpenses, resolvedGroupId, tripLifecycleRecord) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            while (true) {
+                val currentEpochMs = System.currentTimeMillis()
+                
+                val travelLegs = classifiedExpenses.mapNotNull { (exp, cat) ->
+                    if (cat != TripHubBookingCategory.TRAIN && cat != TripHubBookingCategory.FLIGHT) return@mapNotNull null
+                    val sched = resolveExpenseSchedule(context, exp)
+                    if (!sched.hasExplicitTicketDate) return@mapNotNull null
+                    val parsed = extractTravelTicketFromTitle(exp.title)
+                    val rawPnr = exp.travelPnr.trim().ifBlank { parsed?.pnr?.trim().orEmpty() }
+                    val cleanPnr = if (rawPnr.isNotBlank()) PnrNetworkRepository.normalizePnrKey(rawPnr)
+                        else PnrNetworkRepository.extractPnrFromFreeText(exp.title)
+                    val snap = if (cleanPnr.length == 6 || cleanPnr.length == 10) loadPersistedPnrSnapshot(context, cleanPnr) else null
+                    val flightRes = if (cleanPnr.length == 6) PnrNetworkRepository.loadConfirmedFlightTicketResult(context, cleanPnr) else null
+                    val fromCode = flightRes?.originIata?.ifBlank { null }
+                        ?: snap?.fromStation?.ifBlank { null }
+                        ?: parsed?.fromStation.orEmpty()
+                    val toCode = flightRes?.destinationIata?.ifBlank { null }
+                        ?: snap?.toStation?.ifBlank { null }
+                        ?: parsed?.toStation.orEmpty()
+                    if (fromCode.isBlank() || toCode.isBlank()) return@mapNotNull null
+                    com.splitmate.app.data.TripLifecycleResolver.TravelLegSchedule(
+                        fromCode = fromCode,
+                        toCode = toCode,
+                        departureEpochMs = sched.effectiveEpochMs
+                    )
+                }
+                val newReturnArrival = com.splitmate.app.data.TripLifecycleResolver.resolveReturnArrivalEpochMs(travelLegs)
+
+                val newLastActivity = groupExpenses.maxOfOrNull { exp ->
+                    val schedMs = resolveExpenseSchedule(context, exp).takeIf { it.hasExplicitTicketDate }?.effectiveEpochMs ?: 0L
+                    maxOf(exp.createdAt, exp.scheduledAtEpochMs ?: 0L, schedMs)
+                } ?: 0L
+
+                val newFirstActivity = groupExpenses.minOfOrNull { exp ->
+                    val schedMs = resolveExpenseSchedule(context, exp).takeIf { it.hasExplicitTicketDate }?.effectiveEpochMs
+                    val candidate = exp.scheduledAtEpochMs?.takeIf { it > 0L } ?: schedMs
+                    if (candidate != null && candidate > 0L) minOf(candidate, exp.createdAt) else exp.createdAt
+                } ?: 0L
+
+                val newState = com.splitmate.app.data.TripLifecycleResolver.resolve(
+                    tripLifecycleRecord,
+                    currentEpochMs,
+                    newLastActivity,
+                    newReturnArrival
+                )
+
+                returnArrivalEpochMs = newReturnArrival
+                tripLastActivityMs = newLastActivity
+                tripFirstActivityMs = newFirstActivity
+                tripLifecycleState = newState
+
+                kotlinx.coroutines.delay(15 * 60 * 1000L)
+            }
+        }
     }
     val isTripOrganizer = remember(resolvedGroupId, uiState.groups, uiState.members, uiState.userPhone) {
         runCatching { viewModel.isUserGroupOrganizer(resolvedGroupId, uiState) }.getOrDefault(false)
@@ -1227,7 +1175,15 @@ fun TripHomeScreen(
                         performCrispTactileHaptic(context, localView, heavy = false)
                         if (selectedSectionTab != TripHubSectionTab.MONEY) selectedSectionTab = TripHubSectionTab.MONEY else onOpenSettleUpClick()
                     },
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                    isReturnJourneySuggestion = com.splitmate.app.data.TripLifecycleResolver.isReturnJourneySuggestion(
+                        tripLifecycleRecord,
+                        System.currentTimeMillis(),
+                        returnArrivalEpochMs
+                    ),
+                    onDismissSuggestion = {
+                        viewModel.reopenTrip(resolvedGroupId)
+                    }
                 )
             }
 
@@ -3275,7 +3231,7 @@ fun PeriwinkleFlightBookingCard(
     val pnrCode = remember(flightResult, parsedTicket, expense.title) {
         flightResult.pnr.takeIf { it.isNotBlank() }
             ?: parsedTicket?.pnr?.takeIf { it.isNotBlank() }
-            ?: PnrNetworkRepository.normalizePnrKey(expense.title)
+            ?: PnrNetworkRepository.extractPnrFromFreeText(expense.title)
     }
     val splitBreakdown = remember(expense, groupMembers, expenseSplits) {
         SplitMateViewModel.resolveExpenseSplitBreakdown(expense, groupMembers, expenseSplits)

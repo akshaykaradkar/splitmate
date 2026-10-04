@@ -655,11 +655,33 @@ fun FlightExpenseReviewScreen(
         }
     }
 
-    // Optional live flight status / gate enrichment (non-blocking; instant offline fallback)
-    var liveFlightHint by remember(extractedTicket.flightNumber) { mutableStateOf("") }
-    LaunchedEffect(extractedTicket.flightNumber) {
-        if (extractedTicket.flightNumber.isNotBlank()) {
-            val status = PnrNetworkRepository.fetchLiveFlightStatusByNumber(extractedTicket.flightNumber)
+    // Persist confirmed flight ticket into local offline vault and avoid live network calls once confirmed
+    var liveFlightHint by remember(extractedTicket.flightNumber, extractedTicket.pnr) {
+        mutableStateOf(
+            if (extractedTicket.isValidFlightTicket) {
+                "${extractedTicket.airlineName} ${extractedTicket.flightNumber} · Confirmed Offline Vault"
+            } else ""
+        )
+    }
+    LaunchedEffect(extractedTicket.pnr, extractedTicket.flightNumber, existingFlightExpenseInGroup?.expenseId) {
+        val alreadyConfirmed = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            if (extractedTicket.isValidFlightTicket) {
+                PnrNetworkRepository.saveConfirmedFlightTicketToVault(context, extractedTicket)
+            }
+            extractedTicket.isValidFlightTicket ||
+                existingFlightExpenseInGroup != null ||
+                PnrNetworkRepository.loadPersistedPnrSnapshot(context, extractedTicket.pnr)?.let {
+                    PnrNetworkRepository.isSnapshotAllConfirmed(it)
+                } == true
+        }
+        if (!alreadyConfirmed && extractedTicket.flightNumber.isNotBlank()) {
+            val status = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                PnrNetworkRepository.fetchLiveFlightStatusByNumber(
+                    flightNumber = extractedTicket.flightNumber,
+                    optionalPnr = extractedTicket.pnr,
+                    context = context
+                )
+            }
             if (status != null && status.isLiveVerified) {
                 liveFlightHint = status.liveTrainLocationRadar
             }
