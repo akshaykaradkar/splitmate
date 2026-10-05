@@ -4154,7 +4154,7 @@ class SplitMateV23ExpressiveE2ETest {
             }
 
             // 4. Verify LazyColumn item placements use SplitMateMotion.defaultSpatial()
-            val spatialPlacementCount = Regex("""\.animateItemPlacement\(\s*SplitMateMotion\.defaultSpatial\(\)\s*\)""")
+            val spatialPlacementCount = Regex("""\.animateItem\(\s*fadeInSpec = null,\s*placementSpec = SplitMateMotion\.defaultSpatial\(\),\s*fadeOutSpec = null\s*\)""")
                 .findAll(src).count()
             assertTrue(spatialPlacementCount >= 14, "Expected >= 14 defaultSpatial item placements in TripHomeScreen.kt, found $spatialPlacementCount")
         }

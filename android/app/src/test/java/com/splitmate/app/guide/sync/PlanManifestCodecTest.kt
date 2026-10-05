@@ -38,7 +38,7 @@ class PlanManifestCodecTest {
         val o = JSONObject(PlanManifestCodec.encode(full, shareStay = true).json)
         assertEquals(
             setOf("v", "destQid", "wvRev", "stay", "pinned", "hidden", "days", "updatedAt", "by"),
-            o.keySet()
+            o.keys().asSequence().toSet()
         )
         assertEquals(1, o.getInt("v"))
         assertEquals("Q1066187", o.getString("destQid"))

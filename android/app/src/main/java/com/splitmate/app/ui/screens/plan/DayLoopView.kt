@@ -100,7 +100,7 @@ fun DayLoopView(
                     icon = Icons.Rounded.CloudOff,
                     modifier = Modifier
                         .padding(bottom = 12.dp)
-                        .animateItemPlacement(motion.defaultSpatialSpec())
+                        .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                 )
             }
         }
@@ -112,13 +112,13 @@ fun DayLoopView(
                 modifier = Modifier
                     .padding(bottom = 12.dp)
                     .semantics { heading() }
-                    .animateItemPlacement(motion.defaultSpatialSpec())
+                    .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
             )
         }
 
         when {
             stay == null -> item(key = "no_stay") {
-                NoStayCard(onSetStay = onSetStay, modifier = Modifier.animateItemPlacement(motion.defaultSpatialSpec()))
+                NoStayCard(onSetStay = onSetStay, modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null))
             }
             route == null || stops.isEmpty() -> {
                 item(key = "stay_only") {
@@ -130,14 +130,14 @@ fun DayLoopView(
                         onChange = onSetStay,
                         modifier = Modifier
                             .padding(bottom = 12.dp)
-                            .animateItemPlacement(motion.defaultSpatialSpec())
+                            .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                     )
                 }
                 item(key = "no_stops") {
                     EmptyLoopCard(
                         building = state.networkInFlight,
                         onExplore = { actions.selectSubView(PlanSubView.EXPLORE) },
-                        modifier = Modifier.animateItemPlacement(motion.defaultSpatialSpec())
+                        modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                     )
                 }
             }
@@ -148,7 +148,7 @@ fun DayLoopView(
                         stopCount = stops.size,
                         modifier = Modifier
                             .padding(bottom = 16.dp)
-                            .animateItemPlacement(motion.defaultSpatialSpec())
+                            .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                     )
                 }
                 item(key = "stay_start") {
@@ -158,14 +158,14 @@ fun DayLoopView(
                         legKm = null,
                         isShared = state.stay.isShared,
                         onChange = onSetStay,
-                        modifier = Modifier.animateItemPlacement(motion.defaultSpatialSpec())
+                        modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                     )
                 }
                 stops.forEachIndexed { index, place ->
                     item(key = "leg_${place.id}") {
                         LegConnector(
                             km = route.legStraightKm.getOrNull(index),
-                            modifier = Modifier.animateItemPlacement(motion.defaultSpatialSpec())
+                            modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                         )
                     }
                     item(key = "stop_${place.id}") {
@@ -175,14 +175,14 @@ fun DayLoopView(
                             place = place,
                             legKm = route.legStraightKm.getOrNull(index),
                             onOpen = { actions.openPlace(place) },
-                            modifier = Modifier.animateItemPlacement(motion.defaultSpatialSpec())
+                            modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                         )
                     }
                 }
                 item(key = "leg_return") {
                     LegConnector(
                         km = route.legStraightKm.getOrNull(stops.size),
-                        modifier = Modifier.animateItemPlacement(motion.defaultSpatialSpec())
+                        modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                     )
                 }
                 item(key = "stay_end") {
@@ -192,7 +192,7 @@ fun DayLoopView(
                         legKm = route.legStraightKm.getOrNull(stops.size),
                         isShared = state.stay.isShared,
                         onChange = null,
-                        modifier = Modifier.animateItemPlacement(motion.defaultSpatialSpec())
+                        modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                     )
                 }
                 item(key = "loop_actions") {
@@ -200,7 +200,7 @@ fun DayLoopView(
                         actions = actions,
                         modifier = Modifier
                             .padding(top = 20.dp)
-                            .animateItemPlacement(motion.defaultSpatialSpec())
+                            .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                     )
                 }
             }
@@ -217,7 +217,7 @@ fun DayLoopView(
                     icon = Icons.Rounded.LocationOff,
                     modifier = Modifier
                         .padding(top = 16.dp)
-                        .animateItemPlacement(motion.defaultSpatialSpec())
+                        .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                 )
             }
         }

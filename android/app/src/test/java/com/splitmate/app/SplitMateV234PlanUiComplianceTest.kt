@@ -343,7 +343,7 @@ class SplitMateV234PlanUiComplianceTest {
             val code = allPlanCode()
             assertFalse(code.contains("tween("), "Springs via LocalMotionScheme, not tween")
             assertTrue(code.contains("LocalMotionScheme.current"))
-            assertTrue(code.contains("animateItemPlacement(motion.defaultSpatialSpec())"))
+            assertTrue(code.contains("animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)"))
             assertTrue(code.contains("animateContentSize(motion.defaultSpatialSpec())"))
             assertTrue(code.contains("const val PressedScale: Float = 0.98f"))
             assertTrue(code.contains("motion.fastSpatialSpec()"))

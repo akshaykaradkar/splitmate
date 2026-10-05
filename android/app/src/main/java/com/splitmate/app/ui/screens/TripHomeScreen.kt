@@ -1974,7 +1974,7 @@ private fun TripHubOverviewFeed(
                     onLogTrainPnrClick = { onOpenTrainPnrReviewClick("") },
                     onUploadFlightPdfClick = { onOpenFlightReviewClick("") },
                     onLogSharedExpenseClick = onLogQuickExpenseClick,
-                    modifier = Modifier.animateItemPlacement(SplitMateMotion.defaultSpatial())
+                    modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)
                 )
             }
         }
@@ -1999,7 +1999,7 @@ private fun TripHubOverviewFeed(
         ) { (expense, category) ->
             val itemModifier = Modifier
                 .fillMaxWidth()
-                .animateItemPlacement(SplitMateMotion.defaultSpatial())
+                .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)
 
             when (category) {
                 TripHubBookingCategory.TRAIN -> {
@@ -4523,7 +4523,7 @@ private fun TripHubPlanTimelineView(
                     onLogTrainPnrClick = { onOpenTrainPnrReviewClick("") },
                     onUploadFlightPdfClick = { onOpenFlightReviewClick("") },
                     onLogSharedExpenseClick = onLogQuickExpenseClick,
-                    modifier = Modifier.animateItemPlacement(SplitMateMotion.defaultSpatial())
+                    modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)
                 )
             }
         }
@@ -4549,7 +4549,7 @@ private fun TripHubPlanTimelineView(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = if (dayIndex == 0) 2.dp else 8.dp)
-                        .animateItemPlacement(SplitMateMotion.defaultSpatial()),
+                        .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -4616,7 +4616,7 @@ private fun TripHubPlanTimelineView(
                     border = BorderStroke(1.dp, TripHubTokens.CardBorder),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .animateItemPlacement(SplitMateMotion.defaultSpatial())
+                        .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)
                 ) {
                     Row(
                         modifier = Modifier
@@ -4755,7 +4755,7 @@ private fun TripHubTravelWalletView(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .animateItemPlacement(SplitMateMotion.defaultSpatial()),
+                    .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Row(
@@ -4811,7 +4811,7 @@ private fun TripHubTravelWalletView(
         ) { (expense, category) ->
             val itemModifier = Modifier
                 .fillMaxWidth()
-                .animateItemPlacement(SplitMateMotion.defaultSpatial())
+                .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)
 
             when (category) {
                 TripHubBookingCategory.TRAIN -> {
@@ -4954,7 +4954,7 @@ private fun TripHubMoneySettlementView(
                 border = BorderStroke(1.dp, TripHubTokens.CardBorder),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .animateItemPlacement(SplitMateMotion.defaultSpatial())
+                    .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)
                     .animateContentSize(animationSpec = DesignSystemBindings.tactileSpring())
             ) {
                 Column(
@@ -5128,7 +5128,7 @@ private fun TripHubMoneySettlementView(
                     border = BorderStroke(1.dp, TripHubTokens.CardBorder),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .animateItemPlacement(SplitMateMotion.defaultSpatial())
+                        .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)
                 ) {
                     Row(
                         modifier = Modifier
@@ -5214,7 +5214,7 @@ private fun TripHubMoneySettlementView(
                         border = BorderStroke(1.dp, TripHubTokens.CardBorder),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .animateItemPlacement(SplitMateMotion.defaultSpatial())
+                            .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)
                     ) {
                         Row(
                             modifier = Modifier
@@ -5291,7 +5291,7 @@ private fun TripHubMoneySettlementView(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .animateItemPlacement(SplitMateMotion.defaultSpatial())
+                            .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)
                             .animateContentSize(SplitMateMotion.defaultSpatial())
                     ) {
                         Column(
@@ -5560,7 +5560,7 @@ private fun TripHubMoneySettlementView(
                         border = BorderStroke(1.dp, TripHubTokens.CardBorder),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .animateItemPlacement(SplitMateMotion.defaultSpatial())
+                            .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)
                     ) {
                         Column(
                             modifier = Modifier
@@ -6487,7 +6487,7 @@ private fun TripHubPeoplePerspectiveView(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .animateItemPlacement(SplitMateMotion.defaultSpatial()),
+                        .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Button(
@@ -6636,7 +6636,7 @@ private fun TripHubPeoplePerspectiveView(
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .animateItemPlacement(SplitMateMotion.defaultSpatial())
+                    .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)
             ) {
                 Row(
                     modifier = Modifier

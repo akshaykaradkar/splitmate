@@ -137,7 +137,7 @@ fun ExploreGuideView(
                     icon = Icons.Rounded.CloudOff,
                     modifier = Modifier
                         .padding(horizontal = PlanGuideDefaults.ScreenGutter)
-                        .animateItemPlacement(motion.defaultSpatialSpec())
+                        .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                 )
             }
         }
@@ -151,7 +151,7 @@ fun ExploreGuideView(
                     onAction = { actions.acceptGuideUpdate() },
                     modifier = Modifier
                         .padding(horizontal = PlanGuideDefaults.ScreenGutter)
-                        .animateItemPlacement(motion.defaultSpatialSpec())
+                        .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                 )
             }
         }
@@ -163,7 +163,7 @@ fun ExploreGuideView(
                     actions = actions,
                     onClose = if (searchOpen && hasGuide) ({ searchOpen = false }) else null,
                     onSubmitted = { searchOpen = false },
-                    modifier = Modifier.animateItemPlacement(motion.defaultSpatialSpec())
+                    modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                 )
             }
             if (phase is GuidePhase.Disambiguate) {
@@ -172,20 +172,20 @@ fun ExploreGuideView(
                         phase = phase,
                         actions = actions,
                         onChosen = { searchOpen = false },
-                        modifier = Modifier.animateItemPlacement(motion.defaultSpatialSpec())
+                        modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                     )
                 }
             }
             if (phase is GuidePhase.Error && pack == null) {
                 item(key = "error") {
-                    PhaseErrorBanner(phase, actions, Modifier.animateItemPlacement(motion.defaultSpatialSpec()))
+                    PhaseErrorBanner(phase, actions, Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null))
                 }
             }
             if (phase == GuidePhase.Resolving) {
                 item(key = "resolving_skeleton") {
                     HeroSkeleton(
                         label = "Finding your destination",
-                        modifier = Modifier.animateItemPlacement(motion.defaultSpatialSpec())
+                        modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                     )
                 }
             }
@@ -200,11 +200,11 @@ fun ExploreGuideView(
                         subtitle = PlanGuideFormat.sanitizeDisplay(phase.candidate.description),
                         hero = if (sameDestination) pack?.destination?.hero else null,
                         showPlaceholderIcon = false,
-                        modifier = Modifier.animateItemPlacement(motion.defaultSpatialSpec())
+                        modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                     )
                 }
                 item(key = "hydrating_skeleton") {
-                    SectionSkeletons(modifier = Modifier.animateItemPlacement(motion.defaultSpatialSpec()))
+                    SectionSkeletons(modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null))
                 }
             }
             hasGuide && pack != null && !searchOpen -> {
@@ -224,7 +224,7 @@ fun ExploreGuideView(
                 lines = state.attribution,
                 modifier = Modifier
                     .padding(top = 12.dp)
-                    .animateItemPlacement(motion.defaultSpatialSpec())
+                    .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
             )
         }
     }
@@ -250,7 +250,7 @@ private fun LazyListScope.hydratedGuide(
             subtitle = PlanGuideFormat.heroSubtitle(pack.destination.description, state.sections),
             hero = pack.destination.hero,
             showPlaceholderIcon = true,
-            modifier = Modifier.animateItemPlacement(motion.defaultSpatialSpec())
+            modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
         )
     }
     item(key = "hero_chips") {
@@ -260,7 +260,7 @@ private fun LazyListScope.hydratedGuide(
             actions = actions,
             onOpenStaySheet = onOpenStaySheet,
             onChangeDestination = onChangeDestination,
-            modifier = Modifier.animateItemPlacement(motion.defaultSpatialSpec())
+            modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
         )
     }
     if (phase is GuidePhase.Partial) {
@@ -274,14 +274,14 @@ private fun LazyListScope.hydratedGuide(
                 onAction = { actions.retry() },
                 modifier = Modifier
                     .padding(horizontal = PlanGuideDefaults.ScreenGutter)
-                    .animateItemPlacement(motion.defaultSpatialSpec())
+                    .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
             )
         }
     }
     if (phase is GuidePhase.Error) {
         item(key = "error") {
             val motion = LocalMotionScheme.current
-            PhaseErrorBanner(phase, actions, Modifier.animateItemPlacement(motion.defaultSpatialSpec()))
+            PhaseErrorBanner(phase, actions, Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null))
         }
     }
     if (pack.wikivoyage == null || pack.places.isEmpty()) {
@@ -293,7 +293,7 @@ private fun LazyListScope.hydratedGuide(
                 icon = Icons.Rounded.Info,
                 modifier = Modifier
                     .padding(horizontal = PlanGuideDefaults.ScreenGutter)
-                    .animateItemPlacement(motion.defaultSpatialSpec())
+                    .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
             )
         }
     }
@@ -323,7 +323,7 @@ private fun LazyListScope.hydratedGuide(
                 title = title,
                 modifier = Modifier
                     .padding(start = PlanGuideDefaults.ScreenGutter, end = PlanGuideDefaults.ScreenGutter, top = 16.dp)
-                    .animateItemPlacement(motion.defaultSpatialSpec())
+                    .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
             )
         }
         visible.forEach { card ->
@@ -335,7 +335,7 @@ private fun LazyListScope.hydratedGuide(
                     actions = actions,
                     modifier = Modifier
                         .padding(horizontal = PlanGuideDefaults.ScreenGutter)
-                        .animateItemPlacement(motion.defaultSpatialSpec())
+                        .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                 )
             }
         }
@@ -347,7 +347,7 @@ private fun LazyListScope.hydratedGuide(
                     modifier = Modifier
                         .padding(horizontal = 8.dp)
                         .heightIn(min = 48.dp)
-                        .animateItemPlacement(motion.defaultSpatialSpec())
+                        .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                 ) {
                     Text(
                         text = if (expanded) "Show less" else PlanGuideFormat.showMoreLabel(hiddenCount),
