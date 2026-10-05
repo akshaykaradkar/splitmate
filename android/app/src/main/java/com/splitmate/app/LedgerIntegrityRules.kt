@@ -37,74 +37,40 @@ object SettlementDuplicateGuard {
 }
 
 /**
- * v2.3.6: keeps every expense's split rows summing exactly to the expense total.
+ * v2.3.6: keeps every expense's total equal to the sum of its split rows.
  *
- * Found in real trip data: an expense whose total said ₹7,950 while its six split rows still added up
- * to the old ₹4,950. The ₹3,000 nobody owed left two members "owed" money with no transfer that could
- * ever pay them, so the trip could never reach "all settled". Valid expenses always satisfy
- * `sum(finalOwedCents) == totalAmountCents` (the payer's row carries any unassigned remainder), so a
- * mismatch is always corruption. The repair keeps everyone's proportions and fixes the pennies with
- * Largest Remainder (0.00 drift).
+ * Found in real trip data: a rental edited from ₹7,950 to ₹4,950 (deposit returned). The edit saved
+ * the new total and the new split rows (6 × ₹825), but a sync that was already on the network wrote
+ * its older copy of the expense row back, so the total went back to ₹7,950 while the splits stayed
+ * at ₹4,950. The ₹3,000 nobody owed left two members "owed" money that no transfer could ever pay.
+ *
+ * Valid expenses always satisfy `sum(finalOwedCents) == totalAmountCents` (the payer's row carries
+ * any unassigned remainder). In this failure the split rows are the newer data, so the repair trusts
+ * them and corrects the stale total. Itemized receipts (tax / tip / remainder / multiplier) are left
+ * alone because their total can't be rebuilt from the rows alone.
  */
 object ExpenseSplitIntegrity {
 
     fun isConsistent(expense: ExpenseEntity, splits: List<ExpenseSplitEntity>): Boolean =
         splits.isEmpty() || splits.sumOf { it.finalOwedCents } == expense.totalAmountCents
 
-    /** Returns [splits] rescaled to the expense total, or [splits] unchanged when already consistent. */
-    fun reconcile(expense: ExpenseEntity, splits: List<ExpenseSplitEntity>): List<ExpenseSplitEntity> {
-        if (isConsistent(expense, splits)) return splits
-        val ordered = splits.sortedBy { it.splitId }
-        val finals = largestRemainder(expense.totalAmountCents, ordered.map { it.finalOwedCents })
-        val bases = largestRemainder(expense.baseSubtotalCents, ordered.map { it.baseClaimedCents.coerceAtLeast(0L) })
-        val repaired = ordered.mapIndexed { i, sp ->
-            sp.copy(
-                finalOwedCents = finals.first[i],
-                baseClaimedCents = bases.first[i],
-                plusOneCent = finals.second[i]
-            )
-        }
-        val byId = repaired.associateBy { it.splitId }
-        return splits.map { byId[it.splitId] ?: it }
+    /** Returns [expense] with its total (and base subtotal) set to the split sum when it is stale. */
+    fun repairStaleTotal(expense: ExpenseEntity, splits: List<ExpenseSplitEntity>): ExpenseEntity {
+        val rows = splits.filter { it.expenseId == expense.expenseId }
+        if (isConsistent(expense, rows)) return expense
+        val isPlainEqualOrExact = expense.taxCents == 0L &&
+            expense.tipCents == 0L &&
+            expense.unassignedBaseCents == 0L &&
+            kotlin.math.abs(expense.lockedMultiplier - 1.0) < 1e-9
+        if (!isPlainEqualOrExact) return expense
+        val splitSum = rows.sumOf { it.finalOwedCents }
+        if (splitSum <= 0L) return expense
+        return expense.copy(totalAmountCents = splitSum, baseSubtotalCents = splitSum)
     }
 
-    /** Repairs every expense in a ledger; splits of unknown expenses are passed through. */
-    fun reconcileAll(expenses: List<ExpenseEntity>, splits: List<ExpenseSplitEntity>): List<ExpenseSplitEntity> {
+    /** Repairs every expense in a ledger. */
+    fun repairStaleTotals(expenses: List<ExpenseEntity>, splits: List<ExpenseSplitEntity>): List<ExpenseEntity> {
         val byExpense = splits.groupBy { it.expenseId }
-        val expenseById = expenses.associateBy { it.expenseId }
-        return byExpense.flatMap { (expId, rows) ->
-            val exp = expenseById[expId]
-            if (exp == null) rows else reconcile(exp, rows)
-        }
-    }
-
-    /**
-     * Distributes [total] proportionally to [weights] (equal shares when all weights are 0). Returns the
-     * allocations and, per row, whether it received one of the leftover pennies.
-     */
-    private fun largestRemainder(total: Long, weights: List<Long>): Pair<List<Long>, List<Boolean>> {
-        val n = weights.size
-        if (n == 0) return emptyList<Long>() to emptyList()
-        val w = if (weights.all { it <= 0L }) List(n) { 1L } else weights.map { it.coerceAtLeast(0L) }
-        val weightSum = w.sum()
-        val floors = LongArray(n)
-        val remainders = DoubleArray(n)
-        for (i in 0 until n) {
-            val exact = total.toDouble() * w[i].toDouble() / weightSum.toDouble()
-            floors[i] = kotlin.math.floor(exact).toLong()
-            remainders[i] = exact - floors[i]
-        }
-        var leftover = total - floors.sum()
-        val bonus = BooleanArray(n)
-        val order = (0 until n).sortedWith(compareByDescending<Int> { remainders[it] }.thenBy { it })
-        var k = 0
-        while (leftover > 0 && n > 0) {
-            val i = order[k % n]
-            floors[i] += 1
-            bonus[i] = true
-            leftover--
-            k++
-        }
-        return floors.toList() to bonus.toList()
+        return expenses.map { exp -> repairStaleTotal(exp, byExpense[exp.expenseId].orEmpty()) }
     }
 }

@@ -3334,9 +3334,8 @@ class SplitMateViewModel(
      * Determines whether the current local user is allowed to click `Mark Paid` on a settlement
      * transfer where [toMemberId] is the recipient (the member receiving the money):
      * 1. Allowed if the current local user IS the recipient (`toMemberId`) receiving the money.
-     * 2. Allowed if the current local user is a Trip Organizer AND the recipient (`toMemberId`)
-     *    is NOT an active joined app member in the trip group (e.g. offline/local-only member without
-     *    a verified 10-digit phone, or invite is still `PENDING` / `DECLINED`, or no longer in group).
+     * 2. Allowed if the current local user is a Trip Organizer / co-organizer (v2.3.6: for any
+     *    recipient, joined or not).
      */
     fun canCurrentUserMarkTransferPaid(
         groupId: String = _uiState.value.activeGroupId,
@@ -3360,16 +3359,10 @@ class SplitMateViewModel(
         }
         if (isRecipientCurrentUser) return true
 
-        // 2. Recipient is NOT an active joined app member in the trip group -> Trip Organizer can mark paid on their behalf
-        val isRecipientJoinedInTripApp = toMember != null &&
-            toPhone10.length == 10 &&
-            toMember.inviteStatus.equals("JOINED", ignoreCase = true)
-
-        if (!isRecipientJoinedInTripApp && isUserGroupOrganizer(groupId, state)) {
-            return true
-        }
-
-        return false
+        // 2. v2.3.6 (product decision): a Trip Organizer (or co-organizer) can mark ANY transfer paid,
+        //    including ones where the recipient has joined the app, e.g. when cash was handed over
+        //    in person. Everyone else still needs to be the recipient.
+        return isUserGroupOrganizer(groupId, state)
     }
 
     fun getMarkPaidRestrictionLabel(
@@ -3380,18 +3373,8 @@ class SplitMateViewModel(
     ): String {
         val gMembers = state.members.filter { it.groupId == groupId }
         val toMember = gMembers.find { it.memberId == toMemberId }
-        val toPhone10 = toMember?.let {
-            com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(it.userPhone, it.upiId)
-        }.orEmpty()
-        val isRecipientJoinedInTripApp = toMember != null &&
-            toPhone10.length == 10 &&
-            toMember.inviteStatus.equals("JOINED", ignoreCase = true)
         val cleanToName = toMember?.name?.ifBlank { toMemberName } ?: toMemberName
-        return if (isRecipientJoinedInTripApp) {
-            "Only $cleanToName (recipient) can Mark Paid"
-        } else {
-            "Only $cleanToName or Organizer can Mark Paid"
-        }
+        return "Only $cleanToName or an organizer can Mark Paid"
     }
 
     fun getGroupJoinCode(groupId: String = _uiState.value.activeGroupId): String {

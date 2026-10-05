@@ -2742,11 +2742,12 @@ class SplitMateV2ZeroRegressionAndSyncTest {
 
         // 3. Verify Mark Paid Authorization:
         //    - Transfer where Rohan (JOINED with phone) is the recipient (toMemberId = rohan.memberId):
-        //      * Akshay (payer / co-organizer) CANNOT mark paid because Rohan is JOINED in the group!
-        //      * Only Rohan (the recipient receiving the money) CAN mark paid.
-        assertFalse(
+        //      * v2.3.6 product decision: Akshay (organizer) CAN mark paid even though Rohan has joined
+        //        (e.g. cash handed over in person).
+        //      * Rohan (the recipient receiving the money) CAN mark paid too.
+        assertTrue(
             vm.canCurrentUserMarkTransferPaid(groupId, toMemberId = rohan.memberId),
-            "Even an Organizer cannot Mark Paid when the recipient (Rohan) is an active JOINED member in the trip group"
+            "An Organizer can Mark Paid even when the recipient (Rohan) is an active JOINED member"
         )
         vm.claimGroupMemberPerspective(groupId, rohan.memberId)
         assertTrue(

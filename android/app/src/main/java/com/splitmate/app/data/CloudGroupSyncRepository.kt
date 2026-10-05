@@ -1641,7 +1641,7 @@ object CloudGroupSyncRepository {
             if (!hasTombstonedEntities) {
                 return adjustMembersForLocalUser(
                     doc = singleDoc.copy(
-                        splits = com.splitmate.app.ExpenseSplitIntegrity.reconcileAll(singleDoc.expenses, singleDoc.splits),
+                        expenses = com.splitmate.app.ExpenseSplitIntegrity.repairStaleTotals(singleDoc.expenses, singleDoc.splits),
                         organizerPhone10 = resolvedOrgPhone,
                         joinCode6 = resolvedJoinCode,
                         organizerRolesByKey = mergedOrganizerRolesByKey,
@@ -2005,8 +2005,8 @@ object CloudGroupSyncRepository {
         return CloudGroupLedgerDocument(
             group = chosenGroup,
             members = mergedMembers,
-            expenses = finalExpenses,
-            splits = com.splitmate.app.ExpenseSplitIntegrity.reconcileAll(finalExpenses, finalSplits),
+            expenses = com.splitmate.app.ExpenseSplitIntegrity.repairStaleTotals(finalExpenses, finalSplits),
+            splits = finalSplits,
             settlements = allSettlements,
             deletedExpenseIds = mergedDeletedExpenseIds,
             flightVaultByPnr = mergedFlights,
@@ -2630,13 +2630,21 @@ object CloudGroupSyncRepository {
         }
 
         if (cloudSyncedConfirmed && hasPendingLocalEntities) {
+            // v2.3.6 (real-data bug): only flip PENDING -> SYNCED on rows nobody changed while this sync
+            // was on the network. Writing back the snapshot copy used to overwrite an edit made in the
+            // meantime: a total edited ₹7,950 -> ₹4,950 came back as ₹7,950 while its new split rows
+            // (₹825 each) stayed, and an undone settlement could be re-inserted.
+            val currentExpenses = dao.getExpensesForGroup(groupId).associateBy { it.expenseId }
             syncedExpenses.filter { exp ->
-                mergedDoc.expenses.find { it.expenseId == exp.expenseId }?.syncStatus != "SYNCED"
+                val mergedRow = mergedDoc.expenses.find { it.expenseId == exp.expenseId }
+                mergedRow?.syncStatus != "SYNCED" && currentExpenses[exp.expenseId] == mergedRow
             }.forEach { exp ->
                 runCatching { dao.insertExpense(exp) }
             }
+            val currentSettlements = dao.getSettlementsForGroup(groupId).associateBy { it.settlementId }
             syncedSettlements.filter { settle ->
-                mergedDoc.settlements.find { it.settlementId == settle.settlementId }?.syncStatus != "SYNCED"
+                val mergedRow = mergedDoc.settlements.find { it.settlementId == settle.settlementId }
+                mergedRow?.syncStatus != "SYNCED" && currentSettlements[settle.settlementId] == mergedRow
             }.forEach { settle ->
                 runCatching { dao.insertSettlement(settle) }
             }

@@ -6012,7 +6012,7 @@ private fun TripHubMoneySettlementView(
                                             modifier = Modifier.size(14.dp)
                                         )
                                         Text(
-                                            text = "Not paid yet · ${settlement.toName.substringBefore(" ")} confirms when received",
+                                            text = "Not paid yet · ${settlement.toName.substringBefore(" ")} or an organizer can confirm",
                                             style = MaterialTheme.typography.labelMedium,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             maxLines = 2,
