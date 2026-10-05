@@ -10,6 +10,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.swipeUp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.splitmate.app.SplitMateApp
@@ -86,6 +87,12 @@ class AppScreenshotTest {
     @Test fun s08_trip_fab_menu() { launch(); tap(text = "Lake Tahoe Cabin"); tap(desc = "Add Booking"); shot("08_trip_fab_menu") }
 
     @Test fun s09_trip_money_tab() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Money"); shot("09_trip_money_tab") }
+
+    @Test fun s10_trip_scrolled() {
+        launch(); tap(text = "Lake Tahoe Cabin")
+        compose.onRoot().performTouchInput { swipeUp(startY = height * 0.85f, endY = height * 0.25f) }
+        shot("10_trip_scrolled")
+    }
 
     @Test fun s03_settle_tab() { launch(); tap(desc = "Settle"); shot("03_settle") }
 

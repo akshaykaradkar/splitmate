@@ -4136,7 +4136,8 @@ class SplitMateV23ExpressiveE2ETest {
             assertTrue(src.contains("Morph(MaterialShapes.Cookie9Sided, MaterialShapes.Sunny)"))
             assertTrue(src.contains("MorphPolygonShape(morph = settledMorph, percentage = settledMorphProgress)"))
             assertTrue(src.contains("SplitMateMotion.slowSpatialFloat()"))
-            assertTrue(src.contains("amplitude = if (simplifiedTransfers.isEmpty()) 0f else 0.75f"))
+            // v2.3.6: settlement money data carries no wavy progress (v2.3.2 rule, wavy = in-flight network only).
+            assertFalse(src.contains("amplitude = if (simplifiedTransfers.isEmpty()) 0f else 0.75f"))
             assertTrue(src.contains("SplitButtonLayout("))
             assertTrue(src.contains("leadingText = \"Mark Paid\""))
 
@@ -4586,7 +4587,8 @@ class SplitMateV23ExpressiveE2ETest {
             assertTrue(tripHomeSrc.contains(".nestedScroll(scrollBehavior.nestedScrollConnection)"))
             // v2.3.6 Wave 4: LargeTopAppBar -> M3 Expressive LargeFlexibleTopAppBar
             assertTrue(Regex("""Large(Flexible)?TopAppBar\(""").containsMatchIn(tripHomeSrc))
-            assertTrue(tripHomeSrc.contains("LinearWavyProgressIndicator("))
+            // v2.3.6: the only Trip Hub wavy bar was on static settlement money data and was removed.
+            assertFalse(tripHomeSrc.contains("progress = { settlementProgress }"))
 
             // 2. ActivityDetailSheet ModalBottomSheet + SplitButtonLayout + Segmented Island + Tnum Monospace
             assertTrue(activitySheetSrc.contains("ModalBottomSheet("))

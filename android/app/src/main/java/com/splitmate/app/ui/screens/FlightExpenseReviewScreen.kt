@@ -1467,12 +1467,15 @@ fun FlightExpenseReviewScreen(
 
                                             Spacer(modifier = Modifier.width(14.dp))
 
-                                            Column {
+                                            Column(modifier = Modifier.weight(1f)) {
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                                 ) {
                                                     Text(
+                                                        maxLines = 1,
+                                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                                        modifier = Modifier.weight(1f, fill = false),
                                                         text = member.name,
                                                         fontSize = 14.5.sp,
                                                         fontWeight = FontWeight.Bold,
@@ -1587,7 +1590,7 @@ fun FlightExpenseReviewScreen(
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
-                                Column {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = "Saved for Offline Access",
                                         fontSize = 12.5.sp,

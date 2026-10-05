@@ -1,5 +1,7 @@
 package com.splitmate.app.ui.screens
 
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -1629,28 +1631,42 @@ fun TactilePaperBoardingPass(
 
                                 Spacer(modifier = Modifier.width(8.dp))
 
-                                Column {
+                                // v2.3.6 fix: the name column takes the remaining width (weight) and
+                                // wraps/ellipsizes by word, so long statuses can't crush it into
+                                // one letter per line.
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = pax.name,
-                                        fontFamily = FigtreeFontFamily,
+                                        style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp,
-                                        color = TactilePaperPassTokens.InkPrimary
+                                        color = TactilePaperPassTokens.InkPrimary,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
                                         text = splitNatureCaption ?: "Per-Passenger Share: $perPersonShareDisplay",
-                                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
-                                        fontFamily = FigtreeFontFamily,
+                                        style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.SemiBold,
-                                        fontSize = 11.sp,
-                                        color = TactilePaperPassTokens.SageConfirmedText
+                                        color = TactilePaperPassTokens.SageConfirmedText,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }
 
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            // Status side is capped so it can never take the name's space.
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.End,
+                                modifier = Modifier.widthIn(max = 148.dp)
+                            ) {
                                 Text(
                                     text = pax.bookingStatus,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false),
                                     fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 12.sp,
@@ -1680,10 +1696,11 @@ fun TactilePaperBoardingPass(
                                         )
                                         Text(
                                             text = pax.currentStatus,
-                                            fontFamily = FigtreeFontFamily,
+                                            style = MaterialTheme.typography.labelMedium,
                                             fontWeight = FontWeight.ExtraBold,
-                                            fontSize = 12.sp,
-                                            color = statusColor
+                                            color = statusColor,
+                                            maxLines = 1,
+                                            softWrap = false
                                         )
                                     }
                                 }

@@ -4182,7 +4182,7 @@ fun LedgersDashboardScreen(
                 }
 
                 SplitButtonLayout(
-                    leadingText = "+ New Group",
+                    leadingText = "New Group",
                     leadingIcon = Icons.Rounded.Add,
                     onLeadingClick = { showNewGroupDialog = true },
                     containerColor = SplitMateTheme.SageSurface,
@@ -7448,7 +7448,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                             }
                                         }
                                         Spacer(modifier = Modifier.width(10.dp))
-                                        Column {
+                                        Column(modifier = Modifier.weight(1f)) {
                                             Text(
                                                 text = "$fromShortName paid $toShortName",
                                                 fontFamily = SplitMateTheme.FontDisplay,
