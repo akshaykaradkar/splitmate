@@ -1698,15 +1698,10 @@ fun PnrSyncStatusBanner(
     subtitleText: String = "Saved for Offline Access",
     rightStatusLabel: String = "Saved Offline"
 ) {
-    var energyState by remember(pnr) {
-        mutableStateOf(com.splitmate.app.ui.components.Gm3EnergyState.ANTICIPATING)
-    }
-
-    com.splitmate.app.ui.components.Gm3AuroraEnergySurface(
-        state = energyState,
-        onStateAutoTransition = { nextState -> energyState = nextState },
-        palette = com.splitmate.app.ui.components.Gm3EnergyAccentPalette.AVIATION_PERIWINKLE,
+    Surface(
         shape = FlightPassTokens.RadiusInner,
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -1773,17 +1768,8 @@ fun PnrSyncStatusBanner(
 
             Spacer(modifier = Modifier.width(8.dp))
 
+            // Static status label (the old tap-to-cycle fake "processing" states were removed with the aurora effect)
             Surface(
-                onClick = {
-                    energyState = when (energyState) {
-                        com.splitmate.app.ui.components.Gm3EnergyState.IDLE ->
-                            com.splitmate.app.ui.components.Gm3EnergyState.PROCESSING
-                        com.splitmate.app.ui.components.Gm3EnergyState.PROCESSING ->
-                            com.splitmate.app.ui.components.Gm3EnergyState.RESPONDING
-                        else ->
-                            com.splitmate.app.ui.components.Gm3EnergyState.IDLE
-                    }
-                },
                 shape = FlightPassTokens.RadiusPill,
                 color = FlightPassTokens.SkyBlue,
                 border = BorderStroke(1.dp, FlightPassTokens.SkyBlueBorder)
@@ -1792,27 +1778,15 @@ fun PnrSyncStatusBanner(
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (energyState == com.splitmate.app.ui.components.Gm3EnergyState.PROCESSING) {
-                        ContainedLoadingIndicator(
-                            containerSize = 16.dp,
-                            containerColor = FlightPassTokens.SkyBlue,
-                            indicatorColor = FlightPassTokens.SkyBlueText
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Rounded.AutoAwesome,
-                            contentDescription = null,
-                            tint = FlightPassTokens.SkyBlueText,
-                            modifier = Modifier.size(12.dp)
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Rounded.CloudDone,
+                        contentDescription = null,
+                        tint = FlightPassTokens.SkyBlueText,
+                        modifier = Modifier.size(12.dp)
+                    )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = if (energyState == com.splitmate.app.ui.components.Gm3EnergyState.IDLE) {
-                            rightStatusLabel
-                        } else {
-                            "${energyState.label} · $rightStatusLabel"
-                        },
+                        text = rightStatusLabel,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = FlightPassTokens.SkyBlueText

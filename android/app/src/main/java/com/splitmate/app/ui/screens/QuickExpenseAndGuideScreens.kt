@@ -914,28 +914,9 @@ fun QuickExpenseScreen(
                 var isRemainderEquallySplit by remember(totalAmountPaise, selectedMemberIds) {
                     mutableStateOf(false)
                 }
-                var mathEnergyState by remember {
-                    mutableStateOf(com.splitmate.app.ui.components.Gm3EnergyState.IDLE)
-                }
                 val calcEnergyScope = rememberCoroutineScope()
-                val keystrokeDynamicIntensity = remember { androidx.compose.animation.core.Animatable(0f) }
                 val remainderCoinFlightProgress = remember { androidx.compose.animation.core.Animatable(0f) }
                 val avatarCatchPulseScale = remember { androidx.compose.animation.core.Animatable(1f) }
-
-                fun triggerKeystrokeEnergyPulse(updatedDigits: String) {
-                    mathEnergyState = com.splitmate.app.ui.components.Gm3EnergyState.RECEIVING
-                    calcEnergyScope.launch {
-                        val peak = (0.32f + (updatedDigits.length * 0.05f)).coerceAtMost(0.60f)
-                        keystrokeDynamicIntensity.snapTo(peak)
-                        keystrokeDynamicIntensity.animateTo(
-                            targetValue = 0f,
-                            animationSpec = com.splitmate.app.ui.components.SplitMateMotion.slowEffects()
-                        )
-                        if (mathEnergyState == com.splitmate.app.ui.components.Gm3EnergyState.RECEIVING) {
-                            mathEnergyState = com.splitmate.app.ui.components.Gm3EnergyState.IDLE
-                        }
-                    }
-                }
 
                 fun triggerRemainderCoinFlight() {
                     if (isRemainderEquallySplit) return
@@ -946,7 +927,6 @@ fun QuickExpenseScreen(
                             animationSpec = com.splitmate.app.ui.components.SplitMateMotion.defaultEffects()
                         )
                         isRemainderEquallySplit = true
-                        mathEnergyState = com.splitmate.app.ui.components.Gm3EnergyState.RESPONDING
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         remainderCoinFlightProgress.snapTo(0f)
                         avatarCatchPulseScale.snapTo(1.16f)
@@ -1469,14 +1449,10 @@ fun QuickExpenseScreen(
                                 .padding(bottom = 6.dp)
                         )
 
-                        // Hero Tabular Amount Display wrapped in Gm3AuroraEnergySurface (1.2s pulse on math reconciliation + keystroke dynamicIntensity)
-                        com.splitmate.app.ui.components.Gm3AuroraEnergySurface(
-                            state = mathEnergyState,
-                            onStateAutoTransition = { nextState -> mathEnergyState = nextState },
-                            palette = com.splitmate.app.ui.components.Gm3EnergyAccentPalette.BUCKWHEAT_SAGE,
-                            dynamicIntensity = keystrokeDynamicIntensity.value,
+                        // Hero Tabular Amount Display on a plain tonal surface (aurora energy effect removed in v2.3.6)
+                        Surface(
                             shape = RoundedCornerShape(18.dp),
-                            borderWidth = if (mathEnergyState != com.splitmate.app.ui.components.Gm3EnergyState.IDLE) 1.dp else 0.dp,
+                            color = MaterialTheme.colorScheme.surfaceContainerLowest,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Column(
@@ -1519,7 +1495,6 @@ fun QuickExpenseScreen(
                                                 triggerRemainderCoinFlight()
                                             } else {
                                                 isRemainderEquallySplit = true
-                                                mathEnergyState = com.splitmate.app.ui.components.Gm3EnergyState.RESPONDING
                                             }
                                         },
                                         shape = QuickExpenseThemeTokens.RadiusPill,
@@ -1725,7 +1700,6 @@ fun QuickExpenseScreen(
                                 onKeyPress = { key ->
                                     appendDigit(key, amountDigits) {
                                         amountDigits = it
-                                        triggerKeystrokeEnergyPulse(it)
                                     }
                                 }
                             )
@@ -1738,7 +1712,6 @@ fun QuickExpenseScreen(
                                 onKeyPress = { key ->
                                     appendDigit(key, amountDigits) {
                                         amountDigits = it
-                                        triggerKeystrokeEnergyPulse(it)
                                     }
                                 }
                             )
@@ -1751,7 +1724,6 @@ fun QuickExpenseScreen(
                                 onKeyPress = { key ->
                                     appendDigit(key, amountDigits) {
                                         amountDigits = it
-                                        triggerKeystrokeEnergyPulse(it)
                                     }
                                 }
                             )
@@ -1773,7 +1745,6 @@ fun QuickExpenseScreen(
                                         com.splitmate.app.ui.performCrispTactileHaptic(context, keypadView, heavy = false)
                                         if (!amountDigits.contains(".") && amountDigits.length < 9) {
                                             amountDigits = if (amountDigits.isEmpty()) "0." else "$amountDigits."
-                                            triggerKeystrokeEnergyPulse(amountDigits)
                                         }
                                     }
                                 )
@@ -1790,7 +1761,6 @@ fun QuickExpenseScreen(
                                         com.splitmate.app.ui.performCrispTactileHaptic(context, keypadView, heavy = false)
                                         appendDigit("0", amountDigits) {
                                             amountDigits = it
-                                            triggerKeystrokeEnergyPulse(it)
                                         }
                                     }
                                 )
@@ -1810,7 +1780,6 @@ fun QuickExpenseScreen(
                                         if (amountDigits.isNotEmpty()) {
                                             val next = amountDigits.dropLast(1)
                                             amountDigits = next.ifEmpty { "0" }
-                                            triggerKeystrokeEnergyPulse(amountDigits)
                                         }
                                     }
                                 )

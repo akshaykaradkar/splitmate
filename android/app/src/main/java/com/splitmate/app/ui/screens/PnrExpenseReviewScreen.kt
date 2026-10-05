@@ -1156,24 +1156,10 @@ fun PnrSearchLookupCard(
     isFetching: Boolean = false,
     onFetchClick: () -> Unit
 ) {
-    var energyState by remember {
-        mutableStateOf(com.splitmate.app.ui.components.Gm3EnergyState.ANTICIPATING)
-    }
-    LaunchedEffect(isFetching) {
-        energyState = if (isFetching) {
-            com.splitmate.app.ui.components.Gm3EnergyState.PROCESSING
-        } else if (energyState == com.splitmate.app.ui.components.Gm3EnergyState.PROCESSING) {
-            com.splitmate.app.ui.components.Gm3EnergyState.RESPONDING
-        } else {
-            energyState
-        }
-    }
-
-    com.splitmate.app.ui.components.Gm3AuroraEnergySurface(
-        state = energyState,
-        onStateAutoTransition = { nextState -> energyState = nextState },
-        palette = com.splitmate.app.ui.components.Gm3EnergyAccentPalette.BUCKWHEAT_SAGE,
+    Surface(
         shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(

@@ -71,7 +71,6 @@ import com.splitmate.app.ui.resolveExpenseCategoryIcon
 import com.splitmate.app.ui.resolveGroupCategoryIcon
 import com.splitmate.app.ui.resolveStationDisplayName
 import com.splitmate.app.ui.components.ActiveTravelPassMode
-import com.splitmate.app.ui.components.Gm3EnergyState
 import com.splitmate.app.ui.screens.QuickSplitMode
 import com.splitmate.app.ui.toPalette
 import com.splitmate.app.ui.toSmartTitleCase
@@ -3730,10 +3729,6 @@ class SplitMateV23ExpressiveE2ETest {
 
         @Test
         fun `T5_05 ExpressiveM3Components data models and progress indicator overload parity`() {
-            assertEquals(5, Gm3EnergyState.entries.size)
-            Gm3EnergyState.entries.forEach { state ->
-                assertTrue(state.label.isNotBlank())
-            }
             assertEquals(
                 listOf(ActiveTravelPassMode.TRAIN, ActiveTravelPassMode.FLIGHT),
                 ActiveTravelPassMode.entries
