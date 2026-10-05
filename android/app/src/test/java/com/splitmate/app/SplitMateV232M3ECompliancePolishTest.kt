@@ -253,7 +253,7 @@ class SplitMateV232M3ECompliancePolishTest {
 
         val strip = functionBody(src(tripHomePath), "CompactPerspectiveNetBalanceStrip")
         assertTrue(strip.contains("EditorialFinancialTotalText("))
-        assertTrue(strip.contains("MaterialTheme.typography.headlineLarge"))
+        assertTrue(strip.contains("MaterialTheme.typography.displaySmallEmphasized"))
 
         val pnr = src(pnrPath)
         assertTrue(pnr.contains("text = totalFareDisplay,\n                    style = MaterialTheme.typography.displaySmall"))

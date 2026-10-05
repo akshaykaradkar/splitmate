@@ -6,6 +6,15 @@
 
 package com.splitmate.app.ui.screens
 
+import kotlin.math.roundToLong
+import androidx.compose.material.icons.outlined.Group
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.ConfirmationNumber
+import androidx.compose.material.icons.outlined.Map
+import androidx.compose.material.icons.outlined.SpaceDashboard
+import androidx.compose.material.icons.rounded.Group
+import androidx.compose.material.icons.rounded.SpaceDashboard
+import androidx.compose.animation.togetherWith
 import com.splitmate.app.ui.theme.HubExtendedColors
 import android.content.Intent
 import android.net.Uri
@@ -33,6 +42,7 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -1255,9 +1265,8 @@ fun TripHomeScreen(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = "Reassign ${declinedMember.name}'s Share Equally",
-                                    fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 12.sp,
+                                    style = MaterialTheme.typography.labelMedium,
                                     color = DesignSystemBindings.activePalette.onSecondary
                                 )
                             }
@@ -1276,7 +1285,20 @@ fun TripHomeScreen(
                 onOpenTrainPnrReviewClick = onOpenTrainPnrReviewClick,
                 onOpenFlightReviewClick = onOpenFlightReviewClick
             ) {
-            when (selectedSectionTab) {
+            // v2.3.6 Step B: fade-through between sections on the theme's effects springs
+            // (MaterialTheme.motionScheme; snaps when system animations are off).
+            val sectionEnterSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+            val sectionExitSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
+            androidx.compose.animation.AnimatedContent(
+                targetState = selectedSectionTab,
+                transitionSpec = {
+                    (androidx.compose.animation.fadeIn(sectionEnterSpec) +
+                        androidx.compose.animation.scaleIn(sectionEnterSpec, initialScale = 0.98f)) togetherWith
+                        androidx.compose.animation.fadeOut(sectionExitSpec)
+                },
+                label = "TripHubSectionFadeThrough"
+            ) { sectionTab ->
+            when (sectionTab) {
                 TripHubSectionTab.OVERVIEW -> {
                     TripHubOverviewFeed(
                         filteredClassifiedExpenses = filteredClassifiedExpenses,
@@ -1358,6 +1380,7 @@ fun TripHomeScreen(
                         isTravelGroup = isTravelGroup
                     )
                 }
+            }
             }
             }
         }
@@ -1537,9 +1560,8 @@ private fun TripHubTopBar(
                                 )
                                 Text(
                                     text = "$onlineFriendsCount Online",
-                                    fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 12.sp,
+                                    style = MaterialTheme.typography.labelMedium,
                                     color = TripHubTokens.TextPrimary
                                 )
                             } else {
@@ -1551,9 +1573,8 @@ private fun TripHubTopBar(
                                 )
                                 Text(
                                     text = "Invite",
-                                    fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
+                                    style = MaterialTheme.typography.labelMedium,
                                     color = TripHubTokens.TextPrimary
                                 )
                             }
@@ -1713,6 +1734,7 @@ private fun TripHubTopBar(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TripHubSectionTabsRow(
     selectedTab: TripHubSectionTab,
@@ -1720,19 +1742,44 @@ private fun TripHubSectionTabsRow(
 ) {
     val tabs = remember { TripHubSectionTab.entries.toList() }
     val selectedIdx = tabs.indexOf(selectedTab).coerceAtLeast(0)
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
+    // v2.3.6 Step B: M3 primary tabs (icon + label). Section switching inside one screen is the
+    // Tabs pattern; the indicator slides between tabs on the theme's spatial spring.
+    androidx.compose.material3.PrimaryTabRow(
+        selectedTabIndex = selectedIdx,
+        containerColor = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.primary,
+        divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant) },
+        modifier = Modifier.fillMaxWidth()
     ) {
-        ConnectedButtonGroup(
-            options = tabs,
-            selectedIndex = selectedIdx,
-            onSelect = { _, tab -> onSelectTab(tab) },
-            labelProvider = { it.title },
-            modifier = Modifier.fillMaxWidth()
-        )
+        tabs.forEachIndexed { idx, tab ->
+            val selected = idx == selectedIdx
+            androidx.compose.material3.Tab(
+                selected = selected,
+                onClick = { onSelectTab(tab) },
+                selectedContentColor = MaterialTheme.colorScheme.primary,
+                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.heightIn(min = 64.dp)
+            ) {
+                Icon(imageVector = tripHubSectionIcon(tab, selected), contentDescription = null)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = tab.title,
+                    style = if (selected) MaterialTheme.typography.titleSmallEmphasized else MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier.padding(horizontal = 2.dp)
+                )
+            }
+        }
     }
+}
+
+private fun tripHubSectionIcon(tab: TripHubSectionTab, selected: Boolean): ImageVector = when (tab) {
+    TripHubSectionTab.OVERVIEW -> if (selected) Icons.Rounded.SpaceDashboard else Icons.Outlined.SpaceDashboard
+    TripHubSectionTab.PLAN -> if (selected) Icons.Rounded.Map else Icons.Outlined.Map
+    TripHubSectionTab.TRAVEL -> if (selected) Icons.Rounded.ConfirmationNumber else Icons.Outlined.ConfirmationNumber
+    TripHubSectionTab.MONEY -> if (selected) Icons.Rounded.AccountBalanceWallet else Icons.Outlined.AccountBalanceWallet
+    TripHubSectionTab.PEOPLE -> if (selected) Icons.Rounded.Group else Icons.Outlined.Group
 }
 
 @Composable
@@ -1845,8 +1892,22 @@ private fun CompactPerspectiveNetBalanceStrip(
     }
     // v2.3.2 M3E audit: static financial data (spend/net) carries no wavy/linear progress
     // indicators. Hierarchy is expressed through an editorial headlineLarge figure + spacing.
+    // v2.3.6 Step B: hero card uses the 28dp extraLarge corner (top of the corner hierarchy).
+    // The total rolls to its new value on the theme's slow effects spring when spend changes
+    // (snaps under reduced motion); the final frame always shows the exact cents.
+    val spendRoll = remember { androidx.compose.animation.core.Animatable(totalGroupSpendCents.toFloat()) }
+    val rollSpec = MaterialTheme.motionScheme.slowEffectsSpec<Float>()
+    LaunchedEffect(totalGroupSpendCents) {
+        spendRoll.animateTo(totalGroupSpendCents.toFloat(), rollSpec)
+    }
+    val displayedSpendCents = if (spendRoll.isRunning) spendRoll.value.roundToLong() else totalGroupSpendCents
+    val displayedTotalSpend = formatIndianRupeesFromCents(
+        cents = displayedSpendCents,
+        includePlusSign = false,
+        currencySymbol = "₹"
+    )
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = MaterialTheme.shapes.extraLarge,
         color = TripHubTokens.CardSurface,
         border = BorderStroke(1.dp, TripHubTokens.CardBorder),
         modifier = Modifier
@@ -1856,8 +1917,8 @@ private fun CompactPerspectiveNetBalanceStrip(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = 20.dp, vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1869,17 +1930,14 @@ private fun CompactPerspectiveNetBalanceStrip(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
-                        text = if (isTravelGroup) "TRIP SPEND" else "GROUP SPEND",
-                        fontFamily = FigtreeFontFamily,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 11.sp,
-                        letterSpacing = 0.8.sp,
+                        text = if (isTravelGroup) "Trip spend" else "Group spend",
+                        style = MaterialTheme.typography.labelLarge,
                         color = TripHubTokens.TextSecondary
                     )
                     // Editorial hero total: headlineLarge, auto-shrinks so it never overflows the Settle Up column.
                     EditorialFinancialTotalText(
-                        text = formattedTotalSpend,
-                        style = MaterialTheme.typography.headlineLarge,
+                        text = displayedTotalSpend,
+                        style = MaterialTheme.typography.displaySmallEmphasized,
                         fontFamily = SplitMateTnumMonospace,
                         fontWeight = FontWeight.Black,
                         color = TripHubTokens.TextPrimary,
@@ -1927,9 +1985,7 @@ private fun CompactPerspectiveNetBalanceStrip(
                             )
                             Text(
                                 text = "Settled",
-                                fontFamily = FigtreeFontFamily,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 11.sp,
+                                style = MaterialTheme.typography.labelMediumEmphasized,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
@@ -1937,18 +1993,13 @@ private fun CompactPerspectiveNetBalanceStrip(
                 }
 
                 Surface(
-                    shape = RoundedCornerShape(10.dp),
+                    shape = MaterialTheme.shapes.small,
                     color = netBadgeBg,
                     modifier = Modifier.weight(1f, fill = false)
                 ) {
                     Text(
                         text = "$activeMemberName · $netBadgeText",
-                        style = TextStyle(
-                            fontFamily = SplitMateTnumMonospace,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            fontFeatureSettings = "tnum"
-                        ),
+                        style = MaterialTheme.typography.labelLarge.merge(com.splitmate.app.ui.SplitMateMonospaceTextStyle),
                         color = netBadgeTextColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -2306,9 +2357,8 @@ fun DeepGreenTrainTicketCard(
             ) {
                 Text(
                     text = if (legNumber <= 1) "UPCOMING DEPARTURE" else "RETURN / TRANSIT LEG $legNumber",
-                    fontFamily = FigtreeFontFamily,
                     fontWeight = FontWeight.ExtraBold,
-                    fontSize = 11.sp,
+                    style = MaterialTheme.typography.labelSmall,
                     letterSpacing = 0.8.sp,
                     color = TripHubTokens.TextMuted
                 )
@@ -2430,16 +2480,14 @@ fun DeepGreenTrainTicketCard(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = fromCode,
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 28.sp,
+                                style = MaterialTheme.typography.headlineMedium,
                                 color = DesignSystemBindings.activePalette.onPrimary
                             )
                             Text(
                                 text = fromFullName,
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Medium,
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = TripHubTokens.TrainSecondarySage,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -2512,9 +2560,8 @@ fun DeepGreenTrainTicketCard(
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = travelClassText,
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.SemiBold,
-                                fontSize = 11.sp,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = TripHubTokens.TrainSecondarySage
                             )
                         }
@@ -2525,16 +2572,14 @@ fun DeepGreenTrainTicketCard(
                         ) {
                             Text(
                                 text = toCode,
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 28.sp,
+                                style = MaterialTheme.typography.headlineMedium,
                                 color = DesignSystemBindings.activePalette.onPrimary
                             )
                             Text(
                                 text = toFullName,
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Medium,
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = TripHubTokens.TrainSecondarySage,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -2709,16 +2754,14 @@ fun DeepGreenTrainTicketCard(
                                 Column {
                                     Text(
                                         text = "Payer",
-                                        fontFamily = FigtreeFontFamily,
                                         fontWeight = FontWeight.Medium,
-                                        fontSize = 11.sp,
+                                        style = MaterialTheme.typography.labelSmall,
                                         color = TripHubTokens.TextSecondary
                                     )
                                     Text(
                                         text = payer?.name ?: "Group Payer",
-                                        fontFamily = FigtreeFontFamily,
                                         fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 14.sp,
+                                        style = MaterialTheme.typography.titleSmall,
                                         color = TripHubTokens.TextPrimary
                                     )
                                 }
@@ -2917,9 +2960,8 @@ fun ReturnTransitTrainCard(
         ) {
             Text(
                 text = "RETURN TRANSIT",
-                fontFamily = FigtreeFontFamily,
                 fontWeight = FontWeight.ExtraBold,
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
                 letterSpacing = 0.8.sp,
                 color = TripHubTokens.TextMuted
             )
@@ -2974,9 +3016,8 @@ fun ReturnTransitTrainCard(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = cleanDisplayExpenseTitle(expense.title),
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 16.sp,
+                                style = MaterialTheme.typography.titleMedium,
                                 color = TripHubTokens.TextPrimary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -2988,9 +3029,8 @@ fun ReturnTransitTrainCard(
                             }
                             Text(
                                 text = routeDisplay,
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Medium,
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = TripHubTokens.TextSecondary
                             )
                         }
@@ -3032,9 +3072,8 @@ fun ReturnTransitTrainCard(
                         Column {
                             Text(
                                 text = "Departure",
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Medium,
-                                fontSize = 11.sp,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = TripHubTokens.TextSecondary
                             )
                             Text(
@@ -3051,9 +3090,8 @@ fun ReturnTransitTrainCard(
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
                                 text = "Class / Berth",
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Medium,
-                                fontSize = 11.sp,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = TripHubTokens.TextSecondary
                             )
                             val isRacOrWl = classAndStatus.contains("RAC", ignoreCase = true) ||
@@ -3093,9 +3131,8 @@ fun ReturnTransitTrainCard(
                         Column {
                             Text(
                                 text = "Paid by ${payer?.name ?: "Member"}",
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.SemiBold,
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = TripHubTokens.TextPrimary
                             )
                             Text(
@@ -3166,9 +3203,8 @@ fun ReturnTransitTrainCard(
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = "Expand Berths",
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = TripHubTokens.TextPrimary
                             )
                         }
@@ -3201,9 +3237,8 @@ fun ReturnTransitTrainCard(
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = "Open Offline Pass",
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = TripHubTokens.TextPrimary
                             )
                         }
@@ -3294,9 +3329,8 @@ fun PeriwinkleFlightBookingCard(
         ) {
             Text(
                 text = "AVIATION BOARDING PASS",
-                fontFamily = FigtreeFontFamily,
                 fontWeight = FontWeight.ExtraBold,
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
                 letterSpacing = 0.8.sp,
                 color = TripHubTokens.TextMuted
             )
@@ -3383,16 +3417,14 @@ fun PeriwinkleFlightBookingCard(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = originIata.uppercase(Locale.US),
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 28.sp,
+                                style = MaterialTheme.typography.headlineMedium,
                                 color = DesignSystemBindings.activePalette.onPrimary
                             )
                             Text(
                                 text = originCity,
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Medium,
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = TripHubTokens.FlightSecondaryLavender
                             )
                         }
@@ -3427,16 +3459,14 @@ fun PeriwinkleFlightBookingCard(
                         ) {
                             Text(
                                 text = destIata.uppercase(Locale.US),
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 28.sp,
+                                style = MaterialTheme.typography.headlineMedium,
                                 color = DesignSystemBindings.activePalette.onPrimary
                             )
                             Text(
                                 text = destCity,
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Medium,
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = TripHubTokens.FlightSecondaryLavender
                             )
                         }
@@ -3577,9 +3607,8 @@ fun LodgingBookingCard(
         ) {
             Text(
                 text = "LODGING & STAYS",
-                fontFamily = FigtreeFontFamily,
                 fontWeight = FontWeight.ExtraBold,
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
                 letterSpacing = 0.8.sp,
                 color = TripHubTokens.TextMuted
             )
@@ -3595,9 +3624,8 @@ fun LodgingBookingCard(
                 )
                 Text(
                     text = "Confirmed Booking",
-                    fontFamily = FigtreeFontFamily,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
+                    style = MaterialTheme.typography.labelSmall,
                     color = TripHubTokens.PositiveSageText
                 )
             }
@@ -3642,9 +3670,8 @@ fun LodgingBookingCard(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = cleanTitle,
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 16.sp,
+                                style = MaterialTheme.typography.titleMedium,
                                 color = TripHubTokens.TextPrimary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -3696,9 +3723,8 @@ fun LodgingBookingCard(
                         Column {
                             Text(
                                 text = "Logged Date",
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Medium,
-                                fontSize = 11.sp,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = TripHubTokens.TextSecondary
                             )
                             Text(
@@ -3715,9 +3741,8 @@ fun LodgingBookingCard(
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
                                 text = "Group Split Mode",
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Medium,
-                                fontSize = 11.sp,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = TripHubTokens.TextSecondary
                             )
                             Text(
@@ -3753,25 +3778,22 @@ fun LodgingBookingCard(
                         ) {
                             Text(
                                 text = extractInitialsFromNameOrSeed(payer?.name ?: "P"),
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 11.sp,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = TripHubTokens.PositiveSageText
                             )
                         }
                         Column {
                             Text(
                                 text = "Paid by ${payer?.name ?: "Member"}",
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.SemiBold,
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = TripHubTokens.TextPrimary
                             )
                             Text(
                                 text = splitBreakdown.splitModeLabel("All ${splitBreakdown.splittingMembersCount} shared equally"),
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Medium,
-                                fontSize = 11.sp,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = TripHubTokens.TextSecondary
                             )
                         }
@@ -3842,9 +3864,8 @@ fun LodgingBookingCard(
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = "Maps",
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = TripHubTokens.TextPrimary
                             )
                         }
@@ -3877,9 +3898,8 @@ fun LodgingBookingCard(
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = if (showSplitDrawer) "Hide Split" else "Split Details",
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = TripHubTokens.TextPrimary
                             )
                         }
@@ -3947,9 +3967,8 @@ fun GroundMobilityBookingCard(
         ) {
             Text(
                 text = if (isTwoWheelerRental) "GROUND MOBILITY & RENTALS" else "STATION TRANSFER & CABS",
-                fontFamily = FigtreeFontFamily,
                 fontWeight = FontWeight.ExtraBold,
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
                 letterSpacing = 0.8.sp,
                 color = TripHubTokens.TextMuted
             )
@@ -4036,9 +4055,8 @@ fun GroundMobilityBookingCard(
                     ) {
                         Text(
                             text = if (isTwoWheelerRental) "Rental" else "Assigned",
-                            fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
+                            style = MaterialTheme.typography.labelSmall,
                             color = TripHubTokens.PositiveSageText,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                         )
@@ -4065,9 +4083,8 @@ fun GroundMobilityBookingCard(
                         ) {
                             Text(
                                 text = extractInitialsFromNameOrSeed(payer?.name ?: "P"),
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 11.sp,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = iconTint
                             )
                         }
@@ -4292,9 +4309,8 @@ private fun ExpandableSplitBreakdownDrawer(
         ) {
             Text(
                 text = splitBreakdown.headerLabel,
-                fontFamily = FigtreeFontFamily,
                 fontWeight = FontWeight.ExtraBold,
-                fontSize = 12.sp,
+                style = MaterialTheme.typography.labelMedium,
                 color = TripHubTokens.TextPrimary
             )
             // v2.3.5 (#4): Edit + Delete (with confirmation) instead of an instant delete.
@@ -4308,9 +4324,8 @@ private fun ExpandableSplitBreakdownDrawer(
                 ) {
                     Text(
                         text = row.displayName,
-                        fontFamily = FigtreeFontFamily,
                         fontWeight = if (row.isCurrentUser) FontWeight.ExtraBold else FontWeight.Medium,
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = TripHubTokens.TextPrimary
                     )
                     Text(
@@ -4410,10 +4425,8 @@ private fun EmptyTripHubStateCard(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "+ Log Train PNR",
-                        fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 14.sp
-                    )
+                        style = MaterialTheme.typography.titleSmall)
                 }
 
                 OutlinedButton(
@@ -4437,9 +4450,8 @@ private fun EmptyTripHubStateCard(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "+ Upload Flight PDF",
-                        fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
+                        style = MaterialTheme.typography.titleSmall,
                         color = TripHubTokens.TextPrimary
                     )
                 }
@@ -4465,9 +4477,8 @@ private fun EmptyTripHubStateCard(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "+ Log Shared Expense",
-                        fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
+                        style = MaterialTheme.typography.titleSmall,
                         color = TripHubTokens.TextPrimary
                     )
                 }
@@ -4682,18 +4693,16 @@ private fun TripHubPlanTimelineView(
                                 }
                                 Text(
                                     text = cleanDisplayExpenseTitle(expense.title),
-                                    fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 14.sp,
+                                    style = MaterialTheme.typography.titleSmall,
                                     color = TripHubTokens.TextPrimary,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
                                     text = "Paid by ${payer?.name ?: "Member"}",
-                                    fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.Medium,
-                                    fontSize = 11.sp,
+                                    style = MaterialTheme.typography.labelSmall,
                                     color = TripHubTokens.TextSecondary
                                 )
                             }
@@ -4779,9 +4788,8 @@ private fun TripHubTravelWalletView(
                 ) {
                     Text(
                         text = "INTERACTIVE 3D TRANSIT DECK",
-                        fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 11.sp,
+                        style = MaterialTheme.typography.labelSmall,
                         letterSpacing = 0.8.sp,
                         color = TripHubTokens.TextMuted
                     )
@@ -4799,9 +4807,8 @@ private fun TripHubTravelWalletView(
                         Box(contentAlignment = Alignment.Center) {
                             Text(
                                 text = "Classic Ledger View",
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = TripHubTokens.PositiveSageText,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
@@ -5004,9 +5011,8 @@ private fun TripHubMoneySettlementView(
                             Column {
                                 Text(
                                     text = "Smart Settle Up",
-                                    fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 16.sp,
+                                    style = MaterialTheme.typography.titleMedium,
                                     color = TripHubTokens.TextPrimary
                                 )
                                 Text(
@@ -5086,9 +5092,8 @@ private fun TripHubMoneySettlementView(
                                 )
                                 Text(
                                     text = "Recipients confirm payments once received · Organizers can settle for offline members",
-                                    fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.SemiBold,
-                                    fontSize = 11.sp,
+                                    style = MaterialTheme.typography.labelSmall,
                                     color = TripHubTokens.TextSecondary
                                 )
                             }
@@ -5107,16 +5112,14 @@ private fun TripHubMoneySettlementView(
                             ) {
                                 Text(
                                     text = "Combined into the fewest possible payments",
-                                    fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 12.sp,
+                                    style = MaterialTheme.typography.labelMedium,
                                     color = TripHubTokens.TextPrimary
                                 )
                                 Text(
                                     text = "Automatically combines everyone's shared expenses so your group settles up with the fewest possible direct payments.",
-                                    fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.Medium,
-                                    fontSize = 12.sp,
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = TripHubTokens.TextSecondary
                                 )
                             }
@@ -5178,9 +5181,8 @@ private fun TripHubMoneySettlementView(
                             )
                             Text(
                                 text = "Every traveler's balance is settled to the exact paisa.",
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Medium,
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = TripHubTokens.TextSecondary
                             )
                         }
@@ -5210,9 +5212,8 @@ private fun TripHubMoneySettlementView(
                     ) {
                         Text(
                             text = if (myTransfers.isEmpty()) "All settled" else "${myTransfers.size} ${if (myTransfers.size == 1) "payment" else "payments"}",
-                            fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
+                            style = MaterialTheme.typography.labelSmall,
                             color = if (myTransfers.isEmpty()) TripHubTokens.PositiveSageText else TripHubTokens.TextSecondary,
                             modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
                         )
@@ -5256,9 +5257,8 @@ private fun TripHubMoneySettlementView(
                                 )
                                 Text(
                                     text = "No payments needed from or to you.",
-                                    fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.Medium,
-                                    fontSize = 11.sp,
+                                    style = MaterialTheme.typography.labelSmall,
                                     color = TripHubTokens.TextSecondary
                                 )
                             }
@@ -5368,9 +5368,8 @@ private fun TripHubMoneySettlementView(
                                         if (!canMarkPaid && isCurrentUserPayer) {
                                             Text(
                                                 text = "Tap status pill for confirmation info",
-                                                fontFamily = FigtreeFontFamily,
                                                 fontWeight = FontWeight.Medium,
-                                                fontSize = 11.sp,
+                                                style = MaterialTheme.typography.labelSmall,
                                                 color = TripHubTokens.TextSecondary
                                             )
                                         }
@@ -5494,9 +5493,8 @@ private fun TripHubMoneySettlementView(
                                             )
                                             Text(
                                                 text = restrictionLabel,
-                                                fontFamily = FigtreeFontFamily,
                                                 fontWeight = FontWeight.Medium,
-                                                fontSize = 11.sp,
+                                                style = MaterialTheme.typography.labelSmall,
                                                 color = TripHubTokens.TextSecondary
                                             )
                                         }
@@ -5531,17 +5529,15 @@ private fun TripHubMoneySettlementView(
                             )
                             Text(
                                 text = "${otherTransfers.size} ${if (otherTransfers.size == 1) "transfer" else "transfers"}",
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.SemiBold,
-                                fontSize = 11.sp,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = TripHubTokens.TextSecondary
                             )
                         }
                         Text(
                             text = "Confirmed by each recipient once received",
-                            fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.Medium,
-                            fontSize = 11.sp,
+                            style = MaterialTheme.typography.labelSmall,
                             color = TripHubTokens.TextSecondary
                         )
                     }
@@ -5603,9 +5599,8 @@ private fun TripHubMoneySettlementView(
                                     )
                                     Text(
                                         text = settlement.fromName,
-                                        fontFamily = FigtreeFontFamily,
                                         fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 14.sp,
+                                        style = MaterialTheme.typography.titleSmall,
                                         color = TripHubTokens.TextPrimary,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
@@ -5627,9 +5622,8 @@ private fun TripHubMoneySettlementView(
                                     )
                                     Text(
                                         text = settlement.toName,
-                                        fontFamily = FigtreeFontFamily,
                                         fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 14.sp,
+                                        style = MaterialTheme.typography.titleSmall,
                                         color = TripHubTokens.PositiveSageText,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
@@ -5678,9 +5672,8 @@ private fun TripHubMoneySettlementView(
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
                                         text = "Mark Paid",
-                                        fontFamily = FigtreeFontFamily,
                                         fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 12.sp,
+                                        style = MaterialTheme.typography.labelMedium,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -5760,8 +5753,7 @@ private fun TripHubPeoplePerspectiveView(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         text = "Link a 10-digit +91 mobile number for ${targetMember.name} so this trip syncs automatically to their phone.",
-                        fontFamily = FigtreeFontFamily,
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = TripHubTokens.TextSecondary
                     )
                     OutlinedTextField(
@@ -5799,8 +5791,7 @@ private fun TripHubPeoplePerspectiveView(
                     editPhoneDialogStatus?.let { status ->
                         Text(
                             text = status,
-                            fontFamily = FigtreeFontFamily,
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = if (isEditPhoneError) TripHubTokens.TerracottaIconTint else TripHubTokens.PositiveSageText
                         )
@@ -5837,10 +5828,8 @@ private fun TripHubPeoplePerspectiveView(
                 ) {
                     Text(
                         text = "Save & Send Invite",
-                        fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 12.sp
-                    )
+                        style = MaterialTheme.typography.labelMedium)
                 }
             },
             dismissButton = {
@@ -5903,8 +5892,7 @@ private fun TripHubPeoplePerspectiveView(
                         ) {
                             Text(
                                 text = "${memberToRemove.name} has an unsettled balance ($memberNetSignLabel). Removing them will reassign any expenses they paid to the Organizer and redistribute their split shares across the surviving participants with 0.00c drift.",
-                                fontFamily = FigtreeFontFamily,
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = TripHubTokens.TerracottaIconTint,
                                 modifier = Modifier.padding(12.dp)
@@ -5922,9 +5910,8 @@ private fun TripHubPeoplePerspectiveView(
                         ) {
                             Text(
                                 text = "Settle Balance First",
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = TripHubTokens.PositiveSageText
                             )
                         }
@@ -5932,8 +5919,7 @@ private fun TripHubPeoplePerspectiveView(
                     removeMemberStatusMsg?.let { msg ->
                         Text(
                             text = msg,
-                            fontFamily = FigtreeFontFamily,
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = TripHubTokens.TerracottaIconTint
                         )
@@ -5966,10 +5952,8 @@ private fun TripHubPeoplePerspectiveView(
                 ) {
                     Text(
                         text = if (isSettled) "Remove Member" else "Remove & Rebalance",
-                        fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 12.sp
-                    )
+                        style = MaterialTheme.typography.labelMedium)
                 }
             },
             dismissButton = {
@@ -6025,8 +6009,7 @@ private fun TripHubPeoplePerspectiveView(
                         ) {
                             Text(
                                 text = "You have an unsettled balance ($myNetSignLabel) in this group. Please settle up before leaving.",
-                                fontFamily = FigtreeFontFamily,
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = TripHubTokens.TerracottaIconTint,
                                 modifier = Modifier.padding(12.dp)
@@ -6043,8 +6026,7 @@ private fun TripHubPeoplePerspectiveView(
                     leaveTripStatusMsg?.let { msg ->
                         Text(
                             text = msg,
-                            fontFamily = FigtreeFontFamily,
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = TripHubTokens.TerracottaIconTint
                         )
@@ -6067,10 +6049,8 @@ private fun TripHubPeoplePerspectiveView(
                     ) {
                         Text(
                             text = "Settle Up First",
-                            fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 12.sp
-                        )
+                            style = MaterialTheme.typography.labelMedium)
                     }
                 } else {
                     Button(
@@ -6093,10 +6073,8 @@ private fun TripHubPeoplePerspectiveView(
                     ) {
                         Text(
                             text = "Confirm Leave Trip",
-                            fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 12.sp
-                        )
+                            style = MaterialTheme.typography.labelMedium)
                     }
                 }
             },
@@ -6292,9 +6270,8 @@ private fun TripHubPeoplePerspectiveView(
                             )
                             Text(
                                 text = if (isMissingPhone) "+ Add Phone & Invite" else "Edit Name & Phone",
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
+                                style = MaterialTheme.typography.titleSmall,
                                 color = TripHubTokens.TextPrimary
                             )
                         }
@@ -6339,16 +6316,14 @@ private fun TripHubPeoplePerspectiveView(
                             Column {
                                 Text(
                                     text = "Share Invite on WhatsApp",
-                                    fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 14.sp,
+                                    style = MaterialTheme.typography.titleSmall,
                                     color = TripHubTokens.PositiveSageText
                                 )
                                 Text(
                                     text = "Send trip code $formattedJoinCode & join link",
-                                    fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.Medium,
-                                    fontSize = 11.sp,
+                                    style = MaterialTheme.typography.labelSmall,
                                     color = TripHubTokens.PositiveSageText.copy(alpha = 0.85f)
                                 )
                             }
@@ -6392,9 +6367,8 @@ private fun TripHubPeoplePerspectiveView(
                             )
                             Text(
                                 text = "Make Organizer",
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
+                                style = MaterialTheme.typography.titleSmall,
                                 color = TripHubTokens.TextPrimary
                             )
                         }
@@ -6437,9 +6411,8 @@ private fun TripHubPeoplePerspectiveView(
                             )
                             Text(
                                 text = "Dismiss as Organizer",
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
+                                style = MaterialTheme.typography.titleSmall,
                                 color = TripHubTokens.TextSecondary
                             )
                         }
@@ -6476,9 +6449,8 @@ private fun TripHubPeoplePerspectiveView(
                             )
                             Text(
                                 text = "Remove Member",
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 14.sp,
+                                style = MaterialTheme.typography.titleSmall,
                                 color = TripHubTokens.TerracottaIconTint
                             )
                         }
@@ -6556,7 +6528,7 @@ private fun TripHubPeoplePerspectiveView(
                             text = "Trip Code: $formattedJoinCode · Invite",
                             fontFamily = SplitMateTnumMonospace,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
+                            style = MaterialTheme.typography.labelSmall,
                             color = TripHubTokens.TextPrimary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -6583,8 +6555,7 @@ private fun TripHubPeoplePerspectiveView(
                         ) {
                             Text(
                                 text = banner,
-                                fontFamily = FigtreeFontFamily,
-                                fontSize = 11.sp,
+                                style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = if (isPeopleFeedbackError) TripHubTokens.TerracottaIconTint else TripHubTokens.PositiveSageText,
                                 modifier = Modifier.weight(1f)
@@ -6985,9 +6956,8 @@ private fun AddBookingQuickSheet(
                             }
                             Text(
                                 text = label,
-                                fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
+                                style = MaterialTheme.typography.titleSmall,
                                 color = TripHubTokens.TextPrimary
                             )
                         }

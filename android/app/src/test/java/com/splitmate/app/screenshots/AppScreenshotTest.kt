@@ -83,6 +83,10 @@ class AppScreenshotTest {
 
     @Test fun s02_group_detail() { launch(); tap(text = "Lake Tahoe Cabin"); shot("02_group_detail") }
 
+    @Test fun s08_trip_fab_menu() { launch(); tap(text = "Lake Tahoe Cabin"); tap(desc = "Add Booking"); shot("08_trip_fab_menu") }
+
+    @Test fun s09_trip_money_tab() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Money"); shot("09_trip_money_tab") }
+
     @Test fun s03_settle_tab() { launch(); tap(desc = "Settle"); shot("03_settle") }
 
     @Test fun s04_audit_tab() { launch(); tap(desc = "Audit"); shot("04_audit") }

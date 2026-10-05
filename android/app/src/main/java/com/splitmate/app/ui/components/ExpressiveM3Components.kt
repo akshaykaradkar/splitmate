@@ -1,5 +1,6 @@
 package com.splitmate.app.ui.components
 
+import androidx.compose.material3.FloatingActionButtonMenuItem
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
@@ -1104,8 +1105,13 @@ fun ToggleFloatingActionButton(
 }
 
 /**
- * Material 3 Expressive `FloatingActionButtonMenu` that fans out staggered pill items
- * above a morphing [ToggleFloatingActionButton] using [SplitMateMotion.defaultSpatial].
+ * SplitMate entry point for the Material 3 Expressive FAB menu.
+ *
+ * v2.3.6: delegates to the real `androidx.compose.material3.FloatingActionButtonMenu` and
+ * `ToggleFloatingActionButton`: the toggle morphs from a 56dp rounded square into a circle and the
+ * `+` icon turns into `x`; menu items expand with the theme's fast spatial spring
+ * (`MaterialTheme.motionScheme`, snapped under reduced motion). The call-site API (labels, icons,
+ * [toggleLabel] used as the accessibility label) is unchanged.
  */
 @ExperimentalMaterial3ExpressiveApi
 @Composable
@@ -1117,84 +1123,41 @@ fun FloatingActionButtonMenu(
     toggleIcon: ImageVector = Icons.Rounded.Add,
     toggleLabel: String? = null
 ) {
-    Column(
+    androidx.compose.material3.FloatingActionButtonMenu(
+        expanded = expanded,
         modifier = modifier,
-        horizontalAlignment = Alignment.End,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        AnimatedVisibility(
-            visible = expanded,
-            enter = fadeIn(animationSpec = SplitMateMotion.fastEffects()) +
-                scaleIn(
-                    initialScale = 0.82f,
-                    animationSpec = SplitMateMotion.defaultSpatial()
-                ),
-            exit = fadeOut(animationSpec = SplitMateMotion.fastEffects()) +
-                scaleOut(
-                    targetScale = 0.82f,
-                    animationSpec = SplitMateMotion.defaultSpatial()
-                )
-        ) {
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(bottom = 4.dp)
-            ) {
-                items.forEach { item ->
-                    val pillBg = item.containerColor ?: MaterialTheme.colorScheme.primaryContainer
-                    val pillFg = item.contentColor ?: MaterialTheme.colorScheme.onPrimaryContainer
-                    Surface(
-                        onClick = {
-                            onToggle()
-                            item.onClick()
-                        },
-                        shape = CircleShape,
-                        color = pillBg,
-                        contentColor = pillFg,
-                        shadowElevation = 4.dp
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Icon(
-                                imageVector = item.icon,
-                                contentDescription = null,
-                                tint = pillFg,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Column {
-                                Text(
-                                    text = item.label,
-                                    style = SplitMateExpressiveTypography.labelLargeEmphasized,
-                                    fontFamily = FigtreeFontFamily,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 13.sp,
-                                    color = pillFg
-                                )
-                                if (!item.subtitle.isNullOrBlank()) {
-                                    Text(
-                                        text = item.subtitle,
-                                        fontFamily = FigtreeFontFamily,
-                                        fontWeight = FontWeight.Medium,
-                                        fontSize = 11.sp,
-                                        color = pillFg.copy(alpha = 0.8f)
-                                    )
-                                }
-                            }
-                        }
-                    }
+        button = {
+            androidx.compose.material3.ToggleFloatingActionButton(
+                checked = expanded,
+                onCheckedChange = { onToggle() },
+                modifier = Modifier.semantics {
+                    contentDescription = if (expanded) "Close menu" else (toggleLabel ?: "Open menu")
+                    stateDescription = if (expanded) "Expanded" else "Collapsed"
                 }
+            ) {
+                val progress = { checkedProgress }
+                Icon(
+                    imageVector = if (checkedProgress > 0.5f) Icons.Rounded.Close else toggleIcon,
+                    contentDescription = null,
+                    modifier = with(androidx.compose.material3.ToggleFloatingActionButtonDefaults) {
+                        Modifier.animateIcon(progress)
+                    }
+                )
             }
         }
-
-        ToggleFloatingActionButton(
-            checked = expanded,
-            onCheckedChange = { onToggle() },
-            icon = toggleIcon,
-            label = toggleLabel
-        )
+    ) {
+        items.forEach { item ->
+            FloatingActionButtonMenuItem(
+                onClick = {
+                    onToggle()
+                    item.onClick()
+                },
+                text = { Text(text = item.label, maxLines = 1) },
+                icon = { Icon(imageVector = item.icon, contentDescription = null) },
+                containerColor = item.containerColor ?: MaterialTheme.colorScheme.primaryContainer,
+                contentColor = item.contentColor ?: MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        }
     }
 }
 
