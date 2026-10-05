@@ -2617,8 +2617,13 @@ fun SplitMateExpressiveTheme(
         LocalMotionScheme provides motionScheme,
         LocalReducedMotion provides reducedMotion
     ) {
-        MaterialTheme(
+        // v2.3.6 Wave 4: real Material 3 Expressive theme — Google's expressive spring MotionScheme
+        // (snaps under reduced motion) + the approved corner hierarchy, so every stock M3 component
+        // (buttons, toggle buttons, FAB, sheets, dialogs, text fields) uses Expressive shapes & motion.
+        MaterialExpressiveTheme(
             colorScheme = colorScheme,
+            motionScheme = if (reducedMotion) SplitMateReducedMaterialMotionScheme else androidx.compose.material3.MotionScheme.expressive(),
+            shapes = SplitMateExpressiveShapes,
             typography = SplitMateTypography
         ) {
             ProvideTextStyle(
@@ -2630,6 +2635,29 @@ fun SplitMateExpressiveTheme(
 }
 
 val SplitMateBrandFontFamily: FontFamily = FigtreeFontFamily
+
+/**
+ * v2.3.6 corner hierarchy (approved): 4 / 8 / 16 (inputs, keypad, buttons) / 20 (feed cards,
+ * dialogs, sheets) / 28 (hero cards); increased & extra-extra-large keep M3 defaults.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+val SplitMateExpressiveShapes: androidx.compose.material3.Shapes = androidx.compose.material3.Shapes(
+    extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+    small = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+    medium = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+    large = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+    extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)
+)
+
+/** Reduced motion (ANIMATOR_DURATION_SCALE == 0): every M3 component animation snaps. */
+object SplitMateReducedMaterialMotionScheme : androidx.compose.material3.MotionScheme {
+    override fun <T> defaultSpatialSpec(): androidx.compose.animation.core.FiniteAnimationSpec<T> = androidx.compose.animation.core.snap()
+    override fun <T> fastSpatialSpec(): androidx.compose.animation.core.FiniteAnimationSpec<T> = androidx.compose.animation.core.snap()
+    override fun <T> slowSpatialSpec(): androidx.compose.animation.core.FiniteAnimationSpec<T> = androidx.compose.animation.core.snap()
+    override fun <T> defaultEffectsSpec(): androidx.compose.animation.core.FiniteAnimationSpec<T> = androidx.compose.animation.core.snap()
+    override fun <T> fastEffectsSpec(): androidx.compose.animation.core.FiniteAnimationSpec<T> = androidx.compose.animation.core.snap()
+    override fun <T> slowEffectsSpec(): androidx.compose.animation.core.FiniteAnimationSpec<T> = androidx.compose.animation.core.snap()
+}
 val SplitMateDisplayFontFamily: FontFamily = FigtreeFontFamily
 
 // ==============================================================================

@@ -30,8 +30,9 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.semantics.role
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -943,125 +944,68 @@ fun <T> ConnectedButtonGroup(
     iconProvider: ((T, Boolean) -> ImageVector?)? = null
 ) {
     if (options.isEmpty()) return
+    // v2.3.6 Wave 4: real Material 3 Expressive connected button group — official ToggleButton +
+    // ButtonGroupDefaults connected leading/middle/trailing shapes (asymmetric inner corners, press
+    // squish, checked morph to full pill) with ButtonGroupDefaults.ConnectedSpaceBetween gaps.
+    // Brand colours: checked = sage primaryContainer, unchecked = surfaceContainerHigh.
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
-                shape = CircleShape
-            )
-            .padding(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(androidx.compose.material3.ButtonGroupDefaults.ConnectedSpaceBetween),
         verticalAlignment = Alignment.CenterVertically
     ) {
         options.forEachIndexed { index, option ->
             val checked = index == selectedIndex
-            val interactionSource = remember { MutableInteractionSource() }
-            val isPressed by interactionSource.collectIsPressedAsState()
-
-            val targetStartCorner = when {
-                checked || index == 0 -> 22.dp
-                isPressed -> 4.dp
-                else -> 8.dp
+            val shapes = when {
+                options.size == 1 -> androidx.compose.material3.ToggleButtonDefaults.shapes()
+                index == 0 -> androidx.compose.material3.ButtonGroupDefaults.connectedLeadingButtonShapes()
+                index == options.lastIndex -> androidx.compose.material3.ButtonGroupDefaults.connectedTrailingButtonShapes()
+                else -> androidx.compose.material3.ButtonGroupDefaults.connectedMiddleButtonShapes()
             }
-            val targetEndCorner = when {
-                checked || index == options.lastIndex -> 22.dp
-                isPressed -> 4.dp
-                else -> 8.dp
+            val contentColor = if (checked) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
             }
-
-            val startCorner by animateDpAsState(
-                targetValue = targetStartCorner,
-                animationSpec = SplitMateMotion.fastSpatial(),
-                label = "ConnectedStartCorner_$index"
-            )
-            val endCorner by animateDpAsState(
-                targetValue = targetEndCorner,
-                animationSpec = SplitMateMotion.fastSpatial(),
-                label = "ConnectedEndCorner_$index"
-            )
-            val animatedWeight by animateFloatAsState(
-                targetValue = when {
-                    isPressed -> 1.12f
-                    checked -> 1.06f
-                    else -> 1f
-                },
-                animationSpec = SplitMateMotion.fastSpatial(),
-                label = "ConnectedWeight_$index"
-            )
-
-            val containerColor by animateColorAsState(
-                targetValue = if (checked) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surface
-                },
-                animationSpec = SplitMateMotion.fastEffects(),
-                label = "ConnectedBg_$index"
-            )
-            val contentColor by animateColorAsState(
-                targetValue = if (checked) {
-                    MaterialTheme.colorScheme.onPrimaryContainer
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                animationSpec = SplitMateMotion.fastEffects(),
-                label = "ConnectedFg_$index"
-            )
-
-            val segmentShape = RoundedCornerShape(
-                topStart = startCorner,
-                bottomStart = startCorner,
-                topEnd = endCorner,
-                bottomEnd = endCorner
-            )
-
-            Surface(
-                shape = segmentShape,
-                color = containerColor,
-                contentColor = contentColor,
+            androidx.compose.material3.ToggleButton(
+                checked = checked,
+                onCheckedChange = { onSelect(index, option) },
+                shapes = shapes,
+                colors = androidx.compose.material3.ToggleButtonDefaults.toggleButtonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                ),
+                contentPadding = PaddingValues(horizontal = 8.dp),
                 modifier = Modifier
-                    .weight(animatedWeight)
-                    .height(40.dp)
-                    .clip(segmentShape)
-                    .clickable(
-                        interactionSource = interactionSource,
-                        indication = null,
-                        onClick = { onSelect(index, option) }
-                    )
+                    .weight(1f)
+                    .heightIn(min = 40.dp)
+                    .semantics { role = androidx.compose.ui.semantics.Role.RadioButton }
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val icon = iconProvider?.invoke(option, checked)
-                    if (icon != null) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            tint = contentColor,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                    }
-                    Text(
-                        text = labelProvider(option),
-                        style = if (checked) {
-                            SplitMateExpressiveTypography.labelLargeEmphasized
-                        } else {
-                            MaterialTheme.typography.labelMedium
-                        },
-                        fontFamily = FigtreeFontFamily,
-                        fontWeight = if (checked) FontWeight.ExtraBold else FontWeight.SemiBold,
-                        fontSize = 12.sp,
-                        color = contentColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                val icon = iconProvider?.invoke(option, checked)
+                if (icon != null) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = contentColor,
+                        modifier = Modifier.size(15.dp)
                     )
+                    Spacer(modifier = Modifier.width(4.dp))
                 }
+                Text(
+                    text = labelProvider(option),
+                    style = if (checked) {
+                        SplitMateExpressiveTypography.labelLargeEmphasized
+                    } else {
+                        MaterialTheme.typography.labelMedium
+                    },
+                    fontFamily = FigtreeFontFamily,
+                    fontWeight = if (checked) FontWeight.ExtraBold else FontWeight.SemiBold,
+                    fontSize = 12.sp,
+                    color = contentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }

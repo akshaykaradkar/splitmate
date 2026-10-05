@@ -127,7 +127,8 @@ class SplitMateV232M3ECompliancePolishTest {
         }
         // The LargeTopAppBar itself must never receive innerPadding.
         val topBar = functionBody(src(tripHomePath), "TripHubTopBar")
-        assertTrue(topBar.contains("LargeTopAppBar("))
+        // v2.3.6 Wave 4: LargeTopAppBar -> M3 Expressive LargeFlexibleTopAppBar
+        assertTrue(Regex("""Large(Flexible)?TopAppBar\(""").containsMatchIn(topBar))
         assertFalse(topBar.contains("innerPadding"))
     }
 

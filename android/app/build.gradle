@@ -49,7 +49,7 @@ android {
 
     kotlinOptions {
         jvmTarget = '17'
-        freeCompilerArgs += ["-opt-in=com.splitmate.app.ui.components.ExperimentalMaterial3ExpressiveApi"]
+        freeCompilerArgs += ["-opt-in=com.splitmate.app.ui.components.ExperimentalMaterial3ExpressiveApi", "-opt-in=androidx.compose.material3.ExperimentalMaterial3ExpressiveApi"]
     }
 
     testOptions {

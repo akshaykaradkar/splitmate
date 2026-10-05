@@ -1459,7 +1459,11 @@ private fun TripHubTopBar(
             .fillMaxWidth()
             .background(TripHubTokens.CanvasBg)
     ) {
-        LargeTopAppBar(
+        // v2.3.6 Wave 4: M3 Expressive LargeFlexibleTopAppBar (title + subtitle slots; theme type
+        // roles scale between expanded headline and collapsed title). Max 3 visible actions; the
+        // rest live in an overflow menu per M3 app-bar guidance.
+        var showHeaderOverflow by remember { mutableStateOf(false) }
+        androidx.compose.material3.LargeFlexibleTopAppBar(
             navigationIcon = {
                 IconButton(
                     onClick = onBackClick,
@@ -1476,31 +1480,28 @@ private fun TripHubTopBar(
                 }
             },
             title = {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = groupName,
+                Text(
+                    text = groupName,
+                    fontFamily = FigtreeFontFamily,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = TripHubTokens.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            },
+            subtitle = {
+                Text(
+                    text = subtitle,
+                    style = TextStyle(
                         fontFamily = FigtreeFontFamily,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = if (collapsedFraction > 0.5f) 18.sp else 24.sp,
-                        color = TripHubTokens.TextPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (collapsedFraction < 0.65f) {
-                        Text(
-                            text = subtitle,
-                            style = TextStyle(
-                                fontFamily = FigtreeFontFamily,
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 12.sp,
-                                fontFeatureSettings = "tnum"
-                            ),
-                            color = TripHubTokens.TextSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 13.sp,
+                        fontFeatureSettings = "tnum"
+                    ),
+                    color = TripHubTokens.TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             },
             actions = {
                 Surface(
@@ -1596,32 +1597,55 @@ private fun TripHubTopBar(
                     )
                 }
 
-                IconButton(
-                    onClick = onCycleThemeClick,
-                    modifier = Modifier
-                        .minimumInteractiveComponentSize()
-                        .defaultMinSize(minWidth = 44.dp, minHeight = 48.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Palette,
-                        contentDescription = "Cycle Expressive Theme Mode",
-                        tint = TripHubTokens.TextPrimary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                IconButton(
-                    onClick = onSwitchToClassicLedgerClick,
-                    modifier = Modifier
-                        .minimumInteractiveComponentSize()
-                        .defaultMinSize(minWidth = 44.dp, minHeight = 48.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.ViewAgenda,
-                        contentDescription = "Switch to Classic Ledger & 3D Pass",
-                        tint = TripHubTokens.TextPrimary,
-                        modifier = Modifier.size(21.dp)
-                    )
+                Box {
+                    IconButton(
+                        onClick = { showHeaderOverflow = true },
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .defaultMinSize(minWidth = 44.dp, minHeight = 48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.MoreVert,
+                            contentDescription = "More trip options",
+                            tint = TripHubTokens.TextPrimary,
+                            modifier = Modifier.size(21.dp)
+                        )
+                    }
+                    androidx.compose.material3.DropdownMenu(
+                        expanded = showHeaderOverflow,
+                        onDismissRequest = { showHeaderOverflow = false },
+                        shape = MaterialTheme.shapes.large,
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+                    ) {
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("Change theme", fontFamily = FigtreeFontFamily, fontWeight = FontWeight.SemiBold) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Rounded.Palette,
+                                    contentDescription = "Cycle Expressive Theme Mode",
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            },
+                            onClick = {
+                                showHeaderOverflow = false
+                                onCycleThemeClick()
+                            }
+                        )
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("Classic ledger view", fontFamily = FigtreeFontFamily, fontWeight = FontWeight.SemiBold) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Rounded.ViewAgenda,
+                                    contentDescription = "Switch to Classic Ledger & 3D Pass",
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            },
+                            onClick = {
+                                showHeaderOverflow = false
+                                onSwitchToClassicLedgerClick()
+                            }
+                        )
+                    }
                 }
             },
             colors = TopAppBarDefaults.largeTopAppBarColors(

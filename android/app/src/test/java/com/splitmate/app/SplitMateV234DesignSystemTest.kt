@@ -417,7 +417,9 @@ class SplitMateV234DesignSystemTest {
     @Test
     fun `DS_15 module-wide opt-in flag and annotated look-alike surface`() {
         val gradle = resolveFile("build.gradle", "app/build.gradle", "android/app/build.gradle").readText()
-        assertTrue(gradle.contains("freeCompilerArgs += [\"-opt-in=com.splitmate.app.ui.components.ExperimentalMaterial3ExpressiveApi\"]"))
+        // v2.3.6 Wave 4: both the local look-alike opt-in and the real material3 Expressive opt-in
+        assertTrue(gradle.contains("\"-opt-in=com.splitmate.app.ui.components.ExperimentalMaterial3ExpressiveApi\""))
+        assertTrue(gradle.contains("\"-opt-in=androidx.compose.material3.ExperimentalMaterial3ExpressiveApi\""))
         assertTrue(gradle.contains("jvmTarget = '17'"))
 
         val comp = src(componentsPath)

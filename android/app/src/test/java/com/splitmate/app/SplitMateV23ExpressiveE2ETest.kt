@@ -4583,7 +4583,8 @@ class SplitMateV23ExpressiveE2ETest {
             // 1. TripHomeScreen collapsing LargeTopAppBar + nestedScroll + LinearWavyProgressIndicator in Itinerary
             assertTrue(tripHomeSrc.contains("TopAppBarDefaults.exitUntilCollapsedScrollBehavior()"))
             assertTrue(tripHomeSrc.contains(".nestedScroll(scrollBehavior.nestedScrollConnection)"))
-            assertTrue(tripHomeSrc.contains("LargeTopAppBar("))
+            // v2.3.6 Wave 4: LargeTopAppBar -> M3 Expressive LargeFlexibleTopAppBar
+            assertTrue(Regex("""Large(Flexible)?TopAppBar\(""").containsMatchIn(tripHomeSrc))
             assertTrue(tripHomeSrc.contains("LinearWavyProgressIndicator("))
 
             // 2. ActivityDetailSheet ModalBottomSheet + SplitButtonLayout + Segmented Island + Tnum Monospace
