@@ -4134,8 +4134,9 @@ class SplitMateV23ExpressiveE2ETest {
 
             // 2. all_settled_card Cookie9Sided -> Sunny MorphPolygonShape & LinearWavyProgressIndicator flattening
             assertTrue(src.contains("Morph(MaterialShapes.Cookie9Sided, MaterialShapes.Sunny)"))
-            assertTrue(src.contains("MorphPolygonShape(morph = settledMorph, percentage = settledMorphProgress)"))
-            assertTrue(src.contains("SplitMateMotion.slowSpatialFloat()"))
+            // v2.3.6 Step C: the morph is drawn by SettledCelebrationBadge (bouncy spring on celebrate).
+            assertTrue(src.contains("SettledCelebrationBadge("))
+            assertTrue(src.contains("morph = settledMorph"))
             // v2.3.6: settlement money data carries no wavy progress (v2.3.2 rule, wavy = in-flight network only).
             assertFalse(src.contains("amplitude = if (simplifiedTransfers.isEmpty()) 0f else 0.75f"))
             assertTrue(src.contains("SplitButtonLayout("))

@@ -1646,8 +1646,12 @@ fun PaperSensoryFeedbackBanner(
             text = "Paper Tear & Gate-Stamp Acoustics",
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
-            color = FlightPassTokens.TextSecondary
+            color = FlightPassTokens.TextSecondary,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
         )
+        Spacer(modifier = Modifier.width(8.dp))
 
         Surface(
             onClick = {
@@ -1673,9 +1677,10 @@ fun PaperSensoryFeedbackBanner(
                 )
                 Spacer(modifier = Modifier.width(5.dp))
                 Text(
-                    text = if (isFeedbackEnabled) "Paper Tear & Stamp Sound: ON" else "Sensory Sound: OFF",
+                    text = if (isFeedbackEnabled) "Sound: ON" else "Sound: OFF",
                     fontSize = 10.5.sp,
                     fontWeight = FontWeight.Bold,
+                    maxLines = 1,
                     color = if (isFeedbackEnabled) FlightPassTokens.StatusGreenText else FlightPassTokens.TextSecondary
                 )
                 if (isFeedbackEnabled) {
@@ -1735,16 +1740,30 @@ fun PnrSyncStatusBanner(
 
                 Spacer(modifier = Modifier.width(12.dp))
 
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "PNR $pnr",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Black,
-                            color = FlightPassTokens.PrimaryDark,
-                            letterSpacing = 0.5.sp
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    // v2.3.6: the PNR gets its own line and the status chips sit below it, so neither a
+                    // long airline label nor the CNF chip can squeeze the PNR (it used to wrap letter by letter).
+                    Text(
+                        text = "PNR $pnr",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Black,
+                        color = FlightPassTokens.PrimaryDark,
+                        letterSpacing = 0.5.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = subtitleText,
+                        fontSize = 11.sp,
+                        color = FlightPassTokens.TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
                         Surface(
                             shape = FlightPassTokens.RadiusPill,
                             color = FlightPassTokens.StatusGreenSurface,
@@ -1754,46 +1773,41 @@ fun PnrSyncStatusBanner(
                                 text = "Confirmed CNF",
                                 fontSize = 9.5.sp,
                                 fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false,
                                 color = FlightPassTokens.StatusGreenText,
                                 modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                             )
                         }
+                        // Static status label (the old tap-to-cycle fake "processing" states were removed with the aurora effect)
+                        Surface(
+                            shape = FlightPassTokens.RadiusPill,
+                            color = FlightPassTokens.SkyBlue,
+                            border = BorderStroke(1.dp, FlightPassTokens.SkyBlueBorder),
+                            modifier = Modifier.weight(1f, fill = false)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.CloudDone,
+                                    contentDescription = null,
+                                    tint = FlightPassTokens.SkyBlueText,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = rightStatusLabel,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = FlightPassTokens.SkyBlueText
+                                )
+                            }
+                        }
                     }
-                    Text(
-                        text = subtitleText,
-                        fontSize = 11.sp,
-                        color = FlightPassTokens.TextSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // Static status label (the old tap-to-cycle fake "processing" states were removed with the aurora effect)
-            Surface(
-                shape = FlightPassTokens.RadiusPill,
-                color = FlightPassTokens.SkyBlue,
-                border = BorderStroke(1.dp, FlightPassTokens.SkyBlueBorder)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.CloudDone,
-                        contentDescription = null,
-                        tint = FlightPassTokens.SkyBlueText,
-                        modifier = Modifier.size(12.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = rightStatusLabel,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = FlightPassTokens.SkyBlueText
-                    )
                 }
             }
         }
@@ -2020,13 +2034,17 @@ fun AnimatedLuxuryAirlineBoardingPass(
                                     text = "$airlineName · $flightNumber",
                                     fontSize = 14.5.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = FlightPassTokens.OnAviation
+                                    color = FlightPassTokens.OnAviation,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                             Text(
                                 text = aircraftType,
                                 fontSize = 11.sp,
-                                color = FlightPassTokens.OnAviation.copy(alpha = 0.75f)
+                                color = FlightPassTokens.OnAviation.copy(alpha = 0.75f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -2035,7 +2053,8 @@ fun AnimatedLuxuryAirlineBoardingPass(
 
                     Surface(
                         shape = FlightPassTokens.RadiusPill,
-                        color = FlightPassTokens.SkyBlue
+                        color = FlightPassTokens.SkyBlue,
+                        modifier = Modifier.widthIn(max = 148.dp)
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -2052,7 +2071,9 @@ fun AnimatedLuxuryAirlineBoardingPass(
                                 text = "$gateNumber · $boardingTime",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = FlightPassTokens.SkyBlueText
+                                color = FlightPassTokens.SkyBlueText,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -2293,20 +2314,27 @@ fun AnimatedLuxuryAirlineBoardingPass(
                                         text = "${passenger.passengerNumber} · ${passenger.name}",
                                         fontSize = 13.5.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = FlightPassTokens.PrimaryDark
+                                        color = FlightPassTokens.PrimaryDark,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
                                         text = passenger.roleSubtitle,
                                         fontSize = 11.sp,
                                         fontWeight = if (passenger.matchedMemberName != null) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (passenger.matchedMemberName != null) FlightPassTokens.SkyBlueText else FlightPassTokens.TextSecondary
+                                        color = if (passenger.matchedMemberName != null) FlightPassTokens.SkyBlueText else FlightPassTokens.TextSecondary,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
 
+                                Spacer(modifier = Modifier.width(8.dp))
+                                // v2.3.6: capped seat chip; uncapped it squeezed the passenger name to one word per line.
                                 Surface(
                                     shape = FlightPassTokens.RadiusPill,
                                     color = FlightPassTokens.SkyBlue,
-                                    border = BorderStroke(0.5.dp, FlightPassTokens.SkyBlueBorder)
+                                    border = BorderStroke(0.5.dp, FlightPassTokens.SkyBlueBorder),
+                                    modifier = Modifier.widthIn(max = 132.dp)
                                 ) {
                                     Row(
                                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
@@ -2323,7 +2351,9 @@ fun AnimatedLuxuryAirlineBoardingPass(
                                             text = "${passenger.seatNumber} (${passenger.seatType})",
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.ExtraBold,
-                                            color = FlightPassTokens.SkyBlueText
+                                            color = FlightPassTokens.SkyBlueText,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
                                 }

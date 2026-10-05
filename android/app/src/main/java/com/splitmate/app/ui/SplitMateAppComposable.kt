@@ -1,5 +1,6 @@
 package com.splitmate.app
 
+import com.splitmate.app.ui.components.sharedGroupElement
 import com.splitmate.app.ui.*
 import android.Manifest
 import android.content.Intent
@@ -1481,6 +1482,19 @@ fun PendingGroupInviteCard(
     }
 }
 
+/** v2.3.6 Step C1: the ticket screen shown over the dashboard (container-transform target). */
+private sealed class SplitMateTicketOverlay : com.splitmate.app.ui.components.TicketContainerTarget {
+    data class Flight(
+        val result: com.splitmate.app.data.UniversalFlightTicketExtractor.UniversalFlightTicketResult,
+        override val sourceKey: String?
+    ) : SplitMateTicketOverlay()
+
+    data class TrainPnr(
+        val pnr: String,
+        override val sourceKey: String?
+    ) : SplitMateTicketOverlay()
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SplitMateMainDashboardScaffold(
@@ -1498,6 +1512,10 @@ fun SplitMateMainDashboardScaffold(
     var activeFlightTicketResult by remember {
         mutableStateOf<com.splitmate.app.data.UniversalFlightTicketExtractor.UniversalFlightTicketResult?>(null)
     }
+    // v2.3.6 Step C1: which booking card opened the current ticket (drives the container transform).
+    val ticketTransformController = remember { com.splitmate.app.ui.components.TicketContainerTransformController() }
+    var activeTicketSourceKey by remember { mutableStateOf<String?>(null) }
+    var isParsingFlightPdf by remember { mutableStateOf(false) }
 
     val flightPdfPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -1509,6 +1527,7 @@ fun SplitMateMainDashboardScaffold(
             } else {
                 uiState.members.map { it.name }.distinct()
             }
+            isParsingFlightPdf = true
             coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 val extracted = runCatching {
                     context.contentResolver.openInputStream(uri)?.use { stream ->
@@ -1521,6 +1540,7 @@ fun SplitMateMainDashboardScaffold(
                 }.getOrNull()
 
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    isParsingFlightPdf = false
                     if (extracted != null && (extracted.isValidFlightTicket || extracted.totalFarePaise > 0L)) {
                         val existingMatch = viewModel.findExistingExpenseByPnr(
                             pnr = extracted.pnr,
@@ -1566,6 +1586,7 @@ fun SplitMateMainDashboardScaffold(
     }
 
     fun openPnrOrFlightTicket(pnrRaw: String) {
+        activeTicketSourceKey = ticketTransformController.takeSource()
         if (pnrRaw.startsWith("EXPENSE:", ignoreCase = true)) {
             val expId = pnrRaw.substringAfter(":").trim()
             val matchingExp = uiState.expenses.find { it.expenseId == expId }
@@ -1603,43 +1624,65 @@ fun SplitMateMainDashboardScaffold(
         }
     }
 
-    activeFlightTicketResult?.let { flightResult ->
-        com.splitmate.app.ui.screens.FlightExpenseReviewScreen(
-            viewModel = viewModel,
-            extractedTicket = flightResult,
-            onPickAnotherPdfClick = {
-                flightPdfPickerLauncher.launch("application/pdf")
-            },
-            onBackClick = {
-                activeFlightTicketResult = null
-            },
-            onConfirmAndAddToLedger = {
-                activeFlightTicketResult = null
-                val loggedGroupId = viewModel.uiState.value.activeGroup?.groupId
-                viewModel.finishSubFlowToGroupDetail(loggedGroupId)
-            }
-        )
-        return
+    // v2.3.6 Step C1: the ticket screens used to replace the whole dashboard via early `return`s,
+    // which threw away the Trip Hub's tab/scroll state. They now open as an overlay that morphs out
+    // of the tapped booking card (container transform), with a seekable predictive-back preview.
+    val isAnyTicketOpen = activeFlightTicketResult != null || showPnrReviewScreen
+    LaunchedEffect(isAnyTicketOpen) {
+        if (!isAnyTicketOpen) activeTicketSourceKey = null
+    }
+    val ticketOverlayTarget: SplitMateTicketOverlay? = when {
+        activeFlightTicketResult != null -> SplitMateTicketOverlay.Flight(activeFlightTicketResult!!, activeTicketSourceKey)
+        showPnrReviewScreen -> SplitMateTicketOverlay.TrainPnr(activeReviewPnr, activeTicketSourceKey)
+        else -> null
     }
 
-    if (showPnrReviewScreen) {
-        PnrExpenseReviewScreen(
-            viewModel = viewModel,
-            initialPnr = activeReviewPnr,
-            onBackClick = {
+    Box(modifier = Modifier.fillMaxSize()) {
+    com.splitmate.app.ui.components.TicketContainerTransformHost(
+        target = ticketOverlayTarget,
+        controller = ticketTransformController,
+        onDismiss = {
+            if (activeFlightTicketResult != null) {
+                activeFlightTicketResult = null
+            } else if (showPnrReviewScreen) {
                 showPnrReviewScreen = false
                 activeReviewPnr = ""
-            },
-            onExpenseAdded = {
-                showPnrReviewScreen = false
-                activeReviewPnr = ""
-                val loggedGroupId = viewModel.uiState.value.activeGroup?.groupId
-                viewModel.finishSubFlowToGroupDetail(loggedGroupId)
             }
-        )
-        return
-    }
-
+        },
+        overlay = { overlayTarget ->
+            when (overlayTarget) {
+                is SplitMateTicketOverlay.Flight -> com.splitmate.app.ui.screens.FlightExpenseReviewScreen(
+                    viewModel = viewModel,
+                    extractedTicket = overlayTarget.result,
+                    onPickAnotherPdfClick = {
+                        flightPdfPickerLauncher.launch("application/pdf")
+                    },
+                    onBackClick = {
+                        activeFlightTicketResult = null
+                    },
+                    onConfirmAndAddToLedger = {
+                        activeFlightTicketResult = null
+                        val loggedGroupId = viewModel.uiState.value.activeGroup?.groupId
+                        viewModel.finishSubFlowToGroupDetail(loggedGroupId)
+                    }
+                )
+                is SplitMateTicketOverlay.TrainPnr -> PnrExpenseReviewScreen(
+                    viewModel = viewModel,
+                    initialPnr = overlayTarget.pnr,
+                    onBackClick = {
+                        showPnrReviewScreen = false
+                        activeReviewPnr = ""
+                    },
+                    onExpenseAdded = {
+                        showPnrReviewScreen = false
+                        activeReviewPnr = ""
+                        val loggedGroupId = viewModel.uiState.value.activeGroup?.groupId
+                        viewModel.finishSubFlowToGroupDetail(loggedGroupId)
+                    }
+                )
+            }
+        }
+    ) {
     val animatedScreenBg by animateColorAsState(
         targetValue = SplitMateTheme.ScreenBg,
         animationSpec = DesignSystemBindings.themeColorTween(),
@@ -1859,6 +1902,11 @@ fun SplitMateMainDashboardScaffold(
             }
             }
         }
+    }
+    }
+    // v2.3.6 Step C: an M3 Expressive contained loading indicator while a flight PDF is parsed
+    // (local IO, usually 1-3s). It used to give no feedback at all.
+    com.splitmate.app.ui.components.FlightPdfParsingOverlay(visible = isParsingFlightPdf)
     }
 }
 
@@ -4359,7 +4407,10 @@ fun LedgersDashboardScreen(
                                     lineHeight = 24.sp,
                                     color = SplitMateTheme.PrimaryDark,
                                     maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.sharedGroupElement(
+                                        com.splitmate.app.ui.components.SharedGroupKeys.title(groupCard.groupId)
+                                    )
                                 )
                                 Text(
                                     text = "Tap to view expenses & balances",
@@ -4415,7 +4466,11 @@ fun LedgersDashboardScreen(
                                 color = if (groupCard.netBalanceCents == 0L) SplitMateTheme.PrimaryDark else badgeTextColor,
                                 maxLines = 1,
                                 softWrap = false,
-                                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+                                modifier = Modifier.sharedGroupElement(
+                                    com.splitmate.app.ui.components.SharedGroupKeys.net(groupCard.groupId),
+                                    alignment = Alignment.CenterEnd
+                                )
                             )
                         }
                     }
@@ -4717,6 +4772,11 @@ fun LedgersDashboardScreen(
             },
             label = "GroupCardContainerTransform"
         ) { targetGroup ->
+            // v2.3.6 Step C: publish this AnimatedContent scope so the group name and balance can
+            // fly between the Ledgers card and the Trip Hub (shared elements).
+            androidx.compose.runtime.CompositionLocalProvider(
+                com.splitmate.app.ui.components.LocalGroupNavAnimatedScope provides this
+            ) {
             if (targetGroup != null) {
                 if (useTripHubV2View) {
                     com.splitmate.app.ui.screens.TripHomeScreen(
@@ -4750,6 +4810,7 @@ fun LedgersDashboardScreen(
                 }
             } else {
                 renderMasterGroupListPane()
+            }
             }
         }
     }

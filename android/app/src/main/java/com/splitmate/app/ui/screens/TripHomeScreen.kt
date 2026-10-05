@@ -115,6 +115,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.pulltorefresh.pullToRefresh
+import com.splitmate.app.ui.components.staggeredEntrance
+import com.splitmate.app.ui.components.ExpressiveSwipeAction
+import com.splitmate.app.ui.components.ExpressiveSwipeActionsBox
+import com.splitmate.app.ui.components.SettledCelebrationBadge
+import com.splitmate.app.ui.components.SettledCelebrationDefaults
+import com.splitmate.app.ui.components.SharedGroupKeys
+import com.splitmate.app.ui.components.sharedGroupElement
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -1023,6 +1031,9 @@ fun TripHomeScreen(
             // =================================================================
             TripHubTopBar(
                 groupName = (group?.name ?: "Trip Hub").toSmartTitleCase(),
+                // Not shared: a sharedBounds title inside LargeFlexibleTopAppBar loops its collapse
+                // measurement (Compose never idles). Only the balance figure flies across.
+                sharedTitleKey = null,
                 subtitle = if (tripLifecycleState == com.splitmate.app.data.TripLifecycleResolver.State.ENDED) "Ended · $dynamicTripSubtitle" else dynamicTripSubtitle,
                 activePerspectiveMember = activePerspectiveMember,
                 onlineFriendsCount = onlineFriendsCount,
@@ -1128,12 +1139,40 @@ fun TripHomeScreen(
         LaunchedEffect(selectedSectionTab) {
             collapsingHeaderState.expand(headerResetSpec)
         }
-        Column(
+        // v2.3.6 Step C1: real M3 Expressive pull-to-refresh (morphing LoadingIndicator) that runs a
+        // cloud sync of this trip. It only engages once the app bar and the collapsing header are
+        // fully expanded, so pulling down first restores them. The indicator is shown only while
+        // the user-requested sync is in flight (min 400ms), never for cached/offline data.
+        val pullToRefreshState = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
+        var isPullRefreshRequested by remember(resolvedGroupId) { mutableStateOf(false) }
+        LaunchedEffect(isPullRefreshRequested, uiState.isCloudSyncing) {
+            if (isPullRefreshRequested && !uiState.isCloudSyncing) {
+                kotlinx.coroutines.delay(com.splitmate.app.ui.components.WavyProgressIndicatorDefaults.MIN_VISIBLE_MILLIS)
+                if (!viewModel.uiState.value.isCloudSyncing) isPullRefreshRequested = false
+            }
+        }
+        val isPullToRefreshEngaged = scrollBehavior.state.collapsedFraction == 0f &&
+            collapsingHeaderState.offsetPx == 0f
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(TripHubTokens.CanvasBg)
                 .padding(innerPadding)
                 .consumeWindowInsets(innerPadding)
+                .pullToRefresh(
+                    isRefreshing = isPullRefreshRequested,
+                    state = pullToRefreshState,
+                    enabled = isPullToRefreshEngaged || isPullRefreshRequested,
+                    onRefresh = {
+                        performCrispTactileHaptic(context, localView, heavy = false)
+                        isPullRefreshRequested = true
+                        viewModel.syncActiveGroupNow(context = context, groupId = resolvedGroupId, silent = true)
+                    }
+                )
+        ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
                 .nestedScroll(collapsingHeaderState.nestedScrollConnection)
         ) {
             TripHubCollapsingHeader(state = collapsingHeaderState) {
@@ -1154,6 +1193,7 @@ fun TripHomeScreen(
             // SUBTASK 3.1.3: COMPACT PERSPECTIVE NET BALANCE STRIP
             // =================================================================
             CompactPerspectiveNetBalanceStrip(
+                sharedNetKey = SharedGroupKeys.net(groupId),
                 totalGroupSpendCents = totalGroupSpendCents,
                 activeMemberNetCents = activeMemberNetCents,
                 activeMemberName = activePerspectiveMember?.name ?: "You",
@@ -1401,6 +1441,12 @@ fun TripHomeScreen(
             }
             }
         }
+            androidx.compose.material3.pulltorefresh.PullToRefreshDefaults.LoadingIndicator(
+                state = pullToRefreshState,
+                isRefreshing = isPullRefreshRequested,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
+        }
     }
 
     // =========================================================================
@@ -1540,6 +1586,7 @@ internal fun TripHubCollapsingHeader(
 @Composable
 private fun TripHubTopBar(
     groupName: String,
+    sharedTitleKey: String? = null,
     subtitle: String,
     @Suppress("UNUSED_PARAMETER") activePerspectiveMember: GroupMemberEntity?,
     onlineFriendsCount: Int = 0,
@@ -1593,7 +1640,8 @@ private fun TripHubTopBar(
                     fontWeight = FontWeight.ExtraBold,
                     color = TripHubTokens.TextPrimary,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = if (sharedTitleKey != null) Modifier.sharedGroupElement(sharedTitleKey) else Modifier
                 )
             },
             subtitle = {
@@ -1941,6 +1989,7 @@ private fun DynamicCategorySubFilterRow(
 @Composable
 private fun CompactPerspectiveNetBalanceStrip(
     totalGroupSpendCents: Long,
+    sharedNetKey: String? = null,
     activeMemberNetCents: Long,
     activeMemberName: String,
     isAllSettled: Boolean = false,
@@ -2079,7 +2128,9 @@ private fun CompactPerspectiveNetBalanceStrip(
                 Surface(
                     shape = MaterialTheme.shapes.small,
                     color = netBadgeBg,
-                    modifier = Modifier.weight(1f, fill = false)
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .then(if (sharedNetKey != null) Modifier.sharedGroupElement(sharedNetKey) else Modifier)
                 ) {
                     Text(
                         text = "$activeMemberName · $netBadgeText",
@@ -2137,6 +2188,14 @@ private fun TripHubOverviewFeed(
             .toMap()
     }
 
+    // v2.3.6 Step C: first-open stagger for the top cards (once per trip per app session).
+    val feedEntranceStart = com.splitmate.app.ui.components.rememberFirstOpenEntrance(
+        "trip-overview:" + (filteredClassifiedExpenses.firstOrNull()?.first?.groupId ?: "")
+    )
+    val entranceIndexById = remember(filteredClassifiedExpenses) {
+        filteredClassifiedExpenses.mapIndexed { idx, (exp, _) -> exp.expenseId to idx }.toMap()
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
@@ -2149,23 +2208,40 @@ private fun TripHubOverviewFeed(
             val itemModifier = Modifier
                 .fillMaxWidth()
                 .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)
+                .staggeredEntrance(entranceIndexById[expense.expenseId] ?: Int.MAX_VALUE, feedEntranceStart)
                 .expressivePressScale()
+            // v2.3.6 Step C1: booking cards morph into their ticket (container transform).
+            val ticketTransform = com.splitmate.app.ui.components.LocalTicketContainerTransform.current
 
             when (category) {
                 TripHubBookingCategory.TRAIN -> {
                     val legNumber = trainLegNumberById[expense.expenseId] ?: 1
                     // v2.3.5 (#4): Train / Flight cards also get Edit / Delete.
                     Column(modifier = itemModifier) {
-                        DeepGreenTrainTicketCard(
+                        TripHubSwipeToManage(
                             expense = expense,
-                            legNumber = legNumber,
-                            groupMembers = groupMembers,
-                            allSplits = allSplits,
-                            activePerspectiveMember = activePerspectiveMember,
-                            onOpenTrainPnrReviewClick = onOpenTrainPnrReviewClick,
-                            onInspectBerthChart = onInspectBerthChart,
+                            onDeleteExpense = { onDeleteExpense(expense.expenseId) },
                             modifier = Modifier.fillMaxWidth()
-                        )
+                        ) {
+                        com.splitmate.app.ui.components.TicketContainerSource(
+                            sourceKey = expense.expenseId,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            DeepGreenTrainTicketCard(
+                                expense = expense,
+                                legNumber = legNumber,
+                                groupMembers = groupMembers,
+                                allSplits = allSplits,
+                                activePerspectiveMember = activePerspectiveMember,
+                                onOpenTrainPnrReviewClick = { pnr ->
+                                    if (pnr.isNotBlank()) ticketTransform?.controller?.markSource(expense.expenseId)
+                                    onOpenTrainPnrReviewClick(pnr)
+                                },
+                                onInspectBerthChart = onInspectBerthChart,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        }
                         TripHubManageExpenseRow(
                             expense = expense,
                             onDeleteExpense = { onDeleteExpense(expense.expenseId) }
@@ -2175,14 +2251,28 @@ private fun TripHubOverviewFeed(
 
                 TripHubBookingCategory.FLIGHT -> {
                     Column(modifier = itemModifier) {
-                        PeriwinkleFlightBookingCard(
+                        TripHubSwipeToManage(
                             expense = expense,
-                            groupMembers = groupMembers,
-                            allSplits = allSplits,
-                            activePerspectiveMember = activePerspectiveMember,
-                            onOpenFlightReviewClick = onOpenFlightReviewClick,
+                            onDeleteExpense = { onDeleteExpense(expense.expenseId) },
                             modifier = Modifier.fillMaxWidth()
-                        )
+                        ) {
+                        com.splitmate.app.ui.components.TicketContainerSource(
+                            sourceKey = expense.expenseId,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            PeriwinkleFlightBookingCard(
+                                expense = expense,
+                                groupMembers = groupMembers,
+                                allSplits = allSplits,
+                                activePerspectiveMember = activePerspectiveMember,
+                                onOpenFlightReviewClick = { key ->
+                                    if (key.isNotBlank()) ticketTransform?.controller?.markSource(expense.expenseId)
+                                    onOpenFlightReviewClick(key)
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        }
                         TripHubManageExpenseRow(
                             expense = expense,
                             onDeleteExpense = { onDeleteExpense(expense.expenseId) }
@@ -2191,35 +2281,53 @@ private fun TripHubOverviewFeed(
                 }
 
                 TripHubBookingCategory.STAY -> {
-                    LodgingBookingCard(
+                    TripHubSwipeToManage(
                         expense = expense,
-                        groupMembers = groupMembers,
-                        allSplits = allSplits,
                         onDeleteExpense = { onDeleteExpense(expense.expenseId) },
                         modifier = itemModifier
-                    )
+                    ) {
+                        LodgingBookingCard(
+                            expense = expense,
+                            groupMembers = groupMembers,
+                            allSplits = allSplits,
+                            onDeleteExpense = { onDeleteExpense(expense.expenseId) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
 
                 TripHubBookingCategory.RENTAL -> {
-                    GroundMobilityBookingCard(
+                    TripHubSwipeToManage(
                         expense = expense,
-                        isTwoWheelerRental = true,
-                        groupMembers = groupMembers,
-                        allSplits = allSplits,
                         onDeleteExpense = { onDeleteExpense(expense.expenseId) },
                         modifier = itemModifier
-                    )
+                    ) {
+                        GroundMobilityBookingCard(
+                            expense = expense,
+                            isTwoWheelerRental = true,
+                            groupMembers = groupMembers,
+                            allSplits = allSplits,
+                            onDeleteExpense = { onDeleteExpense(expense.expenseId) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
 
                 TripHubBookingCategory.CAB -> {
-                    GroundMobilityBookingCard(
+                    TripHubSwipeToManage(
                         expense = expense,
-                        isTwoWheelerRental = false,
-                        groupMembers = groupMembers,
-                        allSplits = allSplits,
                         onDeleteExpense = { onDeleteExpense(expense.expenseId) },
                         modifier = itemModifier
-                    )
+                    ) {
+                        GroundMobilityBookingCard(
+                            expense = expense,
+                            isTwoWheelerRental = false,
+                            groupMembers = groupMembers,
+                            allSplits = allSplits,
+                            onDeleteExpense = { onDeleteExpense(expense.expenseId) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
 
                 TripHubBookingCategory.FOOD,
@@ -2227,13 +2335,19 @@ private fun TripHubOverviewFeed(
                 TripHubBookingCategory.SHOPPING,
                 TripHubBookingCategory.GENERAL,
                 TripHubBookingCategory.ALL -> {
-                    GeneralSharedExpenseCard(
+                    TripHubSwipeToManage(
                         expense = expense,
-                        groupMembers = groupMembers,
-                        allSplits = allSplits,
                         onDeleteExpense = { onDeleteExpense(expense.expenseId) },
                         modifier = itemModifier
-                    )
+                    ) {
+                        GeneralSharedExpenseCard(
+                            expense = expense,
+                            groupMembers = groupMembers,
+                            allSplits = allSplits,
+                            onDeleteExpense = { onDeleteExpense(expense.expenseId) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
             }
         }
@@ -4892,6 +5006,14 @@ private fun TripHubTravelWalletView(
             .toMap()
     }
 
+    // v2.3.6 Step C: first-open stagger for the top cards (once per trip per app session).
+    val feedEntranceStart = com.splitmate.app.ui.components.rememberFirstOpenEntrance(
+        "trip-travel:" + (travelOnlyItems.firstOrNull()?.first?.groupId ?: "")
+    )
+    val entranceIndexById = remember(travelOnlyItems) {
+        travelOnlyItems.mapIndexed { idx, (exp, _) -> exp.expenseId to idx }.toMap()
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
@@ -4957,23 +5079,40 @@ private fun TripHubTravelWalletView(
             val itemModifier = Modifier
                 .fillMaxWidth()
                 .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)
+                .staggeredEntrance(entranceIndexById[expense.expenseId] ?: Int.MAX_VALUE, feedEntranceStart)
                 .expressivePressScale()
+            // v2.3.6 Step C1: booking cards morph into their ticket (container transform).
+            val ticketTransform = com.splitmate.app.ui.components.LocalTicketContainerTransform.current
 
             when (category) {
                 TripHubBookingCategory.TRAIN -> {
                     val legNumber = trainLegNumberById[expense.expenseId] ?: 1
                     // v2.3.5 (#4): Train / Flight cards also get Edit / Delete.
                     Column(modifier = itemModifier) {
-                        DeepGreenTrainTicketCard(
+                        TripHubSwipeToManage(
                             expense = expense,
-                            legNumber = legNumber,
-                            groupMembers = groupMembers,
-                            allSplits = allSplits,
-                            activePerspectiveMember = activePerspectiveMember,
-                            onOpenTrainPnrReviewClick = onOpenTrainPnrReviewClick,
-                            onInspectBerthChart = onInspectBerthChart,
+                            onDeleteExpense = { onDeleteExpense(expense.expenseId) },
                             modifier = Modifier.fillMaxWidth()
-                        )
+                        ) {
+                        com.splitmate.app.ui.components.TicketContainerSource(
+                            sourceKey = expense.expenseId,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            DeepGreenTrainTicketCard(
+                                expense = expense,
+                                legNumber = legNumber,
+                                groupMembers = groupMembers,
+                                allSplits = allSplits,
+                                activePerspectiveMember = activePerspectiveMember,
+                                onOpenTrainPnrReviewClick = { pnr ->
+                                    if (pnr.isNotBlank()) ticketTransform?.controller?.markSource(expense.expenseId)
+                                    onOpenTrainPnrReviewClick(pnr)
+                                },
+                                onInspectBerthChart = onInspectBerthChart,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        }
                         TripHubManageExpenseRow(
                             expense = expense,
                             onDeleteExpense = { onDeleteExpense(expense.expenseId) }
@@ -4983,14 +5122,28 @@ private fun TripHubTravelWalletView(
 
                 TripHubBookingCategory.FLIGHT -> {
                     Column(modifier = itemModifier) {
-                        PeriwinkleFlightBookingCard(
+                        TripHubSwipeToManage(
                             expense = expense,
-                            groupMembers = groupMembers,
-                            allSplits = allSplits,
-                            activePerspectiveMember = activePerspectiveMember,
-                            onOpenFlightReviewClick = onOpenFlightReviewClick,
+                            onDeleteExpense = { onDeleteExpense(expense.expenseId) },
                             modifier = Modifier.fillMaxWidth()
-                        )
+                        ) {
+                        com.splitmate.app.ui.components.TicketContainerSource(
+                            sourceKey = expense.expenseId,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            PeriwinkleFlightBookingCard(
+                                expense = expense,
+                                groupMembers = groupMembers,
+                                allSplits = allSplits,
+                                activePerspectiveMember = activePerspectiveMember,
+                                onOpenFlightReviewClick = { key ->
+                                    if (key.isNotBlank()) ticketTransform?.controller?.markSource(expense.expenseId)
+                                    onOpenFlightReviewClick(key)
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        }
                         TripHubManageExpenseRow(
                             expense = expense,
                             onDeleteExpense = { onDeleteExpense(expense.expenseId) }
@@ -4999,35 +5152,53 @@ private fun TripHubTravelWalletView(
                 }
 
                 TripHubBookingCategory.STAY -> {
-                    LodgingBookingCard(
+                    TripHubSwipeToManage(
                         expense = expense,
-                        groupMembers = groupMembers,
-                        allSplits = allSplits,
                         onDeleteExpense = { onDeleteExpense(expense.expenseId) },
                         modifier = itemModifier
-                    )
+                    ) {
+                        LodgingBookingCard(
+                            expense = expense,
+                            groupMembers = groupMembers,
+                            allSplits = allSplits,
+                            onDeleteExpense = { onDeleteExpense(expense.expenseId) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
 
                 TripHubBookingCategory.RENTAL -> {
-                    GroundMobilityBookingCard(
+                    TripHubSwipeToManage(
                         expense = expense,
-                        isTwoWheelerRental = true,
-                        groupMembers = groupMembers,
-                        allSplits = allSplits,
                         onDeleteExpense = { onDeleteExpense(expense.expenseId) },
                         modifier = itemModifier
-                    )
+                    ) {
+                        GroundMobilityBookingCard(
+                            expense = expense,
+                            isTwoWheelerRental = true,
+                            groupMembers = groupMembers,
+                            allSplits = allSplits,
+                            onDeleteExpense = { onDeleteExpense(expense.expenseId) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
 
                 TripHubBookingCategory.CAB -> {
-                    GroundMobilityBookingCard(
+                    TripHubSwipeToManage(
                         expense = expense,
-                        isTwoWheelerRental = false,
-                        groupMembers = groupMembers,
-                        allSplits = allSplits,
                         onDeleteExpense = { onDeleteExpense(expense.expenseId) },
                         modifier = itemModifier
-                    )
+                    ) {
+                        GroundMobilityBookingCard(
+                            expense = expense,
+                            isTwoWheelerRental = false,
+                            groupMembers = groupMembers,
+                            allSplits = allSplits,
+                            onDeleteExpense = { onDeleteExpense(expense.expenseId) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
 
                 else -> {}
@@ -5077,6 +5248,14 @@ private fun TripHubMoneySettlementView(
         simplifiedTransfers.partition {
             currentUserId != null && (it.fromMemberId == currentUserId || it.toMemberId == currentUserId)
         }
+    }
+    // v2.3.6 Step C: celebrate only the moment your last payment clears (not on every open).
+    val hasMyTransfersNow = myTransfers.isNotEmpty()
+    var hadMyTransfers by remember(groupId) { mutableStateOf(hasMyTransfersNow) }
+    var celebrateSettled by remember(groupId) { mutableStateOf(false) }
+    LaunchedEffect(hasMyTransfersNow) {
+        if (SettledCelebrationDefaults.shouldCelebrate(hadMyTransfers, hasMyTransfersNow)) celebrateSettled = true
+        hadMyTransfers = hasMyTransfersNow
     }
     val settlementProgress = remember(isAllSettled, simplifiedTransfers.size, groupMembers.size) {
         if (isAllSettled || simplifiedTransfers.isEmpty()) {
@@ -5253,11 +5432,6 @@ private fun TripHubMoneySettlementView(
                 val settledMorph = remember {
                     Morph(MaterialShapes.Cookie9Sided, MaterialShapes.Sunny)
                 }
-                val settledMorphProgress by animateFloatAsState(
-                    targetValue = 1f,
-                    animationSpec = SplitMateMotion.slowSpatialFloat(),
-                    label = "allSettledPolygonMorph"
-                )
                 Surface(
                     shape = RoundedCornerShape(20.dp),
                     color = TripHubTokens.CardSurface,
@@ -5273,20 +5447,15 @@ private fun TripHubMoneySettlementView(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(MorphPolygonShape(morph = settledMorph, percentage = settledMorphProgress))
-                                .background(TripHubTokens.PositiveSagePillBg),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.CheckCircle,
-                                contentDescription = null,
-                                tint = TripHubTokens.PositiveSageText,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
+                        // v2.3.6 Step C: the Cookie9Sided -> Sunny morph now actually plays (bouncy spring +
+                        // confirm haptic) the moment your last payment clears; static otherwise.
+                        SettledCelebrationBadge(
+                            celebrate = celebrateSettled,
+                            morph = settledMorph,
+                            containerColor = TripHubTokens.PositiveSagePillBg,
+                            iconTint = TripHubTokens.PositiveSageText,
+                            size = 38.dp
+                        )
                         Column {
                             Text(
                                 text = "All Group Debts Settled (₹0.00)",
@@ -5357,11 +5526,10 @@ private fun TripHubMoneySettlementView(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Rounded.CheckCircle,
-                                contentDescription = null,
-                                tint = TripHubTokens.PositiveSageText,
-                                modifier = Modifier.size(20.dp)
+                            SettledCelebrationBadge(
+                                celebrate = celebrateSettled,
+                                containerColor = TripHubTokens.PositiveSagePillBg,
+                                iconTint = TripHubTokens.PositiveSageText
                             )
                             Column {
                                 Text(
@@ -5409,6 +5577,7 @@ private fun TripHubMoneySettlementView(
                     )
                     val recipientFirstName = settlement.toName.trim().substringBefore(" ").ifBlank { settlement.toName }
                     var showRestrictionHint by remember(settlement.fromMemberId, settlement.toMemberId) { mutableStateOf(false) }
+                    var pendingMarkPaidConfirm by remember(settlement.fromMemberId, settlement.toMemberId) { mutableStateOf(false) }
                     val rowShape = segmentedIslandItemShape(
                         index = index,
                         totalCount = myTransfers.size,
@@ -5416,204 +5585,237 @@ private fun TripHubMoneySettlementView(
                         innerCorner = 6.dp
                     )
 
-                    Surface(
-                        shape = rowShape,
-                        color = TripHubTokens.CardSurface,
-                        border = BorderStroke(
-                            width = 1.5.dp,
-                            color = if (isCurrentUserPayer) TripHubTokens.TerracottaIconTint.copy(alpha = 0.35f) else BuckwheatOlivePrimary.copy(alpha = 0.45f)
-                        ),
+                    if (pendingMarkPaidConfirm) {
+                        TripHubMarkPaidConfirmDialog(
+                            fromName = settlement.fromName,
+                            toName = settlement.toName,
+                            formattedAmount = formattedAmount,
+                            onConfirm = {
+                                pendingMarkPaidConfirm = false
+                                performCrispTactileHaptic(context, localView, heavy = false)
+                                viewModel.recordSettlement(
+                                    groupId = groupId,
+                                    fromMemberId = settlement.fromMemberId,
+                                    toMemberId = settlement.toMemberId,
+                                    amountCents = settlement.amountCents
+                                )
+                            },
+                            onDismiss = { pendingMarkPaidConfirm = false }
+                        )
+                    }
+                    ExpressiveSwipeActionsBox(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)
-                            .animateContentSize(SplitMateMotion.defaultSpatial())
+                            .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null),
+                        startAction = if (canMarkPaid) {
+                            ExpressiveSwipeAction(
+                                label = "Mark paid",
+                                icon = Icons.Rounded.CheckCircleOutline,
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                onTrigger = { pendingMarkPaidConfirm = true }
+                            )
+                        } else null,
+                        shape = rowShape
                     ) {
-                        Column(
+                        Surface(
+                            shape = rowShape,
+                            color = TripHubTokens.CardSurface,
+                            border = BorderStroke(
+                                width = 1.5.dp,
+                                color = if (isCurrentUserPayer) TripHubTokens.TerracottaIconTint.copy(alpha = 0.35f) else BuckwheatOlivePrimary.copy(alpha = 0.45f)
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(15.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                                .animateContentSize(SplitMateMotion.defaultSpatial())
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(15.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    TripHubMemberAvatar(
-                                        seedOrName = if (isCurrentUserPayer) {
-                                            toMember?.avatarSeed?.ifBlank { settlement.toName } ?: settlement.toName
-                                        } else {
-                                            fromMember?.avatarSeed?.ifBlank { settlement.fromName } ?: settlement.fromName
-                                        },
-                                        fallbackName = if (isCurrentUserPayer) settlement.toName else settlement.fromName,
-                                        size = 36.dp,
-                                        backgroundColor = if (isCurrentUserPayer) TripHubTokens.TerracottaPeachBg else TripHubTokens.PositiveSagePillBg,
-                                        textColor = if (isCurrentUserPayer) TripHubTokens.TerracottaIconTint else TripHubTokens.PositiveSageText,
-                                        fontSize = 12.sp,
-                                        isOnline = if (isCurrentUserPayer) isToOnline else isFromOnline
-                                    )
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            Surface(
-                                                shape = CircleShape,
-                                                color = if (isCurrentUserPayer) TripHubTokens.TerracottaPeachBg else TripHubTokens.PositiveSagePillBg
-                                            ) {
-                                                Text(
-                                                    text = if (isCurrentUserPayer) "YOU PAY" else "YOU RECEIVE",
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = if (isCurrentUserPayer) TripHubTokens.TerracottaIconTint else TripHubTokens.PositiveSageText,
-                                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
-                                                )
-                                            }
-                                            Text(
-                                                text = if (isCurrentUserPayer) "to ${settlement.toName}" else "from ${settlement.fromName}",
-                                                fontWeight = FontWeight.ExtraBold,
-                                                style = MaterialTheme.typography.titleMedium,
-                                                color = TripHubTokens.TextPrimary,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
-                                        if (!canMarkPaid && isCurrentUserPayer) {
-                                            Text(
-                                                text = "Tap status pill for confirmation info",
-                                                fontWeight = FontWeight.Medium,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = TripHubTokens.TextSecondary
-                                            )
-                                        }
-                                    }
-                                }
-
-                                Column(
-                                    horizontalAlignment = Alignment.End,
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Text(
-                                        text = if (isCurrentUserPayer) "-$formattedAmount" else "+$formattedAmount",
-                                        style = TextStyle(
-                                            fontFamily = SplitMateTnumMonospace,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            fontSize = 18.sp,
-                                            fontFeatureSettings = "tnum"
-                                        ),
-                                        color = if (isCurrentUserPayer) TripHubTokens.TerracottaIconTint else TripHubTokens.PositiveSageText
-                                    )
-                                    if (!canMarkPaid && isCurrentUserPayer) {
-                                        Surface(
-                                            onClick = {
-                                                performCrispTactileHaptic(context, localView, heavy = false)
-                                                showRestrictionHint = !showRestrictionHint
-                                            },
-                                            shape = CircleShape,
-                                            color = TripHubTokens.TerracottaPeachBg,
-                                            border = BorderStroke(
-                                                1.dp,
-                                                TripHubTokens.TerracottaIconTint.copy(alpha = 0.25f)
-                                            )
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.Schedule,
-                                                    contentDescription = null,
-                                                    tint = TripHubTokens.TerracottaIconTint,
-                                                    modifier = Modifier.size(11.dp)
-                                                )
-                                                Text(
-                                                    text = "Awaiting $recipientFirstName",
-                                                    fontWeight = FontWeight.Bold,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = TripHubTokens.TerracottaIconTint
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (canMarkPaid) {
-                                Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.End,
-                                    verticalAlignment = Alignment.CenterVertically
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    SplitButtonLayout(
-                                        leadingText = "Mark Paid",
-                                        leadingIcon = Icons.Rounded.CheckCircleOutline,
-                                        onLeadingClick = {
-                                            performCrispTactileHaptic(context, localView, heavy = false)
-                                            viewModel.recordSettlement(
-                                                groupId = groupId,
-                                                fromMemberId = settlement.fromMemberId,
-                                                toMemberId = settlement.toMemberId,
-                                                amountCents = settlement.amountCents
-                                            )
-                                        },
-                                        menuItems = listOf(
-                                            ExpressiveMenuAction(
-                                                label = "Confirm Full Settlement ($formattedAmount)",
-                                                icon = Icons.Rounded.CheckCircleOutline,
-                                                subtitle = "${settlement.fromName} to ${settlement.toName}",
-                                                onClick = {
-                                                    performCrispTactileHaptic(context, localView, heavy = false)
-                                                    viewModel.recordSettlement(
-                                                        groupId = groupId,
-                                                        fromMemberId = settlement.fromMemberId,
-                                                        toMemberId = settlement.toMemberId,
-                                                        amountCents = settlement.amountCents
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        TripHubMemberAvatar(
+                                            seedOrName = if (isCurrentUserPayer) {
+                                                toMember?.avatarSeed?.ifBlank { settlement.toName } ?: settlement.toName
+                                            } else {
+                                                fromMember?.avatarSeed?.ifBlank { settlement.fromName } ?: settlement.fromName
+                                            },
+                                            fallbackName = if (isCurrentUserPayer) settlement.toName else settlement.fromName,
+                                            size = 36.dp,
+                                            backgroundColor = if (isCurrentUserPayer) TripHubTokens.TerracottaPeachBg else TripHubTokens.PositiveSagePillBg,
+                                            textColor = if (isCurrentUserPayer) TripHubTokens.TerracottaIconTint else TripHubTokens.PositiveSageText,
+                                            fontSize = 12.sp,
+                                            isOnline = if (isCurrentUserPayer) isToOnline else isFromOnline
+                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Surface(
+                                                    shape = CircleShape,
+                                                    color = if (isCurrentUserPayer) TripHubTokens.TerracottaPeachBg else TripHubTokens.PositiveSagePillBg
+                                                ) {
+                                                    Text(
+                                                        text = if (isCurrentUserPayer) "YOU PAY" else "YOU RECEIVE",
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = if (isCurrentUserPayer) TripHubTokens.TerracottaIconTint else TripHubTokens.PositiveSageText,
+                                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                                                     )
                                                 }
-                                            ),
-                                            ExpressiveMenuAction(
-                                                label = "Open Settle Up Sheet",
-                                                icon = Icons.Rounded.AccountBalanceWallet,
-                                                subtitle = "Inspect full group graph & custom settlement",
-                                                onClick = onOpenSettleUpClick
-                                            )
-                                        ),
-                                        containerColor = DesignSystemBindings.activePalette.primary,
-                        contentColor = DesignSystemBindings.activePalette.onPrimary
-                                    )
-                                }
-                            } else {
-                                AnimatedVisibility(visible = showRestrictionHint) {
-                                    Surface(
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = TripHubTokens.SunkenWell,
-                                        modifier = Modifier.fillMaxWidth()
+                                                Text(
+                                                    text = if (isCurrentUserPayer) "to ${settlement.toName}" else "from ${settlement.fromName}",
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    color = TripHubTokens.TextPrimary,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                            if (!canMarkPaid && isCurrentUserPayer) {
+                                                Text(
+                                                    text = "Tap status pill for confirmation info",
+                                                    fontWeight = FontWeight.Medium,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = TripHubTokens.TextSecondary
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Column(
+                                        horizontalAlignment = Alignment.End,
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        Text(
+                                            text = if (isCurrentUserPayer) "-$formattedAmount" else "+$formattedAmount",
+                                            style = TextStyle(
+                                                fontFamily = SplitMateTnumMonospace,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 18.sp,
+                                                fontFeatureSettings = "tnum"
+                                            ),
+                                            color = if (isCurrentUserPayer) TripHubTokens.TerracottaIconTint else TripHubTokens.PositiveSageText
+                                        )
+                                        if (!canMarkPaid && isCurrentUserPayer) {
+                                            Surface(
+                                                onClick = {
+                                                    performCrispTactileHaptic(context, localView, heavy = false)
+                                                    showRestrictionHint = !showRestrictionHint
+                                                },
+                                                shape = CircleShape,
+                                                color = TripHubTokens.TerracottaPeachBg,
+                                                border = BorderStroke(
+                                                    1.dp,
+                                                    TripHubTokens.TerracottaIconTint.copy(alpha = 0.25f)
+                                                )
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Rounded.Schedule,
+                                                        contentDescription = null,
+                                                        tint = TripHubTokens.TerracottaIconTint,
+                                                        modifier = Modifier.size(11.dp)
+                                                    )
+                                                    Text(
+                                                        text = "Awaiting $recipientFirstName",
+                                                        fontWeight = FontWeight.Bold,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = TripHubTokens.TerracottaIconTint
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (canMarkPaid) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.End,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        SplitButtonLayout(
+                                            leadingText = "Mark Paid",
+                                            leadingIcon = Icons.Rounded.CheckCircleOutline,
+                                            onLeadingClick = {
+                                                performCrispTactileHaptic(context, localView, heavy = false)
+                                                viewModel.recordSettlement(
+                                                    groupId = groupId,
+                                                    fromMemberId = settlement.fromMemberId,
+                                                    toMemberId = settlement.toMemberId,
+                                                    amountCents = settlement.amountCents
+                                                )
+                                            },
+                                            menuItems = listOf(
+                                                ExpressiveMenuAction(
+                                                    label = "Confirm Full Settlement ($formattedAmount)",
+                                                    icon = Icons.Rounded.CheckCircleOutline,
+                                                    subtitle = "${settlement.fromName} to ${settlement.toName}",
+                                                    onClick = {
+                                                        performCrispTactileHaptic(context, localView, heavy = false)
+                                                        viewModel.recordSettlement(
+                                                            groupId = groupId,
+                                                            fromMemberId = settlement.fromMemberId,
+                                                            toMemberId = settlement.toMemberId,
+                                                            amountCents = settlement.amountCents
+                                                        )
+                                                    }
+                                                ),
+                                                ExpressiveMenuAction(
+                                                    label = "Open Settle Up Sheet",
+                                                    icon = Icons.Rounded.AccountBalanceWallet,
+                                                    subtitle = "Inspect full group graph & custom settlement",
+                                                    onClick = onOpenSettleUpClick
+                                                )
+                                            ),
+                                            containerColor = DesignSystemBindings.activePalette.primary,
+                            contentColor = DesignSystemBindings.activePalette.onPrimary
+                                        )
+                                    }
+                                } else {
+                                    AnimatedVisibility(visible = showRestrictionHint) {
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = TripHubTokens.SunkenWell,
+                                            modifier = Modifier.fillMaxWidth()
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Info,
-                                                contentDescription = null,
-                                                tint = TripHubTokens.TextSecondary,
-                                                modifier = Modifier.size(13.dp)
-                                            )
-                                            Text(
-                                                text = restrictionLabel,
-                                                fontWeight = FontWeight.Medium,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = TripHubTokens.TextSecondary
-                                            )
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Info,
+                                                    contentDescription = null,
+                                                    tint = TripHubTokens.TextSecondary,
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                                Text(
+                                                    text = restrictionLabel,
+                                                    fontWeight = FontWeight.Medium,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = TripHubTokens.TextSecondary
+                                                )
+                                            }
                                         }
                                     }
                                 }

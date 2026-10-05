@@ -30,6 +30,8 @@ class SplitMateV236DesignTokenRatchetTest {
         "category/ExpenseCategoryPicker.kt" to intArrayOf(17, 0, 6),
         "components/AnimatedTransitDeckHeroCard.kt" to intArrayOf(12, 4, 1),
         "components/ExpressiveM3Components.kt" to intArrayOf(5, 4, 0),
+        // Step C1: one linear tween, used only while a back gesture scrubs the container transform.
+        "components/TicketContainerTransform.kt" to intArrayOf(0, 1, 0),
         "components/UpiExpressPaymentSheet.kt" to intArrayOf(22, 0, 11),
         "dialogs/GroupAndSettlementDialogs.kt" to intArrayOf(24, 0, 0),
         "dialogs/TripSyncAndPerspectiveSheet.kt" to intArrayOf(19, 0, 12),

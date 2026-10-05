@@ -1,6 +1,8 @@
 package com.splitmate.app.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -38,6 +40,8 @@ import com.splitmate.app.ui.FigtreeFontFamily
 import com.splitmate.app.ui.SplitMateUiState
 import com.splitmate.app.ui.SplitMateViewModel
 import com.splitmate.app.ui.cleanDisplayExpenseTitle
+import com.splitmate.app.ui.components.ExpressiveSwipeAction
+import com.splitmate.app.ui.components.ExpressiveSwipeActionsBox
 import com.splitmate.app.ui.formatIndianRupeesFromCents
 
 /**
@@ -161,53 +165,13 @@ fun TripHubManageExpenseRow(
     var showDeleteConfirm by remember(expense?.expenseId) { mutableStateOf(false) }
 
     if (showDeleteConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            containerColor = SplitMateTheme.SurfaceWhite,
-            title = {
-                Text(
-                    text = "Delete this expense?",
-                    fontFamily = FigtreeFontFamily,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = TripHubTokens.TextPrimary
-                )
+        TripHubDeleteExpenseDialog(
+            expense = expense,
+            onConfirm = {
+                showDeleteConfirm = false
+                onDeleteExpense()
             },
-            text = {
-                Text(
-                    text = expense?.let {
-                        "\"${cleanDisplayExpenseTitle(it.title)}\" (${formatIndianRupeesFromCents(it.totalAmountCents)}) " +
-                            "will be removed for everyone in the trip and balances will be recalculated."
-                    } ?: "This expense will be removed for everyone in the trip and balances will be recalculated.",
-                    fontFamily = FigtreeFontFamily,
-                    fontSize = 13.sp,
-                    color = TripHubTokens.TextSecondary
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDeleteConfirm = false
-                        onDeleteExpense()
-                    }
-                ) {
-                    Text(
-                        text = "Delete",
-                        fontFamily = FigtreeFontFamily,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = SplitMateTheme.TerracottaText
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text(
-                        text = "Cancel",
-                        fontFamily = FigtreeFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        color = TripHubTokens.TextSecondary
-                    )
-                }
-            }
+            onDismiss = { showDeleteConfirm = false }
         )
     }
 
@@ -270,4 +234,154 @@ fun TripHubManageExpenseRow(
             )
         }
     }
+}
+
+/** Shared "Delete this expense?" confirmation (manage row and swipe-to-delete). */
+@Composable
+private fun TripHubDeleteExpenseDialog(
+    expense: ExpenseEntity?,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SplitMateTheme.SurfaceWhite,
+        title = {
+            Text(
+                text = "Delete this expense?",
+                fontFamily = FigtreeFontFamily,
+                fontWeight = FontWeight.ExtraBold,
+                color = TripHubTokens.TextPrimary
+            )
+        },
+        text = {
+            Text(
+                text = expense?.let {
+                    "\"${cleanDisplayExpenseTitle(it.title)}\" (${formatIndianRupeesFromCents(it.totalAmountCents)}) " +
+                        "will be removed for everyone in the trip and balances will be recalculated."
+                } ?: "This expense will be removed for everyone in the trip and balances will be recalculated.",
+                fontFamily = FigtreeFontFamily,
+                fontSize = 13.sp,
+                color = TripHubTokens.TextSecondary
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm
+            ) {
+                Text(
+                    text = "Delete",
+                    fontFamily = FigtreeFontFamily,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = SplitMateTheme.TerracottaText
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(
+                    text = "Cancel",
+                    fontFamily = FigtreeFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    color = TripHubTokens.TextSecondary
+                )
+            }
+        }
+    )
+}
+
+/** v2.3.6 Step C: confirmation behind the settle-row "Mark paid" swipe. */
+@Composable
+fun TripHubMarkPaidConfirmDialog(
+    fromName: String,
+    toName: String,
+    formattedAmount: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+        title = {
+            Text(
+                text = "Mark $formattedAmount as paid?",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        },
+        text = {
+            Text(
+                text = "$fromName paid $toName $formattedAmount. This is saved as a settlement receipt for everyone in the trip.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(text = "Mark paid", style = MaterialTheme.typography.labelLarge)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(
+                    text = "Cancel",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    )
+}
+
+/**
+ * v2.3.6 Step C: swipe a Trip Hub booking card right to **edit** or left to **delete**.
+ * The card never leaves on its own: after the swipe it springs back (theme motion) and the action
+ * opens the existing details/edit sheet or the delete confirmation, so money data is never removed
+ * by a stray gesture. Only offered when the device user may modify the expense; the Edit / Delete
+ * buttons stay as the visible, accessible alternative, and both actions are also exposed as
+ * TalkBack custom actions.
+ */
+@Composable
+fun TripHubSwipeToManage(
+    expense: ExpenseEntity,
+    onDeleteExpense: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    val actions = LocalTripHubExpenseActions.current
+    if (actions == null || !actions.canModify(expense)) {
+        Box(modifier = modifier) { content() }
+        return
+    }
+    var showDeleteConfirm by remember(expense.expenseId) { mutableStateOf(false) }
+
+    if (showDeleteConfirm) {
+        TripHubDeleteExpenseDialog(
+            expense = expense,
+            onConfirm = {
+                showDeleteConfirm = false
+                onDeleteExpense()
+            },
+            onDismiss = { showDeleteConfirm = false }
+        )
+    }
+
+    ExpressiveSwipeActionsBox(
+        modifier = modifier,
+        startAction = ExpressiveSwipeAction(
+            label = "Edit",
+            icon = Icons.Rounded.Edit,
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            onTrigger = { actions.openDetails(expense) }
+        ),
+        endAction = ExpressiveSwipeAction(
+            label = "Delete",
+            icon = Icons.Rounded.DeleteOutline,
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            onTrigger = { showDeleteConfirm = true }
+        ),
+        content = content
+    )
 }
