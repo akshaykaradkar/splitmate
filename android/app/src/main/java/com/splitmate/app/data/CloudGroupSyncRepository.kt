@@ -1641,6 +1641,7 @@ object CloudGroupSyncRepository {
             if (!hasTombstonedEntities) {
                 return adjustMembersForLocalUser(
                     doc = singleDoc.copy(
+                        splits = com.splitmate.app.ExpenseSplitIntegrity.reconcileAll(singleDoc.expenses, singleDoc.splits),
                         organizerPhone10 = resolvedOrgPhone,
                         joinCode6 = resolvedJoinCode,
                         organizerRolesByKey = mergedOrganizerRolesByKey,
@@ -2005,7 +2006,7 @@ object CloudGroupSyncRepository {
             group = chosenGroup,
             members = mergedMembers,
             expenses = finalExpenses,
-            splits = finalSplits,
+            splits = com.splitmate.app.ExpenseSplitIntegrity.reconcileAll(finalExpenses, finalSplits),
             settlements = allSettlements,
             deletedExpenseIds = mergedDeletedExpenseIds,
             flightVaultByPnr = mergedFlights,

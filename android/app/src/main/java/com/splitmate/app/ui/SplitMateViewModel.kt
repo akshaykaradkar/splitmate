@@ -4089,6 +4089,24 @@ class SplitMateViewModel(
             }
             return
         }
+        // v2.3.6 (device bug): never record the same payment twice. A double tap, or a stale row that
+        // is still on screen after the payment was recorded, used to add a second identical settlement.
+        val groupSettlements = state.settlements.filter { it.groupId == state.activeGroupId }
+        val currentNet = computeGroupMemberNetBalances(state.activeGroupId)
+        if (com.splitmate.app.SettlementDuplicateGuard.isDuplicateOrAlreadySettled(
+                fromMemberId = transfer.fromMemberId,
+                toMemberId = transfer.toMemberId,
+                amountCents = transfer.amountCents,
+                existingSettlements = groupSettlements,
+                netBalances = currentNet,
+                nowMillis = System.currentTimeMillis()
+            )
+        ) {
+            _uiState.update { curr ->
+                curr.copy(statusBannerMessage = "Already recorded: ${transfer.fromName} → ${transfer.toName}")
+            }
+            return
+        }
         com.splitmate.app.data.CloudGroupSyncRepository.setGroupPendingCloudPush(null, state.activeGroupId, true)
         val settlement = SettlementEntity(
             settlementId = "settle_${System.currentTimeMillis()}",
@@ -4179,8 +4197,17 @@ class SplitMateViewModel(
             return
         }
         val targetGroupId = removedExpense?.groupId ?: _uiState.value.activeGroupId
+        val rolledBackAtMs = System.currentTimeMillis()
         if (targetGroupId.isNotBlank()) {
             com.splitmate.app.data.CloudGroupSyncRepository.setGroupPendingCloudPush(null, targetGroupId, true)
+            // v2.3.6: durable tombstone before the local delete (same race as undoSettlement).
+            if (removedExpense != null) {
+                com.splitmate.app.data.CloudGroupSyncRepository.recordLocalTombstones(
+                    context = appContext,
+                    groupId = targetGroupId,
+                    deletedExpenseIds = mapOf(expenseId to rolledBackAtMs)
+                )
+            }
         }
         _uiState.update { curr ->
             val removed = curr.expenses.find { it.expenseId == expenseId }
@@ -4204,7 +4231,7 @@ class SplitMateViewModel(
                             groupId = targetGroupId,
                             localUserPhone10 = normUserPhone,
                             localUserName = _uiState.value.currentUserName.ifBlank { "You" },
-                            additionalTombstones = mapOf(expenseId to System.currentTimeMillis()),
+                            additionalTombstones = mapOf(expenseId to rolledBackAtMs),
                             isLocalMutation = true
                         )
                         refreshStateFromDaoSnapshot(d = d)
@@ -4221,8 +4248,17 @@ class SplitMateViewModel(
     fun undoSettlement(settlementId: String) {
         val removedSettlement = _uiState.value.settlements.find { it.settlementId == settlementId }
         val targetGroupId = removedSettlement?.groupId ?: _uiState.value.activeGroupId
+        val undoneAtMs = System.currentTimeMillis()
         if (targetGroupId.isNotBlank()) {
             com.splitmate.app.data.CloudGroupSyncRepository.setGroupPendingCloudPush(null, targetGroupId, true)
+            // v2.3.6 (device bug): write the tombstone durably BEFORE the local delete. It used to be
+            // recorded only inside the follow-up cloud sync, so a sync that ran first (or never ran)
+            // merged the cloud copy straight back and the undone payment reappeared next to the new one.
+            com.splitmate.app.data.CloudGroupSyncRepository.recordLocalTombstones(
+                context = appContext,
+                groupId = targetGroupId,
+                deletedSettlementIds = mapOf(settlementId to undoneAtMs)
+            )
         }
         _uiState.update { curr ->
             val removed = curr.settlements.find { it.settlementId == settlementId }
@@ -4244,7 +4280,7 @@ class SplitMateViewModel(
                             groupId = targetGroupId,
                             localUserPhone10 = normUserPhone,
                             localUserName = _uiState.value.currentUserName.ifBlank { "You" },
-                            additionalDeletedSettlementIds = mapOf(settlementId to System.currentTimeMillis()),
+                            additionalDeletedSettlementIds = mapOf(settlementId to undoneAtMs),
                             isLocalMutation = true
                         )
                         refreshStateFromDaoSnapshot(d = d)

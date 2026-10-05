@@ -746,6 +746,10 @@ fun TripHomeScreen(
         }
     }
 
+    // v2.3.6: each time a trip is opened, its feeds may play their list entrance again.
+    remember(resolvedGroupId) {
+        com.splitmate.app.ui.components.ExpressiveEntranceRegistry.beginVisit(resolvedGroupId)
+    }
     LaunchedEffect(resolvedGroupId) {
         if (resolvedGroupId.isNotBlank() && uiState.activeGroupId != resolvedGroupId) {
             viewModel.selectActiveGroup(resolvedGroupId)
@@ -1495,6 +1499,7 @@ fun TripHomeScreen(
         val (exp, snap) = berthInspection
         val parsedTicket = remember(exp.title) { extractTravelTicketFromTitle(exp.title) }
         val resolvedPnr = snap?.pnr?.ifBlank { parsedTicket?.pnr.orEmpty() } ?: parsedTicket?.pnr.orEmpty()
+        val berthTicketTransform = com.splitmate.app.ui.components.LocalTicketContainerTransform.current
         BerthChartInspectorDialog(
             expense = exp,
             snapshot = snap,
@@ -1505,6 +1510,8 @@ fun TripHomeScreen(
             onDismiss = { inspectedBerthChartSnapshot = null },
             onOpenFullETicket = {
                 inspectedBerthChartSnapshot = null
+                // The card is still behind the dialog, so the ticket can morph out of it.
+                if (resolvedPnr.isNotBlank()) berthTicketTransform?.controller?.markSource(exp.expenseId)
                 onOpenTrainPnrReviewClick(resolvedPnr)
             }
         )
@@ -2188,7 +2195,7 @@ private fun TripHubOverviewFeed(
             .toMap()
     }
 
-    // v2.3.6 Step C: first-open stagger for the top cards (once per trip per app session).
+    // v2.3.6 Step C: entrance stagger for the top cards (once per trip visit).
     val feedEntranceStart = com.splitmate.app.ui.components.rememberFirstOpenEntrance(
         "trip-overview:" + (filteredClassifiedExpenses.firstOrNull()?.first?.groupId ?: "")
     )
@@ -2598,8 +2605,15 @@ fun DeepGreenTrainTicketCard(
             )
         }
 
-        // Main Deep-Green Ticket Pass + Bottom Stub
+        // Main Deep-Green Ticket Pass + Bottom Stub.
+        // v2.3.6 (device feedback): the whole ticket opens its pass (and morphs into it), not only
+        // the small "Pass" button; the Berth Chart / Pass buttons inside keep their own taps.
         Surface(
+            onClick = {
+                performCrispTactileHaptic(context, localView, heavy = false)
+                onOpenTrainPnrReviewClick(pnrDigits)
+            },
+            enabled = pnrDigits.isNotBlank(),
             shape = RoundedCornerShape(20.dp),
             color = TripHubTokens.CardSurface,
             border = BorderStroke(1.dp, TripHubTokens.CardBorder),
@@ -5006,7 +5020,7 @@ private fun TripHubTravelWalletView(
             .toMap()
     }
 
-    // v2.3.6 Step C: first-open stagger for the top cards (once per trip per app session).
+    // v2.3.6 Step C: entrance stagger for the top cards (once per trip visit).
     val feedEntranceStart = com.splitmate.app.ui.components.rememberFirstOpenEntrance(
         "trip-travel:" + (travelOnlyItems.firstOrNull()?.first?.groupId ?: "")
     )
@@ -5961,16 +5975,57 @@ private fun TripHubMoneySettlementView(
                                 )
                             }
 
-                            if (canMarkPaid) {
-                                Button(
-                                    onClick = {
-                                        performCrispTactileHaptic(context, localView, heavy = false)
+                            var pendingOtherConfirm by remember(settlement.fromMemberId, settlement.toMemberId) { mutableStateOf(false) }
+                            if (pendingOtherConfirm) {
+                                TripHubMarkPaidConfirmDialog(
+                                    fromName = settlement.fromName,
+                                    toName = settlement.toName,
+                                    formattedAmount = formattedAmount,
+                                    onConfirm = {
+                                        pendingOtherConfirm = false
                                         viewModel.recordSettlement(
                                             groupId = groupId,
                                             fromMemberId = settlement.fromMemberId,
                                             toMemberId = settlement.toMemberId,
                                             amountCents = settlement.amountCents
                                         )
+                                    },
+                                    onDismiss = { pendingOtherConfirm = false }
+                                )
+                            }
+                            if (!canMarkPaid) {
+                                // v2.3.6 (device feedback): an unpaid transfer you can't confirm used to show
+                                // no status at all, so it was unclear whether it was paid. Say who confirms it.
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Schedule,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Text(
+                                            text = "Not paid yet · ${settlement.toName.substringBefore(" ")} confirms when received",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                            if (canMarkPaid) {
+                                Button(
+                                    onClick = {
+                                        performCrispTactileHaptic(context, localView, heavy = false)
+                                        pendingOtherConfirm = true
                                     },
                                     shape = CircleShape,
                                     colors = ButtonDefaults.buttonColors(
