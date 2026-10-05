@@ -93,6 +93,50 @@ object CloudGroupSyncRepository {
     const val ONLINE_PRESENCE_TTL_MS: Long = 90_000L
     const val CODE_POINTER_REFRESH_INTERVAL_MS: Long = 2L * 60L * 60L * 1000L
 
+    /**
+     * Public ntfy.sh only caches messages for ~12 hours. Discovery records (the per-phone group
+     * index `splitmate_v2_idx_<phone10>` and the user profile `splitmate_v2_u_<phone10>`) are
+     * re-published at half that window so a fresh install / new phone can always restore trips.
+     */
+    const val NTFY_CACHE_WINDOW_MS: Long = 12L * 60L * 60L * 1000L
+    const val DISCOVERY_REFRESH_INTERVAL_MS: Long = NTFY_CACHE_WINDOW_MS / 2L
+    const val PROFILE_REFRESH_CHECK_INTERVAL_MS: Long = 60L * 60L * 1000L
+
+    enum class IndexPushDecision { SKIP, SEED_TOKEN_ONLY, PUSH }
+
+    /**
+     * Decides whether a phone-index entry must be (re)published. Pushes on status change when
+     * network pushes are allowed, and ALWAYS when the last successful push is older than
+     * [DISCOVERY_REFRESH_INTERVAL_MS] (it may have expired from the ntfy cache).
+     */
+    fun decidePhoneIndexPush(
+        nowMs: Long,
+        lastPushedEpochMs: Long,
+        statusChanged: Boolean,
+        forcePush: Boolean,
+        networkPushAllowed: Boolean
+    ): IndexPushDecision {
+        val stale = lastPushedEpochMs <= 0L || (nowMs - lastPushedEpochMs) >= DISCOVERY_REFRESH_INTERVAL_MS
+        return when {
+            forcePush || stale -> IndexPushDecision.PUSH
+            statusChanged && networkPushAllowed -> IndexPushDecision.PUSH
+            statusChanged -> IndexPushDecision.SEED_TOKEN_ONLY
+            else -> IndexPushDecision.SKIP
+        }
+    }
+
+    /** A profile is re-published only when the cloud GET succeeded and returned no record. */
+    fun shouldRepublishProfile(remoteFetchSucceeded: Boolean, remoteProfileExists: Boolean): Boolean =
+        remoteFetchSucceeded && !remoteProfileExists
+
+    /** Extracts (styleId, presetId) from a canonical `seed|gender|style|preset` avatar seed. */
+    fun parseAvatarStyleAndPreset(avatarSeed: String): Pair<String, String> {
+        val parts = avatarSeed.split("|")
+        val style = parts.getOrNull(2)?.trim().orEmpty().ifBlank { "open-peeps" }
+        val preset = parts.getOrNull(3)?.trim().orEmpty().ifBlank { "Buckwheat" }
+        return style to preset
+    }
+
     private const val TOMBSTONE_PREFS_NAME = "splitmate_v2_tombstones"
     private const val SYNC_META_PREFS_NAME = "splitmate_v2_sync_meta"
     private const val CROCKFORD_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
@@ -106,6 +150,8 @@ object CloudGroupSyncRepository {
     private val lastPushedGroupHashByGroup = ConcurrentHashMap<String, String>()
     private val lastPushedIndexStatusByGroupPhone = ConcurrentHashMap<String, String>()
     private val lastCodePublishEpochByGroup = ConcurrentHashMap<String, Long>()
+    private val lastPushedIndexEpochByGroupPhone = ConcurrentHashMap<String, Long>()
+    @Volatile private var lastProfileRefreshCheckEpochMs: Long = 0L
     private val lastLocalMutationEpochByGroup = ConcurrentHashMap<String, Long>()
     private val pendingCloudPushByGroup = ConcurrentHashMap<String, Boolean>()
 
@@ -1046,6 +1092,33 @@ object CloudGroupSyncRepository {
             ctx.getSharedPreferences(SYNC_META_PREFS_NAME, Context.MODE_PRIVATE)
                 .edit()
                 .putString("idx_$key", status)
+                .apply()
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun getLastPushedIndexEpoch(context: Context?, groupId: String, phone10: String): Long {
+        val key = "${groupId}_$phone10"
+        val mem = lastPushedIndexEpochByGroupPhone[key]
+        if (mem != null && mem > 0L) return mem
+        val ctx = resolveContext(context) ?: return 0L
+        return try {
+            ctx.getSharedPreferences(SYNC_META_PREFS_NAME, Context.MODE_PRIVATE)
+                .getLong("idx_ts_$key", 0L)
+                .also { if (it > 0L) lastPushedIndexEpochByGroupPhone[key] = it }
+        } catch (_: Exception) {
+            0L
+        }
+    }
+
+    private fun setLastPushedIndexEpoch(context: Context?, groupId: String, phone10: String, epochMs: Long) {
+        val key = "${groupId}_$phone10"
+        lastPushedIndexEpochByGroupPhone[key] = epochMs
+        val ctx = resolveContext(context) ?: return
+        try {
+            ctx.getSharedPreferences(SYNC_META_PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putLong("idx_ts_$key", epochMs)
                 .apply()
         } catch (_: Exception) {
         }
@@ -2011,6 +2084,28 @@ object CloudGroupSyncRepository {
         return pushNtfySnapshot(topic, encodeUserProfileRecord(record))
     }
 
+    /**
+     * Re-publishes the local user profile when it has expired from the ntfy cache, so that
+     * signing in on a new device with the same phone number finds the account. Never overwrites
+     * an existing cloud profile (another device may have newer data). Throttled to one GET per
+     * [PROFILE_REFRESH_CHECK_INTERVAL_MS].
+     */
+    suspend fun refreshUserProfileInCloudIfExpired(profile: UserProfileEntity?, nowMs: Long = System.currentTimeMillis()): Boolean {
+        if (profile == null) return false
+        val phone10 = PhoneIdentityValidator.normalizeIndianPhone10(profile.userPhone)
+        if (phone10.length != 10) return false
+        if (nowMs - lastProfileRefreshCheckEpochMs < PROFILE_REFRESH_CHECK_INTERVAL_MS) return false
+        lastProfileRefreshCheckEpochMs = nowMs
+        val lines = executeNtfyGetWithBackoff("https://ntfy.sh/splitmate_v2_u_$phone10/json?poll=1&since=all")
+        val fetchSucceeded = lines != null
+        val exists = lines.orEmpty().any { line ->
+            line.isNotBlank() && runCatching { JSONObject(line).optString("event") == "message" }.getOrDefault(false)
+        }
+        if (!shouldRepublishProfile(fetchSucceeded, exists)) return false
+        val (style, preset) = parseAvatarStyleAndPreset(profile.avatarSeed)
+        return pushUserProfileToCloud(profile, avatarStyle = style, avatarColorPreset = preset)
+    }
+
     suspend fun fetchUserProfileFromCloud(phone10: String): CloudUserProfileRecord? {
         val normPhone = PhoneIdentityValidator.normalizeIndianPhone10(phone10)
         if (normPhone.isEmpty()) return null
@@ -2549,7 +2644,7 @@ object CloudGroupSyncRepository {
         // PA-7: Publish / refresh 6-character Join Code pointer on splitmate_v2_code_<CODE6>
         val lastCodeTs = getLastCodePublishEpoch(ctx, groupId)
         if (mergedDocUpdated.joinCode6.length == 6 &&
-            (forceIndexPush || (remoteDoc == null && remoteFetchSucceeded) || (hasExplicitMutation && (postMergeMs - lastCodeTs) >= CODE_POINTER_REFRESH_INTERVAL_MS))
+            (forceIndexPush || (remoteDoc == null && remoteFetchSucceeded) || (postMergeMs - lastCodeTs) >= CODE_POINTER_REFRESH_INTERVAL_MS)
         ) {
             val orgMember = mergedDocUpdated.members.firstOrNull {
                 PhoneIdentityValidator.extractMemberPhone10(it.userPhone, it.upiId) == mergedDocUpdated.organizerPhone10
@@ -2575,8 +2670,18 @@ object CloudGroupSyncRepository {
             if (p.length == 10 && pushedPhones.add(p)) {
                 val statusToken = "${m.inviteStatus.uppercase()}|${mergedDocUpdated.group.name}"
                 val prevToken = getLastPushedIndexStatus(ctx, groupId, p)
-                if (forceIndexPush || statusToken != prevToken) {
-                    if (allowIndexNetworkPush) {
+                // v2.3.6: also re-publish when the last push may have expired from the ntfy cache,
+                // otherwise a fresh install / new phone cannot discover its trips.
+                when (
+                    decidePhoneIndexPush(
+                        nowMs = System.currentTimeMillis(),
+                        lastPushedEpochMs = getLastPushedIndexEpoch(ctx, groupId, p),
+                        statusChanged = statusToken != prevToken,
+                        forcePush = forceIndexPush,
+                        networkPushAllowed = allowIndexNetworkPush
+                    )
+                ) {
+                    IndexPushDecision.PUSH -> {
                         val idxEntry = CloudPhoneGroupIndexEntry(
                             groupId = mergedDocUpdated.group.groupId,
                             groupName = mergedDocUpdated.group.name,
@@ -2587,11 +2692,14 @@ object CloudGroupSyncRepository {
                         )
                         if (pushPhoneIndexEntry(idxEntry, p)) {
                             setLastPushedIndexStatus(ctx, groupId, p, statusToken)
+                            setLastPushedIndexEpoch(ctx, groupId, p, System.currentTimeMillis())
                         }
-                    } else {
+                    }
+                    IndexPushDecision.SEED_TOKEN_ONLY -> {
                         // Seed local token cache during passive poll so we don't redundantly POST on every poll
                         setLastPushedIndexStatus(ctx, groupId, p, statusToken)
                     }
+                    IndexPushDecision.SKIP -> Unit
                 }
             }
         }
@@ -2633,6 +2741,12 @@ object CloudGroupSyncRepository {
                 PhoneIdentityValidator.normalizeIndianPhone10(localProfile?.userPhone.orEmpty())
             }
         val localName = localProfile?.name ?: "You"
+
+        if (localProfile != null &&
+            PhoneIdentityValidator.normalizeIndianPhone10(localProfile.userPhone) == normPhone
+        ) {
+            runCatching { refreshUserProfileInCloudIfExpired(localProfile) }
+        }
 
         // Purge untouched demo seed groups (using structured isDemoSeed column)
         if (normPhone.isNotEmpty()) {
