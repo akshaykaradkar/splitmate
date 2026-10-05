@@ -124,7 +124,7 @@ object SplitMateThemeTokens {
     val SurfaceMuted: Color
         get() = resolvedPalette.surfaceContainer
     val BorderLight: Color
-        get() = resolvedPalette.outline
+        get() = resolvedPalette.outlineVariant
     val TextSecondary: Color
         get() = resolvedPalette.onSurfaceVariant
 
@@ -598,7 +598,7 @@ fun UserSettingsScreen(
         label = "SettingsSecondaryText"
     )
     val borderColor by animateColorAsState(
-        targetValue = activePalette.outline,
+        targetValue = activePalette.outlineVariant,
         animationSpec = SplitMateMotion.defaultEffects(),
         label = "SettingsBorderColor"
     )

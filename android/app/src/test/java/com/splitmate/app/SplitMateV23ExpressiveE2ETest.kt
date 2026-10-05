@@ -233,7 +233,7 @@ class SplitMateV23ExpressiveE2ETest {
             assertEquals(Color(0xFFEDE6DA), p.surfaceContainerHigh)
             assertEquals(Color(0xFFE4DCCD), p.surfaceContainerHighest)
             assertEquals(Color(0xFF365314), p.primary)
-            assertEquals(Color(0xFFD9F99D), p.primaryContainer)
+            assertEquals(Color(0xFFD7E8B6), p.primaryContainer) // v2.3.6: Stitch sage (was #D9F99D)
             assertEquals(Color(0xFFE06B52), p.secondary)
             assertEquals(Color(0xFFFED8C8), p.secondaryContainer)
             assertEquals(Color(0xFF3730A3), p.tertiary)
@@ -4070,7 +4070,7 @@ class SplitMateV23ExpressiveE2ETest {
                 assertEquals(palette.surfaceContainerLow, com.splitmate.app.ui.screens.TripHubTokens.CanvasBg)
                 assertEquals(palette.surfaceContainerLowest, com.splitmate.app.ui.screens.TripHubTokens.CardSurface)
                 assertEquals(palette.surfaceContainer, com.splitmate.app.ui.screens.TripHubTokens.SunkenWell)
-                assertEquals(palette.outline, com.splitmate.app.ui.screens.TripHubTokens.CardBorder)
+                assertEquals(palette.outlineVariant, com.splitmate.app.ui.screens.TripHubTokens.CardBorder) // v2.3.6: card border = M3 outlineVariant
                 assertEquals(palette.onSurface, com.splitmate.app.ui.screens.TripHubTokens.TextPrimary)
                 assertEquals(palette.primaryContainer, com.splitmate.app.ui.screens.TripHubTokens.PositiveSagePillBg)
                 assertEquals(palette.secondaryContainer, com.splitmate.app.ui.screens.TripHubTokens.TerracottaPeachBg)

@@ -109,7 +109,7 @@ object FlightPassTokens {
     val TicketPaperWhite: Color
         get() = DesignSystemBindings.activePalette.surfaceContainerLowest
     val TicketPaperEdge: Color
-        get() = DesignSystemBindings.activePalette.outline
+        get() = DesignSystemBindings.activePalette.outlineVariant
     val StatusGreenSurface: Color
         get() = DesignSystemBindings.activePalette.primaryContainer
     val StatusGreenText: Color

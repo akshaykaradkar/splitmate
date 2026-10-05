@@ -556,7 +556,7 @@ object TripHubTokens {
     val SunkenWell: Color
         get() = DesignSystemBindings.activePalette.surfaceContainer
     val CardBorder: Color
-        get() = DesignSystemBindings.activePalette.outline
+        get() = DesignSystemBindings.activePalette.outlineVariant
     val TextPrimary: Color
         get() = DesignSystemBindings.activePalette.onSurface
     val TextSecondary: Color

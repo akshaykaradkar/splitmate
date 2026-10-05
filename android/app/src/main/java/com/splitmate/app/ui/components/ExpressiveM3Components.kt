@@ -1869,7 +1869,7 @@ fun HorizontalFloatingToolbar(
                 shape = CircleShape,
                 color = palette.surfaceContainerHigh,
                 contentColor = palette.onSurface,
-                border = BorderStroke(1.dp, palette.outline.copy(alpha = 0.65f)),
+                border = BorderStroke(1.dp, palette.outlineVariant.copy(alpha = 0.65f)),
                 modifier = Modifier
                     .height(60.dp)
                     .shadow(elevation = 6.dp, shape = CircleShape)
@@ -1928,7 +1928,7 @@ fun VerticalFloatingToolbar(
                 shape = CircleShape,
                 color = palette.surfaceContainerHigh,
                 contentColor = palette.onSurface,
-                border = BorderStroke(1.dp, palette.outline.copy(alpha = 0.65f)),
+                border = BorderStroke(1.dp, palette.outlineVariant.copy(alpha = 0.65f)),
                 modifier = Modifier
                     .width(60.dp)
                     .shadow(elevation = 6.dp, shape = CircleShape)

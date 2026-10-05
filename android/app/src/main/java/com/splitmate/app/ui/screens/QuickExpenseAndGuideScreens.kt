@@ -108,9 +108,9 @@ object QuickExpenseThemeTokens {
     val SurfaceKeypad: Color
         get() = DesignSystemBindings.activePalette.surfaceContainer
     val SurfaceKeypadBorder: Color
-        get() = DesignSystemBindings.activePalette.outline
+        get() = DesignSystemBindings.activePalette.outlineVariant
     val BorderLight: Color
-        get() = DesignSystemBindings.activePalette.outline
+        get() = DesignSystemBindings.activePalette.outlineVariant
     val TextSecondary: Color
         get() = DesignSystemBindings.activePalette.onSurfaceVariant
 
@@ -186,7 +186,7 @@ fun QuickExpenseScreen(
         label = "QuickExpenseKeypadBg"
     )
     val keypadBorder by animateColorAsState(
-        targetValue = activePalette.outline,
+        targetValue = activePalette.outlineVariant,
         animationSpec = DesignSystemBindings.themeColorTween(),
         label = "QuickExpenseKeypadBorder"
     )

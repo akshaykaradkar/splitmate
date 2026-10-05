@@ -89,7 +89,7 @@ object TactilePaperPassTokens {
     val PaperStubSurface: Color
         get() = DesignSystemBindings.activePalette.surfaceContainer
     val HairlineBorder: Color
-        get() = DesignSystemBindings.activePalette.outline
+        get() = DesignSystemBindings.activePalette.outlineVariant
     val PerforationLine: Color
         get() = when (DesignSystemBindings.activeThemeMode) {
             SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF4A443C)

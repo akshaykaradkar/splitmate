@@ -136,8 +136,18 @@ data class SplitMateExpressivePalette(
     val onTertiary: Color,
     val tertiaryContainer: Color,
     val onTertiaryContainer: Color,
+    /** M3 `outline`: important boundaries (text fields, focus rings); >= 3:1 against every surface. */
     val outline: Color,
-    val outlineVariant: Color
+    /** M3 `outlineVariant`: decorative borders (1dp card borders, dividers). */
+    val outlineVariant: Color,
+    val error: Color,
+    val onError: Color,
+    val errorContainer: Color,
+    val onErrorContainer: Color,
+    val inverseSurface: Color,
+    val inverseOnSurface: Color,
+    val inversePrimary: Color,
+    val scrim: Color = Color(0xFF000000)
 )
 
 val SunlitBuckwheatPalette = SplitMateExpressivePalette(
@@ -148,10 +158,10 @@ val SunlitBuckwheatPalette = SplitMateExpressivePalette(
     surfaceContainerHigh = Color(0xFFEDE6DA),
     surfaceContainerHighest = Color(0xFFE4DCCD),
     onSurface = Color(0xFF23201E),
-    onSurfaceVariant = Color(0xFF6E675F),
+    onSurfaceVariant = Color(0xFF635E59),
     primary = Color(0xFF365314),
     onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFD9F99D),
+    primaryContainer = Color(0xFFD7E8B6),
     onPrimaryContainer = Color(0xFF1A2E05),
     secondary = Color(0xFFE06B52),
     onSecondary = Color(0xFFFFFFFF),
@@ -161,8 +171,15 @@ val SunlitBuckwheatPalette = SplitMateExpressivePalette(
     onTertiary = Color(0xFFFFFFFF),
     tertiaryContainer = Color(0xFFDCE3FD),
     onTertiaryContainer = Color(0xFF312E81),
-    outline = Color(0xFFEDE7DF),
-    outlineVariant = Color(0xFFE2D9CC)
+    outline = Color(0xFF78716A),
+    outlineVariant = Color(0xFFEDE7DF),
+    error = Color(0xFFBA1A1A),
+    onError = Color(0xFFFFFFFF),
+    errorContainer = Color(0xFFFFDAD6),
+    onErrorContainer = Color(0xFF410002),
+    inverseSurface = Color(0xFF33302E),
+    inverseOnSurface = Color(0xFFF7F3EC),
+    inversePrimary = Color(0xFFB8D98D)
 )
 
 val WarmEspressoNightPalette = SplitMateExpressivePalette(
@@ -180,14 +197,21 @@ val WarmEspressoNightPalette = SplitMateExpressivePalette(
     onPrimaryContainer = Color(0xFFD9F99D),
     secondary = Color(0xFFFB923C),
     onSecondary = Color(0xFF431A08),
-    secondaryContainer = Color(0xFF431A08),
+    secondaryContainer = Color(0xFF6B3418),
     onSecondaryContainer = Color(0xFFFED8C8),
     tertiary = Color(0xFFA5B4FC),
     onTertiary = Color(0xFF1E1B4B),
-    tertiaryContainer = Color(0xFF1E1B4B),
+    tertiaryContainer = Color(0xFF3A3580),
     onTertiaryContainer = Color(0xFFE0E7FF),
-    outline = Color(0xFF38312B),
-    outlineVariant = Color(0xFF2E2924)
+    outline = Color(0xFF968E85),
+    outlineVariant = Color(0xFF38312B),
+    error = Color(0xFFFFB4AB),
+    onError = Color(0xFF690005),
+    errorContainer = Color(0xFF93000A),
+    onErrorContainer = Color(0xFFFFDAD6),
+    inverseSurface = Color(0xFFF5F0E6),
+    inverseOnSurface = Color(0xFF2A2520),
+    inversePrimary = Color(0xFF365314)
 )
 
 val KyotoMatchaYuzuPalette = SplitMateExpressivePalette(
@@ -211,8 +235,15 @@ val KyotoMatchaYuzuPalette = SplitMateExpressivePalette(
     onTertiary = Color(0xFFFFFFFF),
     tertiaryContainer = Color(0xFFF3E8FF),
     onTertiaryContainer = Color(0xFF3B0764),
-    outline = Color(0xFF86B87A),
-    outlineVariant = Color(0xFFA3CC97)
+    outline = Color(0xFF3F6638),
+    outlineVariant = Color(0xFF86B87A),
+    error = Color(0xFF93000A),
+    onError = Color(0xFFFFFFFF),
+    errorContainer = Color(0xFFFFDAD6),
+    onErrorContainer = Color(0xFF410002),
+    inverseSurface = Color(0xFF233A2B),
+    inverseOnSurface = Color(0xFFEDF7EA),
+    inversePrimary = Color(0xFF86EFAC)
 )
 
 fun SplitMateThemeMode.toPalette(): SplitMateExpressivePalette = when (this) {
@@ -315,34 +346,38 @@ object DesignSystemBindings {
     val PixelCompactItemSpacing = 8.dp
 }
 
-// Stitch "Organic Tactile Financial" (Buckwheat) + HCT Expressive Tokens (Reactive to Kyoto Matcha & Yuzu)
+// Stitch "Organic Tactile Financial" (Buckwheat) semantic aliases.
+// v2.3.6: every alias resolves from the ACTIVE palette, so Espresso Night no longer receives light hexes.
+private val activeBuckwheatPalette: SplitMateExpressivePalette
+    get() = DesignSystemBindings.activePalette
 val BuckwheatCanvas: Color
-    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.surfaceContainerLow else Color(0xFFFAF6F0)
+    get() = activeBuckwheatPalette.surfaceContainerLow
 val BuckwheatSurface: Color
-    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.surfaceContainerLowest else Color(0xFFFFFFFF)
+    get() = activeBuckwheatPalette.surfaceContainerLowest
 val BuckwheatSunken: Color
-    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.surfaceContainer else Color(0xFFF4EFE6)
+    get() = activeBuckwheatPalette.surfaceContainer
 val BuckwheatCharcoal: Color
-    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.onSurface else Color(0xFF23201E)
+    get() = activeBuckwheatPalette.onSurface
 val BuckwheatSecondaryText: Color
-    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.onSurfaceVariant else Color(0xFF6E675F)
+    get() = activeBuckwheatPalette.onSurfaceVariant
+/** Decorative 1dp card border (M3 outlineVariant). */
 val BuckwheatBorder: Color
-    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.outline else Color(0xFFEDE7DF)
+    get() = activeBuckwheatPalette.outlineVariant
 
 val BuckwheatOlivePrimary: Color
-    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.primary else Color(0xFF365314)
+    get() = activeBuckwheatPalette.primary
 val BuckwheatSageContainer: Color
-    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.primaryContainer else Color(0xFFD7E8B6)
+    get() = activeBuckwheatPalette.primaryContainer
 val BuckwheatTerracotta: Color
-    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.secondary else Color(0xFFE06B52)
+    get() = activeBuckwheatPalette.secondary
 val BuckwheatPeachContainer: Color
-    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.secondaryContainer else Color(0xFFFED8C8)
+    get() = activeBuckwheatPalette.secondaryContainer
 val BuckwheatTerracottaDark: Color
-    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.onSecondaryContainer else Color(0xFF7C2D12)
+    get() = activeBuckwheatPalette.onSecondaryContainer
 val BuckwheatLavenderContainer: Color
-    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.tertiaryContainer else Color(0xFFDCE3FD)
+    get() = activeBuckwheatPalette.tertiaryContainer
 val BuckwheatLavenderText: Color
-    get() = if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) KyotoMatchaYuzuPalette.tertiary else Color(0xFF3730A3)
+    get() = activeBuckwheatPalette.tertiary
 
 private val SplitMateLightColorScheme = lightColorScheme(
     primary = SunlitBuckwheatPalette.primary,
@@ -364,7 +399,15 @@ private val SplitMateLightColorScheme = lightColorScheme(
     surfaceVariant = SunlitBuckwheatPalette.surfaceContainer,
     onSurfaceVariant = SunlitBuckwheatPalette.onSurfaceVariant,
     outline = SunlitBuckwheatPalette.outline,
-    outlineVariant = SunlitBuckwheatPalette.outlineVariant
+    outlineVariant = SunlitBuckwheatPalette.outlineVariant,
+    error = SunlitBuckwheatPalette.error,
+    onError = SunlitBuckwheatPalette.onError,
+    errorContainer = SunlitBuckwheatPalette.errorContainer,
+    onErrorContainer = SunlitBuckwheatPalette.onErrorContainer,
+    inverseSurface = SunlitBuckwheatPalette.inverseSurface,
+    inverseOnSurface = SunlitBuckwheatPalette.inverseOnSurface,
+    inversePrimary = SunlitBuckwheatPalette.inversePrimary,
+    scrim = SunlitBuckwheatPalette.scrim
 )
 
 private val SplitMateDarkColorScheme = darkColorScheme(
@@ -387,7 +430,15 @@ private val SplitMateDarkColorScheme = darkColorScheme(
     surfaceVariant = WarmEspressoNightPalette.surfaceContainer,
     onSurfaceVariant = WarmEspressoNightPalette.onSurfaceVariant,
     outline = WarmEspressoNightPalette.outline,
-    outlineVariant = WarmEspressoNightPalette.outlineVariant
+    outlineVariant = WarmEspressoNightPalette.outlineVariant,
+    error = WarmEspressoNightPalette.error,
+    onError = WarmEspressoNightPalette.onError,
+    errorContainer = WarmEspressoNightPalette.errorContainer,
+    onErrorContainer = WarmEspressoNightPalette.onErrorContainer,
+    inverseSurface = WarmEspressoNightPalette.inverseSurface,
+    inverseOnSurface = WarmEspressoNightPalette.inverseOnSurface,
+    inversePrimary = WarmEspressoNightPalette.inversePrimary,
+    scrim = WarmEspressoNightPalette.scrim
 )
 
 private val SplitMateKyotoMatchaColorScheme = lightColorScheme(
@@ -410,7 +461,15 @@ private val SplitMateKyotoMatchaColorScheme = lightColorScheme(
     surfaceVariant = KyotoMatchaYuzuPalette.surfaceContainer,
     onSurfaceVariant = KyotoMatchaYuzuPalette.onSurfaceVariant,
     outline = KyotoMatchaYuzuPalette.outline,
-    outlineVariant = KyotoMatchaYuzuPalette.outlineVariant
+    outlineVariant = KyotoMatchaYuzuPalette.outlineVariant,
+    error = KyotoMatchaYuzuPalette.error,
+    onError = KyotoMatchaYuzuPalette.onError,
+    errorContainer = KyotoMatchaYuzuPalette.errorContainer,
+    onErrorContainer = KyotoMatchaYuzuPalette.onErrorContainer,
+    inverseSurface = KyotoMatchaYuzuPalette.inverseSurface,
+    inverseOnSurface = KyotoMatchaYuzuPalette.inverseOnSurface,
+    inversePrimary = KyotoMatchaYuzuPalette.inversePrimary,
+    scrim = KyotoMatchaYuzuPalette.scrim
 )
 
 private val fontProvider = GoogleFont.Provider(
@@ -2474,6 +2533,11 @@ fun SplitMateExpressiveTheme(
         animationSpec = SplitMateMotion.slowEffects(),
         label = "ThemeOutline"
     )
+    val animOutlineVariant by animateColorAsState(
+        targetValue = targetPalette.outlineVariant,
+        animationSpec = SplitMateMotion.slowEffects(),
+        label = "ThemeOutlineVariant"
+    )
 
     val animatedPalette = targetPalette.copy(
         surfaceContainerLowest = animSurfaceLowest,
@@ -2489,7 +2553,8 @@ fun SplitMateExpressiveTheme(
         secondaryContainer = animSecondaryContainer,
         tertiary = animTertiary,
         tertiaryContainer = animTertiaryContainer,
-        outline = animOutline
+        outline = animOutline,
+        outlineVariant = animOutlineVariant
     )
 
     val baseScheme = when {
@@ -2525,7 +2590,15 @@ fun SplitMateExpressiveTheme(
         surfaceVariant = animSurfaceContainer,
         onSurfaceVariant = animOnSurfaceVariant,
         outline = animOutline,
-        outlineVariant = targetPalette.outlineVariant,
+        outlineVariant = animOutlineVariant,
+        error = targetPalette.error,
+        onError = targetPalette.onError,
+        errorContainer = targetPalette.errorContainer,
+        onErrorContainer = targetPalette.onErrorContainer,
+        inverseSurface = targetPalette.inverseSurface,
+        inverseOnSurface = targetPalette.inverseOnSurface,
+        inversePrimary = targetPalette.inversePrimary,
+        scrim = targetPalette.scrim,
         surfaceBright = surfaceRoles.bright,
         surfaceDim = surfaceRoles.dim,
         surfaceContainerLowest = surfaceRoles.lowest,
