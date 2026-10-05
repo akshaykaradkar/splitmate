@@ -85,7 +85,6 @@ data class SplitMateUiState(
     val activeThemeMode: SplitMateThemeMode = SplitMateThemeMode.SUNLIT_BUCKWHEAT,
     val activeCurrencyCode: String = "INR",
     val isOfflineMode: Boolean = false,
-    val isSyncingRates: Boolean = false,
     val currencyRates: List<CurrencyRateEntity> = defaultSeedCurrencies(),
     val groups: List<ExpenseGroupEntity> = emptyList(),
     val activeGroupId: String = "g_tahoe",
@@ -457,9 +456,6 @@ class SplitMateViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val activeGroupCards: StateFlow<List<ActiveGroupCardUiModel>>
-        get() = activeGroups
-
     val settlementPlan: StateFlow<List<SettlementTransferUiModel>> = _uiState.map { state ->
         if (state.groups.isEmpty()) {
             emptyList()
@@ -601,19 +597,6 @@ class SplitMateViewModel(
         return "$cleanKey|$cleanGender|$cleanStyle|$cleanPreset"
     }
 
-    private fun parseAvatarStyleAndPresetFromSeed(
-        seed: String,
-        defaultStyle: String = "open-peeps",
-        defaultPreset: String = "Buckwheat"
-    ): Pair<String, String> {
-        val desc = parseAvatarDescriptorFromSeed(
-            seed = seed,
-            defaultStyle = defaultStyle,
-            defaultPreset = defaultPreset
-        )
-        return desc.styleId to desc.presetId
-    }
-
     private fun createCleanProductionInitialState(): SplitMateUiState = SplitMateUiState(
         hasRegisteredProfile = false,
         currentUserName = "",
@@ -670,29 +653,6 @@ class SplitMateViewModel(
             expenses = initialExpenses,
             splits = initialSplits
         )
-    }
-
-    fun seedDefaultData() {
-        val seeded = createInitialSeededState()
-        val demoGroups = listOf(
-            ExpenseGroupEntity("g_tahoe", "Lake Tahoe Cabin", "INR", isDemoSeed = true),
-            ExpenseGroupEntity("g_apt4b", "Apt 4B", "INR", isDemoSeed = true)
-        )
-        _uiState.update { curr ->
-            curr.copy(
-                groups = if (curr.groups.isEmpty()) seeded.groups else curr.groups.map { g ->
-                    if (g.name == "Lake Tahoe Cabin" || g.name == "Apt 4B" || g.name == "Mission Apt Roommates") {
-                        g.copy(isDemoSeed = true)
-                    } else g
-                },
-                members = curr.members.ifEmpty { seeded.members },
-                expenses = curr.expenses.ifEmpty { seeded.expenses },
-                splits = curr.splits.ifEmpty { seeded.splits }
-            )
-        }
-        viewModelScope.launch(ioDispatcher) {
-            demoGroups.forEach { dao?.insertGroup(it) }
-        }
     }
 
     private fun observeRoomDatabase(roomDao: SplitMateDao) {
@@ -1604,17 +1564,6 @@ class SplitMateViewModel(
             explicitProviderName = providerName,
             explicitScheduledAtEpochMs = scheduledAtEpochMs
         )
-    }
-
-    @Suppress("UNUSED_PARAMETER")
-    fun syncLiveCurrencyRatesFromFrankfurter(base: String = "INR") {
-        _uiState.update {
-            it.copy(
-                isSyncingRates = false,
-                isOfflineMode = false,
-                activeCurrencyCode = "INR"
-            )
-        }
     }
 
     fun wrapUpTrip(groupId: String) {
@@ -2867,14 +2816,6 @@ class SplitMateViewModel(
                 )
             }
         }
-    }
-
-    fun createGroupWithMembers(
-        name: String,
-        iconName: String = "Flight",
-        memberDrafts: List<NewGroupMemberDraft>
-    ) {
-        createNewGroupWithContacts(name = name, iconName = iconName, memberDrafts = memberDrafts)
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -4480,23 +4421,6 @@ class SplitMateViewModel(
         }
     }
 
-    fun persistLivePnrUpdate(expenseId: String, updatedTitle: String) {
-        val currentState = _uiState.value
-        val existing = currentState.expenses.find { it.expenseId == expenseId } ?: return
-        val cleanNew = updatedTitle.trim()
-        if (cleanNew.isBlank() || existing.title == cleanNew) return
-
-        val updatedExpense = existing.copy(title = cleanNew)
-        _uiState.update { curr ->
-            curr.copy(
-                expenses = curr.expenses.map { if (it.expenseId == expenseId) updatedExpense else it }
-            )
-        }
-        viewModelScope.launch(ioDispatcher) {
-            dao?.updateExpenseTitleOnly(expenseId, cleanNew)
-        }
-    }
-
     /**
      * Switches the local device's active perspective ("Viewing as: <Member> (You)") within [groupId]
      * in `<16ms` by toggling `GroupMemberEntity.isCurrentUser` and persisting to Room.
@@ -4528,9 +4452,6 @@ class SplitMateViewModel(
             dao?.insertMembers(updatedGroupMembers)
         }
     }
-
-    fun switchActivePerspectiveMember(groupId: String, memberId: String) =
-        claimGroupMemberPerspective(groupId, memberId)
 
 
     /**

@@ -34,9 +34,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -44,12 +42,8 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -67,18 +61,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import coil.compose.AsyncImage
-import coil.decode.SvgDecoder
-import coil.request.ImageRequest
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -96,12 +83,10 @@ import com.splitmate.app.ui.SplitMateDisplayFontFamily
 import com.splitmate.app.ui.SplitMateThemeMode
 import com.splitmate.app.ui.SplitMateThemeState
 import com.splitmate.app.ui.SplitMateViewModel
-import com.splitmate.app.ui.buildDiceBearOpenPeepsUrl
 import com.splitmate.app.ui.extractInitialsFromNameOrSeed
 import com.splitmate.app.ui.resolveGroupCategoryIcon
 import com.splitmate.app.ui.components.ActiveTravelPassMode
 import com.splitmate.app.ui.components.AnimatedTransitDeckHeroCard
-import com.splitmate.app.ui.components.ButtonGroup
 import com.splitmate.app.ui.components.CircularWavyProgressIndicator
 import com.splitmate.app.ui.components.ConnectedButtonGroup
 import com.splitmate.app.ui.components.ContainedLoadingIndicator
@@ -115,8 +100,6 @@ import com.splitmate.app.ui.components.MorphPolygonShape
 import com.splitmate.app.ui.components.RoundedPolygonShape
 import com.splitmate.app.ui.components.SplitButtonLayout
 import com.splitmate.app.ui.components.SplitMateMotion
-import com.splitmate.app.ui.components.UpiExpressPaymentSheet
-import com.splitmate.app.ui.components.WavyProgressIndicatorDefaults
 import com.splitmate.app.ui.components.floatingToolbarVerticalNestedScroll
 import com.splitmate.app.ui.components.rememberAnimatedSegmentedIslandItemShape
 import com.splitmate.app.ui.components.segmentedIslandItemShape
@@ -124,7 +107,6 @@ import com.splitmate.app.ui.components.toShape
 import com.splitmate.app.ui.screens.ActivityDetailSheet
 import com.splitmate.app.ui.screens.EditFriendUpiDialog
 import com.splitmate.app.ui.screens.FlightExpenseReviewScreen
-import com.splitmate.app.ui.screens.OnboardingSetupScreen
 import com.splitmate.app.ui.screens.PnrExpenseReviewScreen
 import com.splitmate.app.ui.screens.QuickExpenseScreen
 import com.splitmate.app.ui.screens.UserSettingsScreen
@@ -1243,88 +1225,6 @@ fun SplitMateCloudOtpOnboardingScreen(
             }
         }
     }
-}
-
-/**
- * M3 Expressive 6-Cell Segmented OTP Input (`48.dp × 54.dp` tactile cells, `14.dp` radius)
- * with clipboard paste support, backspace cell navigation, and tabular numerals (`tnum`).
- */
-@Composable
-fun OtpSixDigitSegmentedField(
-    otpValue: String,
-    onOtpChange: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val focusRequester = remember { FocusRequester() }
-    val sanitized = otpValue.filter { it.isDigit() }.take(6)
-
-    BasicTextField(
-        value = sanitized,
-        onValueChange = { rawInput ->
-            val digitsOnly = rawInput.filter { it.isDigit() }.take(6)
-            onOtpChange(digitsOnly)
-        },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-        singleLine = true,
-        modifier = modifier
-            .focusRequester(focusRequester)
-            .testTag("OtpSixDigitSegmentedField"),
-        decorationBox = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                for (index in 0 until 6) {
-                    val charStr = sanitized.getOrNull(index)?.toString().orEmpty()
-                    val isFilled = charStr.isNotEmpty()
-                    val isCurrentActiveCell = sanitized.length == index || (sanitized.length == 6 && index == 5)
-                    
-                    val scale by animateFloatAsState(
-                        targetValue = if (isCurrentActiveCell) 1.04f else 1.0f,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessLow
-                        ),
-                        label = "OtpCellScale"
-                    )
-
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = if (isFilled) {
-                            SplitMateTheme.Palette.primaryContainer.copy(alpha = if (SplitMateTheme.isDark) 0.22f else 0.45f)
-                        } else {
-                            SplitMateTheme.SurfaceMuted
-                        },
-                        border = BorderStroke(
-                            width = if (isCurrentActiveCell) 2.dp else 1.dp,
-                            color = when {
-                                isCurrentActiveCell -> SplitMateTheme.Extended.sage.color
-                                isFilled -> SplitMateTheme.Extended.sage.color.copy(alpha = 0.6f)
-                                else -> SplitMateTheme.BorderLight
-                            }
-                        ),
-                        modifier = Modifier
-                            .weight(1f)
-                            .widthIn(min = 44.dp, max = 52.dp)
-                            .height(54.dp)
-                            .scale(scale)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = charStr,
-                                fontFamily = SplitMateTheme.FontDisplay,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 20.sp,
-                                color = SplitMateTheme.PrimaryDark,
-                                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    )
 }
 
 @Composable

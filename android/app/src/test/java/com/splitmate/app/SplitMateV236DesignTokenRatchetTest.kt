@@ -25,7 +25,6 @@ class SplitMateV236DesignTokenRatchetTest {
 
     /** path relative to `ui/` -> (fontSize literals, tween calls, corner literals). */
     private val BASELINE: Map<String, IntArray> = mapOf(
-        "Components.kt" to intArrayOf(0, 0, 1),
         "SplitMateAppComposable.kt" to intArrayOf(196, 2, 40),
         "category/ExpenseCategoryPicker.kt" to intArrayOf(17, 0, 6),
         "components/AnimatedTransitDeckHeroCard.kt" to intArrayOf(12, 4, 1),

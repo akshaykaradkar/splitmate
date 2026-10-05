@@ -27,7 +27,6 @@ import com.splitmate.app.ui.screens.plan.PlanSubView
 import com.splitmate.app.ui.screens.plan.TripPlanTabHost
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.graphics.shapes.Morph
 import androidx.compose.foundation.Canvas
@@ -35,10 +34,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -52,13 +49,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -77,19 +72,16 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.CheckCircleOutline
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ConfirmationNumber
-import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.FlightTakeoff
-import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PersonAdd
-import androidx.compose.material.icons.rounded.PersonPin
 import androidx.compose.material.icons.rounded.PersonRemove
 import androidx.compose.material.icons.rounded.PhoneIphone
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
@@ -108,11 +100,9 @@ import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.pulltorefresh.pullToRefresh
@@ -177,40 +167,27 @@ import com.splitmate.app.data.ExpenseSplitEntity
 import com.splitmate.app.data.GroupMemberEntity
 import com.splitmate.app.data.PnrNetworkRepository
 import com.splitmate.app.ui.BuckwheatOlivePrimary
-import com.splitmate.app.ui.BuckwheatPeachContainer
-import com.splitmate.app.ui.BuckwheatSageContainer
-import com.splitmate.app.ui.BuckwheatTerracottaDark
 import com.splitmate.app.ui.DesignSystemBindings
 import com.splitmate.app.ui.FigtreeFontFamily
 import com.splitmate.app.ui.LivePnrStatusSnapshot
 import com.splitmate.app.ui.ParsedTravelTicket
-import com.splitmate.app.ui.SettlementTransferUiModel
-import com.splitmate.app.ui.SplitMateExpressiveTypography
-import com.splitmate.app.ui.SplitMateThemeMode
 import com.splitmate.app.ui.SplitMateTnumMonospace
 import com.splitmate.app.ui.SplitMateViewModel
 import com.splitmate.app.ui.buildDiceBearOpenPeepsUrl
 import com.splitmate.app.ui.cleanDisplayExpenseTitle
-import com.splitmate.app.ui.cleanIndianTenDigitPhone
 import com.splitmate.app.ui.components.ActiveTravelPassMode
 import com.splitmate.app.ui.components.AnimatedTransitDeckHeroCard
 import com.splitmate.app.ui.components.ButtonGroup
-import com.splitmate.app.ui.components.CircularWavyProgressIndicator
-import com.splitmate.app.ui.components.ConnectedButtonGroup
 import com.splitmate.app.ui.components.ContainedLoadingIndicator
 import com.splitmate.app.ui.components.ExperimentalMaterial3ExpressiveApi
 import com.splitmate.app.ui.components.ExpressiveActionItem
 import com.splitmate.app.ui.components.ExpressiveFabMenuItem
-import com.splitmate.app.ui.components.ExpressiveGapLinearProgressIndicator
 import com.splitmate.app.ui.components.ExpressiveMenuAction
 import com.splitmate.app.ui.components.FloatingActionButtonMenu
-import com.splitmate.app.ui.components.LinearWavyProgressIndicator
 import com.splitmate.app.ui.components.MaterialShapes
-import com.splitmate.app.ui.components.MorphPolygonShape
 import com.splitmate.app.ui.components.RoundedPolygonShape
 import com.splitmate.app.ui.components.SplitButtonLayout
 import com.splitmate.app.ui.components.SplitMateMotion
-import com.splitmate.app.ui.components.UpiExpressPaymentSheet
 import com.splitmate.app.ui.components.WavyProgressIndicatorDefaults
 import com.splitmate.app.ui.components.rememberAnimatedSegmentedIslandItemShape
 import com.splitmate.app.ui.components.segmentedIslandItemShape
@@ -227,7 +204,6 @@ import com.splitmate.app.ui.performCrispTactileHaptic
 import com.splitmate.app.ui.resolveStationDisplayName
 import com.splitmate.app.ui.toSmartTitleCase
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
@@ -3097,386 +3073,6 @@ fun DeepGreenTrainTicketCard(
 }
 
 /**
- * Subsequent Train Leg Card (`RETURN TRANSIT` matching `Debug/screen.png`).
- * Can also be expanded inline into the full Deep-Green Train Ticket Pass.
- */
-@Composable
-fun ReturnTransitTrainCard(
-    expense: ExpenseEntity,
-    legNumber: Int,
-    groupMembers: List<GroupMemberEntity>,
-    allSplits: List<ExpenseSplitEntity>,
-    activePerspectiveMember: GroupMemberEntity?,
-    onOpenTrainPnrReviewClick: (String) -> Unit,
-    onInspectBerthChart: (ExpenseEntity, LivePnrStatusSnapshot?) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
-    val localView = LocalView.current
-    var expandAsFullGreenCard by remember { mutableStateOf(true) }
-
-    if (expandAsFullGreenCard) {
-        DeepGreenTrainTicketCard(
-            expense = expense,
-            legNumber = legNumber,
-            groupMembers = groupMembers,
-            allSplits = allSplits,
-            activePerspectiveMember = activePerspectiveMember,
-            onOpenTrainPnrReviewClick = onOpenTrainPnrReviewClick,
-            onInspectBerthChart = onInspectBerthChart,
-            modifier = modifier
-        )
-        return
-    }
-
-    val parsedTicket = remember(expense.title) { extractTravelTicketFromTitle(expense.title) }
-    val pnrDigits = remember(expense.title, parsedTicket) {
-        parsedTicket?.pnr?.takeIf { it.isNotBlank() }
-            ?: Regex("""\b(\d{10})\b""").find(expense.title)?.groupValues?.getOrNull(1).orEmpty()
-    }
-    val snapshot = remember(context, pnrDigits) {
-        if (pnrDigits.isNotBlank()) loadPersistedPnrSnapshot(context, pnrDigits) else null
-    }
-    val expenseSplits = remember(expense.expenseId, allSplits) {
-        allSplits.filter { it.expenseId == expense.expenseId }
-    }
-    val splitBreakdown = remember(expense, groupMembers, expenseSplits) {
-        SplitMateViewModel.resolveExpenseSplitBreakdown(expense, groupMembers, expenseSplits)
-    }
-    val payer = remember(groupMembers, expense.payerId) {
-        groupMembers.find { it.memberId == expense.payerId }
-    }
-
-    val expenseSchedule = remember(context, expense) {
-        resolveExpenseSchedule(context, expense)
-    }
-    val loggedDateLabel = expenseSchedule.shortDateLabel
-    val depLabel = remember(snapshot, parsedTicket, expenseSchedule) {
-        val rawDep = snapshot?.departureTime?.takeIf { it.isNotBlank() }
-            ?: parsedTicket?.departureInfo?.takeIf { it.isNotBlank() }
-            ?: expenseSchedule.timeLabel
-        if (rawDep.contains(loggedDateLabel, ignoreCase = true)) rawDep else "$loggedDateLabel · $rawDep"
-    }
-    val classAndStatus = buildString {
-        val cls = snapshot?.travelClass?.ifBlank { "3A Sleeper" } ?: "3A Sleeper"
-        append(cls)
-        val status = snapshot?.bookingStatusBadge?.ifBlank { parsedTicket?.bookingStatus.orEmpty() }
-            ?: parsedTicket?.bookingStatus.orEmpty()
-        if (status.isNotBlank()) append(" · ").append(status)
-    }
-
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = "RETURN TRANSIT",
-                fontWeight = FontWeight.ExtraBold,
-                style = MaterialTheme.typography.labelSmall,
-                letterSpacing = 0.8.sp,
-                color = TripHubTokens.TextMuted
-            )
-            Text(
-                text = "$loggedDateLabel · Leg $legNumber",
-                style = MaterialTheme.typography.labelSmall.merge(
-                    TextStyle(
-                        fontFamily = SplitMateTnumMonospace,
-                        fontWeight = FontWeight.SemiBold,
-                        fontFeatureSettings = "tnum"
-                    )
-                ),
-                color = TripHubTokens.TextMuted
-            )
-        }
-
-        Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = TripHubTokens.CardSurface,
-            border = BorderStroke(1.dp, TripHubTokens.CardBorder),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(TripHubTokens.PeriwinkleBoxBg),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Train,
-                                contentDescription = null,
-                                tint = TripHubTokens.PeriwinkleIconTint,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = cleanDisplayExpenseTitle(expense.title),
-                                fontWeight = FontWeight.ExtraBold,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = TripHubTokens.TextPrimary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            val routeDisplay = if (!parsedTicket?.fromStation.isNullOrBlank() && !parsedTicket?.toStation.isNullOrBlank()) {
-                                "${parsedTicket?.fromStation} to ${parsedTicket?.toStation}"
-                            } else {
-                                "Logged Return Train Ticket"
-                            }
-                            Text(
-                                text = routeDisplay,
-                                fontWeight = FontWeight.Medium,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TripHubTokens.TextSecondary
-                            )
-                        }
-                    }
-
-                    if (pnrDigits.isNotBlank()) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = TripHubTokens.SunkenWell
-                        ) {
-                            Text(
-                                text = "PNR $pnrDigits",
-                                style = MaterialTheme.typography.labelSmall.merge(
-                                    TextStyle(
-                                        fontFamily = SplitMateTnumMonospace,
-                                        fontWeight = FontWeight.Bold,
-                                        fontFeatureSettings = "tnum"
-                                    )
-                                ),
-                                color = TripHubTokens.TextSecondary,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-                }
-
-                // Sunken Departure & Class/Berth Row
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = TripHubTokens.SunkenWell,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text(
-                                text = "Departure",
-                                fontWeight = FontWeight.Medium,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = TripHubTokens.TextSecondary
-                            )
-                            Text(
-                                text = depLabel,
-                                style = MaterialTheme.typography.titleSmall.merge(
-                                    TextStyle(
-                                        fontFamily = SplitMateTnumMonospace,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        fontFeatureSettings = "tnum"
-                                    )
-                                ),
-                                color = TripHubTokens.TextPrimary
-                            )
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = "Class / Berth",
-                                fontWeight = FontWeight.Medium,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = TripHubTokens.TextSecondary
-                            )
-                            val isRacOrWl = classAndStatus.contains("RAC", ignoreCase = true) ||
-                                classAndStatus.contains("WL", ignoreCase = true)
-                            Text(
-                                text = classAndStatus,
-                                style = MaterialTheme.typography.labelLarge.merge(
-                                    TextStyle(
-                                        fontFamily = SplitMateTnumMonospace,
-                                        fontWeight = FontWeight.Bold,
-                                        fontFeatureSettings = "tnum"
-                                    )
-                                ),
-                                color = if (isRacOrWl) TripHubTokens.WarningRacText else TripHubTokens.PositiveSageText
-                            )
-                        }
-                    }
-                }
-
-                // Payer + Amount Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        TripHubMemberAvatar(
-                            seedOrName = payer?.avatarSeed?.ifBlank { payer.name } ?: "Payer",
-                            fallbackName = payer?.name ?: "P",
-                            size = 30.dp,
-                            backgroundColor = TripHubTokens.PeriwinkleBoxBg,
-                            textColor = TripHubTokens.PeriwinkleIconTint,
-                            fontSize = 11.sp
-                        )
-                        Column {
-                            Text(
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                text = "Paid by ${payer?.name ?: "Member"}",
-                                fontWeight = FontWeight.SemiBold,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = TripHubTokens.TextPrimary
-                            )
-                            Text(
-                                text = splitBreakdown.splitModeLabel("Equal split · ${splitBreakdown.splittingMembersCount} members"),
-                                style = MaterialTheme.typography.labelSmall.merge(
-                                    TextStyle(
-                                        fontFamily = SplitMateTnumMonospace,
-                                        fontWeight = FontWeight.Medium,
-                                        fontFeatureSettings = "tnum"
-                                    )
-                                ),
-                                color = TripHubTokens.TextSecondary
-                            )
-                        }
-                    }
-
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = formatIndianRupeesFromCents(expense.totalAmountCents),
-                            style = TextStyle(
-                                fontFamily = SplitMateTnumMonospace,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 17.sp,
-                                fontFeatureSettings = "tnum"
-                            ),
-                            color = TripHubTokens.TextPrimary
-                        )
-                        Text(
-                            text = splitBreakdown.perPersonCaption("${splitBreakdown.perPersonHeadlineShare} / traveler"),
-                            style = MaterialTheme.typography.labelSmall.merge(
-                                TextStyle(
-                                    fontFamily = SplitMateTnumMonospace,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFeatureSettings = "tnum"
-                                )
-                            ),
-                            color = TripHubTokens.PositiveSageText
-                        )
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Surface(
-                        onClick = {
-                            performCrispTactileHaptic(context, localView, heavy = false)
-                            expandAsFullGreenCard = true
-                        },
-                        shape = CircleShape,
-                        color = TripHubTokens.SunkenWell,
-                        border = BorderStroke(1.dp, TripHubTokens.CardBorder),
-                        modifier = Modifier
-                            .weight(1f)
-                            .minimumInteractiveComponentSize()
-                            .defaultMinSize(minHeight = 48.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.EventSeat,
-                                contentDescription = null,
-                                tint = TripHubTokens.TextPrimary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Expand Berths",
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = TripHubTokens.TextPrimary
-                            )
-                        }
-                    }
-
-                    Surface(
-                        onClick = {
-                            performCrispTactileHaptic(context, localView, heavy = false)
-                            onOpenTrainPnrReviewClick(pnrDigits)
-                        },
-                        shape = CircleShape,
-                        color = TripHubTokens.SunkenWell,
-                        border = BorderStroke(1.dp, TripHubTokens.CardBorder),
-                        modifier = Modifier
-                            .weight(1.2f)
-                            .minimumInteractiveComponentSize()
-                            .defaultMinSize(minHeight = 48.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.ConfirmationNumber,
-                                contentDescription = null,
-                                tint = TripHubTokens.TextPrimary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Open Offline Pass",
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = TripHubTokens.TextPrimary
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
  * Subtask 3.2.2: Aviation Periwinkle Flight Booking Card (`PeriwinkleFlightBookingCard`).
  * Hydrates from `PnrNetworkRepository.loadConfirmedFlightTicketResult(context, pnr)` or `extractTravelTicketFromTitle`.
  */
@@ -4954,7 +4550,9 @@ private fun TripHubPlanTimelineView(
                                     text = "Paid by ${payer?.name ?: "Member"}",
                                     fontWeight = FontWeight.Medium,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = TripHubTokens.TextSecondary
+                                    color = TripHubTokens.TextSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }

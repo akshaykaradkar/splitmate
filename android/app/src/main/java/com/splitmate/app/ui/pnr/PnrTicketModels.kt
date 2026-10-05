@@ -152,15 +152,6 @@ fun resolveStationDisplayName(code: String): String {
 fun loadPersistedPnrSnapshot(context: Context, pnr: String): LivePnrStatusSnapshot? =
     PnrNetworkRepository.loadPersistedPnrSnapshot(context, pnr)
 
-fun shouldSkipAutoPnrNetworkPoll(
-    context: Context,
-    pnr: String,
-    ticket: ParsedTravelTicket
-): Boolean = PnrNetworkRepository.shouldSkipAutoPnrNetworkPoll(context, pnr, ticket)
-
-fun recordPnrSyncTimestamp(context: Context, pnr: String) =
-    PnrNetworkRepository.recordPnrSyncTimestamp(context, pnr)
-
 suspend fun fetchLivePnrAndTrainStatus(
     pnr: String,
     fallbackTicket: ParsedTravelTicket = ParsedTravelTicket(),

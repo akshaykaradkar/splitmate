@@ -42,14 +42,16 @@ class SplitMateV236LayoutAndMotionTest {
         val home = src("ui/screens/TripHomeScreen.kt")
         var from = 0
         var checked = 0
+        var found = 0
         while (true) {
             val i = home.indexOf("text = \"Paid by \${payer?.name ?: \"Member\"}\",", from)
             if (i < 0) break
+            found++
             val call = home.substring(home.lastIndexOf("Text(", i), home.indexOf("\n", i + 400).coerceAtLeast(i))
             if (call.contains("maxLines")) checked++
             from = i + 10
         }
-        assertTrue(checked >= 4, "at least the 4 card payer rows must cap lines (found $checked)")
+        assertTrue(found >= 3 && checked == found, "every card payer row must cap lines (capped $checked of $found)")
         val dialog = block(home, "\"\${cell.travelerName} (YOU)\" else cell.travelerName,", 700)
         assertTrue(dialog.contains("modifier = Modifier.weight(1f)"))
     }
