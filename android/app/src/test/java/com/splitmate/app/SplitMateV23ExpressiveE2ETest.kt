@@ -3575,26 +3575,27 @@ class SplitMateV23ExpressiveE2ETest {
                 }
             }
 
-            val themeSrc = readSourceFile("ui/SplitMateTheme.kt")
-            val requiredExtensionProps = listOf(
-                "val Typography.displayLargeEmphasized",
-                "val Typography.displayMediumEmphasized",
-                "val Typography.displaySmallEmphasized",
-                "val Typography.headlineLargeEmphasized",
-                "val Typography.headlineMediumEmphasized",
-                "val Typography.headlineSmallEmphasized",
-                "val Typography.titleLargeEmphasized",
-                "val Typography.titleMediumEmphasized",
-                "val Typography.titleSmallEmphasized",
-                "val Typography.bodyLargeEmphasized",
-                "val Typography.bodyMediumEmphasized",
-                "val Typography.bodySmallEmphasized",
-                "val Typography.labelLargeEmphasized",
-                "val Typography.labelMediumEmphasized",
-                "val Typography.labelSmallEmphasized"
+            // v2.3.6: material3 1.5 exposes real `Typography.xEmphasized` members (which shadow the old
+            // extension properties). The SplitMate emphasized styles must be passed into the constructor.
+            val wired = listOf(
+                SplitMateTypography.displayLargeEmphasized to SplitMateExpressiveTypography.displayLargeEmphasized,
+                SplitMateTypography.displayMediumEmphasized to SplitMateExpressiveTypography.displayMediumEmphasized,
+                SplitMateTypography.displaySmallEmphasized to SplitMateExpressiveTypography.displaySmallEmphasized,
+                SplitMateTypography.headlineLargeEmphasized to SplitMateExpressiveTypography.headlineLargeEmphasized,
+                SplitMateTypography.headlineMediumEmphasized to SplitMateExpressiveTypography.headlineMediumEmphasized,
+                SplitMateTypography.headlineSmallEmphasized to SplitMateExpressiveTypography.headlineSmallEmphasized,
+                SplitMateTypography.titleLargeEmphasized to SplitMateExpressiveTypography.titleLargeEmphasized,
+                SplitMateTypography.titleMediumEmphasized to SplitMateExpressiveTypography.titleMediumEmphasized,
+                SplitMateTypography.titleSmallEmphasized to SplitMateExpressiveTypography.titleSmallEmphasized,
+                SplitMateTypography.bodyLargeEmphasized to SplitMateExpressiveTypography.bodyLargeEmphasized,
+                SplitMateTypography.bodyMediumEmphasized to SplitMateExpressiveTypography.bodyMediumEmphasized,
+                SplitMateTypography.bodySmallEmphasized to SplitMateExpressiveTypography.bodySmallEmphasized,
+                SplitMateTypography.labelLargeEmphasized to SplitMateExpressiveTypography.labelLargeEmphasized,
+                SplitMateTypography.labelMediumEmphasized to SplitMateExpressiveTypography.labelMediumEmphasized,
+                SplitMateTypography.labelSmallEmphasized to SplitMateExpressiveTypography.labelSmallEmphasized
             )
-            for (prop in requiredExtensionProps) {
-                assertTrue(themeSrc.contains(prop), "SplitMateTheme.kt must declare extension '$prop'")
+            wired.forEachIndexed { idx, (real, ours) ->
+                assertEquals(ours, real, "Typography emphasized slot $idx must be the SplitMate style")
             }
         }
 

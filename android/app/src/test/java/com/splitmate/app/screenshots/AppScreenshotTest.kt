@@ -7,6 +7,9 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.splitmate.app.SplitMateApp
@@ -69,7 +72,10 @@ class AppScreenshotTest {
 
     private fun tap(text: String? = null, desc: String? = null) {
         val matcher = if (text != null) hasText(text, substring = true) else hasContentDescription(desc!!)
-        compose.onAllNodes(matcher, useUnmergedTree = false)[0].performClick()
+        val node = compose.onAllNodes(matcher, useUnmergedTree = false)[0]
+        runCatching { node.performScrollTo() }
+        // Click near the top edge: the floating bottom toolbar can cover the node's centre.
+        node.performTouchInput { click(androidx.compose.ui.geometry.Offset(width / 2f, minOf(height / 2f, 4f))) }
         settle()
     }
 

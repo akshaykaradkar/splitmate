@@ -523,90 +523,229 @@ val SplitMateMonospaceTextStyle = TextStyle(
     fontFeatureSettings = "tnum, zero"
 )
 
+/**
+ * All 15 Material 3 Expressive `*Emphasized` Typography Tokens (`displayLargeEmphasized` through `labelSmallEmphasized`).
+ *
+ * Built from standalone [TextStyle]s (never `.copy` from [SplitMateTypography]) because
+ * [SplitMateTypography] passes these styles into the real material3 `Typography(...)` constructor,
+ * so `MaterialTheme.typography.xEmphasized` resolves to the SplitMate voice instead of Roboto.
+ */
+object SplitMateExpressiveTypography {
+    val displayLargeEmphasized = TextStyle(
+            fontFamily = PlusJakartaSansFont,
+            fontWeight = FontWeight.Black,
+            fontSize = 57.sp,
+            lineHeight = 64.sp,
+            letterSpacing = (-1.8).sp,
+            fontFeatureSettings = "tnum, zero"
+        )
+    val displayMediumEmphasized = TextStyle(
+            fontFamily = PlusJakartaSansFont,
+            fontWeight = FontWeight.Black,
+            fontSize = 45.sp,
+            lineHeight = 52.sp,
+            letterSpacing = (-1.6).sp,
+            fontFeatureSettings = "tnum, zero"
+        )
+    val displaySmallEmphasized = TextStyle(
+            fontFamily = PlusJakartaSansFont,
+            fontWeight = FontWeight.Black,
+            fontSize = 36.sp,
+            lineHeight = 44.sp,
+            letterSpacing = (-1.2).sp,
+            fontFeatureSettings = "tnum, zero"
+        )
+    val headlineLargeEmphasized = TextStyle(
+            fontFamily = PlusJakartaSansFont,
+            fontWeight = FontWeight.Black,
+            fontSize = 32.sp,
+            lineHeight = 40.sp,
+            letterSpacing = (-0.7).sp,
+            fontFeatureSettings = "tnum, zero"
+        )
+    val headlineMediumEmphasized = TextStyle(
+            fontFamily = PlusJakartaSansFont,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 28.sp,
+            lineHeight = 36.sp,
+            letterSpacing = (-0.4).sp,
+            fontFeatureSettings = "tnum, zero"
+        )
+    val headlineSmallEmphasized = TextStyle(
+            fontFamily = PlusJakartaSansFont,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 24.sp,
+            lineHeight = 32.sp,
+            letterSpacing = (-0.3).sp,
+            fontFeatureSettings = "tnum, zero"
+        )
+    val titleLargeEmphasized = TextStyle(
+            fontFamily = PlusJakartaSansFont,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 22.sp,
+            lineHeight = 28.sp,
+            letterSpacing = (-0.4).sp,
+            fontFeatureSettings = "tnum, zero"
+        )
+    val titleMediumEmphasized = TextStyle(
+            fontFamily = FigtreeFontFamily,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 16.sp,
+            lineHeight = 24.sp,
+            letterSpacing = (-0.2).sp,
+            fontFeatureSettings = "tnum, zero"
+        )
+    val titleSmallEmphasized = TextStyle(
+            fontFamily = FigtreeFontFamily,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+            letterSpacing = (-0.1).sp,
+            fontFeatureSettings = "tnum, zero"
+        )
+    val bodyLargeEmphasized = TextStyle(
+            fontFamily = FigtreeFontFamily,
+            fontWeight = FontWeight.Bold,
+            fontSize = 16.sp,
+            lineHeight = 24.sp,
+            letterSpacing = (0.0).sp,
+            fontFeatureSettings = "tnum, zero"
+        )
+    val bodyMediumEmphasized = TextStyle(
+            fontFamily = FigtreeFontFamily,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+            letterSpacing = (0.0).sp,
+            fontFeatureSettings = "tnum, zero"
+        )
+    val bodySmallEmphasized = TextStyle(
+            fontFamily = FigtreeFontFamily,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+            letterSpacing = (0.0).sp,
+            fontFeatureSettings = "tnum, zero"
+        )
+    val labelLargeEmphasized = TextStyle(
+            fontFamily = FigtreeFontFamily,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+            letterSpacing = (0.2).sp,
+            fontFeatureSettings = "tnum, zero"
+        )
+    val labelMediumEmphasized = TextStyle(
+            fontFamily = FigtreeFontFamily,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+            letterSpacing = (0.2).sp,
+            fontFeatureSettings = "tnum, zero"
+        )
+    val labelSmallEmphasized = TextStyle(
+            fontFamily = FigtreeFontFamily,
+            fontWeight = FontWeight.Bold,
+            fontSize = 11.sp,
+            lineHeight = 16.sp,
+            letterSpacing = (0.2).sp,
+            fontFeatureSettings = "tnum, zero"
+        )
+}
+
+/**
+ * SplitMate type scale: official Material 3 sizes and line heights (57/45/36 display,
+ * 32/28/24 headline, 22/16/14 title, 16/14/12 body, 14/12/11 label) in Figtree with tabular
+ * figures, plus the 15 emphasized styles wired into the real material3 `Typography`.
+ * Screens should use `MaterialTheme.typography.<role>` instead of raw `fontSize = N.sp`.
+ */
 val SplitMateTypography = Typography(
     displayLarge = TextStyle(
         fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.ExtraBold,
-        fontSize = 48.sp,
-        lineHeight = 52.sp,
+        fontSize = 57.sp,
+        lineHeight = 64.sp,
         letterSpacing = (-1.5).sp,
         fontFeatureSettings = "tnum, zero"
     ),
     displayMedium = TextStyle(
         fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.ExtraBold,
-        fontSize = 36.sp,
-        lineHeight = 42.sp,
-        letterSpacing = (-1.5).sp,
+        fontSize = 45.sp,
+        lineHeight = 52.sp,
+        letterSpacing = (-1.2).sp,
         fontFeatureSettings = "tnum, zero"
     ),
     displaySmall = TextStyle(
         fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.ExtraBold,
-        fontSize = 30.sp,
-        lineHeight = 36.sp,
-        letterSpacing = (-1.0).sp,
+        fontSize = 36.sp,
+        lineHeight = 44.sp,
+        letterSpacing = (-0.8).sp,
         fontFeatureSettings = "tnum, zero"
     ),
     headlineLarge = TextStyle(
         fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.ExtraBold,
-        fontSize = 26.sp,
-        lineHeight = 32.sp,
+        fontSize = 32.sp,
+        lineHeight = 40.sp,
         letterSpacing = (-0.5).sp,
         fontFeatureSettings = "tnum, zero"
     ),
     headlineMedium = TextStyle(
         fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.Bold,
-        fontSize = 20.sp,
-        lineHeight = 26.sp,
+        fontSize = 28.sp,
+        lineHeight = 36.sp,
         letterSpacing = (-0.3).sp,
         fontFeatureSettings = "tnum, zero"
     ),
     headlineSmall = TextStyle(
         fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.Bold,
-        fontSize = 18.sp,
-        lineHeight = 24.sp,
+        fontSize = 24.sp,
+        lineHeight = 32.sp,
+        letterSpacing = (-0.2).sp,
         fontFeatureSettings = "tnum, zero"
     ),
     titleLarge = TextStyle(
         fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.Bold,
-        fontSize = 24.sp,
+        fontSize = 22.sp,
         lineHeight = 28.sp,
+        letterSpacing = (-0.2).sp,
         fontFeatureSettings = "tnum, zero"
     ),
     titleMedium = TextStyle(
         fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 15.sp,
-        lineHeight = 20.sp,
+        fontSize = 16.sp,
+        lineHeight = 24.sp,
+        letterSpacing = (0.1).sp,
         fontFeatureSettings = "tnum, zero"
     ),
     titleSmall = TextStyle(
         fontFamily = FigtreeFontFamily,
-        fontWeight = FontWeight.Medium,
-        fontSize = 13.sp,
-        lineHeight = 18.sp,
-        letterSpacing = 0.sp,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        letterSpacing = (0.1).sp,
         fontFeatureSettings = "tnum, zero"
     ),
     bodyLarge = TextStyle(
         fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.Medium,
-        fontSize = 15.sp,
-        lineHeight = 20.sp,
-        letterSpacing = 0.sp,
+        fontSize = 16.sp,
+        lineHeight = 24.sp,
+        letterSpacing = (0.15).sp,
         fontFeatureSettings = "tnum, zero"
     ),
     bodyMedium = TextStyle(
         fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.Medium,
-        fontSize = 13.sp,
-        lineHeight = 18.sp,
-        letterSpacing = 0.sp,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        letterSpacing = (0.15).sp,
         fontFeatureSettings = "tnum, zero"
     ),
     bodySmall = TextStyle(
@@ -614,15 +753,15 @@ val SplitMateTypography = Typography(
         fontWeight = FontWeight.Medium,
         fontSize = 12.sp,
         lineHeight = 16.sp,
-        letterSpacing = 0.sp,
+        letterSpacing = (0.25).sp,
         fontFeatureSettings = "tnum, zero"
     ),
     labelLarge = TextStyle(
         fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.Bold,
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
-        letterSpacing = 0.5.sp,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        letterSpacing = (0.1).sp,
         fontFeatureSettings = "tnum, zero"
     ),
     labelMedium = TextStyle(
@@ -630,156 +769,33 @@ val SplitMateTypography = Typography(
         fontWeight = FontWeight.SemiBold,
         fontSize = 12.sp,
         lineHeight = 16.sp,
+        letterSpacing = (0.4).sp,
         fontFeatureSettings = "tnum, zero"
     ),
     labelSmall = TextStyle(
         fontFamily = FigtreeFontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 11.sp,
-        lineHeight = 14.sp,
-        letterSpacing = 0.sp,
+        lineHeight = 16.sp,
+        letterSpacing = (0.4).sp,
         fontFeatureSettings = "tnum, zero"
-    )
+    ),
+    displayLargeEmphasized = SplitMateExpressiveTypography.displayLargeEmphasized,
+    displayMediumEmphasized = SplitMateExpressiveTypography.displayMediumEmphasized,
+    displaySmallEmphasized = SplitMateExpressiveTypography.displaySmallEmphasized,
+    headlineLargeEmphasized = SplitMateExpressiveTypography.headlineLargeEmphasized,
+    headlineMediumEmphasized = SplitMateExpressiveTypography.headlineMediumEmphasized,
+    headlineSmallEmphasized = SplitMateExpressiveTypography.headlineSmallEmphasized,
+    titleLargeEmphasized = SplitMateExpressiveTypography.titleLargeEmphasized,
+    titleMediumEmphasized = SplitMateExpressiveTypography.titleMediumEmphasized,
+    titleSmallEmphasized = SplitMateExpressiveTypography.titleSmallEmphasized,
+    bodyLargeEmphasized = SplitMateExpressiveTypography.bodyLargeEmphasized,
+    bodyMediumEmphasized = SplitMateExpressiveTypography.bodyMediumEmphasized,
+    bodySmallEmphasized = SplitMateExpressiveTypography.bodySmallEmphasized,
+    labelLargeEmphasized = SplitMateExpressiveTypography.labelLargeEmphasized,
+    labelMediumEmphasized = SplitMateExpressiveTypography.labelMediumEmphasized,
+    labelSmallEmphasized = SplitMateExpressiveTypography.labelSmallEmphasized
 )
-
-/**
- * All 15 Material 3 Expressive `*Emphasized` Typography Tokens (`displayLargeEmphasized` through `labelSmallEmphasized`).
- */
-object SplitMateExpressiveTypography {
-    val displayLargeEmphasized = SplitMateTypography.displayLarge.copy(
-        fontFamily = PlusJakartaSansFont,
-        fontWeight = FontWeight.Black,
-        fontSize = 57.sp,
-        lineHeight = 64.sp,
-        letterSpacing = (-1.8).sp,
-        fontFeatureSettings = "tnum, zero"
-    )
-    val displayMediumEmphasized = SplitMateTypography.displayMedium.copy(
-        fontFamily = PlusJakartaSansFont,
-        fontWeight = FontWeight.Black,
-        fontSize = 45.sp,
-        lineHeight = 52.sp,
-        letterSpacing = (-1.6).sp,
-        fontFeatureSettings = "tnum, zero"
-    )
-    val displaySmallEmphasized = SplitMateTypography.displaySmall.copy(
-        fontFamily = PlusJakartaSansFont,
-        fontWeight = FontWeight.Black,
-        fontSize = 36.sp,
-        lineHeight = 44.sp,
-        letterSpacing = (-1.2).sp,
-        fontFeatureSettings = "tnum, zero"
-    )
-    val headlineLargeEmphasized = SplitMateTypography.headlineLarge.copy(
-        fontFamily = PlusJakartaSansFont,
-        fontWeight = FontWeight.Black,
-        fontSize = 32.sp,
-        lineHeight = 40.sp,
-        letterSpacing = (-0.7).sp,
-        fontFeatureSettings = "tnum, zero"
-    )
-    val headlineMediumEmphasized = SplitMateTypography.headlineMedium.copy(
-        fontFamily = PlusJakartaSansFont,
-        fontWeight = FontWeight.ExtraBold,
-        fontSize = 28.sp,
-        lineHeight = 36.sp,
-        letterSpacing = (-0.4).sp,
-        fontFeatureSettings = "tnum, zero"
-    )
-    val headlineSmallEmphasized = SplitMateTypography.headlineSmall.copy(
-        fontFamily = PlusJakartaSansFont,
-        fontWeight = FontWeight.ExtraBold,
-        fontSize = 24.sp,
-        lineHeight = 32.sp,
-        letterSpacing = (-0.3).sp,
-        fontFeatureSettings = "tnum, zero"
-    )
-    val titleLargeEmphasized = SplitMateTypography.titleLarge.copy(
-        fontFamily = PlusJakartaSansFont,
-        fontWeight = FontWeight.ExtraBold,
-        fontSize = 22.sp,
-        lineHeight = 28.sp,
-        letterSpacing = (-0.4).sp,
-        fontFeatureSettings = "tnum, zero"
-    )
-    val titleMediumEmphasized = SplitMateTypography.titleMedium.copy(
-        fontFamily = FigtreeFontFamily,
-        fontWeight = FontWeight.ExtraBold,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
-        letterSpacing = (-0.2).sp,
-        fontFeatureSettings = "tnum, zero"
-    )
-    val titleSmallEmphasized = SplitMateTypography.titleSmall.copy(
-        fontFamily = FigtreeFontFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 14.sp,
-        lineHeight = 20.sp,
-        letterSpacing = (-0.1).sp,
-        fontFeatureSettings = "tnum, zero"
-    )
-    val bodyLargeEmphasized = SplitMateTypography.bodyLarge.copy(
-        fontFamily = FigtreeFontFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
-        fontFeatureSettings = "tnum, zero"
-    )
-    val bodyMediumEmphasized = SplitMateTypography.bodyMedium.copy(
-        fontFamily = FigtreeFontFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 14.sp,
-        lineHeight = 20.sp,
-        fontFeatureSettings = "tnum, zero"
-    )
-    val bodySmallEmphasized = SplitMateTypography.bodySmall.copy(
-        fontFamily = FigtreeFontFamily,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
-        fontFeatureSettings = "tnum, zero"
-    )
-    val labelLargeEmphasized = SplitMateTypography.labelLarge.copy(
-        fontFamily = FigtreeFontFamily,
-        fontWeight = FontWeight.ExtraBold,
-        fontSize = 14.sp,
-        lineHeight = 20.sp,
-        letterSpacing = 0.2.sp,
-        fontFeatureSettings = "tnum, zero"
-    )
-    val labelMediumEmphasized = SplitMateTypography.labelMedium.copy(
-        fontFamily = FigtreeFontFamily,
-        fontWeight = FontWeight.ExtraBold,
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
-        letterSpacing = 0.2.sp,
-        fontFeatureSettings = "tnum, zero"
-    )
-    val labelSmallEmphasized = SplitMateTypography.labelSmall.copy(
-        fontFamily = FigtreeFontFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 11.sp,
-        lineHeight = 16.sp,
-        letterSpacing = 0.2.sp,
-        fontFeatureSettings = "tnum, zero"
-    )
-}
-
-val Typography.displayLargeEmphasized: TextStyle get() = SplitMateExpressiveTypography.displayLargeEmphasized
-val Typography.displayMediumEmphasized: TextStyle get() = SplitMateExpressiveTypography.displayMediumEmphasized
-val Typography.displaySmallEmphasized: TextStyle get() = SplitMateExpressiveTypography.displaySmallEmphasized
-val Typography.headlineLargeEmphasized: TextStyle get() = SplitMateExpressiveTypography.headlineLargeEmphasized
-val Typography.headlineMediumEmphasized: TextStyle get() = SplitMateExpressiveTypography.headlineMediumEmphasized
-val Typography.headlineSmallEmphasized: TextStyle get() = SplitMateExpressiveTypography.headlineSmallEmphasized
-val Typography.titleLargeEmphasized: TextStyle get() = SplitMateExpressiveTypography.titleLargeEmphasized
-val Typography.titleMediumEmphasized: TextStyle get() = SplitMateExpressiveTypography.titleMediumEmphasized
-val Typography.titleSmallEmphasized: TextStyle get() = SplitMateExpressiveTypography.titleSmallEmphasized
-val Typography.bodyLargeEmphasized: TextStyle get() = SplitMateExpressiveTypography.bodyLargeEmphasized
-val Typography.bodyMediumEmphasized: TextStyle get() = SplitMateExpressiveTypography.bodyMediumEmphasized
-val Typography.bodySmallEmphasized: TextStyle get() = SplitMateExpressiveTypography.bodySmallEmphasized
-val Typography.labelLargeEmphasized: TextStyle get() = SplitMateExpressiveTypography.labelLargeEmphasized
-val Typography.labelMediumEmphasized: TextStyle get() = SplitMateExpressiveTypography.labelMediumEmphasized
-val Typography.labelSmallEmphasized: TextStyle get() = SplitMateExpressiveTypography.labelSmallEmphasized
 
 /**
  * Extracts strictly the first 1 or 2 uppercase letters of the person's ACTUAL NAME.
