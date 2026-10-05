@@ -77,4 +77,61 @@ class LedgerIntegrityRulesTest {
             )
         )
     }
+
+    // Akshay owes Nikhil ₹1,439.13 for one shared expense.
+    private val owedExpense = ExpenseEntity(
+        expenseId = "dinner", groupId = "g", title = "Dinner", payerId = "nikhil",
+        baseSubtotalCents = 287_826, taxCents = 0, tipCents = 0, totalAmountCents = 287_826,
+        lockedMultiplier = 1.0, unassignedBaseCents = 0, currencyCode = "INR", lockedExchangeRate = 1.0
+    )
+    private val owedSplits = listOf(split("dinner", 0, "akshay", 143_913), split("dinner", 1, "nikhil", 143_913))
+    private val t0 = 1_791_200_244_664L
+
+    @Test
+    fun LI_05_realTripDuplicate_laterTwinIsRemoved() {
+        // Real data: the same ₹1,439.13 recorded twice, ~8 minutes apart.
+        val first = settle("settle_1791200244664", "akshay", "nikhil", 143_913, t0)
+        val dup = settle("settle_1791200732303", "akshay", "nikhil", 143_913, t0 + 488_000)
+        assertEquals(
+            setOf(dup.settlementId),
+            SettlementDuplicateGuard.redundantDuplicateIds(listOf(owedExpense), owedSplits, listOf(first, dup))
+        )
+    }
+
+    @Test
+    fun LI_06_twinsFarApartAreTwoRealPayments() {
+        val first = settle("a", "akshay", "nikhil", 143_913, t0)
+        val later = settle("b", "akshay", "nikhil", 143_913, t0 + SettlementDuplicateGuard.CleanupWindowMillis + 1)
+        assertTrue(SettlementDuplicateGuard.redundantDuplicateIds(listOf(owedExpense), owedSplits, listOf(first, later)).isEmpty())
+    }
+
+    @Test
+    fun LI_07_twinIsKeptWhilePayerStillOwes() {
+        // Akshay owed twice as much, so two identical payments are both genuine.
+        val bigger = owedSplits.map { if (it.memberId == "akshay") it.copy(finalOwedCents = 287_826) else it }
+        val expense = owedExpense.copy(totalAmountCents = 431_739, baseSubtotalCents = 431_739)
+        val first = settle("a", "akshay", "nikhil", 143_913, t0)
+        val second = settle("b", "akshay", "nikhil", 143_913, t0 + 60_000)
+        assertTrue(SettlementDuplicateGuard.redundantDuplicateIds(listOf(expense), bigger, listOf(first, second)).isEmpty())
+    }
+
+    @Test
+    fun LI_08_differentAmountsOrPeopleAreNeverTouched() {
+        val first = settle("a", "akshay", "nikhil", 143_913, t0)
+        val other = settle("b", "gaurii", "siddhesh", 319_396, t0 + 1_000)
+        val near = settle("c", "akshay", "nikhil", 143_912, t0 + 2_000)
+        assertTrue(SettlementDuplicateGuard.redundantDuplicateIds(listOf(owedExpense), owedSplits, listOf(first, other, near)).isEmpty())
+    }
+
+    @Test
+    fun LI_09_manualAmountParsesExactlyToPaise() {
+        assertEquals(319_396L, ManualPaymentInput.parseAmountToCents("3193.96"))
+        assertEquals(319_396L, ManualPaymentInput.parseAmountToCents("₹3,193.96"))
+        assertEquals(50_000L, ManualPaymentInput.parseAmountToCents("500"))
+        assertEquals(50_050L, ManualPaymentInput.parseAmountToCents("500.5"))
+        assertEquals(null, ManualPaymentInput.parseAmountToCents("0"))
+        assertEquals(null, ManualPaymentInput.parseAmountToCents("12.345"))
+        assertEquals(null, ManualPaymentInput.parseAmountToCents("-5"))
+        assertEquals(null, ManualPaymentInput.parseAmountToCents("abc"))
+    }
 }

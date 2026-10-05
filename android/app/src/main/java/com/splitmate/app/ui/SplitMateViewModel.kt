@@ -4031,6 +4031,59 @@ class SplitMateViewModel(
             }
             return
         }
+        insertSettlementAndSync(state, transfer, "Settled ${transfer.fromName} → ${transfer.toName}")
+    }
+
+    /**
+     * v2.3.6: records a payment that is not one of the suggested transfers (any payer, receiver and
+     * amount), e.g. one person paid another directly instead of following the plan. Same rule as
+     * Mark Paid: only the receiver or an organizer can record it. Returns null on success, otherwise
+     * the reason it was refused.
+     */
+    fun recordManualPayment(fromMemberId: String, toMemberId: String, amountCents: Long): String? {
+        val state = _uiState.value
+        val groupMembers = state.members.filter { it.groupId == state.activeGroupId }
+        val from = groupMembers.find { it.memberId == fromMemberId } ?: return "Choose who paid"
+        val to = groupMembers.find { it.memberId == toMemberId } ?: return "Choose who received it"
+        if (from.memberId == to.memberId) return "Payer and receiver must be different people"
+        if (amountCents <= 0L) return "Enter an amount above zero"
+        if (!canCurrentUserMarkTransferPaid(state.activeGroupId, to.memberId, state)) {
+            return getMarkPaidRestrictionLabel(
+                groupId = state.activeGroupId,
+                toMemberId = to.memberId,
+                toMemberName = to.name,
+                state = state
+            )
+        }
+        val groupSettlements = state.settlements.filter { it.groupId == state.activeGroupId }
+        val now = System.currentTimeMillis()
+        val recentTwin = groupSettlements.any {
+            it.fromMemberId == from.memberId && it.toMemberId == to.memberId && it.amountCents == amountCents &&
+                now - it.settledAt in 0..com.splitmate.app.SettlementDuplicateGuard.DuplicateWindowMillis
+        }
+        if (recentTwin) return "Already recorded: ${from.name} → ${to.name}"
+        val transfer = SplitMateMathEngine.SimplifiedTransfer(
+            fromMemberId = from.memberId,
+            fromName = from.name,
+            toMemberId = to.memberId,
+            toName = to.name,
+            amountCents = amountCents
+        )
+        insertSettlementAndSync(state, transfer, "Recorded ${from.name} → ${to.name}")
+        return null
+    }
+
+    /** True when the current user can record at least one payment in the active trip. */
+    fun canCurrentUserRecordPayments(state: SplitMateUiState = _uiState.value): Boolean {
+        val groupMembers = state.members.filter { it.groupId == state.activeGroupId }
+        return groupMembers.any { canCurrentUserMarkTransferPaid(state.activeGroupId, it.memberId, state) }
+    }
+
+    private fun insertSettlementAndSync(
+        state: SplitMateUiState,
+        transfer: SplitMateMathEngine.SimplifiedTransfer,
+        banner: String
+    ) {
         com.splitmate.app.data.CloudGroupSyncRepository.setGroupPendingCloudPush(null, state.activeGroupId, true)
         val settlement = SettlementEntity(
             settlementId = "settle_${System.currentTimeMillis()}",
@@ -4048,7 +4101,7 @@ class SplitMateViewModel(
         _uiState.update { curr ->
             curr.copy(
                 settlements = listOf(settlement) + curr.settlements,
-                statusBannerMessage = "Settled ${transfer.fromName} → ${transfer.toName}"
+                statusBannerMessage = banner
             )
         }
 

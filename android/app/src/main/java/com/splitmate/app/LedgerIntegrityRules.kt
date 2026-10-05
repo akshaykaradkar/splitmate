@@ -4,6 +4,17 @@ import com.splitmate.app.data.ExpenseEntity
 import com.splitmate.app.data.ExpenseSplitEntity
 import com.splitmate.app.data.SettlementEntity
 
+/** v2.3.6: parses a typed amount ("3193.96", "₹3,193.96", "500") into integer paise, exactly. */
+object ManualPaymentInput {
+    /** Returns paise, or null when the text isn't a positive amount with at most 2 decimals. */
+    fun parseAmountToCents(text: String): Long? {
+        val clean = text.trim().removePrefix("₹").replace(",", "").replace(" ", "")
+        if (clean.isEmpty() || !Regex("""\d+(\.\d{0,2})?|\.\d{1,2}""").matches(clean)) return null
+        val cents = runCatching { java.math.BigDecimal(clean).movePointRight(2).longValueExact() }.getOrNull()
+        return cents?.takeIf { it > 0L }
+    }
+}
+
 /**
  * v2.3.6: stops the same payment from being recorded twice (double tap, or a stale "Mark paid" row
  * that is still on screen after the payment was recorded).
@@ -33,6 +44,67 @@ object SettlementDuplicateGuard {
         val toNet = netBalances[toMemberId]
         if (fromNet != null && toNet != null && (fromNet >= 0L || toNet <= 0L)) return true
         return false
+    }
+
+    /**
+     * Twins recorded further apart than this are treated as two real payments and never removed.
+     * Found in real trip data: the same ₹1,439.13 recorded twice, about 8 minutes apart.
+     */
+    const val CleanupWindowMillis: Long = 15 * 60 * 1000L
+
+    /**
+     * Finds payments that were already recorded twice before [isDuplicateOrAlreadySettled] existed.
+     * A later payment is removed only when ALL of these hold:
+     * 1. An earlier payment has the same payer, receiver and amount.
+     * 2. It was recorded within [CleanupWindowMillis] of that earlier twin.
+     * 3. Without it, the payer no longer owes anything (net >= 0), so it only adds an overpayment.
+     * Anything else (different amount, far apart, payer still in debt) is left alone.
+     */
+    fun redundantDuplicateIds(
+        expenses: List<ExpenseEntity>,
+        splits: List<ExpenseSplitEntity>,
+        settlements: List<SettlementEntity>
+    ): Set<String> {
+        if (settlements.size < 2) return emptySet()
+        val removed = mutableSetOf<String>()
+        settlements
+            .groupBy { Triple(it.fromMemberId, it.toMemberId, it.amountCents) }
+            .values
+            .filter { it.size > 1 }
+            .forEach { twins ->
+                val ordered = twins.sortedWith(compareBy({ it.settledAt }, { it.settlementId }))
+                for (i in 1 until ordered.size) {
+                    val later = ordered[i]
+                    val earlier = ordered.subList(0, i).lastOrNull { it.settlementId !in removed } ?: continue
+                    if (later.settledAt - earlier.settledAt !in 0..CleanupWindowMillis) continue
+                    val payerNet = netBalanceOf(
+                        memberId = later.fromMemberId,
+                        expenses = expenses,
+                        splits = splits,
+                        settlements = settlements.filter { it.settlementId != later.settlementId && it.settlementId !in removed }
+                    )
+                    if (payerNet >= 0L) removed += later.settlementId
+                }
+            }
+        return removed
+    }
+
+    /** Positive = is owed money, negative = owes money. */
+    private fun netBalanceOf(
+        memberId: String,
+        expenses: List<ExpenseEntity>,
+        splits: List<ExpenseSplitEntity>,
+        settlements: List<SettlementEntity>
+    ): Long {
+        val expenseIds = expenses.map { it.expenseId }.toSet()
+        var net = 0L
+        expenses.forEach { if (it.payerId == memberId) net += it.totalAmountCents }
+        splits.forEach { if (it.memberId == memberId && it.expenseId in expenseIds) net -= it.finalOwedCents }
+        settlements.forEach {
+            if (it.fromMemberId == memberId) net += it.amountCents
+            if (it.toMemberId == memberId) net -= it.amountCents
+        }
+        return net
     }
 }
 

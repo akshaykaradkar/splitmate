@@ -1639,9 +1639,15 @@ object CloudGroupSyncRepository {
                 .ifBlank { deriveGroupJoinCode6(groupId) }
 
             if (!hasTombstonedEntities) {
+                val repairedSingleExpenses = com.splitmate.app.ExpenseSplitIntegrity.repairStaleTotals(singleDoc.expenses, singleDoc.splits)
+                val (singleSettlements, singleDeletedSettlementIds) = dropRedundantDuplicateSettlements(
+                    repairedSingleExpenses, singleDoc.splits, singleDoc.settlements, singleDoc.deletedSettlementIds
+                )
                 return adjustMembersForLocalUser(
                     doc = singleDoc.copy(
-                        expenses = com.splitmate.app.ExpenseSplitIntegrity.repairStaleTotals(singleDoc.expenses, singleDoc.splits),
+                        expenses = repairedSingleExpenses,
+                        settlements = singleSettlements,
+                        deletedSettlementIds = singleDeletedSettlementIds,
                         organizerPhone10 = resolvedOrgPhone,
                         joinCode6 = resolvedJoinCode,
                         organizerRolesByKey = mergedOrganizerRolesByKey,
@@ -2002,12 +2008,17 @@ object CloudGroupSyncRepository {
             else -> remoteDoc!!.group
         }
 
+        val repairedExpenses = com.splitmate.app.ExpenseSplitIntegrity.repairStaleTotals(finalExpenses, finalSplits)
+        val (cleanSettlements, cleanDeletedSettlementIds) = dropRedundantDuplicateSettlements(
+            repairedExpenses, finalSplits, allSettlements, mergedDeletedSettlementIds
+        )
+
         return CloudGroupLedgerDocument(
             group = chosenGroup,
             members = mergedMembers,
-            expenses = com.splitmate.app.ExpenseSplitIntegrity.repairStaleTotals(finalExpenses, finalSplits),
+            expenses = repairedExpenses,
             splits = finalSplits,
-            settlements = allSettlements,
+            settlements = cleanSettlements,
             deletedExpenseIds = mergedDeletedExpenseIds,
             flightVaultByPnr = mergedFlights,
             trainSnapshotByPnr = mergedTrains,
@@ -2017,11 +2028,31 @@ object CloudGroupSyncRepository {
             joinCode6 = resolvedJoinCode,
             deletedMemberIds = mergedDeletedMemberIds,
             removedMemberPhones = mergedRemovedMemberPhones,
-            deletedSettlementIds = mergedDeletedSettlementIds,
+            deletedSettlementIds = cleanDeletedSettlementIds,
             organizerRolesByKey = mergedOrganizerRolesByKey,
             customCategories = mergedCustomCategories,
             tripLifecycle = mergedTripLifecycle
         )
+    }
+
+    /**
+     * v2.3.6: removes payments recorded twice (see [com.splitmate.app.SettlementDuplicateGuard.redundantDuplicateIds])
+     * and tombstones them. The tombstone time is the duplicate's own time + 1ms, so every phone builds
+     * the same document, and older builds that honour `deletedSettlementIds` also drop it.
+     */
+    private fun dropRedundantDuplicateSettlements(
+        expenses: List<ExpenseEntity>,
+        splits: List<ExpenseSplitEntity>,
+        settlements: List<SettlementEntity>,
+        deletedSettlementIds: Map<String, Long>
+    ): Pair<List<SettlementEntity>, Map<String, Long>> {
+        val duplicateIds = com.splitmate.app.SettlementDuplicateGuard.redundantDuplicateIds(expenses, splits, settlements)
+        if (duplicateIds.isEmpty()) return settlements to deletedSettlementIds
+        val tombstones = deletedSettlementIds.toMutableMap()
+        settlements.filter { it.settlementId in duplicateIds }.forEach { dup ->
+            tombstones[dup.settlementId] = max(tombstones[dup.settlementId] ?: 0L, dup.settledAt + 1L)
+        }
+        return settlements.filter { it.settlementId !in duplicateIds } to tombstones
     }
 
     private fun adjustMembersForLocalUser(

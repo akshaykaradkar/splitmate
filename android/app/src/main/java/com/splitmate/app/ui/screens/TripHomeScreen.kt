@@ -113,6 +113,7 @@ import com.splitmate.app.ui.components.SettledCelebrationBadge
 import com.splitmate.app.ui.components.SettledCelebrationDefaults
 import com.splitmate.app.ui.components.SharedGroupKeys
 import com.splitmate.app.ui.components.sharedGroupElement
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -5652,6 +5653,48 @@ private fun TripHubMoneySettlementView(
                                 }
                             }
                         }
+                    }
+                }
+            }
+
+            // v2.3.6: payments that happened outside the suggested plan (e.g. someone paid a
+            // different person directly) can be recorded here; the plan recalculates from them.
+            val receiverIdsICanConfirm = groupMembers
+                .filter { viewModel.canCurrentUserMarkTransferPaid(groupId, it.memberId, uiState) }
+                .map { it.memberId }
+                .toSet()
+            if (receiverIdsICanConfirm.isNotEmpty() && groupMembers.size > 1) {
+                item(key = "record_manual_payment") {
+                    var showRecordPayment by remember { mutableStateOf(false) }
+                    FilledTonalButton(
+                        onClick = {
+                            performCrispTactileHaptic(context, localView, heavy = false)
+                            showRecordPayment = true
+                        },
+                        shape = CircleShape,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp)
+                            .defaultMinSize(minHeight = 48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = "Record a payment", style = MaterialTheme.typography.labelLarge)
+                    }
+                    if (showRecordPayment) {
+                        RecordPaymentDialog(
+                            members = groupMembers,
+                            allowedReceiverIds = receiverIdsICanConfirm,
+                            onRecord = { fromId, toId, cents ->
+                                if (groupId.isNotBlank()) viewModel.selectActiveGroup(groupId)
+                                viewModel.recordManualPayment(fromId, toId, cents)
+                            },
+                            onDismiss = { showRecordPayment = false }
+                        )
                     }
                 }
             }
