@@ -128,6 +128,8 @@ import com.splitmate.app.ui.screens.PnrExpenseReviewScreen
 import com.splitmate.app.ui.screens.QuickExpenseScreen
 import com.splitmate.app.ui.screens.UserSettingsScreen
 import com.splitmate.app.ui.toSmartTitleCase
+import com.splitmate.app.ui.theme.AppShellExtendedColors
+import com.splitmate.app.ui.theme.appShellExtendedFor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -147,6 +149,14 @@ object SplitMateTheme {
             else -> DesignSystemBindings.activePalette
         }
 
+    /** v2.3.6: resolved M3 colour roles for this file (honours the legacy [isDark] override). */
+    val Palette: SplitMateExpressivePalette
+        get() = resolvedPalette
+
+    /** v2.3.6: extended (custom) brand/semantic colours for the resolved theme. */
+    val Extended: AppShellExtendedColors
+        get() = appShellExtendedFor(resolvedPalette.mode)
+
     val ScreenBg: Color
         get() = resolvedPalette.surfaceContainerLow
     val PrimaryDark: Color
@@ -159,7 +169,7 @@ object SplitMateTheme {
         } else if (DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU) {
             resolvedPalette.primaryContainer
         } else {
-            Color(0xFFEAF3DC)
+            Extended.sage.container
         }
     val SageText: Color
         get() = if (isDark || DesignSystemBindings.activeThemeMode.isDark) {
@@ -171,13 +181,13 @@ object SplitMateTheme {
         }
     val TerracottaSurface: Color
         get() = if (isDark || DesignSystemBindings.activeThemeMode.isDark) {
-            Color(0xFF3A2019)
+            appShellExtendedFor(SplitMateThemeMode.WARM_ESPRESSO_NIGHT).terracotta.container
         } else {
             resolvedPalette.secondaryContainer.copy(alpha = 0.65f)
         }
     val TerracottaText: Color
         get() = if (isDark || DesignSystemBindings.activeThemeMode.isDark) {
-            Color(0xFFFECDD3)
+            appShellExtendedFor(SplitMateThemeMode.WARM_ESPRESSO_NIGHT).terracotta.onContainer
         } else {
             resolvedPalette.onSecondaryContainer
         }
@@ -718,8 +728,8 @@ fun SplitMateCloudOtpOnboardingScreen(
                                     customSeedKey = "${base}_${(100..999).random()}"
                                 },
                                 shape = CircleShape,
-                                color = Color(0xFF365314),
-                                border = BorderStroke(1.5.dp, Color(0xFFFAF6F0)),
+                                color = SplitMateTheme.Palette.primary,
+                                border = BorderStroke(1.5.dp, SplitMateTheme.Palette.surfaceContainerLow),
                                 modifier = Modifier
                                     .size(28.dp)
                                     .align(Alignment.BottomEnd)
@@ -729,7 +739,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                                     Icon(
                                         imageVector = Icons.Rounded.Casino,
                                         contentDescription = "Shuffle Look",
-                                        tint = Color(0xFFD7E8B6),
+                                        tint = SplitMateTheme.Palette.primaryContainer,
                                         modifier = Modifier.size(15.dp)
                                     )
                                 }
@@ -766,10 +776,10 @@ fun SplitMateCloudOtpOnboardingScreen(
                                         isStudioExpanded = !isStudioExpanded
                                     },
                                     shape = SplitMateTheme.RadiusBadge,
-                                    color = if (isStudioExpanded) Color(0xFF365314) else SplitMateTheme.SurfaceMuted,
+                                    color = if (isStudioExpanded) SplitMateTheme.Palette.primary else SplitMateTheme.SurfaceMuted,
                                     border = BorderStroke(
                                         1.dp,
-                                        if (isStudioExpanded) Color(0xFF416913) else SplitMateTheme.BorderLight
+                                        if (isStudioExpanded) SplitMateTheme.Extended.sage.color else SplitMateTheme.BorderLight
                                     )
                                 ) {
                                     Row(
@@ -780,7 +790,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                                         Icon(
                                             imageVector = Icons.Rounded.Palette,
                                             contentDescription = null,
-                                            tint = if (isStudioExpanded) Color(0xFFD7E8B6) else SplitMateTheme.PrimaryDark,
+                                            tint = if (isStudioExpanded) SplitMateTheme.Palette.primaryContainer else SplitMateTheme.PrimaryDark,
                                             modifier = Modifier.size(13.dp)
                                         )
                                         Text(
@@ -788,12 +798,12 @@ fun SplitMateCloudOtpOnboardingScreen(
                                             fontFamily = SplitMateTheme.FontRounded,
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.ExtraBold,
-                                            color = if (isStudioExpanded) Color(0xFFFAF6F0) else SplitMateTheme.PrimaryDark
+                                            color = if (isStudioExpanded) SplitMateTheme.Palette.surfaceContainerLow else SplitMateTheme.PrimaryDark
                                         )
                                         Icon(
                                             imageVector = if (isStudioExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
                                             contentDescription = null,
-                                            tint = if (isStudioExpanded) Color(0xFFD7E8B6) else SplitMateTheme.PrimaryDark,
+                                            tint = if (isStudioExpanded) SplitMateTheme.Palette.primaryContainer else SplitMateTheme.PrimaryDark,
                                             modifier = Modifier.size(14.dp)
                                         )
                                     }
@@ -864,10 +874,10 @@ fun SplitMateCloudOtpOnboardingScreen(
                                                 selectedAvatarStyleId = styleSpec.id
                                             },
                                             shape = SplitMateTheme.RadiusBadge,
-                                            color = if (isSelected) Color(0xFF365314) else SplitMateTheme.SurfaceWhite,
+                                            color = if (isSelected) SplitMateTheme.Palette.primary else SplitMateTheme.SurfaceWhite,
                                             border = BorderStroke(
                                                 width = if (isSelected) 1.5.dp else 1.dp,
-                                                color = if (isSelected) Color(0xFF416913) else SplitMateTheme.BorderLight
+                                                color = if (isSelected) SplitMateTheme.Extended.sage.color else SplitMateTheme.BorderLight
                                             )
                                         ) {
                                             Row(
@@ -890,13 +900,13 @@ fun SplitMateCloudOtpOnboardingScreen(
                                                         fontFamily = SplitMateTheme.FontRounded,
                                                         fontSize = 12.sp,
                                                         fontWeight = FontWeight.ExtraBold,
-                                                        color = if (isSelected) Color(0xFFFAF6F0) else SplitMateTheme.PrimaryDark
+                                                        color = if (isSelected) SplitMateTheme.Palette.surfaceContainerLow else SplitMateTheme.PrimaryDark
                                                     )
                                                     Text(
                                                         text = styleSpec.subtitle,
                                                         fontFamily = SplitMateTheme.FontRounded,
                                                         fontSize = 10.sp,
-                                                        color = if (isSelected) Color(0xFFD7E8B6) else SplitMateTheme.TextSecondary
+                                                        color = if (isSelected) SplitMateTheme.Palette.primaryContainer else SplitMateTheme.TextSecondary
                                                     )
                                                 }
                                             }
@@ -954,7 +964,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                                                     fontFamily = SplitMateTheme.FontRounded,
                                                     fontSize = 12.sp,
                                                     fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                                    color = if (isSelected) Color(0xFF23201E) else SplitMateTheme.PrimaryDark
+                                                    color = if (isSelected) SplitMateTheme.Palette.onSurface else SplitMateTheme.PrimaryDark
                                                 )
                                             }
                                         }
@@ -1003,7 +1013,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                                 Icon(
                                     imageVector = Icons.Rounded.CheckCircle,
                                     contentDescription = "Valid 10-digit mobile",
-                                    tint = Color(0xFF416913)
+                                    tint = SplitMateTheme.Extended.sage.color
                                 )
                             }
                         },
@@ -1026,8 +1036,8 @@ fun SplitMateCloudOtpOnboardingScreen(
                     if (isValidPhone10) {
                         Surface(
                             shape = RoundedCornerShape(14.dp),
-                            color = if (hasExisting4DigitPin) Color(0xFFD7E8B6).copy(alpha = 0.55f) else Color(0xFFF4EFE6),
-                            border = BorderStroke(1.dp, if (hasExisting4DigitPin) Color(0xFF416913).copy(alpha = 0.35f) else SplitMateTheme.BorderLight),
+                            color = if (hasExisting4DigitPin) SplitMateTheme.Palette.primaryContainer.copy(alpha = 0.55f) else SplitMateTheme.Palette.surfaceContainer,
+                            border = BorderStroke(1.dp, if (hasExisting4DigitPin) SplitMateTheme.Extended.sage.color.copy(alpha = 0.35f) else SplitMateTheme.BorderLight),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
@@ -1038,7 +1048,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                                 Icon(
                                     imageVector = if (hasExisting4DigitPin) Icons.Rounded.VerifiedUser else Icons.Rounded.Lock,
                                     contentDescription = null,
-                                    tint = Color(0xFF365314),
+                                    tint = SplitMateTheme.Palette.primary,
                                     modifier = Modifier.size(17.dp)
                                 )
                                 Text(
@@ -1050,7 +1060,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                                     fontFamily = SplitMateTheme.FontRounded,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = Color(0xFF365314)
+                                    color = SplitMateTheme.Palette.primary
                                 )
                             }
                         }
@@ -1144,7 +1154,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                         shape = SplitMateTheme.RadiusButton,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = SplitMateTheme.SageText,
-                            contentColor = Color.White
+                            contentColor = SplitMateTheme.Extended.sage.onColor
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1166,14 +1176,14 @@ fun SplitMateCloudOtpOnboardingScreen(
                             fontFamily = SplitMateTheme.FontRounded,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 15.sp,
-                            color = Color.White
+                            color = SplitMateTheme.Extended.sage.onColor
                         )
                         if (!uiState.isCloudSyncing) {
                             Spacer(modifier = Modifier.width(8.dp))
                             Icon(
                                 imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
                                 contentDescription = null,
-                                tint = Color.White,
+                                tint = SplitMateTheme.Extended.sage.onColor,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -1281,15 +1291,15 @@ fun OtpSixDigitSegmentedField(
                     Surface(
                         shape = RoundedCornerShape(14.dp),
                         color = if (isFilled) {
-                            Color(0xFFD7E8B6).copy(alpha = if (SplitMateTheme.isDark) 0.22f else 0.45f)
+                            SplitMateTheme.Palette.primaryContainer.copy(alpha = if (SplitMateTheme.isDark) 0.22f else 0.45f)
                         } else {
                             SplitMateTheme.SurfaceMuted
                         },
                         border = BorderStroke(
                             width = if (isCurrentActiveCell) 2.dp else 1.dp,
                             color = when {
-                                isCurrentActiveCell -> Color(0xFF416913)
-                                isFilled -> Color(0xFF416913).copy(alpha = 0.6f)
+                                isCurrentActiveCell -> SplitMateTheme.Extended.sage.color
+                                isFilled -> SplitMateTheme.Extended.sage.color.copy(alpha = 0.6f)
                                 else -> SplitMateTheme.BorderLight
                             }
                         ),
@@ -1330,10 +1340,10 @@ fun PendingGroupInviteCard(
 
     Card(
         shape = SplitMateTheme.RadiusCard,
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFAF6F0)),
+        colors = CardDefaults.cardColors(containerColor = SplitMateTheme.Palette.surfaceContainerLow),
         modifier = modifier
             .fillMaxWidth()
-            .border(1.5.dp, Color(0xFF416913), SplitMateTheme.RadiusCard)
+            .border(1.5.dp, SplitMateTheme.Extended.sage.color, SplitMateTheme.RadiusCard)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -1352,13 +1362,13 @@ fun PendingGroupInviteCard(
                         modifier = Modifier
                             .size(44.dp)
                             .clip(MaterialShapes.Cookie9Sided.toShape())
-                            .background(Color(0xFFD7E8B6)),
+                            .background(SplitMateTheme.Palette.primaryContainer),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = groupIcon,
                             contentDescription = null,
-                            tint = Color(0xFF365314),
+                            tint = SplitMateTheme.Palette.primary,
                             modifier = Modifier.size(22.dp)
                         )
                     }
@@ -1370,14 +1380,14 @@ fun PendingGroupInviteCard(
                         ) {
                             Surface(
                                 shape = SplitMateTheme.RadiusBadge,
-                                color = Color(0xFFDCE3FD)
+                                color = SplitMateTheme.Palette.tertiaryContainer
                             ) {
                                 Text(
                                     text = "GROUP INVITE",
                                     fontFamily = SplitMateTheme.FontRounded,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = Color(0xFF23201E),
+                                    color = SplitMateTheme.Palette.onSurface,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                                 )
                             }
@@ -1395,14 +1405,14 @@ fun PendingGroupInviteCard(
                             fontFamily = SplitMateTheme.FontDisplay,
                             fontSize = 19.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFF23201E)
+                            color = SplitMateTheme.Palette.onSurface
                         )
                         Text(
                             text = "You were invited via +91 $cleanPhoneDisplay",
                             fontFamily = SplitMateTheme.FontRounded,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
-                            color = Color(0xFF416913)
+                            color = SplitMateTheme.Extended.sage.color
                         )
                     }
                 }
@@ -1416,8 +1426,8 @@ fun PendingGroupInviteCard(
                     onClick = onAcceptClick,
                     shape = SplitMateTheme.RadiusButton,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF416913),
-                        contentColor = Color(0xFFFAF6F0)
+                        containerColor = SplitMateTheme.Extended.sage.color,
+                        contentColor = SplitMateTheme.Palette.surfaceContainerLow
                     ),
                     modifier = Modifier
                         .weight(1f)
@@ -1426,7 +1436,7 @@ fun PendingGroupInviteCard(
                     Icon(
                         imageVector = Icons.Rounded.CheckCircle,
                         contentDescription = null,
-                        tint = Color(0xFFFAF6F0),
+                        tint = SplitMateTheme.Palette.surfaceContainerLow,
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
@@ -1435,7 +1445,7 @@ fun PendingGroupInviteCard(
                         fontFamily = SplitMateTheme.FontRounded,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 13.sp,
-                        color = Color(0xFFFAF6F0)
+                        color = SplitMateTheme.Palette.surfaceContainerLow
                     )
                 }
 
@@ -1443,10 +1453,10 @@ fun PendingGroupInviteCard(
                     onClick = onDeclineClick,
                     shape = SplitMateTheme.RadiusButton,
                     colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = Color(0xFFFED8C8),
-                        contentColor = Color(0xFFE06B52)
+                        containerColor = SplitMateTheme.Palette.secondaryContainer,
+                        contentColor = SplitMateTheme.Palette.secondary
                     ),
-                    border = BorderStroke(1.dp, Color(0xFFE06B52)),
+                    border = BorderStroke(1.dp, SplitMateTheme.Palette.secondary),
                     modifier = Modifier
                         .weight(0.75f)
                         .height(44.dp)
@@ -1454,7 +1464,7 @@ fun PendingGroupInviteCard(
                     Icon(
                         imageVector = Icons.Rounded.Close,
                         contentDescription = null,
-                        tint = Color(0xFFE06B52),
+                        tint = SplitMateTheme.Palette.secondary,
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
@@ -1463,7 +1473,7 @@ fun PendingGroupInviteCard(
                         fontFamily = SplitMateTheme.FontRounded,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 13.sp,
-                        color = Color(0xFFE06B52)
+                        color = SplitMateTheme.Palette.secondary
                     )
                 }
             }
@@ -2236,7 +2246,7 @@ fun LedgersDashboardScreen(
                                     Icon(
                                         imageVector = iconVector,
                                         contentDescription = option.label,
-                                        tint = if (isSelected) Color(0xFF23201E) else SplitMateTheme.TextSecondary,
+                                        tint = if (isSelected) SplitMateTheme.Palette.onSurface else SplitMateTheme.TextSecondary,
                                         modifier = Modifier.size(20.dp)
                                     )
                                 }
@@ -2612,7 +2622,7 @@ fun LedgersDashboardScreen(
                                         AvatarToken(
                                             initials = mbr.avatarSeed,
                                             bg = SplitMateTheme.AccentSage,
-                                            textColor = Color(0xFF23201E),
+                                            textColor = SplitMateTheme.Palette.onSurface,
                                             size = 30,
                                             isOnline = isMbrOnline
                                         )
@@ -2637,7 +2647,7 @@ fun LedgersDashboardScreen(
                                                 fontSize = 10.sp,
                                                 color = when {
                                                     isDeclinedMbr -> SplitMateTheme.TerracottaText
-                                                    isMbrOnline -> Color(0xFF15803D)
+                                                    isMbrOnline -> SplitMateTheme.Extended.online.onContainer
                                                     phone.length == 10 || mbr.isCurrentUser -> SplitMateTheme.SageText
                                                     else -> SplitMateTheme.TerracottaText
                                                 }
@@ -2812,14 +2822,14 @@ fun LedgersDashboardScreen(
                 }
 
                 val cardBgColor = if (showingFlightFace) {
-                    if (SplitMateTheme.isDark) Color(0xFF1B1936) else Color(0xFFEEF2FF)
+                    SplitMateTheme.Extended.flightPass.container
                 } else {
-                    if (SplitMateTheme.isDark) Color(0xFF1F2B16) else Color(0xFFEAF3D5)
+                    SplitMateTheme.Extended.trainPass.container
                 }
                 val cardBorderColor = if (showingFlightFace) {
-                    if (SplitMateTheme.isDark) Color(0xFF3F3A82) else Color(0xFFC7D2FE)
+                    SplitMateTheme.Extended.flightPass.outline
                 } else {
-                    if (SplitMateTheme.isDark) Color(0xFF3D5428) else Color(0xFFC5DCA0)
+                    SplitMateTheme.Extended.trainPass.outline
                 }
 
                 Surface(
@@ -2879,13 +2889,13 @@ fun LedgersDashboardScreen(
                                             modifier = Modifier
                                                 .size(38.dp)
                                                 .clip(RoundedCornerShape(12.dp))
-                                                .background(Color(0xFF264010)),
+                                                .background(SplitMateTheme.Extended.trainPass.color),
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Rounded.Train,
                                                 contentDescription = null,
-                                                tint = Color(0xFFD7E8B6),
+                                                tint = SplitMateTheme.Palette.primaryContainer,
                                                 modifier = Modifier.size(19.dp)
                                             )
                                         }
@@ -2918,8 +2928,8 @@ fun LedgersDashboardScreen(
                                         Surface(
                                             onClick = { isFlightSide = true },
                                             shape = SplitMateTheme.RadiusBadge,
-                                            color = if (SplitMateTheme.isDark) Color(0xFF24214A) else Color(0xFFEEF2FF),
-                                            border = BorderStroke(1.dp, if (SplitMateTheme.isDark) Color(0xFF4E48A6) else Color(0xFFA5B4FC)),
+                                            color = SplitMateTheme.Extended.flightChip.container,
+                                            border = BorderStroke(1.dp, SplitMateTheme.Extended.flightChip.outline),
                                             modifier = Modifier.minimumInteractiveComponentSize()
                                         ) {
                                             Row(
@@ -2930,7 +2940,7 @@ fun LedgersDashboardScreen(
                                                 Icon(
                                                     imageVector = Icons.Rounded.FlightTakeoff,
                                                     contentDescription = "Flip to Flight Pass",
-                                                    tint = if (SplitMateTheme.isDark) Color(0xFFDCE3FD) else Color(0xFF3730A3),
+                                                    tint = SplitMateTheme.Extended.flightPass.onColor,
                                                     modifier = Modifier.size(13.dp)
                                                 )
                                                 Text(
@@ -2938,12 +2948,12 @@ fun LedgersDashboardScreen(
                                                     fontFamily = SplitMateTheme.FontRounded,
                                                     fontWeight = FontWeight.ExtraBold,
                                                     fontSize = 11.sp,
-                                                    color = if (SplitMateTheme.isDark) Color(0xFFDCE3FD) else Color(0xFF3730A3)
+                                                    color = SplitMateTheme.Extended.flightPass.onColor
                                                 )
                                                 Icon(
                                                     imageVector = Icons.Rounded.SwapHoriz,
                                                     contentDescription = null,
-                                                    tint = if (SplitMateTheme.isDark) Color(0xFFDCE3FD) else Color(0xFF3730A3),
+                                                    tint = SplitMateTheme.Extended.flightPass.onColor,
                                                     modifier = Modifier.size(13.dp)
                                                 )
                                             }
@@ -2952,7 +2962,7 @@ fun LedgersDashboardScreen(
                                         Surface(
                                             onClick = onNavigateToPnrSplit,
                                             shape = SplitMateTheme.RadiusBadge,
-                                            color = Color(0xFF264010),
+                                            color = SplitMateTheme.Extended.trainPass.color,
                                             modifier = Modifier.minimumInteractiveComponentSize()
                                         ) {
                                             Text(
@@ -2960,7 +2970,7 @@ fun LedgersDashboardScreen(
                                                 fontFamily = SplitMateTheme.FontRounded,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 fontSize = 11.sp,
-                                                color = Color.White,
+                                                color = SplitMateTheme.Extended.trainPass.onColor,
                                                 modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp)
                                             )
                                         }
@@ -3034,13 +3044,13 @@ fun LedgersDashboardScreen(
                                             modifier = Modifier
                                                 .size(38.dp)
                                                 .clip(RoundedCornerShape(12.dp))
-                                                .background(if (SplitMateTheme.isDark) Color(0xFF282552) else Color(0xFF2B2768)),
+                                                .background(SplitMateTheme.Extended.flightPass.color),
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Rounded.FlightTakeoff,
                                                 contentDescription = null,
-                                                tint = if (SplitMateTheme.isDark) Color(0xFFDCE3FD) else Color(0xFFEEF2FF),
+                                                tint = SplitMateTheme.Extended.flightPass.onColor,
                                                 modifier = Modifier.size(19.dp)
                                             )
                                         }
@@ -3051,7 +3061,7 @@ fun LedgersDashboardScreen(
                                                 fontFamily = SplitMateTheme.FontDisplay,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 fontSize = 15.sp,
-                                                color = if (SplitMateTheme.isDark) Color(0xFFE6EAFF) else Color(0xFF1F1C4D)
+                                                color = SplitMateTheme.Extended.flightPass.onContainer
                                             )
                                             Text(
                                                 text = if (flightPnrExpensesInGroup.isEmpty()) {
@@ -3060,7 +3070,7 @@ fun LedgersDashboardScreen(
                                                     "${flightPnrExpensesInGroup.size} flight pass(es) logged"
                                                 },
                                                 fontSize = 11.sp,
-                                                color = if (SplitMateTheme.isDark) Color(0xFFB5BEEC) else Color(0xFF433E85)
+                                                color = SplitMateTheme.Extended.flightPass.onContainerVariant
                                             )
                                         }
                                     }
@@ -3073,8 +3083,8 @@ fun LedgersDashboardScreen(
                                         Surface(
                                             onClick = { isFlightSide = false },
                                             shape = SplitMateTheme.RadiusBadge,
-                                            color = if (SplitMateTheme.isDark) Color(0xFF1F2B16) else Color(0xFFEAF3D5),
-                                            border = BorderStroke(1.dp, if (SplitMateTheme.isDark) Color(0xFF3D5428) else Color(0xFFC5DCA0))
+                                            color = SplitMateTheme.Extended.trainPass.container,
+                                            border = BorderStroke(1.dp, SplitMateTheme.Extended.trainPass.outline)
                                         ) {
                                             Row(
                                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
@@ -3106,15 +3116,15 @@ fun LedgersDashboardScreen(
                                         Surface(
                                             onClick = onUploadFlightPdf,
                                             shape = SplitMateTheme.RadiusBadge,
-                                            color = if (SplitMateTheme.isDark) Color(0xFF282552) else Color(0xFF2B2768),
-                                            border = BorderStroke(1.dp, if (SplitMateTheme.isDark) Color(0xFF5650B8) else Color(0xFF4B459E))
+                                            color = SplitMateTheme.Extended.flightPass.color,
+                                            border = BorderStroke(1.dp, SplitMateTheme.Extended.flightPass.outline)
                                         ) {
                                             Text(
                                                 text = "+ PDF",
                                                 fontFamily = SplitMateTheme.FontRounded,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 fontSize = 11.sp,
-                                                color = if (SplitMateTheme.isDark) Color(0xFFDCE3FD) else Color(0xFFEEF2FF),
+                                                color = SplitMateTheme.Extended.flightPass.onColor,
                                                 modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp)
                                             )
                                         }
@@ -3134,8 +3144,8 @@ fun LedgersDashboardScreen(
                                             Surface(
                                                 onClick = { onOpenPnrWithTicket("EXPENSE:${exp.expenseId}") },
                                                 shape = SplitMateTheme.RadiusBadge,
-                                                color = if (SplitMateTheme.isDark) Color(0xFF24214A) else Color(0xFFFFFFFF),
-                                                border = BorderStroke(1.dp, if (SplitMateTheme.isDark) Color(0xFF4E48A6) else Color(0xFFA5B4FC))
+                                                color = SplitMateTheme.Extended.flightTicket.container,
+                                                border = BorderStroke(1.dp, SplitMateTheme.Extended.flightChip.outline)
                                             ) {
                                                 Row(
                                                     modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
@@ -3145,7 +3155,7 @@ fun LedgersDashboardScreen(
                                                     Icon(
                                                         imageVector = Icons.Rounded.FlightTakeoff,
                                                         contentDescription = null,
-                                                        tint = if (SplitMateTheme.isDark) Color(0xFFA5B4FC) else Color(0xFF3730A3),
+                                                        tint = SplitMateTheme.Extended.flightChip.color,
                                                         modifier = Modifier.size(13.dp)
                                                     )
                                                     Text(
@@ -3153,12 +3163,12 @@ fun LedgersDashboardScreen(
                                                         fontFamily = SplitMateTheme.FontRounded,
                                                         fontWeight = FontWeight.Bold,
                                                         fontSize = 11.sp,
-                                                        color = if (SplitMateTheme.isDark) Color(0xFFE6EAFF) else Color(0xFF1F1C4D)
+                                                        color = SplitMateTheme.Extended.flightPass.onContainer
                                                     )
                                                     Icon(
                                                         imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
                                                         contentDescription = null,
-                                                        tint = if (SplitMateTheme.isDark) Color(0xFFA5B4FC) else Color(0xFF3730A3),
+                                                        tint = SplitMateTheme.Extended.flightChip.color,
                                                         modifier = Modifier.size(12.dp)
                                                     )
                                                 }
@@ -3307,7 +3317,7 @@ fun LedgersDashboardScreen(
                                         color = if (isMePayer) SplitMateTheme.SageText else SplitMateTheme.TerracottaText
                                     )
                                     val splitToggleTint = if (isFlightCard) {
-                                        if (SplitMateTheme.isDark) Color(0xFFA5B4FC) else Color(0xFF3730A3)
+                                        SplitMateTheme.Extended.flightChip.color
                                     } else {
                                         SplitMateTheme.SageText
                                     }
@@ -3460,7 +3470,7 @@ fun LedgersDashboardScreen(
                                         contentDescription = null,
                                         modifier = Modifier.size(13.dp),
                                         tint = if (isFlightCard) {
-                                            if (SplitMateTheme.isDark) Color(0xFFA5B4FC) else Color(0xFF3730A3)
+                                            SplitMateTheme.Extended.flightChip.color
                                         } else if (parsedTicketInGroup != null) {
                                             SplitMateTheme.SageText
                                         } else {
@@ -3477,7 +3487,7 @@ fun LedgersDashboardScreen(
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = if (isFlightCard) {
-                                            if (SplitMateTheme.isDark) Color(0xFFA5B4FC) else Color(0xFF3730A3)
+                                            SplitMateTheme.Extended.flightChip.color
                                         } else {
                                             SplitMateTheme.TextSecondary
                                         }
@@ -3488,7 +3498,7 @@ fun LedgersDashboardScreen(
                                         onClick = { editingExpense = expense },
                                         shape = SplitMateTheme.RadiusBadge,
                                         color = if (isFlightCard) {
-                                            if (SplitMateTheme.isDark) Color(0xFF282552) else Color(0xFFEEF2FF)
+                                            if (SplitMateTheme.isDark) SplitMateTheme.Extended.flightPass.color else SplitMateTheme.Extended.flightPass.container
                                         } else {
                                             SplitMateTheme.SageSurface
                                         },
@@ -3503,7 +3513,7 @@ fun LedgersDashboardScreen(
                                                 contentDescription = "Edit Expense",
                                                 modifier = Modifier.size(13.dp),
                                                 tint = if (isFlightCard) {
-                                                    if (SplitMateTheme.isDark) Color(0xFFDCE3FD) else Color(0xFF3730A3)
+                                                    SplitMateTheme.Extended.flightPass.onColor
                                                 } else {
                                                     SplitMateTheme.SageText
                                                 }
@@ -3514,7 +3524,7 @@ fun LedgersDashboardScreen(
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = if (isFlightCard) {
-                                                    if (SplitMateTheme.isDark) Color(0xFFDCE3FD) else Color(0xFF3730A3)
+                                                    SplitMateTheme.Extended.flightPass.onColor
                                                 } else {
                                                     SplitMateTheme.SageText
                                                 }
@@ -3639,10 +3649,10 @@ fun LedgersDashboardScreen(
                     Surface(
                         onClick = { viewModel.syncAllGroupsWithCloud(context) },
                         shape = CircleShape,
-                        color = if (onlineFriendsTotal > 0) Color(0xFFDCFCE7) else SplitMateTheme.SurfaceWhite,
+                        color = if (onlineFriendsTotal > 0) SplitMateTheme.Extended.online.container else SplitMateTheme.SurfaceWhite,
                         border = BorderStroke(
                             1.dp,
-                            if (onlineFriendsTotal > 0) Color(0xFF22C55E).copy(alpha = 0.45f) else SplitMateTheme.BorderLight
+                            if (onlineFriendsTotal > 0) SplitMateTheme.Extended.online.color.copy(alpha = 0.45f) else SplitMateTheme.BorderLight
                         )
                     ) {
                         Row(
@@ -3661,13 +3671,13 @@ fun LedgersDashboardScreen(
                                     modifier = Modifier
                                         .size(8.dp)
                                         .clip(CircleShape)
-                                        .background(Color(0xFF22C55E))
+                                        .background(SplitMateTheme.Extended.online.color)
                                 )
                             } else {
                                 Icon(
                                     imageVector = Icons.Rounded.CloudDone,
                                     contentDescription = "Auto-Sync Status",
-                                    tint = Color(0xFF416913),
+                                    tint = SplitMateTheme.Extended.sage.color,
                                     modifier = Modifier.size(15.dp)
                                 )
                             }
@@ -3682,7 +3692,7 @@ fun LedgersDashboardScreen(
                                 fontFamily = SplitMateTheme.FontRounded,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = if (onlineFriendsTotal > 0) Color(0xFF15803D) else SplitMateTheme.PrimaryDark
+                                color = if (onlineFriendsTotal > 0) SplitMateTheme.Extended.online.onContainer else SplitMateTheme.PrimaryDark
                             )
                         }
                     }
@@ -3723,7 +3733,7 @@ fun LedgersDashboardScreen(
                     colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, Color(0xFF416913).copy(alpha = 0.45f), SplitMateTheme.RadiusCard)
+                        .border(1.dp, SplitMateTheme.Extended.sage.color.copy(alpha = 0.45f), SplitMateTheme.RadiusCard)
                 ) {
                     Column(
                         modifier = Modifier.padding(14.dp),
@@ -3742,13 +3752,13 @@ fun LedgersDashboardScreen(
                                     modifier = Modifier
                                         .size(38.dp)
                                         .clip(CircleShape)
-                                        .background(Color(0xFFD7E8B6)),
+                                        .background(SplitMateTheme.Palette.primaryContainer),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         imageVector = Icons.Rounded.Lock,
                                         contentDescription = null,
-                                        tint = Color(0xFF365314),
+                                        tint = SplitMateTheme.Palette.primary,
                                         modifier = Modifier.size(20.dp)
                                     )
                                 }
@@ -3779,14 +3789,14 @@ fun LedgersDashboardScreen(
                                     showUpgradeOtpExpanded = !showUpgradeOtpExpanded
                                 },
                                 shape = SplitMateTheme.RadiusBadge,
-                                color = Color(0xFF416913)
+                                color = SplitMateTheme.Extended.sage.color
                             ) {
                                 Text(
                                     text = "Link Phone & PIN",
                                     fontFamily = SplitMateTheme.FontRounded,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 11.sp,
-                                    color = Color(0xFFFAF6F0),
+                                    color = SplitMateTheme.Palette.surfaceContainerLow,
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                 )
                             }
@@ -3854,8 +3864,8 @@ fun LedgersDashboardScreen(
                                 enabled = isValidUpgradePhone && upgradeOtpInput.length == 4 && !uiState.isCloudSyncing,
                                 shape = SplitMateTheme.RadiusButton,
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF416913),
-                                    contentColor = Color(0xFFFAF6F0)
+                                    containerColor = SplitMateTheme.Extended.sage.color,
+                                    contentColor = SplitMateTheme.Palette.surfaceContainerLow
                                 ),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
@@ -3874,9 +3884,9 @@ fun LedgersDashboardScreen(
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (msg.contains("Incorrect", ignoreCase = true) || msg.contains("Enter", ignoreCase = true)) {
-                                        Color(0xFFE06B52)
+                                        SplitMateTheme.Palette.secondary
                                     } else {
-                                        Color(0xFF416913)
+                                        SplitMateTheme.Extended.sage.color
                                     }
                                 )
                             }
@@ -3903,10 +3913,10 @@ fun LedgersDashboardScreen(
         // 2. Hero Balance Card (32dp Radius, Warm Espresso Night & Kyoto Matcha Adaptive Gradient, Buckwheat-Inspired 64.sp Numbers)
         item {
             val heroGradientColors = when {
-                SplitMateTheme.isDark -> listOf(Color(0xFF233216), Color(0xFF24201C))
+                SplitMateTheme.isDark -> listOf(SplitMateTheme.Extended.heroGradientStart, SplitMateTheme.Extended.heroGradientEnd)
                 DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU ->
-                    listOf(Color(0xFFC4ECCB), Color(0xFFFEF08A))
-                else -> listOf(Color(0xFFF5F8EC), Color(0xFFFDF1EC))
+                    listOf(SplitMateTheme.Extended.heroGradientStart, SplitMateTheme.Extended.heroGradientEnd)
+                else -> listOf(SplitMateTheme.Extended.heroGradientStart, SplitMateTheme.Extended.heroGradientEnd)
             }
             Card(
                 shape = SplitMateTheme.RadiusHero,
@@ -4329,7 +4339,7 @@ fun LedgersDashboardScreen(
                                 modifier = Modifier
                                     .size(42.dp)
                                     .clip(MaterialShapes.Cookie9Sided.toShape())
-                                    .background(if (groupCard.netBalanceCents == 0L) SplitMateTheme.SurfaceMuted else Color.White),
+                                    .background(if (groupCard.netBalanceCents == 0L) SplitMateTheme.SurfaceMuted else SplitMateTheme.SurfaceWhite),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
@@ -4429,7 +4439,7 @@ fun LedgersDashboardScreen(
                             if (groupCard.onlineFriendsCount > 0) {
                                 Surface(
                                     shape = CircleShape,
-                                    color = Color(0xFFDCFCE7)
+                                    color = SplitMateTheme.Extended.online.container
                                 ) {
                                     Row(
                                         modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
@@ -4440,14 +4450,14 @@ fun LedgersDashboardScreen(
                                             modifier = Modifier
                                                 .size(6.dp)
                                                 .clip(CircleShape)
-                                                .background(Color(0xFF22C55E))
+                                                .background(SplitMateTheme.Extended.online.color)
                                         )
                                         Text(
                                             text = "${groupCard.onlineFriendsCount} Online",
                                             fontFamily = SplitMateTheme.FontRounded,
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.ExtraBold,
-                                            color = Color(0xFF15803D)
+                                            color = SplitMateTheme.Extended.online.onContainer
                                         )
                                     }
                                 }
@@ -4544,7 +4554,7 @@ fun LedgersDashboardScreen(
                                 Icon(
                                     imageVector = Icons.Rounded.Archive,
                                     contentDescription = null,
-                                    tint = Color(0xFFE06B52),
+                                    tint = SplitMateTheme.Palette.secondary,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Text(
@@ -4570,8 +4580,8 @@ fun LedgersDashboardScreen(
                             uiState.declinedInviteGroups.forEach { declinedGroup ->
                                 Surface(
                                     shape = SplitMateTheme.RadiusPanel,
-                                    color = Color(0xFFFED8C8).copy(alpha = 0.45f),
-                                    border = BorderStroke(1.dp, Color(0xFFE06B52).copy(alpha = 0.45f)),
+                                    color = SplitMateTheme.Palette.secondaryContainer.copy(alpha = 0.45f),
+                                    border = BorderStroke(1.dp, SplitMateTheme.Palette.secondary.copy(alpha = 0.45f)),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Row(
@@ -4602,7 +4612,7 @@ fun LedgersDashboardScreen(
                                                 viewModel.restoreDeclinedGroupInvite(context, declinedGroup.groupId)
                                             },
                                             shape = SplitMateTheme.RadiusBadge,
-                                            color = Color(0xFF416913)
+                                            color = SplitMateTheme.Extended.sage.color
                                         ) {
                                             Row(
                                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
@@ -4612,7 +4622,7 @@ fun LedgersDashboardScreen(
                                                 Icon(
                                                     imageVector = Icons.Rounded.Restore,
                                                     contentDescription = null,
-                                                    tint = Color(0xFFFAF6F0),
+                                                    tint = SplitMateTheme.Palette.surfaceContainerLow,
                                                     modifier = Modifier.size(14.dp)
                                                 )
                                                 Text(
@@ -4620,7 +4630,7 @@ fun LedgersDashboardScreen(
                                                     fontFamily = SplitMateTheme.FontRounded,
                                                     fontWeight = FontWeight.ExtraBold,
                                                     fontSize = 11.sp,
-                                                    color = Color(0xFFFAF6F0)
+                                                    color = SplitMateTheme.Palette.surfaceContainerLow
                                                 )
                                             }
                                         }
@@ -4842,7 +4852,7 @@ fun LedgersDashboardScreen(
                             Icon(
                                 imageVector = resolveGroupCategoryIcon(selectedIconKey, groupNameInput),
                                 contentDescription = null,
-                                tint = Color(0xFF23201E)
+                                tint = SplitMateTheme.Palette.onSurface
                             )
                         }
                         Spacer(modifier = Modifier.width(10.dp))
@@ -4904,7 +4914,7 @@ fun LedgersDashboardScreen(
                                         color = if (isSelected) SplitMateTheme.AccentSage else SplitMateTheme.SurfaceMuted,
                                         border = BorderStroke(
                                             width = if (isSelected) 1.5.dp else 1.dp,
-                                            color = if (isSelected) Color(0xFF416913) else SplitMateTheme.BorderLight
+                                            color = if (isSelected) SplitMateTheme.Extended.sage.color else SplitMateTheme.BorderLight
                                         ),
                                         modifier = Modifier
                                             .weight(1f)
@@ -4917,7 +4927,7 @@ fun LedgersDashboardScreen(
                                             Icon(
                                                 imageVector = option.icon,
                                                 contentDescription = option.label,
-                                                tint = if (isSelected) Color(0xFF23201E) else SplitMateTheme.PrimaryDark,
+                                                tint = if (isSelected) SplitMateTheme.Palette.onSurface else SplitMateTheme.PrimaryDark,
                                                 modifier = Modifier.size(20.dp)
                                             )
                                             Spacer(modifier = Modifier.height(2.dp))
@@ -4925,7 +4935,7 @@ fun LedgersDashboardScreen(
                                                 text = option.label,
                                                 fontSize = 10.sp,
                                                 fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                                                color = if (isSelected) Color(0xFF23201E) else SplitMateTheme.TextSecondary,
+                                                color = if (isSelected) SplitMateTheme.Palette.onSurface else SplitMateTheme.TextSecondary,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
@@ -4953,7 +4963,7 @@ fun LedgersDashboardScreen(
                         shape = SplitMateTheme.RadiusButton,
                         colors = ButtonDefaults.filledTonalButtonColors(
                             containerColor = SplitMateTheme.AccentSage,
-                            contentColor = Color(0xFF23201E)
+                            contentColor = SplitMateTheme.Palette.onSurface
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -4962,7 +4972,7 @@ fun LedgersDashboardScreen(
                         Icon(
                             imageVector = Icons.Rounded.Contacts,
                             contentDescription = null,
-                            tint = Color(0xFF23201E),
+                            tint = SplitMateTheme.Palette.onSurface,
                             modifier = Modifier.size(17.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
@@ -4970,7 +4980,7 @@ fun LedgersDashboardScreen(
                             text = "+ Browse & Multi-Select Contacts",
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 13.sp,
-                            color = Color(0xFF23201E)
+                            color = SplitMateTheme.Palette.onSurface
                         )
                     }
 
@@ -5001,7 +5011,7 @@ fun LedgersDashboardScreen(
                                                 text = extractInitialsFromNameOrSeed(member.name),
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.ExtraBold,
-                                                color = Color(0xFF23201E)
+                                                color = SplitMateTheme.Palette.onSurface
                                             )
                                         }
                                         Spacer(modifier = Modifier.width(6.dp))
@@ -5110,7 +5120,7 @@ fun LedgersDashboardScreen(
                                     shape = SplitMateTheme.RadiusButton,
                                     colors = ButtonDefaults.filledTonalButtonColors(
                                         containerColor = SplitMateTheme.AccentSage,
-                                        contentColor = Color(0xFF23201E)
+                                        contentColor = SplitMateTheme.Palette.onSurface
                                     ),
                                     modifier = Modifier.height(52.dp)
                                 ) {
@@ -5163,7 +5173,7 @@ fun LedgersDashboardScreen(
                                                             text = extractInitialsFromNameOrSeed(matchedContact.name),
                                                             fontSize = 11.sp,
                                                             fontWeight = FontWeight.ExtraBold,
-                                                            color = Color(0xFF23201E)
+                                                            color = SplitMateTheme.Palette.onSurface
                                                         )
                                                     }
                                                     Spacer(modifier = Modifier.width(8.dp))
@@ -5357,8 +5367,8 @@ fun JoinGroupByCodeDialog(
     ) {
         Surface(
             shape = RoundedCornerShape(28.dp),
-            color = Color(0xFFFAF6F0),
-            border = BorderStroke(1.dp, Color(0xFFEDE7DF)),
+            color = SplitMateTheme.Palette.surfaceContainerLow,
+            border = BorderStroke(1.dp, SplitMateTheme.Palette.outlineVariant),
             shadowElevation = 10.dp,
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -5382,13 +5392,13 @@ fun JoinGroupByCodeDialog(
                             modifier = Modifier
                                 .size(38.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFFDCE9B9)),
+                                .background(SplitMateTheme.Extended.sage.container),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.GroupAdd,
                                 contentDescription = null,
-                                tint = Color(0xFF365314),
+                                tint = SplitMateTheme.Palette.primary,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -5398,7 +5408,7 @@ fun JoinGroupByCodeDialog(
                                 fontFamily = SplitMateTheme.FontDisplay,
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFF23201E)
+                                color = SplitMateTheme.Palette.onSurface
                             )
                             Text(
                                 text = "6-character Trip Code, WhatsApp invite, or link",
@@ -5458,7 +5468,7 @@ fun JoinGroupByCodeDialog(
                         fontFamily = SplitMateTnumMonospace,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF23201E),
+                        color = SplitMateTheme.Palette.onSurface,
                         fontFeatureSettings = "tnum"
                     ),
                     singleLine = false,
@@ -5484,8 +5494,8 @@ fun JoinGroupByCodeDialog(
                             }
                         },
                         shape = SplitMateTheme.RadiusBadge,
-                        color = Color(0xFFF4EFE6),
-                        border = BorderStroke(1.dp, Color(0xFFEDE7DF))
+                        color = SplitMateTheme.Palette.surfaceContainer,
+                        border = BorderStroke(1.dp, SplitMateTheme.Palette.outlineVariant)
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
@@ -5495,7 +5505,7 @@ fun JoinGroupByCodeDialog(
                             Icon(
                                 imageVector = Icons.Rounded.ContentPaste,
                                 contentDescription = null,
-                                tint = Color(0xFF365314),
+                                tint = SplitMateTheme.Palette.primary,
                                 modifier = Modifier.size(15.dp)
                             )
                             Text(
@@ -5503,7 +5513,7 @@ fun JoinGroupByCodeDialog(
                                 fontFamily = SplitMateTheme.FontRounded,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF365314)
+                                color = SplitMateTheme.Palette.primary
                             )
                         }
                     }
@@ -5524,10 +5534,10 @@ fun JoinGroupByCodeDialog(
                 statusMessage?.let { feedback ->
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = if (isErrorStatus) Color(0xFFFCE3D7) else Color(0xFFDCE9B9),
+                        color = if (isErrorStatus) SplitMateTheme.Extended.terracotta.container else SplitMateTheme.Extended.sage.container,
                         border = BorderStroke(
                             1.dp,
-                            if (isErrorStatus) Color(0xFFE06B52).copy(alpha = 0.45f) else Color(0xFF416913).copy(alpha = 0.35f)
+                            if (isErrorStatus) SplitMateTheme.Palette.secondary.copy(alpha = 0.45f) else SplitMateTheme.Extended.sage.color.copy(alpha = 0.35f)
                         ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -5536,7 +5546,7 @@ fun JoinGroupByCodeDialog(
                             fontFamily = SplitMateTheme.FontRounded,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = if (isErrorStatus) Color(0xFF7C2D12) else Color(0xFF365314),
+                            color = if (isErrorStatus) SplitMateTheme.Extended.terracotta.onContainer else SplitMateTheme.Palette.primary,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)
                         )
                     }
@@ -5557,8 +5567,8 @@ fun JoinGroupByCodeDialog(
                     enabled = inputCodeOrLink.trim().isNotBlank() && !uiState.isCloudSyncing,
                     shape = SplitMateTheme.RadiusButton,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF365314),
-                        contentColor = Color(0xFFFAF6F0)
+                        containerColor = SplitMateTheme.Palette.primary,
+                        contentColor = SplitMateTheme.Palette.surfaceContainerLow
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -5567,14 +5577,14 @@ fun JoinGroupByCodeDialog(
                     if (uiState.isCloudSyncing) {
                         ContainedLoadingIndicator(
                             modifier = Modifier.size(18.dp),
-                            containerColor = Color(0xFFDCE9B9).copy(alpha = 0.22f),
-                            indicatorColor = Color(0xFFFAF6F0)
+                            containerColor = SplitMateTheme.Extended.sage.container.copy(alpha = 0.22f),
+                            indicatorColor = SplitMateTheme.Palette.surfaceContainerLow
                         )
                     } else {
                         Icon(
                             imageVector = Icons.Rounded.CheckCircle,
                             contentDescription = null,
-                            tint = Color(0xFFDCE9B9),
+                            tint = SplitMateTheme.Extended.sage.container,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -5584,7 +5594,7 @@ fun JoinGroupByCodeDialog(
                         fontFamily = SplitMateTheme.FontRounded,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFFFAF6F0)
+                        color = SplitMateTheme.Palette.surfaceContainerLow
                     )
                 }
             }
@@ -5896,13 +5906,13 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
             item(key = "trip_settlement_summary_card") {
                 val summaryContainerBg = when {
                     SplitMateTheme.isDark -> SplitMateTheme.SurfaceWhite
-                    DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFFD2F4DC)
-                    else -> Color(0xFFF3F7EB)
+                    DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU -> SplitMateTheme.Extended.settleSummary.container
+                    else -> SplitMateTheme.Extended.settleSummary.container
                 }
                 val summaryBorderColor = when {
                     SplitMateTheme.isDark -> SplitMateTheme.BorderLight
-                    DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF75C993)
-                    else -> Color(0xFFDCE6C8)
+                    DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU -> SplitMateTheme.Extended.settleSummary.outline
+                    else -> SplitMateTheme.Extended.settleSummary.outline
                 }
                 val receiversList = remember(topGridSummaries) {
                     topGridSummaries.filter { it.hasIncoming }
@@ -6530,13 +6540,13 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                 if (summary.hasIncoming) {
                     val receiverCardBg = when {
                         SplitMateTheme.isDark -> SplitMateTheme.SurfaceWhite
-                        DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFFD2F4DC)
-                        else -> Color(0xFFF1F7E8)
+                        DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU -> SplitMateTheme.Extended.settleSummary.container
+                        else -> SplitMateTheme.Extended.settleReceive.container
                     }
                     val receiverBorderColor = when {
                         SplitMateTheme.isDark -> SplitMateTheme.BorderLight
-                        DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF75C993)
-                        else -> Color(0xFFD8E5C2)
+                        DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU -> SplitMateTheme.Extended.settleSummary.outline
+                        else -> SplitMateTheme.Extended.settleReceive.outline
                     }
 
                     Card(
@@ -6809,13 +6819,13 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                     var isPayerExpanded by remember(summary.memberId) { mutableStateOf(true) }
                     val peachBoxBg = when {
                         SplitMateTheme.isDark -> SplitMateTheme.SurfaceMuted
-                        DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFFFEF3C7)
-                        else -> Color(0xFFFDF2EE)
+                        DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU -> SplitMateTheme.Extended.settlePay.container
+                        else -> SplitMateTheme.Extended.settlePay.container
                     }
                     val peachBoxBorder = when {
                         SplitMateTheme.isDark -> SplitMateTheme.BorderLight
-                        DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFFF59E0B).copy(alpha = 0.45f)
-                        else -> Color(0xFFF7E0D7)
+                        DesignSystemBindings.activeThemeMode == SplitMateThemeMode.KYOTO_MATCHA_YUZU -> SplitMateTheme.Extended.settlePay.color.copy(alpha = 0.45f)
+                        else -> SplitMateTheme.Extended.settlePay.outline
                     }
 
                     Card(

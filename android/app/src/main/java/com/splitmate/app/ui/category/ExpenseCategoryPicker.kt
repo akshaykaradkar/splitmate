@@ -1,5 +1,7 @@
 package com.splitmate.app.ui.category
 
+import com.splitmate.app.ui.theme.HubCategoryHue
+import com.splitmate.app.ui.theme.HubExtendedColors
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -211,19 +213,17 @@ object ExpenseCategoryIcons {
     }
 
     /** Buckwheat badge pair (container, content) — same pairs used by the legacy keyword badge engine. */
-    fun toneColors(tone: ExpenseCategoryTone, isDark: Boolean): Pair<Color, Color> = when (tone) {
-        ExpenseCategoryTone.SAGE ->
-            if (isDark) Color(0xFF283A18) to Color(0xFFD7E8B6) else Color(0xFFDCE9B9) to Color(0xFF365314)
-        ExpenseCategoryTone.PERIWINKLE ->
-            if (isDark) Color(0xFF222A4A) to Color(0xFFC7D2FE) else Color(0xFFE0E7FF) to Color(0xFF3730A3)
-        ExpenseCategoryTone.AMBER ->
-            if (isDark) Color(0xFF3D2E14) to Color(0xFFFDE68A) else Color(0xFFFEF3C7) to Color(0xFF92400E)
-        ExpenseCategoryTone.MINT ->
-            if (isDark) Color(0xFF1F3833) to Color(0xFFA7F3D0) else Color(0xFFD1FAE5) to Color(0xFF065F46)
-        ExpenseCategoryTone.ROSE ->
-            if (isDark) Color(0xFF3B1D2E) to Color(0xFFFBCFE8) else Color(0xFFFCE7F3) to Color(0xFF9D174D)
-        ExpenseCategoryTone.PEACH ->
-            if (isDark) Color(0xFF3D231B) to Color(0xFFFED8C8) else Color(0xFFFCE3D7) to Color(0xFF7C2D12)
+    fun toneColors(tone: ExpenseCategoryTone, @Suppress("UNUSED_PARAMETER") isDark: Boolean): Pair<Color, Color> {
+        val hue = when (tone) {
+            ExpenseCategoryTone.SAGE -> com.splitmate.app.ui.theme.HubCategoryHue.SAGE
+            ExpenseCategoryTone.PERIWINKLE -> com.splitmate.app.ui.theme.HubCategoryHue.PERIWINKLE
+            ExpenseCategoryTone.AMBER -> com.splitmate.app.ui.theme.HubCategoryHue.AMBER
+            ExpenseCategoryTone.MINT -> com.splitmate.app.ui.theme.HubCategoryHue.MINT
+            ExpenseCategoryTone.ROSE -> com.splitmate.app.ui.theme.HubCategoryHue.ROSE
+            ExpenseCategoryTone.PEACH -> com.splitmate.app.ui.theme.HubCategoryHue.PEACH
+        }
+        val roles = com.splitmate.app.ui.theme.HubExtendedColors.categoryHue(hue)
+        return roles.colorContainer to roles.onColorContainer
     }
 }
 

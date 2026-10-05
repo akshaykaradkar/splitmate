@@ -141,12 +141,12 @@ data class CountryCurrency(
     val country: String,
     val currencyName: String,
     val symbol: String,
-    val badgeBg: Color = Color(0xFFD7E8B6),
-    val badgeFg: Color = Color(0xFF2D4810)
+    val badgeBg: Color = com.splitmate.app.ui.DesignSystemBindings.activePalette.primaryContainer,
+    val badgeFg: Color = com.splitmate.app.ui.DesignSystemBindings.activePalette.onPrimaryContainer
 )
 
 val SupportedCurrencies = listOf(
-    CountryCurrency("INR", "India", "Indian Rupee", "₹", Color(0xFFD7E8B6), Color(0xFF2D4810))
+    CountryCurrency("INR", "India", "Indian Rupee", "₹", com.splitmate.app.ui.DesignSystemBindings.activePalette.primaryContainer, com.splitmate.app.ui.DesignSystemBindings.activePalette.onPrimaryContainer)
 )
 
 // ==============================================================================
@@ -949,7 +949,7 @@ fun UserSettingsScreen(
                                                     fontFamily = SplitMateBrandFontFamily,
                                                     fontSize = 12.sp,
                                                     fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                                    color = if (isSelected) Color(0xFF23201E) else textPrimary
+                                                    color = if (isSelected) com.splitmate.app.ui.DesignSystemBindings.activePalette.onSurface else textPrimary
                                                 )
                                             }
                                         }
@@ -1262,7 +1262,7 @@ fun UserSettingsScreen(
                                             com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = false)
                                         },
                                         colors = SwitchDefaults.colors(
-                                            checkedThumbColor = Color.White,
+                                            checkedThumbColor = com.splitmate.app.ui.DesignSystemBindings.activePalette.onPrimary,
                                             checkedTrackColor = activePalette.primary,
                                             uncheckedThumbColor = activePalette.onSurface,
                                             uncheckedTrackColor = mutedBg
@@ -1305,7 +1305,7 @@ fun UserSettingsScreen(
                                             }
                                         },
                                         colors = SwitchDefaults.colors(
-                                            checkedThumbColor = Color.White,
+                                            checkedThumbColor = com.splitmate.app.ui.DesignSystemBindings.activePalette.onPrimary,
                                             checkedTrackColor = activePalette.primary,
                                             uncheckedThumbColor = activePalette.onSurface,
                                             uncheckedTrackColor = mutedBg
@@ -1440,7 +1440,7 @@ fun UserSettingsScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = SplitMateThemeTokens.TerracottaText),
                             shape = SplitMateThemeTokens.RadiusButton
                         ) {
-                            Text("Reset Data", fontFamily = SplitMateBrandFontFamily, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text("Reset Data", fontFamily = SplitMateBrandFontFamily, fontWeight = FontWeight.Bold, color = com.splitmate.app.ui.DesignSystemBindings.activePalette.onPrimary)
                         }
                     }
                 }

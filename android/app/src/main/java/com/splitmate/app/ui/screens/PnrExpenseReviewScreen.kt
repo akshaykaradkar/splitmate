@@ -70,6 +70,7 @@ import com.splitmate.app.ui.components.rememberAnimatedSegmentedIslandItemShape
 import com.splitmate.app.ui.components.segmentedIslandItemShape
 import com.splitmate.app.ui.fetchLivePnrAndTrainStatus
 import com.splitmate.app.ui.formatTravelExpenseTitle
+import com.splitmate.app.ui.theme.activeTransitExtendedColors
 import androidx.compose.animation.core.spring
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -90,85 +91,93 @@ object TactilePaperPassTokens {
         get() = DesignSystemBindings.activePalette.surfaceContainer
     val HairlineBorder: Color
         get() = DesignSystemBindings.activePalette.outlineVariant
+    // v2.3.6: boarding-pass / forest-pass / status-pill colours are EXTENDED colours resolved
+    // per theme from `TransitExtendedColors` (hex lives only there).
     val PerforationLine: Color
-        get() = when (DesignSystemBindings.activeThemeMode) {
-            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF4A443C)
-            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFFB5CCA8)
-            SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Color(0xFFD6CEBE)
-        }
+        get() = activeTransitExtendedColors.boardingPass.perforation
 
     val ForestTop: Color
-        get() = when (DesignSystemBindings.activeThemeMode) {
-            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF1F3D1C)
-            else -> Color(0xFF264010)
-        }
+        get() = activeTransitExtendedColors.trainTicket.color
     val ForestBottom: Color
-        get() = when (DesignSystemBindings.activeThemeMode) {
-            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF142812)
-            else -> Color(0xFF1B2E0B)
-        }
+        get() = activeTransitExtendedColors.trainTicket.colorDeep
     val ForestBadgeFill: Color
-        get() = when (DesignSystemBindings.activeThemeMode) {
-            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF2B5427)
-            else -> Color(0xFF345418)
-        }
+        get() = activeTransitExtendedColors.trainTicket.colorRaised
     val ForestBadgeStroke: Color
-        get() = when (DesignSystemBindings.activeThemeMode) {
-            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF437A3D)
-            else -> Color(0xFF4A7325)
-        }
+        get() = activeTransitExtendedColors.trainTicket.colorRaisedOutline
+    /** Headline ink on the forest pass (ForestTop / ForestBottom / ForestBadgeFill). */
+    val OnForest: Color
+        get() = activeTransitExtendedColors.trainTicket.onColor
+    /** Sage accent text / icons on the forest pass. */
+    val ForestAccent: Color
+        get() = activeTransitExtendedColors.trainTicket.onColorVariant
+    /** Travel-class caption on the forest pass. */
+    val ForestSubtle: Color
+        get() = activeTransitExtendedColors.trainTicket.onColorSubtle
+    /** Departure / arrival time captions on the forest pass. */
+    val ForestMuted: Color
+        get() = activeTransitExtendedColors.trainTicket.onColorMuted
+    /** Decorative dashed route line on the forest pass. */
+    val ForestRouteLine: Color
+        get() = activeTransitExtendedColors.trainTicket.decoration
 
     val AmberChartBg: Color
-        get() = when (DesignSystemBindings.activeThemeMode) {
-            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF332610)
-            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFFFEF9C3)
-            SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Color(0xFFFEF3D6)
-        }
+        get() = activeTransitExtendedColors.statusPending.roles.container
     val AmberChartBorder: Color
-        get() = when (DesignSystemBindings.activeThemeMode) {
-            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF6B4E1B)
-            else -> Color(0xFFF7D788)
-        }
+        get() = activeTransitExtendedColors.statusPending.outline
     val AmberChartText: Color
-        get() = when (DesignSystemBindings.activeThemeMode) {
-            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFFFCD34D)
-            else -> Color(0xFF9E5808)
-        }
+        get() = activeTransitExtendedColors.statusPending.roles.onContainer
 
     val TerracottaWaitlistBg: Color
         get() = DesignSystemBindings.activePalette.secondaryContainer
     val TerracottaWaitlistBorder: Color
-        get() = when (DesignSystemBindings.activeThemeMode) {
-            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF7C3725)
-            else -> Color(0xFFF7C6B5)
-        }
+        get() = activeTransitExtendedColors.statusWaitlist.outline
     val TerracottaWaitlistText: Color
         get() = DesignSystemBindings.activePalette.onSecondaryContainer
 
     val SageConfirmedBg: Color
         get() = DesignSystemBindings.activePalette.primaryContainer
     val SageConfirmedBorder: Color
-        get() = when (DesignSystemBindings.activeThemeMode) {
-            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF426128)
-            else -> Color(0xFFC2E0A3)
-        }
+        get() = activeTransitExtendedColors.statusConfirmed.outline
     val SageConfirmedText: Color
-        get() = if (DesignSystemBindings.activePalette.mode.isDark) {
-            DesignSystemBindings.activePalette.onPrimaryContainer
-        } else {
-            DesignSystemBindings.activePalette.primary
+        get() = when (DesignSystemBindings.activeThemeMode) {
+            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> DesignSystemBindings.activePalette.onPrimaryContainer
+            SplitMateThemeMode.SUNLIT_BUCKWHEAT,
+            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> DesignSystemBindings.activePalette.primary
+        }
+    /** Icon ink on a [SageConfirmedText]-filled badge (role pair, >= 4.5:1 in every theme). */
+    val SageConfirmedOnText: Color
+        get() = when (DesignSystemBindings.activeThemeMode) {
+            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> DesignSystemBindings.activePalette.primaryContainer
+            SplitMateThemeMode.SUNLIT_BUCKWHEAT,
+            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> DesignSystemBindings.activePalette.onPrimary
         }
 
     val InkPrimary: Color
         get() = DesignSystemBindings.activePalette.onSurface
     val InkSecondary: Color
         get() = DesignSystemBindings.activePalette.onSurfaceVariant
+    /**
+     * v2.3.6: was a per-theme grey (#9C9488 Sunlit = 2.9:1 on white, below WCAG 4.5:1).
+     * Excluded rows keep their strike-through; the ink now uses onSurfaceVariant.
+     */
     val InkMuted: Color
-        get() = when (DesignSystemBindings.activeThemeMode) {
-            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF857D73)
-            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF6B7C68)
-            SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Color(0xFF9C9488)
+        get() = DesignSystemBindings.activePalette.onSurfaceVariant
+
+    /** Neutral chip / avatar disc behind InkSecondary or SageConfirmedText. */
+    val NeutralChip: Color
+        get() = DesignSystemBindings.activePalette.surfaceContainer
+    /** Disabled CTA slab (dark: raised well, light: deepest tonal surface). */
+    val DisabledSlab: Color
+        get() = if (DesignSystemBindings.activePalette.mode.isDark) {
+            DesignSystemBindings.activePalette.surfaceContainerHigh
+        } else {
+            DesignSystemBindings.activePalette.surfaceContainerHighest
         }
+    /** Excluded-member badge fill (M3 outline: >= 3:1 against every surface). */
+    val ExcludedBadge: Color
+        get() = DesignSystemBindings.activePalette.outline
+    val ExcludedBadgeIcon: Color
+        get() = DesignSystemBindings.activePalette.surfaceContainerLowest
 
     @Composable
     fun tactileTextFieldColors(): TextFieldColors = OutlinedTextFieldDefaults.colors(
@@ -745,9 +754,9 @@ fun PnrExpenseReviewScreen(
                             shape = RoundedCornerShape(16.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = TactilePaperPassTokens.ForestTop,
-                                contentColor = Color.White,
-                                disabledContainerColor = if (SplitMateTheme.isDark) Color(0xFF2E2A25) else Color(0xFFD5CFC2),
-                                disabledContentColor = if (SplitMateTheme.isDark) TactilePaperPassTokens.InkSecondary else Color(0xFF6B655E)
+                                contentColor = TactilePaperPassTokens.OnForest,
+                                disabledContainerColor = TactilePaperPassTokens.DisabledSlab,
+                                disabledContentColor = TactilePaperPassTokens.InkSecondary
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -757,7 +766,7 @@ fun PnrExpenseReviewScreen(
                                 ContainedLoadingIndicator(
                                     containerSize = 20.dp,
                                     containerColor = TactilePaperPassTokens.ForestBadgeFill,
-                                    indicatorColor = Color(0xFFD7E8B6)
+                                    indicatorColor = TactilePaperPassTokens.ForestAccent
                                 )
                             } else {
                                 Icon(
@@ -1246,13 +1255,13 @@ fun PnrSearchLookupCard(
                         ContainedLoadingIndicator(
                             containerSize = 20.dp,
                             containerColor = TactilePaperPassTokens.ForestBadgeFill,
-                            indicatorColor = Color(0xFFD7E8B6)
+                            indicatorColor = TactilePaperPassTokens.ForestAccent
                         )
                     } else {
                         Icon(
                             imageVector = Icons.Rounded.Search,
                             contentDescription = "Fetch Live PNR",
-                            tint = Color(0xFFD7E8B6),
+                            tint = TactilePaperPassTokens.ForestAccent,
                             modifier = Modifier.size(15.dp)
                         )
                     }
@@ -1262,7 +1271,7 @@ fun PnrSearchLookupCard(
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,
-                        color = Color.White
+                        color = TactilePaperPassTokens.OnForest
                     )
                 }
             }
@@ -1345,7 +1354,7 @@ fun TactilePaperBoardingPass(
                                 Icon(
                                     imageVector = Icons.Rounded.Train,
                                     contentDescription = null,
-                                    tint = Color(0xFFD7E8B6),
+                                    tint = TactilePaperPassTokens.ForestAccent,
                                     modifier = Modifier.size(14.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -1354,7 +1363,7 @@ fun TactilePaperBoardingPass(
                                     fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp,
-                                    color = Color.White,
+                                    color = TactilePaperPassTokens.OnForest,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -1368,7 +1377,7 @@ fun TactilePaperBoardingPass(
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.Medium,
                             fontSize = 11.sp,
-                            color = Color(0xFFC5D6A7)
+                            color = TactilePaperPassTokens.ForestSubtle
                         )
                     }
 
@@ -1420,7 +1429,7 @@ fun TactilePaperBoardingPass(
                             fontWeight = FontWeight.Black,
                             fontSize = 30.sp,
                             letterSpacing = (-0.5).sp,
-                            color = Color.White,
+                            color = TactilePaperPassTokens.OnForest,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -1429,7 +1438,7 @@ fun TactilePaperBoardingPass(
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 12.sp,
-                            color = Color(0xFFD7E8B6),
+                            color = TactilePaperPassTokens.ForestAccent,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -1440,7 +1449,7 @@ fun TactilePaperBoardingPass(
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Medium,
                                 fontSize = 11.sp,
-                                color = Color(0xFFAEC48A)
+                                color = TactilePaperPassTokens.ForestMuted
                             )
                         }
                     }
@@ -1461,12 +1470,14 @@ fun TactilePaperBoardingPass(
                                     fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 11.sp,
-                                    color = Color(0xFFD7E8B6),
+                                    color = TactilePaperPassTokens.ForestAccent,
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.height(6.dp))
                         }
+                        val routeLineColor = TactilePaperPassTokens.ForestRouteLine
+                        val routeStopColor = TactilePaperPassTokens.ForestAccent
                         Canvas(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1474,19 +1485,19 @@ fun TactilePaperBoardingPass(
                         ) {
                             val yCenter = size.height / 2f
                             drawLine(
-                                color = Color(0xFF6B9440),
+                                color = routeLineColor,
                                 start = Offset(8f, yCenter),
                                 end = Offset(size.width - 8f, yCenter),
                                 strokeWidth = 3f,
                                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f), 0f)
                             )
                             drawCircle(
-                                color = Color(0xFFD7E8B6),
+                                color = routeStopColor,
                                 radius = 4.dp.toPx(),
                                 center = Offset(4.dp.toPx(), yCenter)
                             )
                             drawCircle(
-                                color = Color(0xFFD7E8B6),
+                                color = routeStopColor,
                                 radius = 4.dp.toPx(),
                                 center = Offset(size.width - 4.dp.toPx(), yCenter)
                             )
@@ -1500,7 +1511,7 @@ fun TactilePaperBoardingPass(
                             fontWeight = FontWeight.Black,
                             fontSize = 30.sp,
                             letterSpacing = (-0.5).sp,
-                            color = Color.White,
+                            color = TactilePaperPassTokens.OnForest,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -1509,7 +1520,7 @@ fun TactilePaperBoardingPass(
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 12.sp,
-                            color = Color(0xFFD7E8B6),
+                            color = TactilePaperPassTokens.ForestAccent,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -1520,7 +1531,7 @@ fun TactilePaperBoardingPass(
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Medium,
                                 fontSize = 11.sp,
-                                color = Color(0xFFAEC48A)
+                                color = TactilePaperPassTokens.ForestMuted
                             )
                         }
                     }
@@ -1605,7 +1616,7 @@ fun TactilePaperBoardingPass(
                             ) {
                                 com.splitmate.app.AvatarToken(
                                     initials = pax.name,
-                                    bg = if (pax.isPayer) TactilePaperPassTokens.SageConfirmedBg else if (SplitMateTheme.isDark) Color(0xFF2E2A25) else Color(0xFFF0ECE1),
+                                    bg = if (pax.isPayer) TactilePaperPassTokens.SageConfirmedBg else TactilePaperPassTokens.NeutralChip,
                                     textColor = if (pax.isPayer) TactilePaperPassTokens.SageConfirmedText else TactilePaperPassTokens.InkSecondary,
                                     size = 34
                                 )
@@ -1614,7 +1625,7 @@ fun TactilePaperBoardingPass(
 
                                 Surface(
                                     shape = RoundedCornerShape(8.dp),
-                                    color = if (pax.isPayer) TactilePaperPassTokens.SageConfirmedBg else if (SplitMateTheme.isDark) Color(0xFF2E2A25) else Color(0xFFF0ECE1),
+                                    color = if (pax.isPayer) TactilePaperPassTokens.SageConfirmedBg else TactilePaperPassTokens.NeutralChip,
                                     border = androidx.compose.foundation.BorderStroke(
                                         1.dp,
                                         if (pax.isPayer) TactilePaperPassTokens.SageConfirmedBorder else TactilePaperPassTokens.HairlineBorder
@@ -2007,8 +2018,8 @@ private fun MemberSplitSelectionCard(
                             Box(modifier = Modifier.size(40.dp)) {
                                 com.splitmate.app.AvatarToken(
                                     initials = member.avatarSeed.ifBlank { member.name },
-                                    // Dark: #2E2A25 behind #D7E8B6 initials (~11:1) instead of a light-cream disc. Light: unchanged.
-                                    bg = if (isSelected) TactilePaperPassTokens.SageConfirmedBg else if (SplitMateTheme.isDark) Color(0xFF2E2A25) else Color(0xFFEAE4D7),
+                                    // Unselected disc: surfaceContainer behind SageConfirmedText initials in every theme.
+                                    bg = if (isSelected) TactilePaperPassTokens.SageConfirmedBg else TactilePaperPassTokens.NeutralChip,
                                     textColor = TactilePaperPassTokens.SageConfirmedText,
                                     size = 38
                                 )
@@ -2019,7 +2030,7 @@ private fun MemberSplitSelectionCard(
                                         .clip(CircleShape)
                                         .background(
                                             when {
-                                                !isSelected -> if (SplitMateTheme.isDark) Color(0xFF5A534A) else Color(0xFFD6CFC0)
+                                                !isSelected -> TactilePaperPassTokens.ExcludedBadge
                                                 isPayer -> TactilePaperPassTokens.ForestTop
                                                 else -> TactilePaperPassTokens.SageConfirmedText
                                             }
@@ -2030,7 +2041,11 @@ private fun MemberSplitSelectionCard(
                                     Icon(
                                         imageVector = if (isSelected) Icons.Rounded.Check else Icons.Rounded.Close,
                                         contentDescription = if (isSelected) "Selected" else "Excluded",
-                                        tint = if (SplitMateTheme.isDark && isSelected && !isPayer) TactilePaperPassTokens.ForestBottom else Color.White,
+                                        tint = when {
+                                            !isSelected -> TactilePaperPassTokens.ExcludedBadgeIcon
+                                            isPayer -> TactilePaperPassTokens.OnForest
+                                            else -> TactilePaperPassTokens.SageConfirmedOnText
+                                        },
                                         modifier = Modifier.size(10.dp)
                                     )
                                 }
@@ -2127,7 +2142,7 @@ private fun PayerSegmentedButtonRow(
                         shape = SegmentedButtonDefaults.itemShape(index = index, count = members.size),
                         colors = SegmentedButtonDefaults.colors(
                             activeContainerColor = TactilePaperPassTokens.ForestTop,
-                            activeContentColor = Color.White,
+                            activeContentColor = TactilePaperPassTokens.OnForest,
                             activeBorderColor = TactilePaperPassTokens.ForestTop,
                             inactiveContainerColor = TactilePaperPassTokens.PaperStubSurface,
                             inactiveContentColor = TactilePaperPassTokens.InkSecondary,

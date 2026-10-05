@@ -6,6 +6,7 @@
 
 package com.splitmate.app.ui.screens
 
+import com.splitmate.app.ui.theme.HubExtendedColors
 import android.content.Intent
 import android.net.Uri
 import com.splitmate.app.ui.screens.plan.PlanSubView
@@ -537,7 +538,7 @@ fun TripHubMemberAvatar(
                     .size(dotSize)
                     .align(Alignment.BottomEnd)
                     .clip(CircleShape)
-                    .background(Color(0xFF22C55E))
+                    .background(HubExtendedColors.presence().color)
                     .border(1.5.dp, TripHubTokens.CardSurface, CircleShape)
             )
         }
@@ -552,7 +553,7 @@ object TripHubTokens {
     val CanvasBg: Color
         get() = DesignSystemBindings.activePalette.surfaceContainerLow
     val CardSurface: Color
-        get() = if (SplitMateTheme.isDark) DesignSystemBindings.activePalette.surfaceContainerLowest else Color(0xFFFFFFFF).let { DesignSystemBindings.activePalette.surfaceContainerLowest }
+        get() = DesignSystemBindings.activePalette.surfaceContainerLowest
     val SunkenWell: Color
         get() = DesignSystemBindings.activePalette.surfaceContainer
     val CardBorder: Color
@@ -575,46 +576,39 @@ object TripHubTokens {
 
     // Deep Forest Green Train Pass Tokens (Sunlight-Grade Contrast >= 5.8:1)
     val TrainForestTop: Color
-        get() = when (DesignSystemBindings.activeThemeMode) {
-            SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Color(0xFF2D4F12)
-            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF264210)
-            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF1E3F24)
-        }
+        get() = HubExtendedColors.trainPass().forestTop
     val TrainForestBottom: Color
-        get() = when (DesignSystemBindings.activeThemeMode) {
-            SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Color(0xFF213B0C)
-            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF1B3009)
-            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF142E19)
-        }
+        get() = HubExtendedColors.trainPass().forestBottom
+    val TrainOnPass: Color
+        get() = HubExtendedColors.trainPass().onPass
     val TrainNextUpPillBg: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF759943) else Color(0xFF84A950)
+        get() = HubExtendedColors.trainPass().nextUpPillBg
     val TrainNextUpPillText: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF0F1F03) else Color(0xFF132604)
+        get() = HubExtendedColors.trainPass().nextUpPillText
     val TrainBerthCellBg: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF1A300A) else Color(0xFF223D0D)
+        get() = HubExtendedColors.trainPass().berthCellBg
     val TrainBerthCellBorder: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF345718) else Color(0xFF3E651E)
-    val TrainAccentLime = Color(0xFFB5DC86)     // > 7:1 contrast on Deep Forest Green
-    val TrainSecondarySage = Color(0xFFD7E8B6)  // > 5.8:1 contrast on Deep Forest Green
+        get() = HubExtendedColors.trainPass().berthCellBorder
+    val TrainAccentLime: Color
+        get() = HubExtendedColors.trainPass().accentLime
+    val TrainSecondarySage: Color
+        get() = HubExtendedColors.trainPass().secondarySage
     val TrainPrimaryCtaBg: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFF8BB85A) else Color(0xFF80AD47)
-    val TrainPrimaryCtaText = Color(0xFF132604)
+        get() = HubExtendedColors.trainPass().primaryCtaBg
+    val TrainPrimaryCtaText: Color
+        get() = HubExtendedColors.trainPass().primaryCtaText
 
     // Aviation Periwinkle Flight Pass Tokens
     val FlightNavyTop: Color
-        get() = when (DesignSystemBindings.activeThemeMode) {
-            SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Color(0xFF2B2768)
-            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF242059)
-            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF23383B)
-        }
+        get() = HubExtendedColors.flightPass().navyTop
     val FlightNavyBottom: Color
-        get() = when (DesignSystemBindings.activeThemeMode) {
-            SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Color(0xFF1B1849)
-            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF16133B)
-            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF162527)
-        }
-    val FlightSecondaryLavender = Color(0xFFDCE3FD)
-    val FlightAccentPeriwinkle = Color(0xFFC7D2FE)
+        get() = HubExtendedColors.flightPass().navyBottom
+    val FlightOnPass: Color
+        get() = HubExtendedColors.flightPass().onPass
+    val FlightSecondaryLavender: Color
+        get() = HubExtendedColors.flightPass().secondaryLavender
+    val FlightAccentPeriwinkle: Color
+        get() = HubExtendedColors.flightPass().accentPeriwinkle
 
     // Semantic Status & Category Badges
     val PositiveSageText: Color
@@ -622,7 +616,7 @@ object TripHubTokens {
     val PositiveSagePillBg: Color
         get() = DesignSystemBindings.activePalette.primaryContainer
     val WarningRacText: Color
-        get() = if (SplitMateTheme.isDark) Color(0xFFFDBA74) else Color(0xFF9A3412)
+        get() = HubExtendedColors.warning().color
     val TerracottaPeachBg: Color
         get() = DesignSystemBindings.activePalette.secondaryContainer
     val TerracottaIconTint: Color
@@ -1202,8 +1196,8 @@ fun TripHomeScreen(
                     .sumOf { it.finalOwedCents }
                 Surface(
                     shape = RoundedCornerShape(16.dp),
-                    color = Color(0xFFFED8C8),
-                    border = BorderStroke(1.dp, Color(0xFFE06B52).copy(alpha = 0.35f)),
+                    color = DesignSystemBindings.activePalette.secondaryContainer,
+                    border = BorderStroke(1.dp, DesignSystemBindings.activePalette.secondary.copy(alpha = 0.35f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
@@ -1219,7 +1213,7 @@ fun TripHomeScreen(
                             Icon(
                                 imageVector = Icons.Rounded.PersonRemove,
                                 contentDescription = null,
-                                tint = Color(0xFF7C2D12),
+                                tint = DesignSystemBindings.activePalette.onSecondaryContainer,
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
@@ -1227,13 +1221,13 @@ fun TripHomeScreen(
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp,
-                                color = Color(0xFF7C2D12),
+                                color = DesignSystemBindings.activePalette.onSecondaryContainer,
                                 modifier = Modifier.weight(1f)
                             )
                         }
                         Surface(
                             shape = RoundedCornerShape(999.dp),
-                            color = Color(0xFFE06B52),
+                            color = DesignSystemBindings.activePalette.secondary,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
@@ -1255,7 +1249,7 @@ fun TripHomeScreen(
                                 Icon(
                                     imageVector = Icons.Rounded.SwapHoriz,
                                     contentDescription = null,
-                                    tint = Color.White,
+                                    tint = DesignSystemBindings.activePalette.onSecondary,
                                     modifier = Modifier.size(15.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -1264,7 +1258,7 @@ fun TripHomeScreen(
                                     fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 12.sp,
-                                    color = Color.White
+                                    color = DesignSystemBindings.activePalette.onSecondary
                                 )
                             }
                         }
@@ -1538,7 +1532,7 @@ private fun TripHubTopBar(
                                     modifier = Modifier
                                         .size(8.dp)
                                         .clip(CircleShape)
-                                        .background(Color(0xFF22C55E))
+                                        .background(HubExtendedColors.presence().color)
                                 )
                                 Text(
                                     text = "$onlineFriendsCount Online",
@@ -1816,18 +1810,14 @@ private fun CompactPerspectiveNetBalanceStrip(
         else -> "ALL SETTLED ₹0.00"
     }
     val netBadgeBg = when {
-        activeMemberNetCents > 0L && isDark -> Color(0xFF233216)
-        activeMemberNetCents > 0L -> BuckwheatSageContainer
-        activeMemberNetCents < 0L && isDark -> Color(0xFF3A2019)
-        activeMemberNetCents < 0L -> BuckwheatPeachContainer
-        else -> MaterialTheme.colorScheme.primaryContainer
+        activeMemberNetCents > 0L -> TripHubTokens.PositiveSagePillBg
+        activeMemberNetCents < 0L -> TripHubTokens.TerracottaPeachBg
+        else -> TripHubTokens.SunkenWell
     }
     val netBadgeTextColor = when {
-        activeMemberNetCents > 0L && isDark -> BuckwheatSageContainer
-        activeMemberNetCents > 0L -> BuckwheatOlivePrimary
-        activeMemberNetCents < 0L && isDark -> Color(0xFFFECDD3)
-        activeMemberNetCents < 0L -> BuckwheatTerracottaDark
-        else -> MaterialTheme.colorScheme.onPrimaryContainer
+        activeMemberNetCents > 0L -> TripHubTokens.PositiveSageText
+        activeMemberNetCents < 0L -> TripHubTokens.TerracottaIconTint
+        else -> TripHubTokens.TextSecondary
     }
     // v2.3.2 M3E audit: static financial data (spend/net) carries no wavy/linear progress
     // indicators. Hierarchy is expressed through an editorial headlineLarge figure + spacing.
@@ -2419,7 +2409,7 @@ fun DeepGreenTrainTicketCard(
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 28.sp,
-                                color = Color.White
+                                color = DesignSystemBindings.activePalette.onPrimary
                             )
                             Text(
                                 text = fromFullName,
@@ -2479,7 +2469,7 @@ fun DeepGreenTrainTicketCard(
                                 Icon(
                                     imageVector = Icons.Rounded.Train,
                                     contentDescription = null,
-                                    tint = Color.White,
+                                    tint = DesignSystemBindings.activePalette.onPrimary,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Box(
@@ -2514,7 +2504,7 @@ fun DeepGreenTrainTicketCard(
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 28.sp,
-                                color = Color.White
+                                color = DesignSystemBindings.activePalette.onPrimary
                             )
                             Text(
                                 text = toFullName,
@@ -2602,7 +2592,7 @@ fun DeepGreenTrainTicketCard(
                                                 fontFamily = FigtreeFontFamily,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 fontSize = 13.sp,
-                                                color = Color.White,
+                                                color = DesignSystemBindings.activePalette.onPrimary,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
@@ -3342,7 +3332,7 @@ fun PeriwinkleFlightBookingCard(
                                     fontSize = 11.sp,
                                     fontFeatureSettings = "tnum"
                                 ),
-                                color = Color.White,
+                                color = DesignSystemBindings.activePalette.onPrimary,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                             )
                         }
@@ -3372,7 +3362,7 @@ fun PeriwinkleFlightBookingCard(
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 28.sp,
-                                color = Color.White
+                                color = DesignSystemBindings.activePalette.onPrimary
                             )
                             Text(
                                 text = originCity,
@@ -3396,7 +3386,7 @@ fun PeriwinkleFlightBookingCard(
                             Icon(
                                 imageVector = Icons.Rounded.FlightTakeoff,
                                 contentDescription = null,
-                                tint = Color.White,
+                                tint = DesignSystemBindings.activePalette.onPrimary,
                                 modifier = Modifier.size(18.dp)
                             )
                             Box(
@@ -3416,7 +3406,7 @@ fun PeriwinkleFlightBookingCard(
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 28.sp,
-                                color = Color.White
+                                color = DesignSystemBindings.activePalette.onPrimary
                             )
                             Text(
                                 text = destCity,
@@ -4380,8 +4370,8 @@ private fun EmptyTripHubStateCard(
                     },
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = BuckwheatOlivePrimary,
-                        contentColor = Color.White
+                        containerColor = DesignSystemBindings.activePalette.primary,
+                        contentColor = DesignSystemBindings.activePalette.onPrimary
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -5454,8 +5444,8 @@ private fun TripHubMoneySettlementView(
                                                 onClick = onOpenSettleUpClick
                                             )
                                         ),
-                                        containerColor = BuckwheatOlivePrimary,
-                                        contentColor = Color.White
+                                        containerColor = DesignSystemBindings.activePalette.primary,
+                        contentColor = DesignSystemBindings.activePalette.onPrimary
                                     )
                                 }
                             } else {
@@ -5647,8 +5637,8 @@ private fun TripHubMoneySettlementView(
                                     },
                                     shape = CircleShape,
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = BuckwheatOlivePrimary,
-                                        contentColor = Color.White
+                                        containerColor = DesignSystemBindings.activePalette.primary,
+                        contentColor = DesignSystemBindings.activePalette.onPrimary
                                     ),
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -5658,7 +5648,7 @@ private fun TripHubMoneySettlementView(
                                     Icon(
                                         imageVector = Icons.Rounded.CheckCircleOutline,
                                         contentDescription = null,
-                                        tint = Color.White,
+                                        tint = DesignSystemBindings.activePalette.onPrimary,
                                         modifier = Modifier.size(15.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
@@ -5817,8 +5807,8 @@ private fun TripHubPeoplePerspectiveView(
                     enabled = cleanTypedPhone10.length == 10 && editedMemberName.trim().isNotBlank(),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = BuckwheatOlivePrimary,
-                        contentColor = Color.White
+                        containerColor = DesignSystemBindings.activePalette.primary,
+                        contentColor = DesignSystemBindings.activePalette.onPrimary
                     )
                 ) {
                     Text(
@@ -5884,7 +5874,7 @@ private fun TripHubPeoplePerspectiveView(
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = TripHubTokens.TerracottaPeachBg,
-                            border = BorderStroke(1.dp, Color(0xFFE06B52).copy(alpha = 0.4f)),
+                            border = BorderStroke(1.dp, DesignSystemBindings.activePalette.secondary.copy(alpha = 0.4f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
@@ -5946,8 +5936,8 @@ private fun TripHubPeoplePerspectiveView(
                     },
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFE06B52),
-                        contentColor = Color.White
+                        containerColor = DesignSystemBindings.activePalette.secondary,
+                            contentColor = DesignSystemBindings.activePalette.onSecondary
                     )
                 ) {
                     Text(
@@ -6006,7 +5996,7 @@ private fun TripHubPeoplePerspectiveView(
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = TripHubTokens.TerracottaPeachBg,
-                            border = BorderStroke(1.dp, Color(0xFFE06B52).copy(alpha = 0.4f)),
+                            border = BorderStroke(1.dp, DesignSystemBindings.activePalette.secondary.copy(alpha = 0.4f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
@@ -6047,8 +6037,8 @@ private fun TripHubPeoplePerspectiveView(
                         },
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = BuckwheatOlivePrimary,
-                            contentColor = Color.White
+                            containerColor = DesignSystemBindings.activePalette.primary,
+                        contentColor = DesignSystemBindings.activePalette.onPrimary
                         )
                     ) {
                         Text(
@@ -6073,8 +6063,8 @@ private fun TripHubPeoplePerspectiveView(
                         },
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFE06B52),
-                            contentColor = Color.White
+                            containerColor = DesignSystemBindings.activePalette.secondary,
+                            contentColor = DesignSystemBindings.activePalette.onSecondary
                         )
                     ) {
                         Text(
@@ -6442,7 +6432,7 @@ private fun TripHubPeoplePerspectiveView(
                         },
                         shape = RoundedCornerShape(16.dp),
                         color = TripHubTokens.TerracottaPeachBg,
-                        border = BorderStroke(1.dp, Color(0xFFE06B52).copy(alpha = 0.4f)),
+                        border = BorderStroke(1.dp, DesignSystemBindings.activePalette.secondary.copy(alpha = 0.4f)),
                         modifier = Modifier
                             .fillMaxWidth()
                             .defaultMinSize(minHeight = 48.dp)
@@ -6556,7 +6546,7 @@ private fun TripHubPeoplePerspectiveView(
                         color = if (isPeopleFeedbackError) TripHubTokens.TerracottaPeachBg else TripHubTokens.PositiveSagePillBg,
                         border = BorderStroke(
                             1.dp,
-                            if (isPeopleFeedbackError) Color(0xFFE06B52).copy(alpha = 0.4f) else TripHubTokens.PositiveSageText.copy(alpha = 0.35f)
+                            if (isPeopleFeedbackError) DesignSystemBindings.activePalette.secondary.copy(alpha = 0.4f) else TripHubTokens.PositiveSageText.copy(alpha = 0.35f)
                         ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -6842,7 +6832,7 @@ private fun TripHubPeoplePerspectiveView(
                     showLeaveTripConfirmDialog = true
                 },
                 shape = RoundedCornerShape(18.dp),
-                border = BorderStroke(1.dp, Color(0xFFE06B52).copy(alpha = 0.6f)),
+                border = BorderStroke(1.dp, DesignSystemBindings.activePalette.secondary.copy(alpha = 0.6f)),
                 colors = ButtonDefaults.outlinedButtonColors(
                     containerColor = TripHubTokens.TerracottaPeachBg.copy(alpha = if (SplitMateTheme.isDark) 0.75f else 0.45f),
                     contentColor = TripHubTokens.TerracottaIconTint
@@ -6892,7 +6882,7 @@ private fun AddBookingQuickSheet(
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         containerColor = SplitMateTheme.ScreenBg,
-        scrimColor = Color.Black.copy(alpha = 0.55f),
+        scrimColor = DesignSystemBindings.activePalette.scrim.copy(alpha = 0.55f),
         dragHandle = {
             BottomSheetDefaults.DragHandle(
                 color = SplitMateTheme.BorderLight,
@@ -7110,8 +7100,8 @@ private fun BerthChartInspectorDialog(
                 onClick = onOpenFullETicket,
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = BuckwheatOlivePrimary,
-                    contentColor = Color.White
+                    containerColor = DesignSystemBindings.activePalette.primary,
+                        contentColor = DesignSystemBindings.activePalette.onPrimary
                 ),
                 modifier = Modifier
                     .minimumInteractiveComponentSize()

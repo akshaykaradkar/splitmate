@@ -2,6 +2,7 @@
 
 package com.splitmate.app.ui.screens.plan
 
+import com.splitmate.app.ui.theme.HubExtendedColors
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -601,14 +602,14 @@ private fun GuideHero(
                         .background(
                             Brush.verticalGradient(
                                 0f to Color.Transparent,
-                                0.4f to Color.Black.copy(alpha = 0.12f),
-                                1f to Color.Black.copy(alpha = PlanGuideDefaults.HeroScrimAlpha)
+                                0.4f to com.splitmate.app.ui.DesignSystemBindings.activePalette.scrim.copy(alpha = 0.12f),
+                                1f to com.splitmate.app.ui.DesignSystemBindings.activePalette.scrim.copy(alpha = PlanGuideDefaults.HeroScrimAlpha)
                             )
                         )
                 )
             }
-            val titleColor = if (imageShown) Color.White else MaterialTheme.colorScheme.onSurface
-            val subtitleColor = if (imageShown) Color.White.copy(alpha = 0.92f) else MaterialTheme.colorScheme.onSurfaceVariant
+            val titleColor = if (imageShown) com.splitmate.app.ui.theme.HubExtendedColors.OnImageScrim else MaterialTheme.colorScheme.onSurface
+            val subtitleColor = if (imageShown) com.splitmate.app.ui.theme.HubExtendedColors.OnImageScrim.copy(alpha = 0.92f) else MaterialTheme.colorScheme.onSurfaceVariant
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
@@ -639,7 +640,7 @@ private fun GuideHero(
                         onClick = { creditOpen = !creditOpen },
                         modifier = Modifier.semantics { contentDescription = "Photo credit" }
                     ) {
-                        Surface(shape = CircleShape, color = Color.Black.copy(alpha = 0.45f), contentColor = Color.White) {
+                        Surface(shape = CircleShape, color = com.splitmate.app.ui.DesignSystemBindings.activePalette.scrim.copy(alpha = 0.45f), contentColor = com.splitmate.app.ui.theme.HubExtendedColors.OnImageScrim) {
                             Icon(
                                 imageVector = Icons.Rounded.Info,
                                 contentDescription = null,
@@ -653,8 +654,8 @@ private fun GuideHero(
                         val source = hero.sourceUrl?.takeIf { PlanGuideFormat.isSafeHttpsUrl(it) }
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = Color.Black.copy(alpha = 0.65f),
-                            contentColor = Color.White,
+                            color = com.splitmate.app.ui.DesignSystemBindings.activePalette.scrim.copy(alpha = 0.65f),
+                            contentColor = com.splitmate.app.ui.theme.HubExtendedColors.OnImageScrim,
                             modifier = Modifier
                                 .padding(start = 48.dp)
                                 .then(

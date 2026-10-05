@@ -36,31 +36,63 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.splitmate.app.SplitMateTheme
+import com.splitmate.app.ui.DesignSystemBindings
+import com.splitmate.app.ui.theme.activeTransitExtendedColors
 
 // ==============================================================================
 // 1. MATERIAL 3 EXPRESSIVE LUMINOUS TRANSIT TOKENS
 // ==============================================================================
 object AnimatedTransitDeckTokens {
+    // v2.3.6: transit pass brand colours are EXTENDED colours resolved per theme from
+    // `TransitExtendedColors` (hex lives only there). Sunlit values are unchanged.
+
     // Mode 1: Train PNR Pass Tokens (Fresh Botanical Sage & Lustrous Forest)
-    val SageForestStart = Color(0xFF32571F)        // Luminous Olive Forest
-    val SageForestEnd = Color(0xFF223E13)          // Shadowed Botanical Forest
-    val SagePillBg = Color(0xFFEAF5DC)             // Airy Sage Action Surface
-    val SagePillText = Color(0xFF254212)           // High-contrast Deep Forest Text
-    val SageBorder = Color(0xFFC3E29C)
-    val SageSignalGreen = Color(0xFF4CAF50)
+    val SageForestStart: Color                     // Luminous Olive Forest
+        get() = activeTransitExtendedColors.trainDeck.color
+    val SageForestEnd: Color                       // Shadowed Botanical Forest
+        get() = activeTransitExtendedColors.trainDeck.colorDeep
+    val SagePillBg: Color                          // Airy Sage Action Surface
+        get() = activeTransitExtendedColors.trainDeck.container
+    val SagePillText: Color                        // High-contrast Deep Forest Text
+        get() = activeTransitExtendedColors.trainDeck.onContainer
+    val SageBorder: Color
+        get() = activeTransitExtendedColors.trainDeck.containerOutline
+    val SageSignalGreen: Color
+        get() = activeTransitExtendedColors.trainDeck.signal
+    /** Headline ink / icons on the train pass. */
+    val TrainOnPass: Color
+        get() = activeTransitExtendedColors.trainDeck.onColor
+    /** Golden-sage locomotive headlight cone. */
+    val TrainHeadlight: Color
+        get() = activeTransitExtendedColors.trainDeck.highlight
 
     // Mode 2: Flight E-Ticket Pass Tokens (Warmed Periwinkle-Indigo & Lavender Mist)
-    val AviationNavyStart = Color(0xFF2B2768)      // Warm Periwinkle-Indigo Dusk
-    val AviationNavyEnd = Color(0xFF1B1849)        // Deep Periwinkle Midnight
-    val SkyBluePillBg = Color(0xFFEEF2FF)          // Stitch Canonical Periwinkle Mist Surface (#EEF2FF)
-    val SkyBluePillText = Color(0xFF2B2768)        // Deep Periwinkle Indigo Typography
-    val SkyBlueBorder = Color(0xFFC7D2FE)          // Soft Periwinkle Hairline Border
-    val SkySignalBlue = Color(0xFF818CF8)          // Luminous Periwinkle Signal
+    val AviationNavyStart: Color                   // Warm Periwinkle-Indigo Dusk
+        get() = activeTransitExtendedColors.flight.color
+    val AviationNavyEnd: Color                     // Deep Periwinkle Midnight
+        get() = activeTransitExtendedColors.flight.colorDeep
+    val SkyBluePillBg: Color                       // Stitch Canonical Periwinkle Mist Surface
+        get() = activeTransitExtendedColors.flight.container
+    val SkyBluePillText: Color                     // Deep Periwinkle Indigo Typography
+        get() = activeTransitExtendedColors.flight.onContainer
+    val SkyBlueBorder: Color                       // Soft Periwinkle Hairline Border
+        get() = activeTransitExtendedColors.flight.containerOutline
+    val SkySignalBlue: Color                       // Luminous Periwinkle Signal
+        get() = activeTransitExtendedColors.flight.signal
+    /** Headline ink / icons on the flight pass. */
+    val FlightOnPass: Color
+        get() = activeTransitExtendedColors.flight.onColor
 
     // Shared Specular & Rim Tokens
-    val SpecularRim = Color(0x38FFFFFF)            // 22% Specular Hairline
-    val TranslucentHeader = Color(0x2EFFFFFF)      // 18% Header Glass Inset
-    val DashedLine = Color(0x38FFFFFF)             // Perforation Dashed Line
+    val SpecularRim: Color                         // 22% Specular Hairline
+        get() = activeTransitExtendedColors.trainDeck.onColor.copy(alpha = 0.22f)
+    val TranslucentHeader: Color                   // 18% Header Glass Inset
+        get() = activeTransitExtendedColors.trainDeck.onColor.copy(alpha = 0.18f)
+    val DashedLine: Color                          // Perforation Dashed Line
+        get() = activeTransitExtendedColors.trainDeck.onColor.copy(alpha = 0.22f)
+    /** Smoked-glass badge backdrop on both passes. */
+    val Scrim: Color
+        get() = DesignSystemBindings.activePalette.scrim
 
     // Expressive Radii
     val RadiusCardCorner = 26.dp
@@ -358,8 +390,8 @@ private fun TrainPassCard(
             .shadow(
                 elevation = elevation,
                 shape = ticketShape,
-                spotColor = Color(0x44223E13),
-                ambientColor = Color(0x2614270B)
+                spotColor = AnimatedTransitDeckTokens.SageForestEnd.copy(alpha = 0.27f),
+                ambientColor = AnimatedTransitDeckTokens.SageForestEnd.copy(alpha = 0.15f)
             )
     ) {
         Box(
@@ -386,8 +418,8 @@ private fun TrainPassCard(
                 .drawBehind {
                     val w = size.width
                     val h = size.height
-                    val trackColor = Color.White.copy(alpha = 0.20f * alpha)
-                    val sleeperColor = Color.White.copy(alpha = 0.12f * alpha)
+                    val trackColor = AnimatedTransitDeckTokens.TrainOnPass.copy(alpha = 0.20f * alpha)
+                    val sleeperColor = AnimatedTransitDeckTokens.TrainOnPass.copy(alpha = 0.12f * alpha)
 
                     val p0 = Offset(w * 0.55f, h)
                     val p1 = Offset(w * 0.68f, h * 0.70f)
@@ -471,7 +503,7 @@ private fun TrainPassCard(
                     }
                     drawPath(
                         path = beamPath,
-                        color = Color(0xFFFFF59D).copy(alpha = 0.26f * alpha)
+                        color = AnimatedTransitDeckTokens.TrainHeadlight.copy(alpha = 0.26f * alpha)
                     )
 
                     // Locomotive Medallion + Actual Train Vector Icon (Icons.Rounded.Train)
@@ -515,8 +547,8 @@ private fun TrainPassCard(
                 ) {
                     Surface(
                         shape = AnimatedTransitDeckTokens.RadiusPill,
-                        color = Color.Black.copy(alpha = 0.28f),
-                        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.20f))
+                        color = AnimatedTransitDeckTokens.Scrim.copy(alpha = 0.28f),
+                        border = BorderStroke(0.5.dp, AnimatedTransitDeckTokens.TrainOnPass.copy(alpha = 0.20f))
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
@@ -533,7 +565,7 @@ private fun TrainPassCard(
                                 text = "IRCTC RAIL PASS",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = Color.White,
+                                color = AnimatedTransitDeckTokens.TrainOnPass,
                                 letterSpacing = 0.5.sp
                             )
                         }
@@ -542,7 +574,7 @@ private fun TrainPassCard(
                     if (!isForeground) {
                         Surface(
                             shape = AnimatedTransitDeckTokens.RadiusPill,
-                            color = Color.White.copy(alpha = 0.20f)
+                            color = AnimatedTransitDeckTokens.TrainOnPass.copy(alpha = 0.20f)
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
@@ -553,12 +585,12 @@ private fun TrainPassCard(
                                     text = "Tap to Switch to Train",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    color = AnimatedTransitDeckTokens.TrainOnPass
                                 )
                                 Icon(
                                     imageVector = Icons.Rounded.SwapHoriz,
                                     contentDescription = null,
-                                    tint = Color.White,
+                                    tint = AnimatedTransitDeckTokens.TrainOnPass,
                                     modifier = Modifier.size(12.dp)
                                 )
                             }
@@ -576,7 +608,7 @@ private fun TrainPassCard(
                                 text = if (trainCountLogged > 0) "$trainCountLogged ${if (trainCountLogged == 1) "Trip" else "Trips"} Active" else "Live Berth & Fare Split",
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White.copy(alpha = 0.90f)
+                                color = AnimatedTransitDeckTokens.TrainOnPass.copy(alpha = 0.90f)
                             )
                         }
                     }
@@ -589,7 +621,7 @@ private fun TrainPassCard(
                         fontFamily = SplitMateTheme.FontDisplay,
                         fontSize = 21.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        color = Color.White,
+                        color = AnimatedTransitDeckTokens.TrainOnPass,
                         letterSpacing = (-0.4).sp
                     )
                     Spacer(modifier = Modifier.height(3.dp))
@@ -597,7 +629,7 @@ private fun TrainPassCard(
                         text = "Auto-fetches IRCTC fare & berths via 10-Digit PNR.",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
-                        color = Color.White.copy(alpha = 0.85f),
+                        color = AnimatedTransitDeckTokens.TrainOnPass.copy(alpha = 0.85f),
                         lineHeight = 16.sp,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -708,8 +740,8 @@ private fun FlightPassCard(
             .shadow(
                 elevation = elevation,
                 shape = ticketShape,
-                spotColor = Color(0x44132743),
-                ambientColor = Color(0x260C1B2E)
+                spotColor = AnimatedTransitDeckTokens.AviationNavyEnd.copy(alpha = 0.27f),
+                ambientColor = AnimatedTransitDeckTokens.AviationNavyEnd.copy(alpha = 0.15f)
             )
     ) {
         Box(
@@ -736,7 +768,7 @@ private fun FlightPassCard(
                 .drawBehind {
                     val w = size.width
                     val h = size.height
-                    val contrailBaseColor = Color.White.copy(alpha = 0.16f * alpha)
+                    val contrailBaseColor = AnimatedTransitDeckTokens.FlightOnPass.copy(alpha = 0.16f * alpha)
 
                     val p0 = Offset(w * 0.44f, h * 0.96f)
                     val p1 = Offset(w * 0.60f, h * 0.65f)
@@ -792,7 +824,7 @@ private fun FlightPassCard(
                             cap = StrokeCap.Round
                         )
                         drawLine(
-                            color = Color.White.copy(alpha = 0.25f * alpha),
+                            color = AnimatedTransitDeckTokens.FlightOnPass.copy(alpha = 0.25f * alpha),
                             start = wakePos1,
                             end = wakePos2,
                             strokeWidth = 1.8.dp.toPx(),
@@ -837,8 +869,8 @@ private fun FlightPassCard(
                 ) {
                     Surface(
                         shape = AnimatedTransitDeckTokens.RadiusPill,
-                        color = Color.Black.copy(alpha = 0.28f),
-                        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.20f))
+                        color = AnimatedTransitDeckTokens.Scrim.copy(alpha = 0.28f),
+                        border = BorderStroke(0.5.dp, AnimatedTransitDeckTokens.FlightOnPass.copy(alpha = 0.20f))
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
@@ -855,7 +887,7 @@ private fun FlightPassCard(
                                 text = "AIRLINE E-TICKET",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = Color.White,
+                                color = AnimatedTransitDeckTokens.FlightOnPass,
                                 letterSpacing = 0.5.sp
                             )
                         }
@@ -864,7 +896,7 @@ private fun FlightPassCard(
                     if (!isForeground) {
                         Surface(
                             shape = AnimatedTransitDeckTokens.RadiusPill,
-                            color = Color.White.copy(alpha = 0.20f)
+                            color = AnimatedTransitDeckTokens.FlightOnPass.copy(alpha = 0.20f)
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
@@ -875,12 +907,12 @@ private fun FlightPassCard(
                                     text = "Tap to Switch to Flight",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    color = AnimatedTransitDeckTokens.FlightOnPass
                                 )
                                 Icon(
                                     imageVector = Icons.Rounded.SwapHoriz,
                                     contentDescription = null,
-                                    tint = Color.White,
+                                    tint = AnimatedTransitDeckTokens.FlightOnPass,
                                     modifier = Modifier.size(12.dp)
                                 )
                             }
@@ -898,7 +930,7 @@ private fun FlightPassCard(
                                 text = if (flightCountActive > 0) "$flightCountActive ${if (flightCountActive == 1) "Flight" else "Flights"} Active" else "Instant Seat & Fare Split",
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White.copy(alpha = 0.90f)
+                                color = AnimatedTransitDeckTokens.FlightOnPass.copy(alpha = 0.90f)
                             )
                         }
                     }
@@ -911,7 +943,7 @@ private fun FlightPassCard(
                         fontFamily = SplitMateTheme.FontDisplay,
                         fontSize = 21.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        color = Color.White,
+                        color = AnimatedTransitDeckTokens.FlightOnPass,
                         letterSpacing = (-0.4).sp
                     )
                     Spacer(modifier = Modifier.height(3.dp))
@@ -919,7 +951,7 @@ private fun FlightPassCard(
                         text = "Upload airline PDF to parse seats & airfare.",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
-                        color = Color.White.copy(alpha = 0.85f),
+                        color = AnimatedTransitDeckTokens.FlightOnPass.copy(alpha = 0.85f),
                         lineHeight = 16.sp,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis

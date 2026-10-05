@@ -1,5 +1,6 @@
 package com.splitmate.app.ui.screens
 
+import com.splitmate.app.ui.theme.HubExtendedColors
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -131,14 +132,8 @@ data class QuickParticipant(
     val upiId: String = ""
 )
 
-private val ParticipantPalette = listOf(
-    Color(0xFFD7E8B6) to Color(0xFF23201E),
-    Color(0xFFFFD8CC) to Color(0xFF8A2E1A),
-    Color(0xFFD0E2FF) to Color(0xFF143E82),
-    Color(0xFFFFD5E5) to Color(0xFF801844),
-    Color(0xFFE5DCFF) to Color(0xFF452285),
-    Color(0xFFD2F5DC) to Color(0xFF1B6331)
-)
+private val ParticipantPalette: List<Pair<Color, Color>>
+    get() = com.splitmate.app.ui.theme.HubExtendedColors.participantPalette().map { it.colorContainer to it.onColorContainer }
 
 // ==============================================================================
 // ELEVATED QuickExpenseScreen (M3 Expressive)
@@ -566,8 +561,8 @@ fun QuickExpenseScreen(
                             onOpenPnrDirectSplit()
                         },
                         shape = RoundedCornerShape(14.dp),
-                        color = Color(0xFF264010),
-                        border = BorderStroke(1.dp, Color(0xFF4A7325)),
+                        color = com.splitmate.app.ui.theme.HubExtendedColors.trainPass().promoContainer,
+                        border = BorderStroke(1.dp, com.splitmate.app.ui.theme.HubExtendedColors.trainPass().promoBorder),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
@@ -583,19 +578,19 @@ fun QuickExpenseScreen(
                                     fontFamily = SplitMateBrandFontFamily,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 13.sp,
-                                    color = Color.White
+                                    color = com.splitmate.app.ui.theme.HubExtendedColors.trainPass().onPass
                                 )
                                 Text(
                                     text = "Open tactile boarding pass · Enter 10-digit PNR & select members",
                                     fontFamily = SplitMateBrandFontFamily,
                                     fontWeight = FontWeight.Medium,
                                     fontSize = 11.sp,
-                                    color = Color(0xFFC5D6A7)
+                                    color = com.splitmate.app.ui.theme.HubExtendedColors.trainPass().promoSubtitle
                                 )
                             }
                             Surface(
                                 shape = QuickExpenseThemeTokens.RadiusPill,
-                                color = Color(0xFFD7E8B6)
+                                color = com.splitmate.app.ui.theme.HubExtendedColors.trainPass().promoPill
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
@@ -607,12 +602,12 @@ fun QuickExpenseScreen(
                                         fontFamily = SplitMateBrandFontFamily,
                                         fontWeight = FontWeight.ExtraBold,
                                         fontSize = 11.sp,
-                                        color = Color(0xFF1B2E0B)
+                                        color = com.splitmate.app.ui.theme.HubExtendedColors.trainPass().onPromoPill
                                     )
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
                                         contentDescription = null,
-                                        tint = Color(0xFF1B2E0B),
+                                        tint = com.splitmate.app.ui.theme.HubExtendedColors.trainPass().onPromoPill,
                                         modifier = Modifier.size(12.dp)
                                     )
                                 }
@@ -1371,7 +1366,7 @@ fun QuickExpenseScreen(
                                                 Icon(
                                                     imageVector = Icons.Rounded.Check,
                                                     contentDescription = "Selected",
-                                                    tint = Color.White,
+                                                    tint = com.splitmate.app.ui.theme.HubExtendedColors.trainPass().onPass,
                                                     modifier = Modifier.size(10.dp)
                                                 )
                                             }
@@ -1500,7 +1495,7 @@ fun QuickExpenseScreen(
                                             fontFamily = SplitMateBrandFontFamily,
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = if (isDark) Color(0xFFD6CEC4) else textSecondary,
+                                            color = textSecondary,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -1531,7 +1526,7 @@ fun QuickExpenseScreen(
                                         color = if (memberCount > 0) QuickExpenseThemeTokens.SageSurface else QuickExpenseThemeTokens.TerracottaSurface,
                                         border = BorderStroke(
                                             1.dp,
-                                            if (memberCount > 0) QuickExpenseThemeTokens.AccentSage else Color(0xFFFFCCBA)
+                                            if (memberCount > 0) QuickExpenseThemeTokens.AccentSage else DesignSystemBindings.activePalette.errorContainer
                                         )
                                     ) {
                                         Row(

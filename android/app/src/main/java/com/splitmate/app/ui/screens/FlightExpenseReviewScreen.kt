@@ -65,6 +65,7 @@ import com.splitmate.app.ui.components.rememberAnimatedSegmentedIslandItemShape
 import com.splitmate.app.ui.components.segmentedIslandItemShape
 import com.splitmate.app.ui.extractInitialsFromNameOrSeed
 import com.splitmate.app.ui.formatTravelExpenseTitle
+import com.splitmate.app.ui.theme.activeTransitExtendedColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.NumberFormat
@@ -84,28 +85,38 @@ object FlightPassTokens {
         get() = DesignSystemBindings.activePalette.surfaceContainerLow
     val PrimaryDark: Color
         get() = DesignSystemBindings.activePalette.onSurface
+    // v2.3.6: aviation brand colours are EXTENDED colours resolved per theme from
+    // `TransitExtendedColors` (hex lives only there).
     val AviationNavy: Color
-        get() = when (DesignSystemBindings.activeThemeMode) {
-            SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Color(0xFF2B2768)
-            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF1F1C52)
-            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF23383B)
-        }
+        get() = activeTransitExtendedColors.flight.color
     val AviationNavyGradient: Color
-        get() = when (DesignSystemBindings.activeThemeMode) {
-            SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Color(0xFF1B1849)
-            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF141236)
-            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFF162527)
-        }
+        get() = activeTransitExtendedColors.flight.colorDeep
+    /** Headline ink / icons on AviationNavy surfaces. */
+    val OnAviation: Color
+        get() = activeTransitExtendedColors.flight.onColor
+    /** Periwinkle-mist secondary ink on AviationNavy surfaces. */
+    val AviationOnVariant: Color
+        get() = activeTransitExtendedColors.flight.onColorVariant
+    /** Raised navy (wallet sleeve, dark-theme CTA). */
+    val AviationRaised: Color
+        get() = activeTransitExtendedColors.flight.colorRaised
+    val AviationRaisedOutline: Color
+        get() = activeTransitExtendedColors.flight.colorRaisedOutline
+    /** Gold foil text / icon ink on navy. */
+    val GoldFoil: Color
+        get() = activeTransitExtendedColors.flight.highlight
+    /** Decorative gold saddle-stitch stroke. */
+    val GoldStitch: Color
+        get() = activeTransitExtendedColors.flight.decoration
     val SkyBlue: Color
         get() = DesignSystemBindings.activePalette.tertiaryContainer
     val SkyBlueText: Color
         get() = DesignSystemBindings.activePalette.onTertiaryContainer
     val SkyBlueBorder: Color
-        get() = when (DesignSystemBindings.activeThemeMode) {
-            SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Color(0xFFC7D2FE)
-            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF4E48A6)
-            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFFB4D4D8)
-        }
+        get() = activeTransitExtendedColors.flight.outline
+    /** Gate-stamp ink (border, icon, sub-label) on a SkyBlue stamp. */
+    val StampInk: Color
+        get() = DesignSystemBindings.activePalette.tertiary
     val TicketPaperWhite: Color
         get() = DesignSystemBindings.activePalette.surfaceContainerLowest
     val TicketPaperEdge: Color
@@ -115,11 +126,7 @@ object FlightPassTokens {
     val StatusGreenText: Color
         get() = DesignSystemBindings.activePalette.onPrimaryContainer
     val StatusGreenBorder: Color
-        get() = when (DesignSystemBindings.activeThemeMode) {
-            SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Color(0xFFC7E2A4)
-            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Color(0xFF3D5428)
-            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Color(0xFFA8C6A3)
-        }
+        get() = activeTransitExtendedColors.statusConfirmed.outline
     val StatusGreenDot: Color
         get() = DesignSystemBindings.activePalette.primaryContainer
     val BorderSubtle: Color
@@ -130,8 +137,28 @@ object FlightPassTokens {
         get() = DesignSystemBindings.activePalette.onSurfaceVariant
     val TextMuted: Color
         get() = DesignSystemBindings.activePalette.onSurfaceVariant
+    /**
+     * Sage glow ink on the navy commit CTA. v2.3.6: Espresso's primaryContainer is a dark
+     * olive (1.3:1 on navy), so the dark theme uses onPrimaryContainer instead.
+     */
     val AccentSageGlow: Color
-        get() = DesignSystemBindings.activePalette.primaryContainer
+        get() = when (DesignSystemBindings.activeThemeMode) {
+            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> DesignSystemBindings.activePalette.onPrimaryContainer
+            SplitMateThemeMode.SUNLIT_BUCKWHEAT,
+            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> DesignSystemBindings.activePalette.primaryContainer
+        }
+    /** Commit CTA slab: raised navy on the dark theme so it separates from the espresso canvas. */
+    val CommitCtaContainer: Color
+        get() = when (DesignSystemBindings.activeThemeMode) {
+            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> activeTransitExtendedColors.flight.colorRaised
+            SplitMateThemeMode.SUNLIT_BUCKWHEAT,
+            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> activeTransitExtendedColors.flight.color
+        }
+    /** Dark-theme disabled CTA slab (warm raised well instead of a flat grey veil). */
+    val DisabledSlabDark: Color
+        get() = DesignSystemBindings.activePalette.surfaceContainerHigh
+    val Scrim: Color
+        get() = DesignSystemBindings.activePalette.scrim
     val BarcodeBarColor: Color
         get() = DesignSystemBindings.activePalette.onTertiaryContainer
 
@@ -321,10 +348,12 @@ internal fun BoardingPassCommitStampOverlay(
     stampSubLabel: String
 ) {
     if (tearProgress <= 0.01f && stampAlpha <= 0.01f) return
+    val boardingPassColors = activeTransitExtendedColors.boardingPass
+    val tearCursorColor = boardingPassColors.tearCursor
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF1E1B18).copy(alpha = (tearProgress * 0.18f).coerceAtMost(0.22f))),
+            .background(FlightPassTokens.Scrim.copy(alpha = (tearProgress * 0.18f).coerceAtMost(0.22f))),
         contentAlignment = Alignment.Center
     ) {
         // Stage 1 (0..125ms): Progressive Perforation Tear Sweep Line across the pass
@@ -345,7 +374,7 @@ internal fun BoardingPassCommitStampOverlay(
             )
             if (tearProgress in 0.05f..0.98f) {
                 drawCircle(
-                    color = Color(0xFFD7E8B6),
+                    color = tearCursorColor,
                     radius = 7.dp.toPx(),
                     center = Offset(sweepX, centerY)
                 )
@@ -356,7 +385,7 @@ internal fun BoardingPassCommitStampOverlay(
         if (stampAlpha > 0.01f) {
             Surface(
                 shape = RoundedCornerShape(14.dp),
-                color = Color(0xFFFFFCF7).copy(alpha = 0.96f * stampAlpha),
+                color = boardingPassColors.stamp.container.copy(alpha = 0.96f * stampAlpha),
                 border = BorderStroke(3.dp, accentColor.copy(alpha = stampAlpha)),
                 shadowElevation = 10.dp,
                 modifier = Modifier
@@ -399,7 +428,7 @@ internal fun BoardingPassCommitStampOverlay(
                             fontFamily = SplitMateTheme.FontRounded,
                             fontWeight = FontWeight.Bold,
                             fontSize = 11.sp,
-                            color = Color(0xFF4A443E)
+                            color = boardingPassColors.stamp.onContainer
                         )
                     }
                 }
@@ -445,14 +474,9 @@ data class FlightSplitMember(
     val avatarSeed: String = ""
 )
 
-private val MemberAvatarPalette = listOf(
-    Color(0xFFD7E8B6) to Color(0xFF2D4810),
-    Color(0xFFFFD8CC) to Color(0xFF8A2E1A),
-    Color(0xFFD0E2FF) to Color(0xFF143E82),
-    Color(0xFFD3D7FD) to Color(0xFF343B80),
-    Color(0xFFFCE3D7) to Color(0xFF7C2D12),
-    Color(0xFFE0F2FE) to Color(0xFF075985)
-)
+// v2.3.6: categorical member avatar (container to onContainer) pairs, resolved per theme.
+private val MemberAvatarPalette: List<Pair<Color, Color>>
+    get() = activeTransitExtendedColors.memberAvatars
 
 // ==============================================================================
 // 2. LUXURY PERFORATED BOARDING PASS SHAPE (16dp Semicircular Inward Notches)
@@ -777,7 +801,7 @@ fun FlightExpenseReviewScreen(
         }
     }
 
-    val ledgerSplitMembers = remember(groupMembers, selectedMemberIds, selectedPayerId, splitAllocationsPaise, matchedTicketMemberIds) {
+    val ledgerSplitMembers = remember(groupMembers, selectedMemberIds, selectedPayerId, splitAllocationsPaise, matchedTicketMemberIds, DesignSystemBindings.activeThemeMode) {
         groupMembers.mapIndexed { idx, member ->
             val (bg, fg) = MemberAvatarPalette[idx % MemberAvatarPalette.size]
             val isSelected = member.memberId in selectedMemberIds
@@ -923,7 +947,7 @@ fun FlightExpenseReviewScreen(
                                     Icon(
                                         imageVector = Icons.Rounded.Groups,
                                         contentDescription = "Switch Group",
-                                        tint = Color(0xFFEEF2FF),
+                                        tint = FlightPassTokens.AviationOnVariant,
                                         modifier = Modifier.size(20.dp)
                                     )
                                 }
@@ -1019,16 +1043,16 @@ fun FlightExpenseReviewScreen(
                             enabled = selectedMemberIds.isNotEmpty() && totalAirfarePaise > 0L && !isCommittingBoardingPass,
                             shape = FlightPassTokens.RadiusPill,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (SplitMateTheme.isDark) Color(0xFF282552) else FlightPassTokens.AviationNavy,
+                                containerColor = FlightPassTokens.CommitCtaContainer,
                                 contentColor = FlightPassTokens.AccentSageGlow,
                                 // Dark: warm sunken charcoal slab instead of a flat grey veil; Light: unchanged M3 default.
-                                disabledContainerColor = if (SplitMateTheme.isDark) Color(0xFF2E2A25) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                                disabledContainerColor = if (SplitMateTheme.isDark) FlightPassTokens.DisabledSlabDark else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
                                 disabledContentColor = if (SplitMateTheme.isDark) FlightPassTokens.TextSecondary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(56.dp)
-                                .shadow(12.dp, FlightPassTokens.RadiusPill, spotColor = Color(0x332B2768)),
+                                .shadow(12.dp, FlightPassTokens.RadiusPill, spotColor = FlightPassTokens.AviationNavy.copy(alpha = 0.2f)),
                             contentPadding = PaddingValues(horizontal = 20.dp)
                         ) {
                             val isCommitEnabled = selectedMemberIds.isNotEmpty() && totalAirfarePaise > 0L && !isCommittingBoardingPass
@@ -1063,8 +1087,8 @@ fun FlightExpenseReviewScreen(
                                     fontWeight = FontWeight.ExtraBold,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    // Dark disabled: #B8B0A4 on #2E2A25 (~6.5:1). Light: unchanged white.
-                                    color = if (!isCommitEnabled && SplitMateTheme.isDark) FlightPassTokens.TextSecondary else Color.White
+                                    // Disabled: TextSecondary on the disabled slab/veil (>= 4.5:1 in all themes). Enabled: flight onColor.
+                                    color = if (!isCommitEnabled) FlightPassTokens.TextSecondary else FlightPassTokens.OnAviation
                                 )
                             }
                         }
@@ -1705,7 +1729,7 @@ fun PnrSyncStatusBanner(
                         Icon(
                             imageVector = Icons.Rounded.FlightTakeoff,
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = FlightPassTokens.OnAviation,
                             modifier = Modifier.size(19.dp)
                         )
                     }
@@ -1963,8 +1987,8 @@ fun AnimatedLuxuryAirlineBoardingPass(
             .shadow(
                 elevation = cardElevation,
                 shape = passShape,
-                spotColor = Color(0x380F1D36),
-                ambientColor = Color(0x1F0F1D36)
+                spotColor = FlightPassTokens.AviationNavyGradient.copy(alpha = 0.22f),
+                ambientColor = FlightPassTokens.AviationNavyGradient.copy(alpha = 0.12f)
             )
             .clip(passShape)
             .background(FlightPassTokens.TicketPaperWhite)
@@ -1998,14 +2022,14 @@ fun AnimatedLuxuryAirlineBoardingPass(
                     ) {
                         Surface(
                             shape = CircleShape,
-                            color = Color.White.copy(alpha = 0.15f),
+                            color = FlightPassTokens.OnAviation.copy(alpha = 0.15f),
                             modifier = Modifier.size(36.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     imageVector = Icons.Rounded.Flight,
                                     contentDescription = null,
-                                    tint = Color.White,
+                                    tint = FlightPassTokens.OnAviation,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -2019,13 +2043,13 @@ fun AnimatedLuxuryAirlineBoardingPass(
                                     text = "$airlineName · $flightNumber",
                                     fontSize = 14.5.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White
+                                    color = FlightPassTokens.OnAviation
                                 )
                             }
                             Text(
                                 text = aircraftType,
                                 fontSize = 11.sp,
-                                color = Color.White.copy(alpha = 0.75f)
+                                color = FlightPassTokens.OnAviation.copy(alpha = 0.75f)
                             )
                         }
                     }
@@ -2335,8 +2359,8 @@ fun AnimatedLuxuryAirlineBoardingPass(
                 if (stampAlpha > 0.01f) {
                     Surface(
                         shape = RoundedCornerShape(14.dp),
-                        color = if (SplitMateTheme.isDark) Color(0xEB1B1936) else Color(0xF0EEF2FF),
-                        border = BorderStroke(2.2.dp, if (SplitMateTheme.isDark) Color(0xFF818CF8) else Color(0xFF3730A3)),
+                        color = FlightPassTokens.SkyBlue.copy(alpha = 0.94f),
+                        border = BorderStroke(2.2.dp, FlightPassTokens.StampInk),
                         shadowElevation = 10.dp,
                         modifier = Modifier
                             .align(Alignment.Center)
@@ -2356,7 +2380,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
                             Icon(
                                 imageVector = Icons.Rounded.Verified,
                                 contentDescription = null,
-                                tint = if (SplitMateTheme.isDark) Color(0xFFA5B4FC) else Color(0xFF3730A3),
+                                tint = FlightPassTokens.StampInk,
                                 modifier = Modifier.size(20.dp)
                             )
                             Column {
@@ -2366,14 +2390,14 @@ fun AnimatedLuxuryAirlineBoardingPass(
                                     fontSize = 11.5.sp,
                                     fontWeight = FontWeight.Black,
                                     letterSpacing = 1.1.sp,
-                                    color = if (SplitMateTheme.isDark) Color(0xFFE0E7FF) else Color(0xFF1E1B4B)
+                                    color = FlightPassTokens.SkyBlueText
                                 )
                                 Text(
                                     text = "STUB DETACHED & TUCKED IN WALLET SLEEVE",
                                     fontSize = 8.5.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     letterSpacing = 0.8.sp,
-                                    color = if (SplitMateTheme.isDark) Color(0xFFA5B4FC) else Color(0xFF4338CA)
+                                    color = FlightPassTokens.StampInk
                                 )
                             }
                         }
@@ -2397,6 +2421,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
                     .padding(vertical = 4.dp)
             ) {
                 // Perforation Dashed Line + Animated Gold/Periwinkle Tear Cut Line
+                val tearLineColors = activeTransitExtendedColors.boardingPass
                 Canvas(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -2418,9 +2443,9 @@ fun AnimatedLuxuryAirlineBoardingPass(
                         drawLine(
                             brush = Brush.horizontalGradient(
                                 colors = listOf(
-                                    Color(0xFF6366F1),
-                                    Color(0xFFF59E0B),
-                                    Color(0xFF4F46E5)
+                                    tearLineColors.tearGradientStart,
+                                    tearLineColors.stamp.color,
+                                    tearLineColors.tearGradientEnd
                                 )
                             ),
                             start = Offset(0f, centerY),
@@ -2429,7 +2454,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
                         )
                         // Glowing perforation spark at the active tear tip
                         drawCircle(
-                            color = Color(0xFFF59E0B),
+                            color = tearLineColors.stamp.color,
                             radius = 5.dp.toPx(),
                             center = Offset(cutEndX.coerceIn(0f, size.width), centerY)
                         )
@@ -2572,6 +2597,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
 
                 // Periwinkle Stitched Leather Wallet Pocket Lip overlapping the bottom of the tucked stub
                 if (walletPocketAlpha > 0.01f) {
+                    val walletStitchColor = FlightPassTokens.GoldStitch.copy(alpha = 0.75f)
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -2584,21 +2610,21 @@ fun AnimatedLuxuryAirlineBoardingPass(
                             .background(
                                 Brush.verticalGradient(
                                     colors = listOf(
-                                        Color(0xFF282552),
-                                        Color(0xFF1B1849)
+                                        FlightPassTokens.AviationRaised,
+                                        FlightPassTokens.AviationNavyGradient
                                     )
                                 )
                             )
                             .border(
                                 width = 1.dp,
-                                color = Color(0xFF5650B8),
+                                color = FlightPassTokens.AviationRaisedOutline,
                                 shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 22.dp, bottomEnd = 22.dp)
                             )
                             .drawBehind {
                                 // Gold saddle-stitching line across the leather wallet lip
                                 val stitchEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 7f), 0f)
                                 drawLine(
-                                    color = Color(0xFFEAB308).copy(alpha = 0.75f),
+                                    color = walletStitchColor,
                                     start = Offset(16.dp.toPx(), 7.dp.toPx()),
                                     end = Offset(size.width - 16.dp.toPx(), 7.dp.toPx()),
                                     strokeWidth = 1.5.dp.toPx(),
@@ -2620,7 +2646,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
                                 Icon(
                                     imageVector = Icons.Rounded.AccountBalanceWallet,
                                     contentDescription = null,
-                                    tint = Color(0xFFFDE68A),
+                                    tint = FlightPassTokens.GoldFoil,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Text(
@@ -2629,7 +2655,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
                                     fontSize = 10.5.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     letterSpacing = 0.9.sp,
-                                    color = Color(0xFFEEF2FF)
+                                    color = FlightPassTokens.AviationOnVariant
                                 )
                             }
                             Text(
@@ -2637,7 +2663,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
                                 style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFFFDE68A)
+                                color = FlightPassTokens.GoldFoil
                             )
                         }
                     }

@@ -69,44 +69,28 @@ enum class Gm3EnergyState(val label: String) {
  * GM3 dark card surface (`#24201C`).
  */
 enum class Gm3EnergyAccentPalette(
-    val baseContainer: Color,
-    val primaryBlob: Color,
-    val secondaryBlob: Color,
-    val tertiaryBlob: Color,
-    val borderTint: Color,
-    val darkBorderTint: Color
 ) {
     /** Warm Olive + Sage + Peach for IRCTC Train PNR & Receipt Claim Engine */
-    BUCKWHEAT_SAGE(
-        baseContainer = Color(0xFFF7F3EC),
-        primaryBlob = Color(0xFFD7E8B6),    // Soft Sage Container
-        secondaryBlob = Color(0xFFFED8C8),  // Warm Peach Container
-        tertiaryBlob = Color(0xFFE5F2D0),   // Light Olive Tonal
-        borderTint = Color(0xFF416913),     // Deep Olive
-        darkBorderTint = Color(0xFFB5DC86)  // Light Sage accent for dark surfaces
-    ),
+    BUCKWHEAT_SAGE,
 
     /** Periwinkle + Lavender + Peach for Airline E-Ticket PDF & Boarding Pass Engine */
-    AVIATION_PERIWINKLE(
-        baseContainer = Color(0xFFF7F3EC),
-        primaryBlob = Color(0xFFDCE3FD),    // Soft Periwinkle Container
-        secondaryBlob = Color(0xFFEDE9FE),  // Lavender Tonal
-        tertiaryBlob = Color(0xFFFED8C8),   // Warm Peach Accent
-        borderTint = Color(0xFF3730A3),     // Deep Indigo
-        darkBorderTint = Color(0xFFC7D2FE)  // Light Periwinkle accent for dark surfaces
-    );
+    AVIATION_PERIWINKLE;
+
+    val primaryBlob: Color get() = com.splitmate.app.ui.DesignSystemBindings.activePalette.primaryContainer
+    val secondaryBlob: Color get() = com.splitmate.app.ui.DesignSystemBindings.activePalette.secondaryContainer
+    val tertiaryBlob: Color get() = com.splitmate.app.ui.DesignSystemBindings.activePalette.tertiaryContainer
 
     /** Base container resolved against the current theme (dark: GM3 dark card surface `#24201C`). */
     val resolvedBaseContainer: Color
-        get() = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkCardSurface else baseContainer
+        get() = com.splitmate.app.ui.DesignSystemBindings.activePalette.surfaceContainerLow
 
     /** Resting (idle) border resolved against the current theme (dark: `#38312B`). */
     val resolvedRestingBorder: Color
-        get() = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkBorder else Color(0xFFEDE7DF)
+        get() = com.splitmate.app.ui.DesignSystemBindings.activePalette.outlineVariant
 
     /** Accent tint (status dot, active border, state label) resolved against the current theme. */
     val resolvedAccentTint: Color
-        get() = if (SplitMateTheme.isDark) darkBorderTint else borderTint
+        get() = com.splitmate.app.ui.DesignSystemBindings.activePalette.primary
 
     /** Blob alpha multiplier: pastel blobs are dimmed on dark surfaces so light text stays legible. */
     val resolvedBlobAlphaScale: Float
@@ -307,7 +291,7 @@ fun Gm3EnergyStatusPill(
                 text = statusText,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                color = if (SplitMateTheme.isDark) DesignSystemBindings.GM3DarkPrimaryText else Color(0xFF23201E)
+                color = com.splitmate.app.ui.DesignSystemBindings.activePalette.onSurface
             )
             Text(
                 text = "• ${state.label}",

@@ -1,5 +1,6 @@
 package com.splitmate.app
 
+import com.splitmate.app.ui.theme.HubExtendedColors
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -528,7 +529,7 @@ fun AvatarToken(
                     .size(dotSize)
                     .align(Alignment.BottomEnd)
                     .clip(CircleShape)
-                    .background(Color(0xFF22C55E))
+                    .background(com.splitmate.app.ui.theme.HubExtendedColors.presence().color)
                     .border(1.5.dp, SplitMateTheme.SurfaceWhite, CircleShape)
             )
         }
@@ -546,7 +547,7 @@ fun OverlappingAvatarStack(
             Box(modifier = Modifier.offset(x = (-index * 8).dp)) {
                 AvatarToken(
                     initials = seed,
-                    bg = Color(0xFFE2E8F0),
+                    bg = com.splitmate.app.ui.DesignSystemBindings.activePalette.surfaceContainerHighest,
                     textColor = SplitMateTheme.PrimaryDark,
                     size = 28,
                     isOnline = onlineFlags.getOrNull(index) == true

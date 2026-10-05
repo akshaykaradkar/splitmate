@@ -270,7 +270,7 @@ fun TripSyncAndPerspectiveSheet(
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         containerColor = SplitMateTheme.ScreenBg,
-        scrimColor = Color.Black.copy(alpha = 0.55f),
+        scrimColor = com.splitmate.app.ui.DesignSystemBindings.activePalette.scrim.copy(alpha = 0.55f),
         dragHandle = {
             BottomSheetDefaults.DragHandle(
                 color = SplitMateTheme.BorderLight,
@@ -589,7 +589,7 @@ fun TripSyncAndPerspectiveSheet(
                             shape = RoundedCornerShape(14.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = SplitMateTheme.SageText,
-                                contentColor = Color.White
+                                contentColor = com.splitmate.app.ui.DesignSystemBindings.activePalette.onPrimary
                             ),
                             modifier = Modifier
                                 .weight(1.45f)
@@ -732,7 +732,7 @@ fun TripSyncAndPerspectiveSheet(
                                     shape = RoundedCornerShape(12.dp),
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = SplitMateTheme.SageText,
-                                        contentColor = Color.White
+                                        contentColor = com.splitmate.app.ui.DesignSystemBindings.activePalette.onPrimary
                                     ),
                                     modifier = Modifier
                                         .fillMaxWidth()

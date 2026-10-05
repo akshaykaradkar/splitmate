@@ -126,8 +126,11 @@ class SplitMateV236ThemeRolesTest {
         val root = File("src/main/java/com/splitmate/app/ui")
         val offenders = root.walkTopDown().filter { it.isFile && it.extension == "kt" }.flatMap { f ->
             f.readLines().mapIndexedNotNull { i, line ->
-                val isBorderToken = Regex("""(CardBorder|Border|Divider)\b.*get\(\)\s*=.*\.outline\b(?!Variant)""").containsMatchIn(line) ||
-                    Regex("""BorderStroke\([^)]*\.outline\b(?!Variant)""").containsMatchIn(line)
+                // Only the M3 palette/colour-scheme `outline` role is restricted; extended colour groups
+                // (e.g. `Extended.trainPass.outline`) carry their own decorative border colour.
+                val role = """(?:[Pp]alette|colorScheme)\.outline\b(?!Variant)"""
+                val isBorderToken = Regex("""(CardBorder|Border|Divider)\b.*get\(\)\s*=.*$role""").containsMatchIn(line) ||
+                    Regex("""BorderStroke\([^)]*$role""").containsMatchIn(line)
                 if (isBorderToken) "${f.name}:${i + 1}" else null
             }
         }.toList()
