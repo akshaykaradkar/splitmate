@@ -417,7 +417,7 @@ fun TripSyncAndPerspectiveSheet(
                         ) {
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 Text(
-                                    text = "6-CHARACTER TRIP JOIN CODE",
+                                    text = "Trip code",
                                     fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 10.sp,
@@ -474,7 +474,7 @@ fun TripSyncAndPerspectiveSheet(
                                         modifier = Modifier.size(15.dp)
                                     )
                                     Text(
-                                        text = "Copy Code",
+                                        text = "Copy code",
                                         fontFamily = FigtreeFontFamily,
                                         fontWeight = FontWeight.ExtraBold,
                                         fontSize = 12.sp,
@@ -500,7 +500,7 @@ fun TripSyncAndPerspectiveSheet(
                     ButtonGroup(
                         items = listOf(
                             ExpressiveActionItem(
-                                label = "Copy Code",
+                                label = "Copy code",
                                 icon = Icons.Rounded.ContentCopy,
                                 isPrimary = false,
                                 onClick = {
@@ -603,7 +603,7 @@ fun TripSyncAndPerspectiveSheet(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Share Invite on WhatsApp",
+                                text = "Share invite on WhatsApp",
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp,
@@ -649,7 +649,7 @@ fun TripSyncAndPerspectiveSheet(
             }
 
             // =========================================================================
-            // SECTION 2: Join Another Trip by Code or Link
+            // SECTION 2: Join another trip by code or link
             // =========================================================================
             Surface(
                 shape = RoundedCornerShape(20.dp),
@@ -674,7 +674,7 @@ fun TripSyncAndPerspectiveSheet(
                             modifier = Modifier.size(18.dp)
                         )
                         Text(
-                            text = "Join Another Trip by Code or Link",
+                            text = "Join another trip by code or link",
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,

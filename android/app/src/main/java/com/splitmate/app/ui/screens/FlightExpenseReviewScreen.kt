@@ -414,11 +414,11 @@ internal fun BoardingPassCommitStampOverlay(
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
-                                text = "TICKET SAVED",
+                                text = "Ticket saved",
                                 fontFamily = SplitMateTheme.FontDisplay,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 15.sp,
-                                letterSpacing = 1.1.sp,
+                                letterSpacing = 0.1.sp,
                                 color = accentColor
                             )
                         }
@@ -2252,11 +2252,11 @@ fun AnimatedLuxuryAirlineBoardingPass(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "PASSENGER ALLOCATION (${passengers.size})",
+                            text = "Passengers (${passengers.size})",
                             fontSize = 10.5.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = FlightPassTokens.TextSecondary,
-                            letterSpacing = 0.8.sp
+                            letterSpacing = 0.1.sp
                         )
 
                         Surface(
@@ -2392,18 +2392,18 @@ fun AnimatedLuxuryAirlineBoardingPass(
                             )
                             Column {
                                 Text(
-                                    text = "BOARDING VERIFIED · PNR $pnrNumber",
+                                    text = "Ticket checked · PNR $pnrNumber",
                                     fontFamily = SplitMateTheme.FontDisplay,
                                     fontSize = 11.5.sp,
                                     fontWeight = FontWeight.Black,
-                                    letterSpacing = 1.1.sp,
+                                    letterSpacing = 0.1.sp,
                                     color = FlightPassTokens.SkyBlueText
                                 )
                                 Text(
-                                    text = "STUB DETACHED & TUCKED IN WALLET SLEEVE",
+                                    text = "Saved to your trip",
                                     fontSize = 8.5.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = 0.8.sp,
+                                    letterSpacing = 0.1.sp,
                                     color = FlightPassTokens.StampInk
                                 )
                             }
@@ -2540,11 +2540,11 @@ fun AnimatedLuxuryAirlineBoardingPass(
                                 .padding(end = 12.dp)
                         ) {
                             Text(
-                                text = "TOTAL GROUP AIRFARE",
+                                text = "Total airfare",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = FlightPassTokens.TextMuted,
-                                letterSpacing = 1.sp
+                                letterSpacing = 0.1.sp
                             )
                             EditorialFinancialTotalText(
                                 text = "₹${NumberFormat.getNumberInstance(Locale("en", "IN")).format(totalAirfare)}",
@@ -2657,11 +2657,11 @@ fun AnimatedLuxuryAirlineBoardingPass(
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Text(
-                                    text = "SPLITMATE AVIATION WALLET SLEEVE",
+                                    text = "Your tickets",
                                     fontFamily = SplitMateTheme.FontDisplay,
                                     fontSize = 10.5.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = 0.9.sp,
+                                    letterSpacing = 0.1.sp,
                                     color = FlightPassTokens.AviationOnVariant
                                 )
                             }
@@ -2716,11 +2716,11 @@ fun EngravedAviationBarcode(
         }
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = barcodeCaption.ifBlank { "IATA BCBP · PNR $pnrNumber" },
+            text = barcodeCaption.ifBlank { "PNR $pnrNumber" },
             fontSize = 9.sp,
             fontWeight = FontWeight.ExtraBold,
             color = FlightPassTokens.TextMuted,
-            letterSpacing = 1.2.sp,
+            letterSpacing = 0.1.sp,
             textAlign = TextAlign.Center,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis

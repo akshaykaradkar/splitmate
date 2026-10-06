@@ -218,9 +218,9 @@ fun ActivityDetailSheet(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = if (parsedTravelTicket.pnr.isNotBlank()) {
-                            "Open Full Boarding Pass (PNR ${parsedTravelTicket.pnr})"
+                            "Open boarding pass (PNR ${parsedTravelTicket.pnr})"
                         } else {
-                            "Open Full Boarding Pass"
+                            "Open boarding pass"
                         },
                         fontFamily = SplitMateTheme.FontRounded,
                         fontWeight = FontWeight.ExtraBold,

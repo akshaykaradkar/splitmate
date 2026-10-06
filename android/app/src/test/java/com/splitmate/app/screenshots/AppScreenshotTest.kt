@@ -82,9 +82,9 @@ class AppScreenshotTest {
     /** Step C: mark both payments paid -> the "all settled" burst plays (mid + rest frames). */
     @Test fun s16_settled_celebration() {
         launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Money")
-        tap(text = "Mark Paid")
+        tap(text = "Mark paid")
         compose.mainClock.autoAdvance = false
-        val last = compose.onAllNodes(hasText("Mark Paid", substring = true))[0]
+        val last = compose.onAllNodes(hasText("Mark paid", substring = true))[0]
         last.performTouchInput { click(androidx.compose.ui.geometry.Offset(width / 2f, minOf(height / 2f, 4f))) }
         compose.mainClock.advanceTimeBy(64); frame("16a_settled_burst_early")
         compose.mainClock.advanceTimeBy(96); frame("16a_settled_burst_mid")
@@ -115,8 +115,8 @@ class AppScreenshotTest {
         compose.onRoot().captureRoboImage("$outDir/$name.png")
     }
 
-    private fun tap(text: String? = null, desc: String? = null) {
-        val matcher = if (text != null) hasText(text, substring = true) else hasContentDescription(desc!!)
+    private fun tap(text: String? = null, desc: String? = null, exact: Boolean = false) {
+        val matcher = if (text != null) hasText(text, substring = !exact) else hasContentDescription(desc!!)
         val node = compose.onAllNodes(matcher, useUnmergedTree = false)[0]
         runCatching { node.performScrollTo() }
         // Click near the top edge: the floating bottom toolbar can cover the node's centre.
@@ -128,18 +128,18 @@ class AppScreenshotTest {
 
     @Test fun s02_group_detail() { launch(); tap(text = "Lake Tahoe Cabin"); shot("02_group_detail") }
 
-    @Test fun s08_trip_fab_menu() { launch(); tap(text = "Lake Tahoe Cabin"); tap(desc = "Add Booking"); shot("08_trip_fab_menu") }
+    @Test fun s08_trip_fab_menu() { launch(); tap(text = "Lake Tahoe Cabin"); tap(desc = "Add booking"); shot("08_trip_fab_menu") }
 
     @Test fun s09_trip_money_tab() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Money"); shot("09_trip_money_tab") }
 
     // Full-app design audit coverage (every main surface).
     @Test fun s18_trip_plan_tab() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Plan"); shot("18_trip_plan_tab") }
 
-    @Test fun s19_trip_travel_tab() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Travel"); shot("19_trip_travel_tab") }
+    @Test fun s19_trip_travel_tab() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Travel", exact = true); shot("19_trip_travel_tab") }
 
     @Test fun s20_trip_people_tab() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "People"); shot("20_trip_people_tab") }
 
-    @Test fun s21_settle_up_sheet() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Money"); tap(text = "Settle Up"); shot("21_settle_up_sheet") }
+    @Test fun s21_settle_up_sheet() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Money"); tap(text = "Settle up"); shot("21_settle_up_sheet") }
 
     @Test fun s22_money_check_sheet() {
         launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Money")
@@ -150,11 +150,11 @@ class AppScreenshotTest {
     }
 
     @Test fun s23_shared_expense_form() {
-        launch(); tap(text = "Lake Tahoe Cabin"); tap(desc = "Add Booking"); tap(text = "Shared Expense"); shot("23_shared_expense_form")
+        launch(); tap(text = "Lake Tahoe Cabin"); tap(desc = "Add booking"); tap(text = "Split a bill"); shot("23_shared_expense_form")
     }
 
     @Test fun s24_more_booking_options() {
-        launch(); tap(text = "Lake Tahoe Cabin"); tap(desc = "Add Booking"); tap(text = "More Booking Options"); shot("24_more_booking_options")
+        launch(); tap(text = "Lake Tahoe Cabin"); tap(desc = "Add booking"); tap(text = "More", exact = true); shot("24_more_booking_options")
     }
 
     @Test fun s25_money_tab_scrolled() {
@@ -241,7 +241,7 @@ class AppScreenshotTest {
     /** Step C: swipe a Money-tab settle row right -> "Mark paid" revealed; release -> confirmation. */
     @Test fun s14_mark_paid_swipe() {
         launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Money")
-        val row = compose.onAllNodes(hasText("YOU RECEIVE", substring = true), useUnmergedTree = true)[0]
+        val row = compose.onAllNodes(hasText("You receive", substring = true), useUnmergedTree = true)[0]
         runCatching { row.performScrollTo() }
         settle()
         compose.mainClock.autoAdvance = false

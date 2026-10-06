@@ -421,9 +421,9 @@ fun resolveExpenseSchedule(
     val explicitEpoch = expense.scheduledAtEpochMs
     if (explicitEpoch != null && explicitEpoch > 0L) {
         val dateObj = Date(explicitEpoch)
-        val shortDate = SimpleDateFormat("dd MMM", Locale.US).format(dateObj)
-        val fullDate = SimpleDateFormat("dd MMM yyyy", Locale.US).format(dateObj)
-        val timeStr = SimpleDateFormat("hh:mm a", Locale.US).format(dateObj)
+        val shortDate = SimpleDateFormat("d MMM", Locale.US).format(dateObj)
+        val fullDate = SimpleDateFormat("d MMM yyyy", Locale.US).format(dateObj)
+        val timeStr = SimpleDateFormat("h:mm a", Locale.US).format(dateObj)
         return ResolvedExpenseSchedule(
             effectiveEpochMs = explicitEpoch,
             shortDateLabel = shortDate,
@@ -462,9 +462,9 @@ fun resolveExpenseSchedule(
 
     val effectiveEpoch = parsedInstant?.epochMs ?: expense.createdAtEpochMs
     val effectiveDate = Date(effectiveEpoch)
-    val shortStr = SimpleDateFormat("dd MMM", Locale.US).format(effectiveDate)
-    val fullStr = SimpleDateFormat("dd MMM yyyy", Locale.US).format(effectiveDate)
-    val timeStr = SimpleDateFormat("hh:mm a", Locale.US).format(effectiveDate)
+    val shortStr = SimpleDateFormat("d MMM", Locale.US).format(effectiveDate)
+    val fullStr = SimpleDateFormat("d MMM yyyy", Locale.US).format(effectiveDate)
+    val timeStr = SimpleDateFormat("h:mm a", Locale.US).format(effectiveDate)
 
     return ResolvedExpenseSchedule(
         effectiveEpochMs = effectiveEpoch,
@@ -1078,39 +1078,39 @@ fun TripHomeScreen(
                         isFabMenuExpanded = !isFabMenuExpanded
                     },
                     toggleIcon = Icons.Rounded.Add,
-                    toggleLabel = "Add Booking",
+                    toggleLabel = "Add booking",
                     items = listOf(
                         ExpressiveFabMenuItem(
-                            label = "IRCTC Train PNR",
+                            label = "Train ticket",
                             icon = Icons.Rounded.Train,
-                            subtitle = "10-digit live status & split",
+                            subtitle = "Add with your PNR",
                             onClick = {
                                 performCrispTactileHaptic(context, localView, heavy = false)
                                 onOpenTrainPnrReviewClick("")
                             }
                         ),
                         ExpressiveFabMenuItem(
-                            label = "Flight Boarding Pass",
+                            label = "Flight",
                             icon = Icons.Rounded.FlightTakeoff,
-                            subtitle = "3D pass & passenger seats",
+                            subtitle = "Upload your boarding pass",
                             onClick = {
                                 performCrispTactileHaptic(context, localView, heavy = false)
                                 onOpenFlightReviewClick("")
                             }
                         ),
                         ExpressiveFabMenuItem(
-                            label = "Shared Expense",
+                            label = "Split a bill",
                             icon = Icons.AutoMirrored.Rounded.ReceiptLong,
-                            subtitle = "0.00c drift calculator",
+                            subtitle = "Equal, exact or by shares",
                             onClick = {
                                 performCrispTactileHaptic(context, localView, heavy = false)
                                 onLogQuickExpenseClick()
                             }
                         ),
                         ExpressiveFabMenuItem(
-                            label = "More Booking Options",
+                            label = "More",
                             icon = Icons.Rounded.ViewAgenda,
-                            subtitle = "Stay, rental, cab & invites",
+                            subtitle = "Stay, rental or cab",
                             onClick = {
                                 performCrispTactileHaptic(context, localView, heavy = false)
                                 showAddBookingBottomSheet = true
@@ -1789,7 +1789,7 @@ private fun TripHubTopBar(
                             leadingIcon = {
                                 Icon(
                                     imageVector = Icons.Rounded.ViewAgenda,
-                                    contentDescription = "Switch to Classic Ledger & 3D Pass",
+                                    contentDescription = "Switch ticket view",
                                     modifier = Modifier.size(20.dp)
                                 )
                             },
@@ -2022,9 +2022,9 @@ private fun CompactPerspectiveNetBalanceStrip(
     )
 
     val netBadgeText = when {
-        activeMemberNetCents > 0L -> "YOU GET BACK +$formattedAbsNet"
-        activeMemberNetCents < 0L -> "YOU OWE -$formattedAbsNet"
-        else -> "ALL SETTLED ₹0.00"
+        activeMemberNetCents > 0L -> "You get back $formattedAbsNet"
+        activeMemberNetCents < 0L -> "You owe $formattedAbsNet"
+        else -> "All settled"
     }
     val netBadgeBg = when {
         activeMemberNetCents > 0L -> TripHubTokens.PositiveSagePillBg
@@ -2080,7 +2080,7 @@ private fun CompactPerspectiveNetBalanceStrip(
                         style = MaterialTheme.typography.labelLarge,
                         color = TripHubTokens.TextSecondary
                     )
-                    // Editorial hero total: headlineLarge, auto-shrinks so it never overflows the Settle Up column.
+                    // Editorial hero total: headlineLarge, auto-shrinks so it never overflows the Settle up column.
                     EditorialFinancialTotalText(
                         text = displayedTotalSpend,
                         style = MaterialTheme.typography.displaySmallEmphasized,
@@ -2095,7 +2095,7 @@ private fun CompactPerspectiveNetBalanceStrip(
                     ButtonGroup(
                         items = listOf(
                             ExpressiveActionItem(
-                                label = "Settle Up",
+                                label = "Settle up",
                                 icon = Icons.Rounded.SwapHoriz,
                                 onClick = onSettleUpClick,
                                 isPrimary = true,
@@ -2513,9 +2513,9 @@ fun DeepGreenTrainTicketCard(
     var showAllOverflowBerths by remember { mutableStateOf(false) }
 
     val fromCode = (snapshot?.fromStation?.ifBlank { parsedTicket?.fromStation.orEmpty() }
-        ?: parsedTicket?.fromStation.orEmpty()).ifBlank { "ORG" }.uppercase(Locale.US)
+        ?: parsedTicket?.fromStation.orEmpty()).ifBlank { "—" }.uppercase(Locale.US)
     val toCode = (snapshot?.toStation?.ifBlank { parsedTicket?.toStation.orEmpty() }
-        ?: parsedTicket?.toStation.orEmpty()).ifBlank { "DST" }.uppercase(Locale.US)
+        ?: parsedTicket?.toStation.orEmpty()).ifBlank { "—" }.uppercase(Locale.US)
 
     val fromFullName = snapshot?.fromStationName?.takeIf { it.isNotBlank() }
         ?: resolveStationDisplayName(fromCode).substringAfter("(", "").removeSuffix(")").ifBlank { fromCode }
@@ -2568,10 +2568,10 @@ fun DeepGreenTrainTicketCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = if (legNumber <= 1) "UPCOMING DEPARTURE" else "RETURN / TRANSIT LEG $legNumber",
+                    text = if (legNumber <= 1) "Next departure" else "Leg $legNumber",
                     fontWeight = FontWeight.ExtraBold,
                     style = MaterialTheme.typography.labelSmall,
-                    letterSpacing = 0.8.sp,
+                    letterSpacing = 0.1.sp,
                     color = TripHubTokens.TextMuted
                 )
                 Surface(
@@ -2653,7 +2653,7 @@ fun DeepGreenTrainTicketCard(
                             modifier = Modifier.weight(1f, fill = false)
                         ) {
                             Text(
-                                text = "DEPARTURE · ${depTimeLabel.uppercase(Locale.US)}",
+                                text = "Departs · $depTimeLabel",
                                 style = MaterialTheme.typography.labelSmall.merge(
                                     TextStyle(
                                         fontFamily = SplitMateTnumMonospace,
@@ -2678,7 +2678,7 @@ fun DeepGreenTrainTicketCard(
                                 color = TripHubTokens.TrainSecondarySage
                             )
                             Text(
-                                text = pnrDigits.ifBlank { "VERIFIED" },
+                                text = pnrDigits.ifBlank { "Verified" },
                                 style = MaterialTheme.typography.labelLarge.merge(
                                     TextStyle(
                                         fontFamily = SplitMateTnumMonospace,
@@ -3143,10 +3143,10 @@ fun PeriwinkleFlightBookingCard(
     }
 
     val originIata = flightResult.originIata.ifBlank {
-        parsedTicket?.fromStation?.ifBlank { "ORG" } ?: "ORG"
+        parsedTicket?.fromStation?.ifBlank { "—" } ?: "—"
     }
     val destIata = flightResult.destinationIata.ifBlank {
-        parsedTicket?.toStation?.ifBlank { "DST" } ?: "DST"
+        parsedTicket?.toStation?.ifBlank { "—" } ?: "—"
     }
     val originCity = flightResult.originCity.ifBlank { originIata }
     val destCity = flightResult.destinationCity.ifBlank { destIata }
@@ -3181,10 +3181,10 @@ fun PeriwinkleFlightBookingCard(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = "AVIATION BOARDING PASS",
+                text = "Flight",
                 fontWeight = FontWeight.ExtraBold,
                 style = MaterialTheme.typography.labelSmall,
-                letterSpacing = 0.8.sp,
+                letterSpacing = 0.1.sp,
                 color = TripHubTokens.TextMuted
             )
             Text(
@@ -3404,7 +3404,7 @@ fun PeriwinkleFlightBookingCard(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "3D Boarding Pass",
+                                text = "Boarding pass",
                                 fontWeight = FontWeight.ExtraBold,
                                 style = MaterialTheme.typography.labelLarge,
                                 color = TripHubTokens.PeriwinkleIconTint
@@ -3445,7 +3445,7 @@ fun LodgingBookingCard(
         groupMembers.find { it.memberId == expense.payerId }
     }
     val loggedDateFormatted = remember(expense.createdAtEpochMs) {
-        SimpleDateFormat("dd MMM yyyy · hh:mm a", Locale.US).format(Date(expense.createdAtEpochMs))
+        SimpleDateFormat("d MMM yyyy · h:mm a", Locale.US).format(Date(expense.createdAtEpochMs))
     }
     val nightsBadge = remember(expense.title) {
         Regex("""\b(\d+\s*Nights?)\b""", RegexOption.IGNORE_CASE).find(expense.title)?.groupValues?.getOrNull(1)
@@ -3464,10 +3464,10 @@ fun LodgingBookingCard(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = "LODGING & STAYS",
+                text = "Stays",
                 fontWeight = FontWeight.ExtraBold,
                 style = MaterialTheme.typography.labelSmall,
-                letterSpacing = 0.8.sp,
+                letterSpacing = 0.1.sp,
                 color = TripHubTokens.TextMuted
             )
             Row(
@@ -3588,7 +3588,7 @@ fun LodgingBookingCard(
                                 color = TripHubTokens.TextSecondary
                             )
                             Text(
-                                text = SimpleDateFormat("dd MMM yyyy", Locale.US).format(Date(expense.createdAtEpochMs)),
+                                text = SimpleDateFormat("d MMM yyyy", Locale.US).format(Date(expense.createdAtEpochMs)),
                                 style = MaterialTheme.typography.labelLarge.merge(
                                     TextStyle(
                                         fontFamily = SplitMateTnumMonospace,
@@ -3812,7 +3812,7 @@ fun GroundMobilityBookingCard(
         groupMembers.find { it.memberId == expense.payerId }
     }
     val loggedDateStr = remember(expense.createdAtEpochMs) {
-        SimpleDateFormat("dd MMM · hh:mm a", Locale.US).format(Date(expense.createdAtEpochMs))
+        SimpleDateFormat("d MMM · h:mm a", Locale.US).format(Date(expense.createdAtEpochMs))
     }
 
     val boxBg = if (isTwoWheelerRental) TripHubTokens.TerracottaPeachBg else TripHubTokens.PeriwinkleBoxBg
@@ -3832,10 +3832,10 @@ fun GroundMobilityBookingCard(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = if (isTwoWheelerRental) "GROUND MOBILITY & RENTALS" else "STATION TRANSFER & CABS",
+                text = if (isTwoWheelerRental) "Rentals" else "Cabs and transfers",
                 fontWeight = FontWeight.ExtraBold,
                 style = MaterialTheme.typography.labelSmall,
-                letterSpacing = 0.8.sp,
+                letterSpacing = 0.1.sp,
                 color = TripHubTokens.TextMuted
             )
             Text(
@@ -4030,7 +4030,7 @@ fun GeneralSharedExpenseCard(
         groupMembers.find { it.memberId == expense.payerId }
     }
     val dateLabel = remember(expense.createdAtEpochMs) {
-        SimpleDateFormat("dd MMM · hh:mm a", Locale.US).format(Date(expense.createdAtEpochMs))
+        SimpleDateFormat("d MMM", Locale.US).format(Date(expense.createdAtEpochMs))
     }
 
     val expenseActions = LocalTripHubExpenseActions.current
@@ -4122,7 +4122,7 @@ fun GeneralSharedExpenseCard(
                         horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         Text(
-                            text = splitBreakdown.perPersonCaption("${splitBreakdown.perPersonHeadlineShare}/pax"),
+                            text = splitBreakdown.perPersonCaption("${splitBreakdown.perPersonHeadlineShare} each"),
                             style = MaterialTheme.typography.labelSmall.merge(
                                 TextStyle(
                                     fontFamily = SplitMateTnumMonospace,
@@ -4265,7 +4265,7 @@ private fun EmptyTripHubStateCard(
             )
 
             Text(
-                text = "Log an IRCTC 10-digit Train PNR, upload a Flight Boarding Pass PDF, or add a Hotel, Rental, Cab, or Shared Expense. Cards and category filters appear automatically as you add trip expenses.",
+                text = "Add a train ticket with its PNR, upload a boarding pass, or add a stay, rental, cab or bill. Your bookings show up here as you add them.",
                 fontWeight = FontWeight.Medium,
                 style = MaterialTheme.typography.bodyMedium,
                 color = TripHubTokens.TextSecondary
@@ -4675,10 +4675,10 @@ private fun TripHubTravelWalletView(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "INTERACTIVE 3D TRANSIT DECK",
+                        text = "Tickets",
                         fontWeight = FontWeight.ExtraBold,
                         style = MaterialTheme.typography.labelSmall,
-                        letterSpacing = 0.8.sp,
+                        letterSpacing = 0.1.sp,
                         color = TripHubTokens.TextMuted
                     )
                     Surface(
@@ -4694,7 +4694,7 @@ private fun TripHubTravelWalletView(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
-                                text = "Classic Ledger View",
+                                text = "List view",
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = TripHubTokens.PositiveSageText,
@@ -4851,7 +4851,7 @@ private fun TripHubTravelWalletView(
 
 /**
  * Subtask 3.3.3: `Money` Tab — Greedy Minimum Cash Flow Settlements (`SplitMateMathEngine.simplifyDebtsGreedy`)
- * + Compact Max-Heap Graph Inspector (`Icons.Rounded.Info`, `48.dp` touch bounds) + `Mark Paid`.
+ * + Compact Max-Heap Graph Inspector (`Icons.Rounded.Info`, `48.dp` touch bounds) + `Mark paid`.
  */
 @Composable
 private fun TripHubMoneySettlementView(
@@ -5383,7 +5383,7 @@ private fun TripHubMoneySettlementView(
                                                     color = if (isCurrentUserPayer) TripHubTokens.TerracottaPeachBg else TripHubTokens.PositiveSagePillBg
                                                 ) {
                                                     Text(
-                                                        text = if (isCurrentUserPayer) "YOU PAY" else "YOU RECEIVE",
+                                                        text = if (isCurrentUserPayer) "You pay" else "You receive",
                                                         fontWeight = FontWeight.ExtraBold,
                                                         style = MaterialTheme.typography.labelSmall,
                                                         color = if (isCurrentUserPayer) TripHubTokens.TerracottaIconTint else TripHubTokens.PositiveSageText,
@@ -5467,7 +5467,7 @@ private fun TripHubMoneySettlementView(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         SplitButtonLayout(
-                                            leadingText = "Mark Paid",
+                                            leadingText = "Mark paid",
                                             leadingIcon = Icons.Rounded.CheckCircleOutline,
                                             onLeadingClick = {
                                                 performCrispTactileHaptic(context, localView, heavy = false)
@@ -5494,9 +5494,9 @@ private fun TripHubMoneySettlementView(
                                                     }
                                                 ),
                                                 ExpressiveMenuAction(
-                                                    label = "Open Settle Up Sheet",
+                                                    label = "Open Settle up Sheet",
                                                     icon = Icons.Rounded.AccountBalanceWallet,
-                                                    subtitle = "Inspect full group graph & custom settlement",
+                                                    subtitle = "See every balance and settle your way",
                                                     onClick = onOpenSettleUpClick
                                                 )
                                             ),
@@ -5555,7 +5555,7 @@ private fun TripHubMoneySettlementView(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = "Other Travelers' Settlements",
+                                text = "Other travelers' settlements",
                                 fontWeight = FontWeight.ExtraBold,
                                 style = MaterialTheme.typography.titleMedium,
                                 color = TripHubTokens.TextPrimary
@@ -5747,7 +5747,7 @@ private fun TripHubMoneySettlementView(
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "Mark Paid",
+                                        text = "Mark paid",
                                         fontWeight = FontWeight.ExtraBold,
                                         style = MaterialTheme.typography.labelMedium,
                                         maxLines = 1,
@@ -6008,7 +6008,7 @@ private fun TripHubPeoplePerspectiveView(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = "${memberToRemove.name} has an unsettled balance ($memberNetSignLabel). Removing them will reassign any expenses they paid to the Organizer and redistribute their split shares across the surviving participants with 0.00c drift.",
+                                text = "${memberToRemove.name} has an unsettled balance ($memberNetSignLabel). Removing them will reassign any expenses they paid to the Organizer and redistribute their split shares across the surviving participants, down to the last paisa.",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = TripHubTokens.TerracottaIconTint,
@@ -6068,7 +6068,7 @@ private fun TripHubPeoplePerspectiveView(
                     )
                 ) {
                     Text(
-                        text = if (isSettled) "Remove Member" else "Remove & Rebalance",
+                        text = if (isSettled) "Remove member" else "Remove & Rebalance",
                         fontWeight = FontWeight.ExtraBold,
                         style = MaterialTheme.typography.labelMedium)
                 }
@@ -6108,7 +6108,7 @@ private fun TripHubPeoplePerspectiveView(
             containerColor = TripHubTokens.CanvasBg,
             title = {
                 Text(
-                    text = "Leave Trip?",
+                    text = "Leave trip?",
                     fontFamily = FigtreeFontFamily,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 18.sp,
@@ -6164,7 +6164,7 @@ private fun TripHubPeoplePerspectiveView(
                         )
                     ) {
                         Text(
-                            text = "Settle Up First",
+                            text = "Settle up first",
                             fontWeight = FontWeight.ExtraBold,
                             style = MaterialTheme.typography.labelMedium)
                     }
@@ -6188,7 +6188,7 @@ private fun TripHubPeoplePerspectiveView(
                         )
                     ) {
                         Text(
-                            text = "Confirm Leave Trip",
+                            text = "Confirm Leave trip",
                             fontWeight = FontWeight.ExtraBold,
                             style = MaterialTheme.typography.labelMedium)
                     }
@@ -6296,7 +6296,7 @@ private fun TripHubPeoplePerspectiveView(
                                             color = TripHubTokens.TerracottaPeachBg
                                         ) {
                                             Text(
-                                                text = "DECLINED",
+                                                text = "Declined",
                                                 fontWeight = FontWeight.ExtraBold,
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = TripHubTokens.TerracottaIconTint,
@@ -6310,7 +6310,7 @@ private fun TripHubPeoplePerspectiveView(
                                             color = TripHubTokens.PeriwinkleBoxBg
                                         ) {
                                             Text(
-                                                text = "INVITE PENDING",
+                                                text = "Invite pending",
                                                 fontWeight = FontWeight.ExtraBold,
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = TripHubTokens.PeriwinkleIconTint,
@@ -6324,7 +6324,7 @@ private fun TripHubPeoplePerspectiveView(
                                             color = TripHubTokens.PositiveSagePillBg
                                         ) {
                                             Text(
-                                                text = "ORGANIZER",
+                                                text = "Organizer",
                                                 fontWeight = FontWeight.ExtraBold,
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = TripHubTokens.PositiveSageText,
@@ -6383,7 +6383,7 @@ private fun TripHubPeoplePerspectiveView(
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
-                                text = if (isMissingPhone) "+ Add Phone & Invite" else "Edit Name & Phone",
+                                text = if (isMissingPhone) "Add phone and invite" else "Edit name & phone",
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.titleSmall,
                                 color = TripHubTokens.TextPrimary
@@ -6429,7 +6429,7 @@ private fun TripHubPeoplePerspectiveView(
                             )
                             Column {
                                 Text(
-                                    text = "Share Invite on WhatsApp",
+                                    text = "Share invite on WhatsApp",
                                     fontWeight = FontWeight.ExtraBold,
                                     style = MaterialTheme.typography.titleSmall,
                                     color = TripHubTokens.PositiveSageText
@@ -6562,7 +6562,7 @@ private fun TripHubPeoplePerspectiveView(
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
-                                text = "Remove Member",
+                                text = "Remove member",
                                 fontWeight = FontWeight.ExtraBold,
                                 style = MaterialTheme.typography.titleSmall,
                                 color = TripHubTokens.TerracottaIconTint
@@ -6612,7 +6612,7 @@ private fun TripHubPeoplePerspectiveView(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (isTravelGroup) "+ Add Traveler" else "+ Add Member",
+                            text = if (isTravelGroup) "Add traveler" else "Add member",
                             fontWeight = FontWeight.ExtraBold,
                             style = MaterialTheme.typography.labelLarge)
                     }
@@ -6637,7 +6637,7 @@ private fun TripHubPeoplePerspectiveView(
                         )
                         Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = "Trip Code: $formattedJoinCode · Invite",
+                            text = "Share code $formattedJoinCode",
                             fontFamily = SplitMateTnumMonospace,
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.labelSmall,
@@ -6808,7 +6808,7 @@ private fun TripHubPeoplePerspectiveView(
                                                     modifier = Modifier.size(10.dp)
                                                 )
                                                 Text(
-                                                    text = "DECLINED",
+                                                    text = "Declined",
                                                     fontWeight = FontWeight.ExtraBold,
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = TripHubTokens.TerracottaIconTint
@@ -6834,7 +6834,7 @@ private fun TripHubPeoplePerspectiveView(
                                                     modifier = Modifier.size(10.dp)
                                                 )
                                                 Text(
-                                                    text = "INVITE PENDING",
+                                                    text = "Invite pending",
                                                     fontWeight = FontWeight.ExtraBold,
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = TripHubTokens.PeriwinkleIconTint
@@ -6848,7 +6848,7 @@ private fun TripHubPeoplePerspectiveView(
                                             color = TripHubTokens.PositiveSagePillBg
                                         ) {
                                             Text(
-                                                text = "ORGANIZER",
+                                                text = "Organizer",
                                                 fontWeight = FontWeight.ExtraBold,
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = TripHubTokens.PositiveSageText,
@@ -6908,7 +6908,7 @@ private fun TripHubPeoplePerspectiveView(
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
                                         imageVector = if (isMissingPhone) Icons.Rounded.PersonAdd else Icons.AutoMirrored.Rounded.Send,
-                                        contentDescription = if (isMissingPhone) "+ Add Phone & Invite" else "Share Invite on WhatsApp",
+                                        contentDescription = if (isMissingPhone) "Add phone and invite" else "Share invite on WhatsApp",
                                         tint = TripHubTokens.PositiveSageText,
                                         modifier = Modifier.size(15.dp)
                                     )
@@ -6954,7 +6954,7 @@ private fun TripHubPeoplePerspectiveView(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Leave Trip",
+                    text = "Leave trip",
                     fontWeight = FontWeight.ExtraBold,
                     style = MaterialTheme.typography.labelLarge,
                     color = TripHubTokens.TerracottaIconTint
@@ -7016,8 +7016,8 @@ private fun AddBookingQuickSheet(
             )
 
             val actions = listOf(
-                Triple("IRCTC Train PNR Ticket", Icons.Rounded.Train, onSelectTrainPnr),
-                Triple("Flight Boarding Pass / PDF", Icons.Rounded.FlightTakeoff, onSelectFlightPass),
+                Triple("Train ticket", Icons.Rounded.Train, onSelectTrainPnr),
+                Triple("Flight", Icons.Rounded.FlightTakeoff, onSelectFlightPass),
                 Triple("Hotel, Rental, Cab or Shared Expense", Icons.AutoMirrored.Rounded.ReceiptLong, onSelectSharedExpense),
                 Triple("Share Trip Code & Invite Friends", Icons.Rounded.PersonAdd, onSelectSyncAndPerspective)
             )

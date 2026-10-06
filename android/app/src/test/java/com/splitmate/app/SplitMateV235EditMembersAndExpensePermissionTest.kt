@@ -25,7 +25,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 
 /**
- * v2.3.5 issue #7 (Edit Members not saved) and issue #4 (edit / delete expenses from Trip Hub 2.0).
+ * v2.3.5 issue #7 (Edit members not saved) and issue #4 (edit / delete expenses from Trip Hub 2.0).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SplitMateV235EditMembersAndExpensePermissionTest {
@@ -43,7 +43,7 @@ class SplitMateV235EditMembersAndExpensePermissionTest {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Issue #7: Edit Members
+    // Issue #7: Edit members
     // ---------------------------------------------------------------------------------------------
 
     @Test

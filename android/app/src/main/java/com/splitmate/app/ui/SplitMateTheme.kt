@@ -509,16 +509,15 @@ fun String.toSmartTitleCase(): String {
         }
 }
 
-// 3-Voice Typography:
-// 1. Editorial Display (`PlusJakartaSansFont` backed by deterministic offline Figtree ExtraBold/Black)
-// 2. Conversational UI (`FigtreeFontFamily`)
-// 3. True Tabular Monospace (`JetBrainsMonoFont` / `SplitMateTnumMonospace` backed by `FontFamily.Monospace` with `"tnum, zero"`)
+// v2.4.0 D1 "One voice" typography: every surface, including money, is Figtree.
+// Money stays aligned through Figtree's tabular figures (`tnum`), not a monospace face.
+// The legacy token names below are kept so existing call sites compile; they all resolve to Figtree.
 val PlusJakartaSansFont: FontFamily = FigtreeFontFamily
-val JetBrainsMonoFont: FontFamily = FontFamily.Monospace
-val SplitMateTnumMonospace: FontFamily = FontFamily.Monospace
+val JetBrainsMonoFont: FontFamily = FigtreeFontFamily
+val SplitMateTnumMonospace: FontFamily = FigtreeFontFamily
 
 val SplitMateMonospaceTextStyle = TextStyle(
-    fontFamily = FontFamily.Monospace,
+    fontFamily = FigtreeFontFamily,
     fontWeight = FontWeight.Bold,
     fontFeatureSettings = "tnum, zero"
 )
@@ -2900,8 +2899,8 @@ fun CompactLedgerTicketStub(
         else -> Color(0xFF365314)
     }
 
-    val fromCode = ticket.fromStation.ifBlank { "ORG" }.uppercase(java.util.Locale.US)
-    val toCode = ticket.toStation.ifBlank { "DST" }.uppercase(java.util.Locale.US)
+    val fromCode = ticket.fromStation.ifBlank { "—" }.uppercase(java.util.Locale.US)
+    val toCode = ticket.toStation.ifBlank { "—" }.uppercase(java.util.Locale.US)
     val statusBadge = ticket.bookingStatus.ifBlank { "CNF" }
 
     Surface(
@@ -2995,7 +2994,7 @@ fun CompactLedgerTicketStub(
                         text = buildString {
                             if (ticket.trainOrFlightNo.isNotBlank()) append(ticket.trainOrFlightNo).append(" · ")
                             append(statusBadge)
-                            if (perPersonShareDisplay.isNotBlank()) append(" · ").append(perPersonShareDisplay).append("/pax")
+                            if (perPersonShareDisplay.isNotBlank()) append(" · ").append(perPersonShareDisplay).append(" each")
                         },
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Medium,

@@ -1,7 +1,7 @@
 package com.splitmate.app
 
 /**
- * v2.3.3 "Your Settlements" filter presentation (100% pure Kotlin, no money math).
+ * v2.3.3 "Your settlements" filter presentation (100% pure Kotlin, no money math).
  *
  * Bug fixed: the "All settled" badge and "You're all settled up (₹0.00)" card were driven by the
  * FILTERED member list, so tapping "Gets Back" while the current user only owes money hid their row

@@ -422,8 +422,8 @@ class SplitMateViewModel(
                 )
                 val formattedAbs = formatIndianRupeesFromCents(kotlin.math.abs(myNetCents), includePlusSign = false, currencySymbol = sym)
                 val badgeText = when {
-                    myNetCents > 0L -> "YOU GET BACK $formattedAbs"
-                    myNetCents < 0L -> "YOU OWE $formattedAbs"
+                    myNetCents > 0L -> "You get back $formattedAbs"
+                    myNetCents < 0L -> "You owe $formattedAbs"
                     else -> "All settled up"
                 }
                 val memberNoun = if (groupMembers.size == 1) "member" else "members"
@@ -3272,7 +3272,7 @@ class SplitMateViewModel(
     }
 
     /**
-     * Determines whether the current local user is allowed to click `Mark Paid` on a settlement
+     * Determines whether the current local user is allowed to click `Mark paid` on a settlement
      * transfer where [toMemberId] is the recipient (the member receiving the money):
      * 1. Allowed if the current local user IS the recipient (`toMemberId`) receiving the money.
      * 2. Allowed if the current local user is a Trip Organizer / co-organizer (v2.3.6: for any
@@ -3315,7 +3315,7 @@ class SplitMateViewModel(
         val gMembers = state.members.filter { it.groupId == groupId }
         val toMember = gMembers.find { it.memberId == toMemberId }
         val cleanToName = toMember?.name?.ifBlank { toMemberName } ?: toMemberName
-        return "Only $cleanToName or an organizer can Mark Paid"
+        return "Only $cleanToName or an organizer can Mark paid"
     }
 
     fun getGroupJoinCode(groupId: String = _uiState.value.activeGroupId): String {
@@ -4037,7 +4037,7 @@ class SplitMateViewModel(
     /**
      * v2.3.6: records a payment that is not one of the suggested transfers (any payer, receiver and
      * amount), e.g. one person paid another directly instead of following the plan. Same rule as
-     * Mark Paid: only the receiver or an organizer can record it. Returns null on success, otherwise
+     * Mark paid: only the receiver or an organizer can record it. Returns null on success, otherwise
      * the reason it was refused.
      */
     fun recordManualPayment(fromMemberId: String, toMemberId: String, amountCents: Long): String? {

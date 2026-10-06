@@ -506,8 +506,8 @@ class SplitMateV23ExpressiveE2ETest {
             assertTrue(src.contains("fun ButtonGroup("))
             assertTrue(src.contains("fun <T> ConnectedButtonGroup("))
             assertTrue(src.contains("SplitMateMotion.fastSpatial()"))
-            val item = ExpressiveActionItem(label = "Settle Up", onClick = {}, isPrimary = true)
-            assertEquals("Settle Up", item.label)
+            val item = ExpressiveActionItem(label = "Settle up", onClick = {}, isPrimary = true)
+            assertEquals("Settle up", item.label)
             assertTrue(item.isPrimary)
         }
 
@@ -946,7 +946,7 @@ class SplitMateV23ExpressiveE2ETest {
             assertTrue(mathSrc.contains("attributeRemainderToPayer"))
         }
 
-        // --- F12: Greedy Debt Simplification & Settle Up ---
+        // --- F12: Greedy Debt Simplification & Settle up ---
 
         @Test
         fun `F12_T1_01 simplifyDebtsGreedy collapses transitive 3-member chain A owes B owes C into 1 transfer`() {
@@ -1207,7 +1207,7 @@ class SplitMateV23ExpressiveE2ETest {
         @Test
         fun `F15_T1_02 AnimatedTransitDeckHeroCard supports FLIGHT TRAIN STAY CAB and RENTAL categories`() {
             val src = readSourceFile("ui/components/AnimatedTransitDeckHeroCard.kt")
-            listOf("FLIGHT", "TRAIN", "IRCTC RAIL PASS", "AIRLINE E-TICKET").forEach { token ->
+            listOf("FLIGHT", "TRAIN", "Train ticket", "Flight ticket").forEach { token ->
                 assertTrue(src.contains(token), "Expected AnimatedTransitDeckHeroCard to handle $token")
             }
             val themeSrc = readSourceFile("ui/SplitMateTheme.kt")
@@ -2829,7 +2829,7 @@ class SplitMateV23ExpressiveE2ETest {
         }
 
         @Test
-        fun `T3_10 F8 Trip Sync Sheet x F12 Settle Up Summary x F3 Tabular Monospace Alignment`() = runTest {
+        fun `T3_10 F8 Trip Sync Sheet x F12 Settle up Summary x F3 Tabular Monospace Alignment`() = runTest {
             val vm = SplitMateViewModel(dao = null, ioDispatcher = testDispatcher)
             val groupId = vm.uiState.value.activeGroupId
             val bundle = vm.exportGroupSyncPayload(groupId)
@@ -3537,8 +3537,8 @@ class SplitMateV23ExpressiveE2ETest {
             )
 
             assertEquals(FigtreeFontFamily, PlusJakartaSansFont)
-            assertEquals(FontFamily.Monospace, JetBrainsMonoFont)
-            assertEquals(FontFamily.Monospace, SplitMateTnumMonospace)
+            assertEquals(FigtreeFontFamily, JetBrainsMonoFont)
+            assertEquals(FigtreeFontFamily, SplitMateTnumMonospace)
             assertEquals("tnum, zero", SplitMateMonospaceTextStyle.fontFeatureSettings)
             assertEquals(FontWeight.Bold, SplitMateMonospaceTextStyle.fontWeight)
 
@@ -3938,8 +3938,8 @@ class SplitMateV23ExpressiveE2ETest {
 
             val composableSrc = readSourceFile("ui/SplitMateAppComposable.kt")
             assertTrue(composableSrc.contains("Morph(MaterialShapes.Cookie9Sided, MaterialShapes.Sunny)"))
-            assertTrue(composableSrc.contains("All Accounts Balanced"))
-            assertTrue(composableSrc.contains("0.00\u00A2 DRIFT \u2022 EVERY PENNY ACCOUNTED FOR"))
+            assertTrue(composableSrc.contains("All accounts balanced"))
+            assertTrue(composableSrc.contains("\"Adds up exactly\""))
             assertTrue(composableSrc.contains("SplitButtonLayout("))
             assertTrue(composableSrc.contains("segmentedIslandItemShape("))
         }
@@ -4140,7 +4140,7 @@ class SplitMateV23ExpressiveE2ETest {
             // v2.3.6: settlement money data carries no wavy progress (v2.3.2 rule, wavy = in-flight network only).
             assertFalse(src.contains("amplitude = if (simplifiedTransfers.isEmpty()) 0f else 0.75f"))
             assertTrue(src.contains("SplitButtonLayout("))
-            assertTrue(src.contains("leadingText = \"Mark Paid\""))
+            assertTrue(src.contains("leadingText = \"Mark paid\""))
 
             // 3. Runtime verification of Cookie9Sided -> Sunny MorphPolygonShape across [0f, 0.5f, 1f]
             val settledMorph = Morph(MaterialShapes.Cookie9Sided, MaterialShapes.Sunny)
@@ -4170,7 +4170,7 @@ class SplitMateV23ExpressiveE2ETest {
             val mergedDriftStyle = SplitMateExpressiveTypography.labelSmallEmphasized.merge(
                 com.splitmate.app.ui.SplitMateMonospaceTextStyle
             )
-            assertEquals(FontFamily.Monospace, mergedDriftStyle.fontFamily)
+            assertEquals(com.splitmate.app.ui.FigtreeFontFamily, mergedDriftStyle.fontFamily)
             assertEquals(FontWeight.Bold, mergedDriftStyle.fontWeight)
             assertEquals(11.sp, mergedDriftStyle.fontSize)
             assertEquals("tnum, zero", mergedDriftStyle.fontFeatureSettings)

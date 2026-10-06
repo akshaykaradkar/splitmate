@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test
 /**
  * SplitMate v2.3.3 (versionCode 51) bug-fix regression suite.
  *
- * - Bug 1: "Your Settlements" Gets Back / Owes filters must never show a false "all settled" state.
+ * - Bug 1: "Your settlements" Gets Back / Owes filters must never show a false "all settled" state.
  * - Bug 2: personal (non-split) expenses read as "Personal expense", never "1 of N splitting" / "₹x/person".
  *
  * Pure UI-copy / presentation logic only; money math is asserted unchanged.
@@ -72,7 +72,7 @@ class SplitMateV233FilterAndSplitNatureTest {
     )
 
     @Nested
-    @DisplayName("Bug 1: Your Settlements filter")
+    @DisplayName("Bug 1: Your settlements filter")
     inner class SettlementFilter {
 
         @Test

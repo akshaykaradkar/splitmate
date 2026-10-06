@@ -562,11 +562,11 @@ private fun TrainPassCard(
                             )
                             Spacer(modifier = Modifier.width(5.dp))
                             Text(
-                                text = "IRCTC RAIL PASS",
+                                text = "Train ticket",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = AnimatedTransitDeckTokens.TrainOnPass,
-                                letterSpacing = 0.5.sp
+                                letterSpacing = 0.1.sp
                             )
                         }
                     }
@@ -582,7 +582,7 @@ private fun TrainPassCard(
                                 horizontalArrangement = Arrangement.spacedBy(3.dp)
                             ) {
                                 Text(
-                                    text = "Tap to Switch to Train",
+                                    text = "Switch to train",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = AnimatedTransitDeckTokens.TrainOnPass
@@ -605,7 +605,7 @@ private fun TrainPassCard(
                             )
                             Spacer(modifier = Modifier.width(5.dp))
                             Text(
-                                text = if (trainCountLogged > 0) "$trainCountLogged ${if (trainCountLogged == 1) "Trip" else "Trips"} Active" else "Live Berth & Fare Split",
+                                text = if (trainCountLogged > 0) "$trainCountLogged ${if (trainCountLogged == 1) "ticket" else "tickets"} added" else "Live fare and berths",
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = AnimatedTransitDeckTokens.TrainOnPass.copy(alpha = 0.90f)
@@ -617,7 +617,7 @@ private fun TrainPassCard(
                 // MIDDLE HEADINGS
                 Column(modifier = Modifier.fillMaxWidth(0.85f)) {
                     Text(
-                        text = "Split Train Ticket",
+                        text = "Split a train ticket",
                         fontFamily = SplitMateTheme.FontDisplay,
                         fontSize = 21.sp,
                         fontWeight = FontWeight.ExtraBold,
@@ -626,7 +626,7 @@ private fun TrainPassCard(
                     )
                     Spacer(modifier = Modifier.height(3.dp))
                     Text(
-                        text = "Auto-fetches IRCTC fare & berths via 10-Digit PNR.",
+                        text = "Enter your PNR and we fill in the fare and berths.",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                         color = AnimatedTransitDeckTokens.TrainOnPass.copy(alpha = 0.85f),
@@ -884,11 +884,11 @@ private fun FlightPassCard(
                             )
                             Spacer(modifier = Modifier.width(5.dp))
                             Text(
-                                text = "AIRLINE E-TICKET",
+                                text = "Flight ticket",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = AnimatedTransitDeckTokens.FlightOnPass,
-                                letterSpacing = 0.5.sp
+                                letterSpacing = 0.1.sp
                             )
                         }
                     }
@@ -904,7 +904,7 @@ private fun FlightPassCard(
                                 horizontalArrangement = Arrangement.spacedBy(3.dp)
                             ) {
                                 Text(
-                                    text = "Tap to Switch to Flight",
+                                    text = "Switch to flight",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = AnimatedTransitDeckTokens.FlightOnPass
@@ -927,7 +927,7 @@ private fun FlightPassCard(
                             )
                             Spacer(modifier = Modifier.width(5.dp))
                             Text(
-                                text = if (flightCountActive > 0) "$flightCountActive ${if (flightCountActive == 1) "Flight" else "Flights"} Active" else "Instant Seat & Fare Split",
+                                text = if (flightCountActive > 0) "$flightCountActive ${if (flightCountActive == 1) "flight" else "flights"} added" else "Seats and fare from your PDF",
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = AnimatedTransitDeckTokens.FlightOnPass.copy(alpha = 0.90f)
@@ -939,7 +939,7 @@ private fun FlightPassCard(
                 // MIDDLE HEADINGS
                 Column(modifier = Modifier.fillMaxWidth(0.85f)) {
                     Text(
-                        text = "Split Flight E-Ticket",
+                        text = "Split a flight",
                         fontFamily = SplitMateTheme.FontDisplay,
                         fontSize = 21.sp,
                         fontWeight = FontWeight.ExtraBold,
@@ -948,7 +948,7 @@ private fun FlightPassCard(
                     )
                     Spacer(modifier = Modifier.height(3.dp))
                     Text(
-                        text = "Upload airline PDF to parse seats & airfare.",
+                        text = "Upload the airline PDF and we read the seats and fare.",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                         color = AnimatedTransitDeckTokens.FlightOnPass.copy(alpha = 0.85f),

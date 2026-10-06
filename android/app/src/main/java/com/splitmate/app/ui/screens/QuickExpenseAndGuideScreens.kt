@@ -574,7 +574,7 @@ fun QuickExpenseScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "IRCTC Train PNR Direct Split",
+                                    text = "Train ticket",
                                     fontFamily = SplitMateBrandFontFamily,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 13.sp,
@@ -793,13 +793,13 @@ fun QuickExpenseScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Rounded.ManageAccounts,
-                                    contentDescription = "Edit Members",
+                                    contentDescription = "Edit members",
                                     tint = textPrimary,
                                     modifier = Modifier.size(14.dp)
                                 )
                                 Spacer(modifier = Modifier.width(5.dp))
                                 Text(
-                                    text = "Edit Members",
+                                    text = "Edit members",
                                     fontFamily = SplitMateBrandFontFamily,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
@@ -888,7 +888,7 @@ fun QuickExpenseScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Log & Split",
+                                text = "Log & split",
                                 fontFamily = SplitMateDisplayFontFamily,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 14.sp
@@ -1569,11 +1569,11 @@ fun QuickExpenseScreen(
                                 Spacer(modifier = Modifier.height(3.dp))
 
                                 Text(
-                                    text = "0.00¢ DRIFT • EVERY PENNY ACCOUNTED FOR",
+                                    text = "Adds up exactly",
                                     style = SplitMateExpressiveTypography.labelSmallEmphasized.merge(SplitMateMonospaceTextStyle),
                                     fontSize = 9.5.sp,
                                     color = if (isZeroDriftVerified) QuickExpenseThemeTokens.SageText else textSecondary,
-                                    letterSpacing = 0.6.sp
+                                    letterSpacing = 0.1.sp
                                 )
 
                                 // High-contrast Peach Remainder Banner when remainderPaise > 0L & not yet reconciled

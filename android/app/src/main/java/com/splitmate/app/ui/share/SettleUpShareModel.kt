@@ -66,7 +66,7 @@ data class SettleUpShareModel(
     val footerText: String,
     val footerSubText: String,
     /** Small caps line under the brand name in the header. */
-    val brandSubtitle: String = "SETTLEMENT SUMMARY",
+    val brandSubtitle: String = "Settlement summary",
     /** Exact-math sub-badge inside the hero card (dropped by the renderer if it would collide). */
     val heroDriftText: String = "0.00\u00A2 drift \u00B7 Exact math",
     /** Directional pill between payer and receiver in each transfer row. */
@@ -82,13 +82,13 @@ data class SettleUpShareModel(
 
     /** Upper-cased label drawn above the hero amount. */
     val totalSpentHeroLabel: String
-        get() = totalSpentLabel.uppercase(Locale.ROOT)
+        get() = totalSpentLabel
 
     /** Status pill in the hero card: "ALL SETTLED" or "N PAYMENTS". */
     val heroBadgeText: String
         get() {
             val total = transferRows.size + hiddenTransferCount
-            return if (isAllSettled) "ALL SETTLED" else "$total ${if (total == 1) "PAYMENT" else "PAYMENTS"}"
+            return if (isAllSettled) "All settled" else "$total ${if (total == 1) "payment" else "payments"}"
         }
 
     /** True when the net-summary section (rows and/or its "+N more" row) is drawn. */
@@ -243,7 +243,7 @@ data class SettleUpShareModel(
                 netRows = visibleNet,
                 hiddenNetCount = orderedNet.size - visibleNet.size,
                 footerText = "Made with SplitMate",
-                footerSubText = "Exact to the last paisa · 0.00¢ drift"
+                footerSubText = "Exact to the last paisa"
             )
         }
 

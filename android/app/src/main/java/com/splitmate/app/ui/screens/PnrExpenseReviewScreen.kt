@@ -616,7 +616,7 @@ fun PnrExpenseReviewScreen(
 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "IRCTC Train PNR Split",
+                        text = "Train ticket",
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp,
@@ -838,11 +838,11 @@ fun PnrExpenseReviewScreen(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
-                            text = "LOGGED TRAIN TICKETS IN ${activeGroup?.name?.uppercase(Locale.US) ?: "THIS GROUP"} (${existingPnrExpensesInGroup.size}) · TAP TO INSPECT OR EDIT",
+                            text = "Train tickets in ${activeGroup?.name ?: "this trip"} (${existingPnrExpensesInGroup.size}) · tap to open or edit",
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 10.sp,
-                            letterSpacing = 0.7.sp,
+                            letterSpacing = 0.1.sp,
                             color = TactilePaperPassTokens.SageConfirmedText
                         )
                         existingPnrExpensesInGroup.forEach { exp ->
@@ -1013,11 +1013,11 @@ fun PnrExpenseReviewScreen(
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Text(
-                                text = "MANUAL TICKET FARE & ROUTE ENTRY (ZERO SYNTHETIC DATA)",
+                                text = "Enter fare and route",
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 11.sp,
-                                letterSpacing = 0.7.sp,
+                                letterSpacing = 0.1.sp,
                                 color = TactilePaperPassTokens.AmberChartText
                             )
                             OutlinedTextField(
@@ -1042,7 +1042,7 @@ fun PnrExpenseReviewScreen(
                                     value = manualFromStationInput,
                                     onValueChange = { manualFromStationInput = it.uppercase(Locale.US).take(24) },
                                     label = { Text("From Station", fontFamily = FigtreeFontFamily) },
-                                    placeholder = { Text("NDLS / DELHI", fontFamily = FigtreeFontFamily) },
+                                    placeholder = { Text("NDLS / Delhi", fontFamily = FigtreeFontFamily) },
                                     singleLine = true,
                                     colors = TactilePaperPassTokens.tactileTextFieldColors(),
                                     modifier = Modifier.weight(1f)
@@ -1051,7 +1051,7 @@ fun PnrExpenseReviewScreen(
                                     value = manualToStationInput,
                                     onValueChange = { manualToStationInput = it.uppercase(Locale.US).take(24) },
                                     label = { Text("To Station", fontFamily = FigtreeFontFamily) },
-                                    placeholder = { Text("MMCT / MUMBAI", fontFamily = FigtreeFontFamily) },
+                                    placeholder = { Text("MMCT / Mumbai", fontFamily = FigtreeFontFamily) },
                                     singleLine = true,
                                     colors = TactilePaperPassTokens.tactileTextFieldColors(),
                                     modifier = Modifier.weight(1f)
@@ -1194,11 +1194,11 @@ fun PnrSearchLookupCard(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "ENTER 10-DIGIT IRCTC PNR NUMBER",
+                        text = "Enter your 10-digit PNR",
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 10.sp,
-                        letterSpacing = 0.8.sp,
+                        letterSpacing = 0.1.sp,
                         color = TactilePaperPassTokens.InkMuted
                     )
                     Box(contentAlignment = Alignment.CenterStart) {
@@ -1538,11 +1538,11 @@ fun TactilePaperBoardingPass(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "VERIFIED PASSENGERS ON PNR (${passengers.size})",
+                        text = "Passengers on this PNR (${passengers.size})",
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
-                        letterSpacing = 0.8.sp,
+                        letterSpacing = 0.1.sp,
                         color = TactilePaperPassTokens.InkMuted
                     )
                     Row(
@@ -1550,11 +1550,11 @@ fun TactilePaperBoardingPass(
                         horizontalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
                         Text(
-                            text = "BOOKING",
+                            text = "Booking",
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.Bold,
                             fontSize = 11.sp,
-                            letterSpacing = 0.8.sp,
+                            letterSpacing = 0.1.sp,
                             color = TactilePaperPassTokens.InkMuted
                         )
                         Icon(
@@ -1564,11 +1564,11 @@ fun TactilePaperBoardingPass(
                             modifier = Modifier.size(12.dp)
                         )
                         Text(
-                            text = "LIVE STATUS",
+                            text = "Live status",
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.Bold,
                             fontSize = 11.sp,
-                            letterSpacing = 0.8.sp,
+                            letterSpacing = 0.1.sp,
                             color = TactilePaperPassTokens.InkMuted
                         )
                     }
@@ -1746,11 +1746,11 @@ fun TactilePaperBoardingPass(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "ALL-INCLUSIVE IRCTC FARE ($passengerCount PASSENGERS)",
+                        text = "Total fare ($passengerCount ${if (passengerCount == 1) "passenger" else "passengers"})",
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 10.sp,
-                        letterSpacing = 0.8.sp,
+                        letterSpacing = 0.1.sp,
                         color = TactilePaperPassTokens.InkMuted,
                         modifier = Modifier
                             .weight(1f)
@@ -1867,11 +1867,11 @@ private fun MemberSplitSelectionCard(
             // "Who paid" M3 SingleChoiceSegmentedButtonRow (scrolls horizontally for 4+ members)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "WHO PAID FOR THIS IRCTC TICKET?",
+                    text = "Who paid for this ticket?",
                     fontFamily = FigtreeFontFamily,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 10.sp,
-                    letterSpacing = 0.7.sp,
+                    letterSpacing = 0.1.sp,
                     color = TactilePaperPassTokens.InkSecondary
                 )
                 PayerSegmentedButtonRow(

@@ -2402,22 +2402,22 @@ class SplitMateV2ZeroRegressionAndSyncTest {
         val tripHomeFile = java.io.File(srcMain, "java/com/splitmate/app/ui/screens/TripHomeScreen.kt")
         val tripHomeSource = tripHomeFile.readText()
         assertTrue(
-            tripHomeSource.contains("Trip Code: \$formattedJoinCode · Invite"),
+            tripHomeSource.contains("Share code \$formattedJoinCode"),
             "TripHubPeoplePerspectiveView must display 6-character Trip Code in the top action bar (F12)"
         )
         assertTrue(
-            tripHomeSource.contains("\"ORGANIZER\"") &&
-                tripHomeSource.contains("+ Add Phone & Invite") &&
-                tripHomeSource.contains("Edit Name & Phone") &&
-                tripHomeSource.contains("Share Invite on WhatsApp") &&
+            tripHomeSource.contains("\"Organizer\"") &&
+                tripHomeSource.contains("Add phone and invite") &&
+                tripHomeSource.contains("Edit name & phone") &&
+                tripHomeSource.contains("Share invite on WhatsApp") &&
                 tripHomeSource.contains("Your settlements") &&
-                tripHomeSource.contains("Other Travelers' Settlements") &&
+                tripHomeSource.contains("Other travelers' settlements") &&
                 tripHomeSource.contains("Confirmed by each recipient once received") &&
                 !tripHomeSource.contains("· Invite sent") &&
                 !tripHomeSource.contains("View as \${member.name") &&
                 !tripHomeSource.contains("switchActivePerspectiveMember") &&
-                tripHomeSource.contains("Remove Member") &&
-                tripHomeSource.contains("Leave Trip") &&
+                tripHomeSource.contains("Remove member") &&
+                tripHomeSource.contains("Leave trip") &&
                 tripHomeSource.contains("selectedMemberForActions") &&
                 tripHomeSource.contains("Recipients confirm payments once received · Organizers can settle for offline members") &&
                 !tripHomeSource.contains("containerColor = Color(0xFFFAF6F0)") &&
@@ -2426,11 +2426,11 @@ class SplitMateV2ZeroRegressionAndSyncTest {
             "TripHubPeoplePerspectiveView and TripHubMoneySettlementView must use M3 Expressive Segmented Contained List, Me-First hierarchy, non-overlapping action sheet rows, and adaptive TripHubTokens (F12)"
         )
         assertTrue(
-            appSource.contains("GETS BACK (") &&
+            appSource.contains("Gets back (") &&
                 appSource.contains("OWES (") &&
                 appSource.contains("Show top 3 rows") &&
-                appSource.contains("Your Settlements") &&
-                appSource.contains("Other Travelers' Settlements") &&
+                appSource.contains("Your settlements") &&
+                appSource.contains("Other travelers' settlements") &&
                 !appSource.contains("confirms incoming payments once received"),
             "SettleUpTab must render compact 2-column GETS BACK | OWES split board with 3-row accordion, Me-First settlements, and zero repetitive per-card confirmation footers (F12)"
         )
@@ -2438,10 +2438,10 @@ class SplitMateV2ZeroRegressionAndSyncTest {
         val syncSheetFile = java.io.File(srcMain, "java/com/splitmate/app/ui/dialogs/TripSyncAndPerspectiveSheet.kt")
         val syncSheetSource = syncSheetFile.readText()
         assertTrue(
-            syncSheetSource.contains("6-CHARACTER TRIP JOIN CODE") &&
-                syncSheetSource.contains("Copy Code") &&
-                syncSheetSource.contains("Share Invite on WhatsApp") &&
-                syncSheetSource.contains("Join Another Trip by Code or Link") &&
+            syncSheetSource.contains("Trip code") &&
+                syncSheetSource.contains("Copy code") &&
+                syncSheetSource.contains("Share invite on WhatsApp") &&
+                syncSheetSource.contains("Join another trip by code or link") &&
                 !syncSheetSource.contains("Viewing as (Switch Perspective)") &&
                 !syncSheetSource.contains("claimGroupMemberPerspective"),
             "TripSyncAndPerspectiveSheet must render 6-character Trip Join Code card and universal Join by Code/Link without any perspective switcher (F13)"
@@ -2689,7 +2689,7 @@ class SplitMateV2ZeroRegressionAndSyncTest {
     }
 
     @Test
-    @DisplayName("PA-12: WhatsApp-Style Multi-Organizer Governance & Recipient/Unjoined-Organizer Mark Paid Authorization")
+    @DisplayName("PA-12: WhatsApp-Style Multi-Organizer Governance & Recipient/Unjoined-Organizer Mark paid Authorization")
     fun testMultiOrganizerGovernanceAndRecipientMarkPaidAuthorization() = kotlinx.coroutines.test.runTest {
         val dispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)
         val vm = SplitMateViewModel(dao = null, ioDispatcher = dispatcher)
@@ -2740,26 +2740,26 @@ class SplitMateV2ZeroRegressionAndSyncTest {
         assertTrue(vm.isMemberGroupOrganizer(groupId, rohan), "Rohan must now be a co-organizer")
         assertEquals(2, vm.getGroupOrganizerMembers(groupId).size)
 
-        // 3. Verify Mark Paid Authorization:
+        // 3. Verify Mark paid Authorization:
         //    - Transfer where Rohan (JOINED with phone) is the recipient (toMemberId = rohan.memberId):
         //      * v2.3.6 product decision: Akshay (organizer) CAN mark paid even though Rohan has joined
         //        (e.g. cash handed over in person).
         //      * Rohan (the recipient receiving the money) CAN mark paid too.
         assertTrue(
             vm.canCurrentUserMarkTransferPaid(groupId, toMemberId = rohan.memberId),
-            "An Organizer can Mark Paid even when the recipient (Rohan) is an active JOINED member"
+            "An Organizer can Mark paid even when the recipient (Rohan) is an active JOINED member"
         )
         vm.claimGroupMemberPerspective(groupId, rohan.memberId)
         assertTrue(
             vm.canCurrentUserMarkTransferPaid(groupId, toMemberId = rohan.memberId),
-            "Recipient (Rohan) must be able to Mark Paid when receiving money"
+            "Recipient (Rohan) must be able to Mark paid when receiving money"
         )
 
         //    - Transfer where Sneha (unjoined / offline member without 10-digit phone) is the recipient:
         //      * Organizer (Akshay or Rohan) CAN mark paid on behalf of Sneha!
         assertTrue(
             vm.canCurrentUserMarkTransferPaid(groupId, toMemberId = sneha.memberId),
-            "Organizer must be able to Mark Paid when recipient (Sneha) is not an active JOINED phone member in the trip group"
+            "Organizer must be able to Mark paid when recipient (Sneha) is not an active JOINED phone member in the trip group"
         )
 
         // 4. Switch back to Akshay and dismiss Rohan as Organizer ("Dismiss as Organizer")
@@ -2775,7 +2775,7 @@ class SplitMateV2ZeroRegressionAndSyncTest {
         vm.claimGroupMemberPerspective(groupId, rohan.memberId)
         assertFalse(
             vm.canCurrentUserMarkTransferPaid(groupId, toMemberId = sneha.memberId),
-            "Non-organizer non-recipient (Rohan) must NOT be able to Mark Paid for unjoined member Sneha"
+            "Non-organizer non-recipient (Rohan) must NOT be able to Mark paid for unjoined member Sneha"
         )
     }
 }

@@ -709,11 +709,11 @@ fun UpiExpressPaymentSheet(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "1-TAP UPI SETTLEMENT",
+                                text = "Pay with UPI",
                                 fontFamily = FigtreeFontFamily,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                letterSpacing = 1.sp,
+                                letterSpacing = 0.1.sp,
                                 color = SplitMateTheme.TextSecondary
                             )
                             Text(
@@ -749,11 +749,11 @@ fun UpiExpressPaymentSheet(
                             horizontalAlignment = Alignment.End
                         ) {
                             Text(
-                                text = "PRE-FILLED",
+                                text = "Pre-filled",
                                 fontFamily = FigtreeFontFamily,
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                letterSpacing = 0.8.sp,
+                                letterSpacing = 0.1.sp,
                                 color = SplitMateTheme.SageText
                             )
                             Text(
@@ -921,11 +921,11 @@ fun UpiExpressPaymentSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${transferModel.toName.uppercase(Locale.US)}'S UPI ID (FOR 1-TAP GOOGLE PAY)",
+                        text = "${transferModel.toName}'s UPI ID",
                         fontFamily = FigtreeFontFamily,
                         fontSize = 10.5.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 0.7.sp,
+                        letterSpacing = 0.1.sp,
                         color = SplitMateTheme.TextSecondary
                     )
                     if (discoveredGmailPrefix.isNotBlank()) {

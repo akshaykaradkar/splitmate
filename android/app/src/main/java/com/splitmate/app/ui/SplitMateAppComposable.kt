@@ -620,8 +620,9 @@ fun SplitMateCloudOtpOnboardingScreen(
                         color = SplitMateTheme.SageSurface
                     ) {
                         Text(
-                            text = "STEP $onboardingStepCount OF 4",
-                            fontFamily = FontFamily.Monospace,
+                            text = "Step $onboardingStepCount of 4",
+                            fontFamily = FigtreeFontFamily,
+                            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = SplitMateTheme.SageText,
@@ -1284,7 +1285,7 @@ fun PendingGroupInviteCard(
                                 color = SplitMateTheme.Palette.tertiaryContainer
                             ) {
                                 Text(
-                                    text = "GROUP INVITE",
+                                    text = "Group invite",
                                     fontFamily = SplitMateTheme.FontRounded,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.ExtraBold,
@@ -2152,11 +2153,11 @@ fun LedgersDashboardScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = "DISPLAY TITLE",
+                                    text = "Display title",
                                     fontFamily = SplitMateTheme.FontDisplay,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = 0.8.sp,
+                                    letterSpacing = 0.1.sp,
                                     color = SplitMateTheme.SageText
                                 )
                                 Text(
@@ -2272,7 +2273,7 @@ fun LedgersDashboardScreen(
             contentPadding = PaddingValues(top = 8.dp, bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Back to All Groups Header — Keep Settle Up 100% visible at all times
+            // Back to All Groups Header — Keep Settle up 100% visible at all times
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
@@ -2373,13 +2374,13 @@ fun LedgersDashboardScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Rounded.SwapHoriz,
-                                        contentDescription = "Settle Up",
+                                        contentDescription = "Settle up",
                                         tint = SplitMateTheme.ScreenBg,
                                         modifier = Modifier.size(15.dp)
                                     )
                                     Spacer(modifier = Modifier.width(5.dp))
                                     Text(
-                                        text = "Settle Up",
+                                        text = "Settle up",
                                         fontWeight = FontWeight.ExtraBold,
                                         fontSize = 12.sp,
                                         maxLines = 1,
@@ -2953,7 +2954,7 @@ fun LedgersDashboardScreen(
                                                         modifier = Modifier.size(13.dp)
                                                     )
                                                     Text(
-                                                        text = "PNR ${ticket.pnr} (${ticket.fromStation.ifBlank { "ORG" }} - ${ticket.toStation.ifBlank { "DST" }} · $formattedFare)",
+                                                        text = "PNR ${ticket.pnr} · ${listOf(ticket.fromStation, ticket.toStation).filter { it.isNotBlank() }.joinToString(" – ")} · $formattedFare",
                                                         fontFamily = SplitMateTheme.FontRounded,
                                                         fontWeight = FontWeight.Bold,
                                                         fontSize = 11.sp,
@@ -3107,7 +3108,7 @@ fun LedgersDashboardScreen(
                                                         modifier = Modifier.size(13.dp)
                                                     )
                                                     Text(
-                                                        text = "FLIGHT ${ticket.pnr} (${ticket.fromStation.ifBlank { "ORG" }} - ${ticket.toStation.ifBlank { "DST" }} · $formattedFare)",
+                                                        text = "Flight ${ticket.pnr} · ${listOf(ticket.fromStation, ticket.toStation).filter { it.isNotBlank() }.joinToString(" – ")} · $formattedFare",
                                                         fontFamily = SplitMateTheme.FontRounded,
                                                         fontWeight = FontWeight.Bold,
                                                         fontSize = 11.sp,
@@ -3340,7 +3341,7 @@ fun LedgersDashboardScreen(
                                                     .background(SplitMateTheme.SageText)
                                             )
                                             Text(
-                                                text = "0.00¢ DRIFT • EVERY PENNY ACCOUNTED FOR",
+                                                text = "Adds up exactly",
                                                 fontSize = 9.sp,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 color = SplitMateTheme.SageText
@@ -3997,7 +3998,7 @@ fun LedgersDashboardScreen(
 
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        // Phase 3: Promote 'Settle Up' as the sole Primary Action inside the Hero Balance Card
+                        // Phase 3: Promote 'Settle up' as the sole Primary Action inside the Hero Balance Card
                         if (totalBalance != "₹0.00") {
                             Button(
                                 onClick = onNavigateToSettle,
@@ -4012,7 +4013,7 @@ fun LedgersDashboardScreen(
                             ) {
                                 Icon(Icons.Rounded.TaskAlt, contentDescription = null, tint = SplitMateTheme.ScreenBg, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Settle Up", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.ScreenBg, fontWeight = FontWeight.Bold)
+                                Text("Settle up", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.ScreenBg, fontWeight = FontWeight.Bold)
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
@@ -4035,7 +4036,7 @@ fun LedgersDashboardScreen(
                             ) {
                                 Icon(Icons.Rounded.TaskAlt, contentDescription = null, tint = SplitMateTheme.PrimaryDark, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Settle Up · All Balanced", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.PrimaryDark, fontWeight = FontWeight.Bold)
+                                Text("Settle up · all balanced", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.PrimaryDark, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -4325,9 +4326,9 @@ fun LedgersDashboardScreen(
                         }
 
                         val statusLabel = when {
-                            groupCard.netBalanceCents > 0L -> "YOU GET BACK"
-                            groupCard.netBalanceCents < 0L -> "YOU OWE"
-                            else -> "ALL SETTLED"
+                            groupCard.netBalanceCents > 0L -> "You get back"
+                            groupCard.netBalanceCents < 0L -> "You owe"
+                            else -> "All settled"
                         }
                         val numericBadgeAmount = if (groupCard.netBalanceCents == 0L) {
                             "₹0.00"
@@ -5797,7 +5798,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
     ) {
         item {
             Text(
-                text = "Settle Up & Balances",
+                text = "Settle up & Balances",
                 fontFamily = SplitMateTheme.FontDisplay,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.ExtraBold,
@@ -5965,7 +5966,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                         color = SplitMateTheme.PrimaryDark
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    // Info icon next to Settle Up — toggles the payment simplification diagram
+                                    // Info icon next to Settle up — toggles the payment simplification diagram
                                     Surface(
                                         onClick = { showMaxHeapGraphInspector = !showMaxHeapGraphInspector },
                                         shape = RoundedCornerShape(inspectorCornerRadius),
@@ -6184,7 +6185,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "GETS BACK (${receiversList.size})",
+                                        text = "Gets back (${receiversList.size})",
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = SplitMateTheme.SageText,
@@ -6355,7 +6356,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Your Settlements",
+                            text = "Your settlements",
                             fontFamily = SplitMateTheme.FontDisplay,
                             fontSize = 17.sp,
                             fontWeight = FontWeight.ExtraBold,
@@ -6442,12 +6443,12 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                 }
             }
 
-            // 3. MEMBER SETTLEMENT CARDS (Your Settlements first, then Other Travelers' Settlements)
+            // 3. MEMBER SETTLEMENT CARDS (Your settlements first, then Other travelers' settlements)
             itemsIndexed(
                 items = orderedMemberSummaries,
                 key = { _, it -> "member_detail_${it.memberId}" }
             ) { index, summary ->
-                // Render "Other Travelers' Settlements" header right above the first non-current-user card
+                // Render "Other travelers' settlements" header right above the first non-current-user card
                 if (!summary.isCurrentUser && index == myMemberSummaries.size) {
                     Row(
                         modifier = Modifier
@@ -6458,7 +6459,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Other Travelers' Settlements",
+                                text = "Other travelers' settlements",
                                 fontFamily = SplitMateTheme.FontDisplay,
                                 fontSize = 17.sp,
                                 fontWeight = FontWeight.ExtraBold,
@@ -6549,7 +6550,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                 color = SplitMateTheme.SageSurface
                                             ) {
                                                 Text(
-                                                    text = if (summary.isCurrentUser) "YOU RECEIVE" else "RECEIVES",
+                                                    text = if (summary.isCurrentUser) "You receive" else "Receives",
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.ExtraBold,
                                                     color = SplitMateTheme.SageText,
@@ -6721,7 +6722,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                         }
                                                     }
                                                     SplitButtonLayout(
-                                                        leadingText = if (isDrainingIn) "₹0.00 · Settled" else "Mark Paid",
+                                                        leadingText = if (isDrainingIn) "₹0.00 · Settled" else "Mark paid",
                                                         leadingIcon = Icons.Rounded.Check,
                                                         onLeadingClick = performMarkPaidIn,
                                                         menuItems = listOf(
@@ -6830,7 +6831,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                 color = SplitMateTheme.TerracottaSurface
                                             ) {
                                                 Text(
-                                                    text = if (summary.isCurrentUser) "YOU PAY" else "PAYS",
+                                                    text = if (summary.isCurrentUser) "You pay" else "Pays",
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.ExtraBold,
                                                     color = SplitMateTheme.TerracottaText,
@@ -7042,7 +7043,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                         }
                                                     }
                                                     SplitButtonLayout(
-                                                        leadingText = if (isDrainingOut) "₹0.00 · Settled" else "Mark Paid",
+                                                        leadingText = if (isDrainingOut) "₹0.00 · Settled" else "Mark paid",
                                                         leadingIcon = Icons.Rounded.Check,
                                                         onLeadingClick = performMarkPaidOut,
                                                         menuItems = listOf(
@@ -7102,7 +7103,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
-                            text = "Other Travelers' Settlements",
+                            text = "Other travelers' settlements",
                             fontFamily = SplitMateTheme.FontDisplay,
                             fontSize = 17.sp,
                             fontWeight = FontWeight.ExtraBold,
@@ -7193,7 +7194,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column {
                                     Text(
-                                        text = "All Accounts Balanced",
+                                        text = "All accounts balanced",
                                         fontFamily = SplitMateTheme.FontDisplay,
                                         fontWeight = FontWeight.ExtraBold,
                                         fontSize = 15.sp,
@@ -7326,7 +7327,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "When you tap 'Mark Paid' on any settlement above, it will be saved here as a permanent receipt record.",
+                                    text = "When you tap 'Mark paid' on any settlement above, it will be saved here as a permanent receipt record.",
                                     fontSize = 11.sp,
                                     color = SplitMateTheme.TextSecondary
                                 )
@@ -7334,7 +7335,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                         }
                     } else {
                         val dateFormatter = remember {
-                            java.text.SimpleDateFormat("dd MMM · hh:mm a", Locale.US)
+                            java.text.SimpleDateFormat("d MMM · h:mm a", Locale.US)
                         }
                         recordedSettlements.forEachIndexed { idx, settlement ->
                             val fromMbr = uiState.members.find { it.memberId == settlement.fromMemberId }
@@ -7457,7 +7458,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                     currencySymbol = "₹"
                 )
                 val fullDateStr = remember(selectedSettlement.settledAt) {
-                    java.text.SimpleDateFormat("dd MMM yyyy · hh:mm a", Locale.US).format(java.util.Date(selectedSettlement.settledAt))
+                    java.text.SimpleDateFormat("d MMM yyyy · h:mm a", Locale.US).format(java.util.Date(selectedSettlement.settledAt))
                 }
                 ModalBottomSheet(
                     onDismissRequest = { selectedSettlementForSheet = null },
@@ -7573,7 +7574,7 @@ fun AuditVaultScreen(
     // Group expenses chronologically by day with friendly labels ("Today · 29 Sep", "Yesterday · 28 Sep", etc.)
     val groupedExpensesByDate = remember(filteredExpenses) {
         val dayKeyFormat = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        val displayDayFormat = java.text.SimpleDateFormat("dd MMM", Locale.US)
+        val displayDayFormat = java.text.SimpleDateFormat("d MMM", Locale.US)
         val todayKey = dayKeyFormat.format(java.util.Date())
         val yesterdayKey = dayKeyFormat.format(java.util.Date(System.currentTimeMillis() - 86_400_000L))
 
@@ -7899,7 +7900,7 @@ fun AuditVaultScreen(
                             hasTravelPass -> Icons.Rounded.Train
                             else -> Icons.AutoMirrored.Rounded.ReceiptLong
                         }
-                        val actionLabel = if (hasTravelPass) "Boarding Pass" else "Breakdown"
+                        val actionLabel = if (hasTravelPass) "Boarding pass" else "Breakdown"
 
                         Surface(
                             onClick = triggerPrimarySwipeAction,

@@ -499,11 +499,11 @@ fun ExpenseCategoryPickerSheet(
 @Composable
 private fun SectionLabel(text: String) {
     Text(
-        text = text.uppercase(),
+        text = text,
         fontFamily = SplitMateBrandFontFamily,
         fontWeight = FontWeight.ExtraBold,
         fontSize = 11.sp,
-        letterSpacing = 0.8.sp,
+        letterSpacing = 0.1.sp,
         color = SplitMateTheme.TextSecondary
     )
 }
@@ -661,11 +661,11 @@ fun CreateExpenseCategoryDialog(
                 }
 
                 Text(
-                    "COUNTS UNDER",
+                    "Counts under",
                     fontFamily = SplitMateBrandFontFamily,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 11.sp,
-                    letterSpacing = 0.8.sp,
+                    letterSpacing = 0.1.sp,
                     color = SplitMateTheme.TextSecondary
                 )
                 FlowRow(
