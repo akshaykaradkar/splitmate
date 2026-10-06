@@ -92,6 +92,16 @@ interface SplitMateDao {
         replaceExpenseSplits(expense.expenseId, splits)
     }
 
+    /**
+     * v2.3.6 P0 (RCA Bike Rentals): runs [block] in ONE Room transaction. The cloud sync uses it to
+     * re-read the current rows and write the merged ledger atomically, so an edit saved while the
+     * sync was merging can never be half-overwritten (old total with new shares).
+     */
+    @Transaction
+    suspend fun runInLedgerTransaction(block: suspend () -> Unit) {
+        block()
+    }
+
     @Query("DELETE FROM expenses WHERE expenseId = :expenseId")
     suspend fun deleteExpense(expenseId: String)
 

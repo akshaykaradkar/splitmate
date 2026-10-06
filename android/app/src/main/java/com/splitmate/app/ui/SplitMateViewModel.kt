@@ -4475,6 +4475,57 @@ class SplitMateViewModel(
     }
 
     /**
+     * v2.3.6 P3 Money check, 1-tap fix: sets a plain (non-itemized) expense's total to the sum of its
+     * shares. Only the organizer, the payer or the creator may do it (same rule as editing), and only
+     * when [com.splitmate.app.MoneyCheck.canUseSharesTotal] says it is safe. Returns the previous
+     * total (for Undo), or null when nothing changed.
+     */
+    fun useSharesTotalForExpense(expenseId: String): Long? {
+        val state = _uiState.value
+        val existing = state.expenses.find { it.expenseId == expenseId } ?: return null
+        if (!canCurrentUserModifyExpense(existing, state)) {
+            _uiState.update { it.copy(statusBannerMessage = com.splitmate.app.ExpenseEditPermission.READ_ONLY_REASON) }
+            return null
+        }
+        val rows = state.splits.filter { it.expenseId == expenseId }
+        if (!com.splitmate.app.MoneyCheck.canUseSharesTotal(existing, rows)) return null
+        val sharesTotal = rows.sumOf { it.finalOwedCents }
+        persistExpenseTotal(existing, sharesTotal)
+        _uiState.update {
+            it.copy(statusBannerMessage = "${cleanDisplayExpenseTitle(existing.title)} set to ${formatIndianRupeesFromCents(sharesTotal)}")
+        }
+        return existing.totalAmountCents
+    }
+
+    private fun persistExpenseTotal(existing: ExpenseEntity, totalCents: Long) {
+        com.splitmate.app.data.CloudGroupSyncRepository.setGroupPendingCloudPush(null, existing.groupId, true)
+        val updated = existing.copy(
+            totalAmountCents = totalCents,
+            baseSubtotalCents = totalCents,
+            syncStatus = "PENDING"
+        )
+        _uiState.update { curr ->
+            curr.copy(expenses = curr.expenses.map { if (it.expenseId == existing.expenseId) updated else it })
+        }
+        viewModelScope.launch(ioDispatcher) {
+            val d = dao ?: return@launch
+            d.insertExpense(updated)
+            val normUserPhone = resolveEffectiveUserPhone10(d)
+            runCatching {
+                com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
+                    context = null,
+                    dao = d,
+                    groupId = updated.groupId,
+                    localUserPhone10 = normUserPhone,
+                    localUserName = _uiState.value.currentUserName.ifBlank { "You" },
+                    isLocalMutation = true
+                )
+                refreshStateFromDaoSnapshot(d = d)
+            }
+        }
+    }
+
+    /**
      * Switches the local device's active perspective ("Viewing as: <Member> (You)") within [groupId]
      * in `<16ms` by toggling `GroupMemberEntity.isCurrentUser` and persisting to Room.
      */

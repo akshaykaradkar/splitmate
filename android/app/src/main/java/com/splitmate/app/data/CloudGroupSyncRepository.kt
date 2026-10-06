@@ -155,6 +155,12 @@ object CloudGroupSyncRepository {
     private val lastLocalMutationEpochByGroup = ConcurrentHashMap<String, Long>()
     private val pendingCloudPushByGroup = ConcurrentHashMap<String, Boolean>()
 
+    /** v2.3.6 P3: when this phone last confirmed its copy equals the group's cloud copy (this session). */
+    private val lastConfirmedInSyncEpochByGroup = ConcurrentHashMap<String, Long>()
+
+    /** v2.3.6 P3 Money check footer: epoch ms of the last confirmed match with the group, or 0. */
+    fun lastConfirmedInSyncEpoch(groupId: String): Long = lastConfirmedInSyncEpochByGroup[groupId] ?: 0L
+
     fun init(context: Context?) {
         if (context != null) {
             appContext = context.applicationContext ?: context
@@ -2536,67 +2542,90 @@ object CloudGroupSyncRepository {
             return null
         }
 
-        // Strict Topological Persistence Order into Room (PA-1 & PA-2):
-        // Step 1: Upsert group & surviving members first so new payer/member FKs exist
-        if (localGroup == null || localGroup != mergedDoc.group) {
-            dao.insertGroup(mergedDoc.group)
-        }
-        if (rawGroupMembers == null || rawGroupMembers != mergedDoc.members) {
-            dao.insertMembers(mergedDoc.members)
-        }
-
-        // Step 2: Delete tombstoned or non-surviving expenses & their splits
-        val localExpIds = localDoc?.expenses?.map { it.expenseId }?.toSet().orEmpty()
-        val survivingExpIds = mergedDoc.expenses.map { it.expenseId }.toSet()
-        val expIdsToDelete = (mergedDoc.deletedExpenseIds.keys + localExpIds.filter { it !in survivingExpIds }).toSet()
-        expIdsToDelete.forEach { deletedExpId ->
-            if (localDoc == null || deletedExpId in localExpIds || additionalTombstones.containsKey(deletedExpId)) {
-                dao.deleteSplitsForExpense(deletedExpId)
-                dao.deleteExpense(deletedExpId)
+        // v2.3.6 P0 (RCA audit R2): steps 1-6 run in ONE Room transaction. Inside it the current rows
+        // are re-read; any expense or settlement changed on this phone since the snapshot above (an
+        // edit saved while this sync was merging) is skipped, so it can never be half-overwritten
+        // (old total + new shares). The skipped edit stays local and is pushed by the next sync.
+        val skippedExpenseIds = mutableSetOf<String>()
+        val skippedSettlementIds = mutableSetOf<String>()
+        val snapshotDoc = localDoc
+        dao.runInLedgerTransaction {
+            if (snapshotDoc != null) {
+                skippedExpenseIds += com.splitmate.app.ConcurrentEditGuard.changedExpenseIds(
+                    snapshotExpenses = snapshotDoc.expenses,
+                    snapshotSplits = snapshotDoc.splits,
+                    currentExpenses = dao.getExpensesForGroup(groupId),
+                    currentSplits = dao.getSplitsForGroup(groupId)
+                )
+                skippedSettlementIds += com.splitmate.app.ConcurrentEditGuard.changedSettlementIds(
+                    snapshot = snapshotDoc.settlements,
+                    current = dao.getSettlementsForGroup(groupId)
+                )
             }
-        }
 
-        // Step 3: Upsert surviving expenses (including any payerId remapped or reassigned to Organizer per PA-1)
-        val localExpMap = localDoc?.expenses?.associateBy { it.expenseId }.orEmpty()
-        mergedDoc.expenses.filter { localExpMap[it.expenseId] != it }.forEach { exp ->
-            runCatching { dao.insertExpense(exp) }
-        }
-
-        // Step 4: Atomically replace splits per expense when changed (PA-2)
-        val localSplitsByExp = localDoc?.splits.orEmpty().groupBy { it.expenseId }
-        val mergedSplitsByExp = mergedDoc.splits.groupBy { it.expenseId }
-        for (exp in mergedDoc.expenses) {
-            val oldSplits = localSplitsByExp[exp.expenseId].orEmpty()
-            val newSplits = mergedSplitsByExp[exp.expenseId].orEmpty()
-            if (localDoc == null || oldSplits.toSet() != newSplits.toSet()) {
-                runCatching { dao.replaceExpenseSplits(exp.expenseId, newSplits) }
+            // Strict Topological Persistence Order into Room (PA-1 & PA-2):
+            // Step 1: Upsert group & surviving members first so new payer/member FKs exist
+            if (localGroup == null || localGroup != mergedDoc.group) {
+                dao.insertGroup(mergedDoc.group)
             }
-        }
-
-        // Step 5: Delete tombstoned or orphaned settlements, then upsert surviving settlements
-        val survivingSettleIds = mergedDoc.settlements.map { it.settlementId }.toSet()
-        localDoc?.settlements.orEmpty().forEach { oldSettle ->
-            if (oldSettle.settlementId !in survivingSettleIds || oldSettle.settlementId in mergedDoc.deletedSettlementIds) {
-                dao.deleteSettlementById(oldSettle.settlementId)
+            if (rawGroupMembers == null || rawGroupMembers != mergedDoc.members) {
+                dao.insertMembers(mergedDoc.members)
             }
-        }
-        mergedDoc.deletedSettlementIds.keys.forEach { delSettleId ->
-            dao.deleteSettlementById(delSettleId)
-        }
-        val localSettleMap = localDoc?.settlements?.associateBy { it.settlementId }.orEmpty()
-        mergedDoc.settlements.filter { localSettleMap[it.settlementId] != it }.forEach { settle ->
-            runCatching { dao.insertSettlement(settle) }
-        }
 
-        // Step 6: Finally delete any tombstoned or remapped/removed members from Room (safe now that expenses/splits/settlements no longer reference them)
-        val survivingMemberIdSet = mergedDoc.members.map { it.memberId }.toSet()
-        val memberIdsToDelete = (rawGroupMembers.orEmpty().map { it.memberId }.filter { it !in survivingMemberIdSet } +
-            mergedDoc.deletedMemberIds.keys).toSet()
-        for (deadMemberId in memberIdsToDelete) {
-            if (deadMemberId !in survivingMemberIdSet) {
-                runCatching {
-                    dao.deleteSettlementsForMember(groupId, deadMemberId)
-                    dao.deleteMemberById(deadMemberId)
+            // Step 2: Delete tombstoned or non-surviving expenses & their splits (a delete always wins)
+            val localExpIds = localDoc?.expenses?.map { it.expenseId }?.toSet().orEmpty()
+            val survivingExpIds = mergedDoc.expenses.map { it.expenseId }.toSet()
+            val expIdsToDelete = (mergedDoc.deletedExpenseIds.keys + localExpIds.filter { it !in survivingExpIds }).toSet()
+            expIdsToDelete.forEach { deletedExpId ->
+                if (localDoc == null || deletedExpId in localExpIds || additionalTombstones.containsKey(deletedExpId)) {
+                    dao.deleteSplitsForExpense(deletedExpId)
+                    dao.deleteExpense(deletedExpId)
+                }
+            }
+
+            // Step 3: Upsert surviving expenses (including any payerId remapped or reassigned to Organizer per PA-1)
+            val localExpMap = localDoc?.expenses?.associateBy { it.expenseId }.orEmpty()
+            mergedDoc.expenses.filter { localExpMap[it.expenseId] != it && it.expenseId !in skippedExpenseIds }.forEach { exp ->
+                runCatching { dao.insertExpense(exp) }
+            }
+
+            // Step 4: Atomically replace splits per expense when changed (PA-2)
+            val localSplitsByExp = localDoc?.splits.orEmpty().groupBy { it.expenseId }
+            val mergedSplitsByExp = mergedDoc.splits.groupBy { it.expenseId }
+            for (exp in mergedDoc.expenses) {
+                if (exp.expenseId in skippedExpenseIds) continue
+                val oldSplits = localSplitsByExp[exp.expenseId].orEmpty()
+                val newSplits = mergedSplitsByExp[exp.expenseId].orEmpty()
+                if (localDoc == null || oldSplits.toSet() != newSplits.toSet()) {
+                    runCatching { dao.replaceExpenseSplits(exp.expenseId, newSplits) }
+                }
+            }
+
+            // Step 5: Delete tombstoned or orphaned settlements, then upsert surviving settlements
+            val survivingSettleIds = mergedDoc.settlements.map { it.settlementId }.toSet()
+            localDoc?.settlements.orEmpty().forEach { oldSettle ->
+                if (oldSettle.settlementId !in survivingSettleIds || oldSettle.settlementId in mergedDoc.deletedSettlementIds) {
+                    dao.deleteSettlementById(oldSettle.settlementId)
+                }
+            }
+            mergedDoc.deletedSettlementIds.keys.forEach { delSettleId ->
+                dao.deleteSettlementById(delSettleId)
+            }
+            val localSettleMap = localDoc?.settlements?.associateBy { it.settlementId }.orEmpty()
+            mergedDoc.settlements.filter { localSettleMap[it.settlementId] != it && it.settlementId !in skippedSettlementIds }.forEach { settle ->
+                runCatching { dao.insertSettlement(settle) }
+            }
+
+            // Step 6: Finally delete any tombstoned or remapped/removed members from Room (safe now that expenses/splits/settlements no longer reference them)
+            val survivingMemberIdSet = mergedDoc.members.map { it.memberId }.toSet()
+            val memberIdsToDelete = (rawGroupMembers.orEmpty().map { it.memberId }.filter { it !in survivingMemberIdSet } +
+                mergedDoc.deletedMemberIds.keys).toSet()
+            for (deadMemberId in memberIdsToDelete) {
+                if (deadMemberId !in survivingMemberIdSet) {
+                    runCatching {
+                        dao.deleteSettlementsForMember(groupId, deadMemberId)
+                        dao.deleteMemberById(deadMemberId)
+                    }
                 }
             }
         }
@@ -2658,6 +2687,12 @@ object CloudGroupSyncRepository {
             setLastPushedGroupHash(ctx, groupId, newStructuralHash)
             setGroupPendingCloudPush(ctx, groupId, false)
             cloudSyncedConfirmed = true
+        }
+        if (skippedExpenseIds.isNotEmpty() || skippedSettlementIds.isNotEmpty()) {
+            // v2.3.6 P0: an edit made during this sync was kept locally; make sure the next sync pushes it.
+            setGroupPendingCloudPush(ctx, groupId, true)
+        } else if (cloudSyncedConfirmed) {
+            lastConfirmedInSyncEpochByGroup[groupId] = postMergeMs
         }
 
         if (cloudSyncedConfirmed && hasPendingLocalEntities) {

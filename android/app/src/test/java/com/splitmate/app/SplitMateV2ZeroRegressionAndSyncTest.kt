@@ -2410,7 +2410,7 @@ class SplitMateV2ZeroRegressionAndSyncTest {
                 tripHomeSource.contains("+ Add Phone & Invite") &&
                 tripHomeSource.contains("Edit Name & Phone") &&
                 tripHomeSource.contains("Share Invite on WhatsApp") &&
-                tripHomeSource.contains("Your Settlements") &&
+                tripHomeSource.contains("Your settlements") &&
                 tripHomeSource.contains("Other Travelers' Settlements") &&
                 tripHomeSource.contains("Confirmed by each recipient once received") &&
                 !tripHomeSource.contains("· Invite sent") &&

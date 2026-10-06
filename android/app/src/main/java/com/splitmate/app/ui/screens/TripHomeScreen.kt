@@ -7,6 +7,10 @@
 package com.splitmate.app.ui.screens
 
 import com.splitmate.app.ui.components.expressivePressScale
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.splitmate.app.ui.components.LocalMotionScheme
 import androidx.compose.foundation.layout.ColumnScope
 import kotlin.math.roundToInt
 import androidx.compose.runtime.mutableFloatStateOf
@@ -769,6 +773,13 @@ fun TripHomeScreen(
     ) {
         viewModel.computeGroupMemberNetBalances(resolvedGroupId)
     }
+    // v2.3.6 P3 Money check: read-only audit from the exact rows the balances use.
+    val groupSettlements = remember(uiState.settlements, resolvedGroupId) {
+        uiState.settlements.filter { it.groupId == resolvedGroupId }
+    }
+    val moneyCheckReport = remember(groupMembers, groupExpenses, groupSplits, groupSettlements) {
+        com.splitmate.app.MoneyCheck.run(groupMembers, groupExpenses, groupSplits, groupSettlements)
+    }
     val totalGroupSpendCents: Long = remember(groupExpenses) {
         groupExpenses.sumOf { it.totalAmountCents }
     }
@@ -1019,6 +1030,7 @@ fun TripHomeScreen(
                 activePerspectiveMember = activePerspectiveMember,
                 onlineFriendsCount = onlineFriendsCount,
                 isCloudSyncing = uiState.isCloudSyncing,
+                moneyNeedsAttention = !moneyCheckReport.passed,
                 isSearchExpanded = isSearchExpanded,
                 searchQuery = searchQuery,
                 onSearchQueryChange = { searchQuery = it },
@@ -1399,6 +1411,7 @@ fun TripHomeScreen(
                         groupName = group?.name ?: "Trip Hub",
                         groupMembers = groupMembers,
                         netBalancesMap = netBalancesMap,
+                        moneyCheckReport = moneyCheckReport,
                         onOpenSettleUpClick = onOpenSettleUpClick
                     )
                 }
@@ -1575,6 +1588,8 @@ private fun TripHubTopBar(
     @Suppress("UNUSED_PARAMETER") activePerspectiveMember: GroupMemberEntity?,
     onlineFriendsCount: Int = 0,
     isCloudSyncing: Boolean = false,
+    /** v2.3.6 P3: a Money check fails, so the Money tab shows an error dot. */
+    moneyNeedsAttention: Boolean = false,
     isSearchExpanded: Boolean,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
@@ -1798,7 +1813,8 @@ private fun TripHubTopBar(
 
         TripHubSectionTabsRow(
             selectedTab = selectedSectionTab,
-            onSelectTab = onSelectSectionTab
+            onSelectTab = onSelectSectionTab,
+            attentionTab = if (moneyNeedsAttention) TripHubSectionTab.MONEY else null
         )
 
         AnimatedVisibility(visible = isSearchExpanded) {
@@ -1854,7 +1870,9 @@ private fun TripHubTopBar(
 @Composable
 private fun TripHubSectionTabsRow(
     selectedTab: TripHubSectionTab,
-    onSelectTab: (TripHubSectionTab) -> Unit
+    onSelectTab: (TripHubSectionTab) -> Unit,
+    /** v2.3.6 P3: tab that gets an error dot (Money while a Money check fails). */
+    attentionTab: TripHubSectionTab? = null
 ) {
     val tabs = remember { TripHubSectionTab.entries.toList() }
     val selectedIdx = tabs.indexOf(selectedTab).coerceAtLeast(0)
@@ -1869,14 +1887,25 @@ private fun TripHubSectionTabsRow(
     ) {
         tabs.forEachIndexed { idx, tab ->
             val selected = idx == selectedIdx
+            val needsAttention = tab == attentionTab
             androidx.compose.material3.Tab(
                 selected = selected,
                 onClick = { onSelectTab(tab) },
                 selectedContentColor = MaterialTheme.colorScheme.primary,
                 unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.heightIn(min = 64.dp)
+                modifier = Modifier
+                    .heightIn(min = 64.dp)
+                    .semantics { if (needsAttention) stateDescription = "Something doesn't add up" }
             ) {
-                Icon(imageVector = tripHubSectionIcon(tab, selected), contentDescription = null)
+                androidx.compose.material3.BadgedBox(
+                    badge = {
+                        if (needsAttention) {
+                            androidx.compose.material3.Badge(containerColor = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                ) {
+                    Icon(imageVector = tripHubSectionIcon(tab, selected), contentDescription = null)
+                }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = tab.title,
@@ -4831,12 +4860,44 @@ private fun TripHubMoneySettlementView(
     @Suppress("UNUSED_PARAMETER") groupName: String,
     groupMembers: List<GroupMemberEntity>,
     netBalancesMap: Map<String, Long>,
+    moneyCheckReport: com.splitmate.app.MoneyCheck.Report,
     onOpenSettleUpClick: () -> Unit
 ) {
     val context = LocalContext.current
     val localView = LocalView.current
     val uiState by viewModel.uiState.collectAsState()
     var showGraphInspector by remember { mutableStateOf(false) }
+
+    // v2.3.6 P3 Money check: sheet + "Review" (opens the failing expense's detail sheet).
+    var showMoneyCheckSheet by rememberSaveable { mutableStateOf(false) }
+    val expenseActions = LocalTripHubExpenseActions.current
+    val moneyCheckSync = com.splitmate.app.MoneyCheckSyncStatus(
+        isSyncing = uiState.isCloudSyncing,
+        isOffline = uiState.isOfflineMode,
+        hasPendingPush = com.splitmate.app.data.CloudGroupSyncRepository.isGroupPendingCloudPush(null, groupId),
+        lastConfirmedEpochMs = com.splitmate.app.data.CloudGroupSyncRepository.lastConfirmedInSyncEpoch(groupId)
+    )
+    val expenseTitleOf: (String) -> String = { id ->
+        uiState.expenses.find { it.expenseId == id }?.let { cleanDisplayExpenseTitle(it.title) } ?: "An expense"
+    }
+    val openExpense: (String) -> Unit = { id ->
+        uiState.expenses.find { it.expenseId == id }?.let { exp ->
+            showMoneyCheckSheet = false
+            expenseActions?.openDetails?.invoke(exp)
+        }
+    }
+    val firstFailingExpense = moneyCheckReport.failingExpenseIds.firstOrNull()
+        ?.let { id -> uiState.expenses.find { it.expenseId == id } }
+    val markPaidWarning = if (moneyCheckReport.passed) null else com.splitmate.app.MoneyCheckCopy.MARK_PAID_WARNING
+    if (showMoneyCheckSheet) {
+        MoneyCheckSheet(
+            report = moneyCheckReport,
+            sync = moneyCheckSync,
+            titleOf = expenseTitleOf,
+            onOpenExpense = openExpense,
+            onDismiss = { showMoneyCheckSheet = false }
+        )
+    }
 
     val memberNetBalances = remember(groupMembers, netBalancesMap) {
         groupMembers.map { m ->
@@ -4884,6 +4945,29 @@ private fun TripHubMoneySettlementView(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // v2.3.6 P3: calm, non-dismissable card while any Money check fails (springs in/out).
+        if (!moneyCheckReport.passed) {
+            item(key = "money_check_failure") {
+                MoneyCheckFailureCard(
+                    report = moneyCheckReport,
+                    titleOf = expenseTitleOf,
+                    canFix = firstFailingExpense?.let { expenseActions?.canModify?.invoke(it) } ?: false,
+                    onReview = {
+                        performCrispTactileHaptic(context, localView, heavy = false)
+                        if (moneyCheckReport.failingExpenseIds.size == 1 && firstFailingExpense != null) {
+                            openExpense(firstFailingExpense.expenseId)
+                        } else {
+                            showMoneyCheckSheet = true
+                        }
+                    },
+                    modifier = Modifier.animateItem(
+                        fadeInSpec = LocalMotionScheme.current.defaultEffectsSpec(),
+                        placementSpec = LocalMotionScheme.current.defaultSpatialSpec(),
+                        fadeOutSpec = LocalMotionScheme.current.fastEffectsSpec()
+                    )
+                )
+            }
+        }
         // Header + Compact Max-Heap Graph Inspector Toggle (`Icons.Rounded.Info`, >= 48.dp touch bounds)
         item(key = "greedy_settlement_header") {
             Surface(
@@ -4927,13 +5011,14 @@ private fun TripHubMoneySettlementView(
                             }
                             Column {
                                 Text(
-                                    text = "Smart Settle Up",
+                                    text = "Smart settle up",
                                     fontWeight = FontWeight.ExtraBold,
                                     style = MaterialTheme.typography.titleMedium,
                                     color = TripHubTokens.TextPrimary
                                 )
                                 Text(
-                                    text = "${simplifiedTransfers.size} optimal ${if (simplifiedTransfers.size == 1) "transfer" else "transfers"} · Exact to the last paisa",
+                                    text = if (simplifiedTransfers.isEmpty()) "Everyone is settled"
+                                    else "${simplifiedTransfers.size} ${if (simplifiedTransfers.size == 1) "payment" else "payments"} to settle everyone",
                                     style = MaterialTheme.typography.bodySmall.merge(
                                         TextStyle(
                                             fontFamily = SplitMateTnumMonospace,
@@ -4963,6 +5048,17 @@ private fun TripHubMoneySettlementView(
                             )
                         }
                     }
+
+                    // v2.3.6 P3 Money check: the old static "Exact to the last paisa" claim is now a
+                    // live, checked fact. Tap for the full checklist.
+                    MoneyCheckStatusRow(
+                        report = moneyCheckReport,
+                        sync = moneyCheckSync,
+                        onClick = {
+                            performCrispTactileHaptic(context, localView, heavy = false)
+                            showMoneyCheckSheet = true
+                        }
+                    )
 
                     // v2.3.6: no progress line here. Settlement totals are static money data
                     // (v2.3.2 rule); wavy progress is reserved for in-flight network work.
@@ -5093,6 +5189,11 @@ private fun TripHubMoneySettlementView(
             }
         } else {
             // SECTION 1: YOUR SETTLEMENTS (Me-First Hierarchy)
+            if (!moneyCheckReport.passed) {
+                item(key = "money_check_hold_note") {
+                    MoneyCheckSettleHoldNote()
+                }
+            }
             item(key = "your_settlements_header") {
                 Row(
                     modifier = Modifier
@@ -5102,7 +5203,7 @@ private fun TripHubMoneySettlementView(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "Your Settlements",
+                        text = "Your settlements",
                         fontWeight = FontWeight.ExtraBold,
                         style = MaterialTheme.typography.titleMedium,
                         color = TripHubTokens.TextPrimary
@@ -5203,6 +5304,7 @@ private fun TripHubMoneySettlementView(
                             fromName = settlement.fromName,
                             toName = settlement.toName,
                             formattedAmount = formattedAmount,
+                            warning = markPaidWarning,
                             onConfirm = {
                                 pendingMarkPaidConfirm = false
                                 performCrispTactileHaptic(context, localView, heavy = false)
@@ -5580,6 +5682,7 @@ private fun TripHubMoneySettlementView(
                                     fromName = settlement.fromName,
                                     toName = settlement.toName,
                                     formattedAmount = formattedAmount,
+                                    warning = markPaidWarning,
                                     onConfirm = {
                                         pendingOtherConfirm = false
                                         viewModel.recordSettlement(

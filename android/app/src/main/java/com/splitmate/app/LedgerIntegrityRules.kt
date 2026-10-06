@@ -112,14 +112,15 @@ object SettlementDuplicateGuard {
  * v2.3.6: keeps every expense's total equal to the sum of its split rows.
  *
  * Found in real trip data: a rental edited from ₹7,950 to ₹4,950 (deposit returned). The edit saved
- * the new total and the new split rows (6 × ₹825), but a sync that was already on the network wrote
- * its older copy of the expense row back, so the total went back to ₹7,950 while the splits stayed
- * at ₹4,950. The ₹3,000 nobody owed left two members "owed" money that no transfer could ever pay.
+ * the new total and the new split rows (6 × ₹825) together. Another phone with the old copy then
+ * won the whole-document merge, and the v2.3.4 merge took the expense row from that copy (₹7,950)
+ * while keeping the local split rows (same `_sp_N` ids), so the mixed copy spread to everyone. The
+ * ₹3,000 nobody owed sent part of a real payment to the wrong person. See the RCA (Bike Rentals).
  *
  * Valid expenses always satisfy `sum(finalOwedCents) == totalAmountCents` (the payer's row carries
- * any unassigned remainder). In this failure the split rows are the newer data, so the repair trusts
- * them and corrects the stale total. Itemized receipts (tax / tip / remainder / multiplier) are left
- * alone because their total can't be rebuilt from the rows alone.
+ * any unassigned remainder). In that failure the split rows were the newer data, so the repair
+ * trusts them and corrects the stale total. Itemized receipts (tax / tip / remainder / multiplier)
+ * are left alone because their total can't be rebuilt from the rows alone.
  */
 object ExpenseSplitIntegrity {
 
@@ -144,5 +145,39 @@ object ExpenseSplitIntegrity {
     fun repairStaleTotals(expenses: List<ExpenseEntity>, splits: List<ExpenseSplitEntity>): List<ExpenseEntity> {
         val byExpense = splits.groupBy { it.expenseId }
         return expenses.map { exp -> repairStaleTotal(exp, byExpense[exp.expenseId].orEmpty()) }
+    }
+}
+
+/**
+ * v2.3.6 P0 (RCA audit, risk R2): the sync reads the local rows, merges, then writes. An edit saved
+ * in between used to be half-overwritten: the merged expense row (old total) was written, but the
+ * split rows were skipped because they still matched the pre-merge snapshot, leaving the edit's new
+ * shares under the old total. The sync now re-reads the rows inside one transaction and skips every
+ * expense / settlement that changed since its snapshot. The edit stays local (it is PENDING and
+ * triggers its own sync), and nothing is ever written half-way.
+ */
+object ConcurrentEditGuard {
+
+    /** Expense ids whose row or share rows differ between the sync's snapshot and the database now. */
+    fun changedExpenseIds(
+        snapshotExpenses: List<ExpenseEntity>,
+        snapshotSplits: List<ExpenseSplitEntity>,
+        currentExpenses: List<ExpenseEntity>,
+        currentSplits: List<ExpenseSplitEntity>
+    ): Set<String> {
+        val before = snapshotExpenses.associateBy { it.expenseId }
+        val now = currentExpenses.associateBy { it.expenseId }
+        val splitsBefore = snapshotSplits.groupBy { it.expenseId }.mapValues { it.value.toSet() }
+        val splitsNow = currentSplits.groupBy { it.expenseId }.mapValues { it.value.toSet() }
+        return (before.keys + now.keys).filterTo(mutableSetOf()) { id ->
+            before[id] != now[id] || splitsBefore[id].orEmpty() != splitsNow[id].orEmpty()
+        }
+    }
+
+    /** Settlement ids added, removed or changed since the sync's snapshot. */
+    fun changedSettlementIds(snapshot: List<SettlementEntity>, current: List<SettlementEntity>): Set<String> {
+        val before = snapshot.associateBy { it.settlementId }
+        val now = current.associateBy { it.settlementId }
+        return (before.keys + now.keys).filterTo(mutableSetOf()) { before[it] != now[it] }
     }
 }

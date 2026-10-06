@@ -1,5 +1,7 @@
 package com.splitmate.app.ui.screens
 
+import androidx.compose.material3.Surface
+import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.MaterialTheme
@@ -115,7 +117,17 @@ fun TripHubExpenseManagementHost(
             onEditExpense = { expToEdit -> editingExpenseId = expToEdit.expenseId },
             onUndoExpense = { idToRollback -> viewModel.rollbackExpense(idToRollback) },
             canModify = viewModel.canCurrentUserModifyExpense(exp, uiState),
-            readOnlyReason = ExpenseEditPermission.READ_ONLY_REASON
+            readOnlyReason = ExpenseEditPermission.READ_ONLY_REASON,
+            // v2.3.6 P3 Money check: per-expense shares check + 1-tap fix (organizer / payer / creator).
+            sharesCheck = {
+                ExpenseSharesCheckRow(
+                    expense = exp,
+                    splits = uiState.splits,
+                    canModify = viewModel.canCurrentUserModifyExpense(exp, uiState),
+                    onUseSharesTotal = { viewModel.useSharesTotalForExpense(exp.expenseId) },
+                    onEdit = { editingExpenseId = exp.expenseId }
+                )
+            }
         )
     }
 
@@ -297,7 +309,9 @@ fun TripHubMarkPaidConfirmDialog(
     toName: String,
     formattedAmount: String,
     onConfirm: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    /** v2.3.6 P3: shown while a Money check fails. Paying is still allowed (cash may have moved). */
+    warning: String? = null
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -310,11 +324,29 @@ fun TripHubMarkPaidConfirmDialog(
             )
         },
         text = {
-            Text(
-                text = "$fromName paid $toName $formattedAmount. This is saved as a settlement receipt for everyone in the trip.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "$fromName paid $toName $formattedAmount. This is saved as a settlement receipt for everyone in the trip.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (warning != null) {
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(imageVector = Icons.Rounded.ErrorOutline, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Text(text = warning, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
