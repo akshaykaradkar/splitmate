@@ -358,8 +358,9 @@ private fun TrainPassCard(
     )
 
     // Ambient loop for train gliding across the tracks (5.5s periodic cycle)
+    val reduceMotionForLoops = com.splitmate.app.ui.components.rememberReducedMotionEnabled() // v2.4.0 D2: loops hold still under "Remove animations"
     val infiniteTransition = rememberInfiniteTransition(label = "TrainTransitLoop")
-    val trainProgress by infiniteTransition.animateFloat(
+    val trainProgressAnimated by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
@@ -368,11 +369,12 @@ private fun TrainPassCard(
         ),
         label = "TrainGlideProgress"
     )
+    val trainProgress = if (reduceMotionForLoops) 0.62f else trainProgressAnimated
 
     val trainVectorPainter = rememberVectorPainter(Icons.Rounded.Train)
 
     // Signal light beacon pulse
-    val beaconPulse by infiniteTransition.animateFloat(
+    val beaconPulseAnimated by infiniteTransition.animateFloat(
         initialValue = 0.35f,
         targetValue = 0.90f,
         animationSpec = infiniteRepeatable(
@@ -381,6 +383,7 @@ private fun TrainPassCard(
         ),
         label = "TrainBeaconPulse"
     )
+    val beaconPulse = if (reduceMotionForLoops) 0.90f else beaconPulseAnimated
 
     Surface(
         onClick = { if (!isForeground) onCardHeaderTap() },
@@ -563,7 +566,7 @@ private fun TrainPassCard(
                             Spacer(modifier = Modifier.width(5.dp))
                             Text(
                                 text = "Train ticket",
-                                fontSize = 10.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = AnimatedTransitDeckTokens.TrainOnPass,
                                 letterSpacing = 0.1.sp
@@ -583,7 +586,7 @@ private fun TrainPassCard(
                             ) {
                                 Text(
                                     text = "Switch to train",
-                                    fontSize = 10.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = AnimatedTransitDeckTokens.TrainOnPass
                                 )
@@ -606,7 +609,7 @@ private fun TrainPassCard(
                             Spacer(modifier = Modifier.width(5.dp))
                             Text(
                                 text = if (trainCountLogged > 0) "$trainCountLogged ${if (trainCountLogged == 1) "ticket" else "tickets"} added" else "Live fare and berths",
-                                fontSize = 10.5.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = AnimatedTransitDeckTokens.TrainOnPass.copy(alpha = 0.90f)
                             )
@@ -708,8 +711,9 @@ private fun FlightPassCard(
     )
 
     // Ambient loop for airplane traversing contrail arc (6s periodic cycle)
+    val reduceMotionForLoops = com.splitmate.app.ui.components.rememberReducedMotionEnabled() // v2.4.0 D2: loops hold still under "Remove animations"
     val infiniteTransition = rememberInfiniteTransition(label = "FlightTransitLoop")
-    val flightProgress by infiniteTransition.animateFloat(
+    val flightProgressAnimated by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
@@ -718,11 +722,12 @@ private fun FlightPassCard(
         ),
         label = "AirplaneGlideProgress"
     )
+    val flightProgress = if (reduceMotionForLoops) 0.62f else flightProgressAnimated
 
     val flightVectorPainter = rememberVectorPainter(Icons.Rounded.Flight)
 
     // Radar pulse wave expansion
-    val radarPulse by infiniteTransition.animateFloat(
+    val radarPulseAnimated by infiniteTransition.animateFloat(
         initialValue = 0.2f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
@@ -731,6 +736,7 @@ private fun FlightPassCard(
         ),
         label = "RadarPulseRadius"
     )
+    val radarPulse = if (reduceMotionForLoops) 0.6f else radarPulseAnimated
 
     Surface(
         onClick = { if (!isForeground) onCardHeaderTap() },
@@ -885,7 +891,7 @@ private fun FlightPassCard(
                             Spacer(modifier = Modifier.width(5.dp))
                             Text(
                                 text = "Flight ticket",
-                                fontSize = 10.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = AnimatedTransitDeckTokens.FlightOnPass,
                                 letterSpacing = 0.1.sp
@@ -905,7 +911,7 @@ private fun FlightPassCard(
                             ) {
                                 Text(
                                     text = "Switch to flight",
-                                    fontSize = 10.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = AnimatedTransitDeckTokens.FlightOnPass
                                 )
@@ -928,7 +934,7 @@ private fun FlightPassCard(
                             Spacer(modifier = Modifier.width(5.dp))
                             Text(
                                 text = if (flightCountActive > 0) "$flightCountActive ${if (flightCountActive == 1) "flight" else "flights"} added" else "Seats and fare from your PDF",
-                                fontSize = 10.5.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = AnimatedTransitDeckTokens.FlightOnPass.copy(alpha = 0.90f)
                             )

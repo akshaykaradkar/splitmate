@@ -420,7 +420,7 @@ fun TripSyncAndPerspectiveSheet(
                                     text = "Trip code",
                                     fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 10.sp,
+                                    fontSize = 11.sp,
                                     color = SplitMateTheme.SageText
                                 )
                                 Text(

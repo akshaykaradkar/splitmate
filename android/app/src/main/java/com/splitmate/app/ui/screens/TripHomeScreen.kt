@@ -8,6 +8,12 @@ package com.splitmate.app.ui.screens
 
 import com.splitmate.app.ui.components.expressivePressScale
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.splitmate.app.ui.components.LocalMotionScheme
@@ -2211,7 +2217,7 @@ private fun TripHubOverviewFeed(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 160.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         items(
@@ -3531,7 +3537,7 @@ fun LodgingBookingCard(
                                 fontWeight = FontWeight.ExtraBold,
                                 style = MaterialTheme.typography.titleMedium,
                                 color = TripHubTokens.TextPrimary,
-                                maxLines = 1,
+                                maxLines = 2, // v2.4.0 D2: wrap long titles instead of cutting them
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
@@ -3648,7 +3654,7 @@ fun LodgingBookingCard(
                         }
                         Column {
                             Text(
-                                maxLines = 1,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                                 text = "Paid by ${payer?.name ?: "Member"}",
                                 fontWeight = FontWeight.SemiBold,
@@ -3897,7 +3903,7 @@ fun GroundMobilityBookingCard(
                                 fontWeight = FontWeight.ExtraBold,
                                 style = MaterialTheme.typography.titleMedium,
                                 color = TripHubTokens.TextPrimary,
-                                maxLines = 1,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
@@ -3957,7 +3963,7 @@ fun GroundMobilityBookingCard(
                             )
                         }
                         Text(
-                            maxLines = 1,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                             text = "Paid by ${payer?.name ?: "Member"}",
                             fontWeight = FontWeight.SemiBold,
@@ -4086,7 +4092,7 @@ fun GeneralSharedExpenseCard(
                             fontWeight = FontWeight.ExtraBold,
                             style = MaterialTheme.typography.titleMedium,
                             color = TripHubTokens.TextPrimary,
-                            maxLines = 1,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
@@ -4438,7 +4444,7 @@ private fun TripHubPlanTimelineView(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 160.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         groupedByDay.entries.forEachIndexed { dayIndex, (dateHeader, dayItems) ->
@@ -4658,7 +4664,7 @@ private fun TripHubTravelWalletView(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 160.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // Top Interactive 3D Flip Travel Pass Deck Launcher
@@ -4942,7 +4948,7 @@ private fun TripHubMoneySettlementView(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 160.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // v2.3.6 P3: calm, non-dismissable card while any Money check fails (springs in/out).
@@ -5351,7 +5357,18 @@ private fun TripHubMoneySettlementView(
                                 verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        // v2.4.0 D2: TalkBack hears one sentence ("Sam pays you 14 rupees 17 paise")
+                                        .clearAndSetSemantics {
+                                            contentDescription = com.splitmate.app.ui.a11y.SpokenMoney.settlementSentence(
+                                                fromName = settlement.fromName,
+                                                toName = settlement.toName,
+                                                amountCents = settlement.amountCents,
+                                                currentUserIsPayer = isCurrentUserPayer,
+                                                currentUserIsReceiver = !isCurrentUserPayer
+                                            )
+                                        },
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
@@ -5382,13 +5399,25 @@ private fun TripHubMoneySettlementView(
                                                     shape = CircleShape,
                                                     color = if (isCurrentUserPayer) TripHubTokens.TerracottaPeachBg else TripHubTokens.PositiveSagePillBg
                                                 ) {
-                                                    Text(
-                                                        text = if (isCurrentUserPayer) "You pay" else "You receive",
-                                                        fontWeight = FontWeight.ExtraBold,
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = if (isCurrentUserPayer) TripHubTokens.TerracottaIconTint else TripHubTokens.PositiveSageText,
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(3.dp),
                                                         modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
-                                                    )
+                                                    ) {
+                                                        // v2.4.0 D2: owe vs receive shown by icon + words, not colour alone
+                                                        Icon(
+                                                            imageVector = if (isCurrentUserPayer) Icons.Rounded.ArrowUpward else Icons.Rounded.ArrowDownward,
+                                                            contentDescription = null,
+                                                            tint = if (isCurrentUserPayer) TripHubTokens.TerracottaIconTint else TripHubTokens.PositiveSageText,
+                                                            modifier = Modifier.size(12.dp)
+                                                        )
+                                                        Text(
+                                                            text = if (isCurrentUserPayer) "You pay" else "You receive",
+                                                            fontWeight = FontWeight.ExtraBold,
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = if (isCurrentUserPayer) TripHubTokens.TerracottaIconTint else TripHubTokens.PositiveSageText
+                                                        )
+                                                    }
                                                 }
                                                 Text(
                                                     text = if (isCurrentUserPayer) "to ${settlement.toName}" else "from ${settlement.fromName}",
@@ -6576,7 +6605,7 @@ private fun TripHubPeoplePerspectiveView(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 160.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         item(key = "people_actions_row") {
@@ -6656,7 +6685,9 @@ private fun TripHubPeoplePerspectiveView(
                             1.dp,
                             if (isPeopleFeedbackError) DesignSystemBindings.activePalette.secondary.copy(alpha = 0.4f) else TripHubTokens.PositiveSageText.copy(alpha = 0.35f)
                         ),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite }
                     ) {
                         Row(
                             modifier = Modifier
@@ -6665,6 +6696,12 @@ private fun TripHubPeoplePerspectiveView(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Icon(
+                                imageVector = if (isPeopleFeedbackError) Icons.Rounded.ErrorOutline else Icons.Rounded.CheckCircleOutline,
+                                contentDescription = null,
+                                tint = if (isPeopleFeedbackError) TripHubTokens.TerracottaIconTint else TripHubTokens.PositiveSageText,
+                                modifier = Modifier.padding(end = 8.dp).size(18.dp)
+                            )
                             Text(
                                 text = banner,
                                 style = MaterialTheme.typography.labelSmall,
@@ -6674,7 +6711,7 @@ private fun TripHubPeoplePerspectiveView(
                             )
                             IconButton(
                                 onClick = { peopleFeedbackBanner = null },
-                                modifier = Modifier.size(22.dp)
+                                modifier = Modifier // v2.4.0 D2: default 48dp target
                             ) {
                                 Icon(
                                     imageVector = Icons.Rounded.Close,
@@ -6903,7 +6940,7 @@ private fun TripHubPeoplePerspectiveView(
                                 shape = CircleShape,
                                 color = TripHubTokens.PositiveSagePillBg,
                                 border = BorderStroke(1.dp, TripHubTokens.PositiveSageText.copy(alpha = 0.35f)),
-                                modifier = Modifier.size(32.dp)
+                                modifier = Modifier.minimumInteractiveComponentSize().size(32.dp) // v2.4.0 D2: 48dp touch area
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(

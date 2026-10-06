@@ -164,7 +164,7 @@ val SunlitBuckwheatPalette = SplitMateExpressivePalette(
     primaryContainer = Color(0xFFD7E8B6),
     onPrimaryContainer = Color(0xFF1A2E05),
     secondary = Color(0xFFE06B52),
-    onSecondary = Color(0xFFFFFFFF),
+    onSecondary = Color(0xFF23201E), // v2.4.0 D2: soft charcoal on terracotta = 4.9:1 (white was 3.28:1)
     secondaryContainer = Color(0xFFFED8C8),
     onSecondaryContainer = Color(0xFF7C2D12),
     tertiary = Color(0xFF3730A3),
@@ -236,7 +236,7 @@ val KyotoMatchaYuzuPalette = SplitMateExpressivePalette(
     tertiaryContainer = Color(0xFFF3E8FF),
     onTertiaryContainer = Color(0xFF3B0764),
     outline = Color(0xFF3F6638),
-    outlineVariant = Color(0xFF86B87A),
+    outlineVariant = Color(0xFF5E8F52), // v2.4.0 D2: was 2.09:1 on surface; now >= 3:1
     error = Color(0xFF93000A),
     onError = Color(0xFFFFFFFF),
     errorContainer = Color(0xFFFFDAD6),
@@ -1600,8 +1600,9 @@ fun OpenPeepsHeroStage(
         label = "hero_stage_height"
     )
 
+    val reduceMotionForLoops = com.splitmate.app.ui.components.rememberReducedMotionEnabled() // v2.4.0 D2: loops hold still under "Remove animations"
     val infiniteTransition = rememberInfiniteTransition(label = "hero_scene_breathing")
-    val floatOffsetY by infiniteTransition.animateFloat(
+    val floatOffsetYAnimated by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = -4f,
         animationSpec = infiniteRepeatable(
@@ -1610,6 +1611,7 @@ fun OpenPeepsHeroStage(
         ),
         label = "scene_float_y"
     )
+    val floatOffsetY = if (reduceMotionForLoops) 0f else floatOffsetYAnimated
 
     Surface(
         shape = RoundedCornerShape(28.dp),
@@ -1732,7 +1734,7 @@ fun OpenPeepsHeroStage(
                         style = TextStyle(
                             fontFamily = SplitMateTnumMonospace,
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 10.sp,
+                            fontSize = 11.sp,
                             fontFeatureSettings = "tnum"
                         ),
                         color = Color(0xFF365314)
@@ -2980,7 +2982,7 @@ fun CompactLedgerTicketStub(
                                     style = TextStyle(
                                         fontFamily = SplitMateTnumMonospace,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 10.sp,
+                                        fontSize = 11.sp,
                                         fontFeatureSettings = "tnum"
                                     ),
                                     color = badgeText,
@@ -3019,7 +3021,7 @@ fun CompactLedgerTicketStub(
                             text = "Paper Pass",
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp,
+                            fontSize = 11.sp,
                             color = badgeText
                         )
                         Icon(

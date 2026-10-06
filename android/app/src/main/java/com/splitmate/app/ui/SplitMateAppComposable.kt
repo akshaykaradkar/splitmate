@@ -1,6 +1,8 @@
 package com.splitmate.app
 
 import com.splitmate.app.ui.components.sharedGroupElement
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.liveRegion
 import com.splitmate.app.ui.*
 import android.Manifest
 import android.content.Intent
@@ -623,7 +625,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                             text = "Step $onboardingStepCount of 4",
                             fontFamily = FigtreeFontFamily,
                             style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
-                            fontSize = 10.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = SplitMateTheme.SageText,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
@@ -889,7 +891,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                                                     Text(
                                                         text = styleSpec.subtitle,
                                                         fontFamily = SplitMateTheme.FontRounded,
-                                                        fontSize = 10.sp,
+                                                        fontSize = 11.sp,
                                                         color = if (isSelected) SplitMateTheme.Palette.primaryContainer else SplitMateTheme.TextSecondary
                                                     )
                                                 }
@@ -1287,7 +1289,7 @@ fun PendingGroupInviteCard(
                                 Text(
                                     text = "Group invite",
                                     fontFamily = SplitMateTheme.FontRounded,
-                                    fontSize = 10.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = SplitMateTheme.Palette.onSurface,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
@@ -2155,7 +2157,7 @@ fun LedgersDashboardScreen(
                                 Text(
                                     text = "Display title",
                                     fontFamily = SplitMateTheme.FontDisplay,
-                                    fontSize = 10.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     letterSpacing = 0.1.sp,
                                     color = SplitMateTheme.SageText
@@ -2593,7 +2595,7 @@ fun LedgersDashboardScreen(
                                                     mbr.isCurrentUser -> "Group Admin"
                                                     else -> "Tap to link phone"
                                                 },
-                                                fontSize = 10.sp,
+                                                fontSize = 11.sp,
                                                 color = when {
                                                     isDeclinedMbr -> SplitMateTheme.TerracottaText
                                                     isMbrOnline -> SplitMateTheme.Extended.online.onContainer
@@ -3342,7 +3344,7 @@ fun LedgersDashboardScreen(
                                             )
                                             Text(
                                                 text = "Adds up exactly",
-                                                fontSize = 9.sp,
+                                                fontSize = 11.sp,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 color = SplitMateTheme.SageText
                                             )
@@ -3536,7 +3538,7 @@ fun LedgersDashboardScreen(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(top = 8.dp, bottom = 160.dp),
         verticalArrangement = Arrangement.spacedBy(DesignSystemBindings.PixelSectionSpacing)
     ) {
         // 1. Custom Top Bar (Subtitle "Fun & Trip Expenses", Sync Cloud button, Clickable Avatar)
@@ -4348,7 +4350,7 @@ fun LedgersDashboardScreen(
                                 Text(
                                     text = statusLabel,
                                     fontFamily = SplitMateTheme.FontRounded,
-                                    fontSize = 10.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     letterSpacing = 0.5.sp,
                                     color = badgeTextColor,
@@ -4411,7 +4413,7 @@ fun LedgersDashboardScreen(
                                         Text(
                                             text = "${groupCard.onlineFriendsCount} Online",
                                             fontFamily = SplitMateTheme.FontRounded,
-                                            fontSize = 10.sp,
+                                            fontSize = 11.sp,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = SplitMateTheme.Extended.online.onContainer
                                         )
@@ -4895,7 +4897,7 @@ fun LedgersDashboardScreen(
                                             Spacer(modifier = Modifier.height(2.dp))
                                             Text(
                                                 text = option.label,
-                                                fontSize = 10.sp,
+                                                fontSize = 11.sp,
                                                 fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
                                                 color = if (isSelected) SplitMateTheme.Palette.onSurface else SplitMateTheme.TextSecondary,
                                                 maxLines = 1,
@@ -4971,7 +4973,7 @@ fun LedgersDashboardScreen(
                                         ) {
                                             Text(
                                                 text = extractInitialsFromNameOrSeed(member.name),
-                                                fontSize = 10.sp,
+                                                fontSize = 11.sp,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 color = SplitMateTheme.Palette.onSurface
                                             )
@@ -4987,7 +4989,7 @@ fun LedgersDashboardScreen(
                                             if (member.cleanPhone.isNotEmpty()) {
                                                 Text(
                                                     text = "+91 ${member.cleanPhone}",
-                                                    fontSize = 9.sp,
+                                                    fontSize = 11.sp,
                                                     color = SplitMateTheme.SageText,
                                                     fontWeight = FontWeight.SemiBold
                                                 )
@@ -5209,7 +5211,7 @@ fun LedgersDashboardScreen(
                                                 } else {
                                                     "Works offline · You can link their 10-digit mobile number anytime"
                                                 },
-                                                fontSize = 10.sp,
+                                                fontSize = 11.sp,
                                                 color = SplitMateTheme.SageText
                                             )
                                         }
@@ -5383,7 +5385,7 @@ fun JoinGroupByCodeDialog(
                     }
                     IconButton(
                         onClick = onDismiss,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(40.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Close,
@@ -5501,7 +5503,9 @@ fun JoinGroupByCodeDialog(
                             1.dp,
                             if (isErrorStatus) SplitMateTheme.Palette.secondary.copy(alpha = 0.45f) else SplitMateTheme.Extended.sage.color.copy(alpha = 0.35f)
                         ),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite }
                     ) {
                         Text(
                             text = feedback,
@@ -5617,7 +5621,7 @@ fun ExpressiveThemeModePill(
             Text(
                 text = badgeLabel,
                 fontFamily = SplitMateTheme.FontRounded,
-                fontSize = 10.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = SplitMateTheme.PrimaryDark,
                 maxLines = 1
@@ -6012,8 +6016,9 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                             enter = expandVertically(animationSpec = spring(dampingRatio = 0.75f, stiffness = 380f)) + fadeIn(),
                             exit = shrinkVertically() + fadeOut()
                         ) {
+                            val reduceMotionForLoops = com.splitmate.app.ui.components.rememberReducedMotionEnabled() // v2.4.0 D2: loops hold still under "Remove animations"
                             val graphPulseTransition = rememberInfiniteTransition(label = "MaxHeapGraphFlow")
-                            val flowProgress by graphPulseTransition.animateFloat(
+                            val flowProgressAnimated by graphPulseTransition.animateFloat(
                                 initialValue = 0f,
                                 targetValue = 1f,
                                 animationSpec = infiniteRepeatable(
@@ -6022,6 +6027,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                 ),
                                 label = "FlowDotProgress"
                             )
+                            val flowProgress = if (reduceMotionForLoops) 0.5f else flowProgressAnimated
                             val activeCoral = SplitMateTheme.BrandCoral
                             val activeSageContainer = SplitMateTheme.SageSurface
                             val activeSageText = SplitMateTheme.SageText
@@ -6040,13 +6046,13 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                     ) {
                                         Text(
                                             text = "Before: $rawPairwiseIouCount separate payments",
-                                            fontSize = 10.sp,
+                                            fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = SplitMateTheme.TerracottaText
                                         )
                                         Text(
                                             text = "Simplified: $simplifiedTransferCount direct payments",
-                                            fontSize = 10.sp,
+                                            fontSize = 11.sp,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = SplitMateTheme.SageText
                                         )
@@ -6186,7 +6192,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                 ) {
                                     Text(
                                         text = "Gets back (${receiversList.size})",
-                                        fontSize = 10.sp,
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = SplitMateTheme.SageText,
                                         modifier = Modifier.weight(1f)
@@ -6194,7 +6200,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text(
                                         text = "Owes (${payersList.size})",
-                                        fontSize = 10.sp,
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = SplitMateTheme.TerracottaText,
                                         modifier = Modifier.weight(1f)
@@ -6551,7 +6557,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                             ) {
                                                 Text(
                                                     text = if (summary.isCurrentUser) "You receive" else "Receives",
-                                                    fontSize = 10.sp,
+                                                    fontSize = 11.sp,
                                                     fontWeight = FontWeight.ExtraBold,
                                                     color = SplitMateTheme.SageText,
                                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
@@ -6832,7 +6838,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                             ) {
                                                 Text(
                                                     text = if (summary.isCurrentUser) "You pay" else "Pays",
-                                                    fontSize = 10.sp,
+                                                    fontSize = 11.sp,
                                                     fontWeight = FontWeight.ExtraBold,
                                                     color = SplitMateTheme.TerracottaText,
                                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
@@ -7011,7 +7017,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                                         text = "Awaiting $counterpartyFirstName",
                                                                         fontFamily = SplitMateTheme.FontRounded,
                                                                         fontWeight = FontWeight.Bold,
-                                                                        fontSize = 9.sp,
+                                                                        fontSize = 11.sp,
                                                                         color = SplitMateTheme.TerracottaText
                                                                     )
                                                                 }
@@ -7125,8 +7131,9 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                 val harmonyMorph = remember {
                     Morph(MaterialShapes.Cookie9Sided, MaterialShapes.Sunny)
                 }
+                val reduceMotionForLoops = com.splitmate.app.ui.components.rememberReducedMotionEnabled() // v2.4.0 D2: loops hold still under "Remove animations"
                 val harmonyInfinite = rememberInfiniteTransition(label = "HarmonySealMorphTransition")
-                val harmonyMorphProgress by harmonyInfinite.animateFloat(
+                val harmonyMorphProgressAnimated by harmonyInfinite.animateFloat(
                     initialValue = 0f,
                     targetValue = 1f,
                     animationSpec = infiniteRepeatable(
@@ -7135,6 +7142,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                     ),
                     label = "HarmonySealMorphProgress"
                 )
+                val harmonyMorphProgress = if (reduceMotionForLoops) 0f else harmonyMorphProgressAnimated
                 val sealScale by animateFloatAsState(
                     targetValue = 1f,
                     animationSpec = SplitMateMotion.slowSpatial(),
@@ -8042,7 +8050,7 @@ fun AuditVaultScreen(
                                                 Text(
                                                     text = "PNR ${parsedTravelTicket.pnr} · ${parsedTravelTicket.bookingStatus}",
                                                     fontFamily = SplitMateTheme.FontRounded,
-                                                    fontSize = 10.sp,
+                                                    fontSize = 11.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     color = activePalette.onTertiaryContainer,
                                                     style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),

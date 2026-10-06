@@ -890,7 +890,7 @@ fun UserSettingsScreen(
                                                     Text(
                                                         text = styleSpec.subtitle,
                                                         fontFamily = SplitMateBrandFontFamily,
-                                                        fontSize = 10.sp,
+                                                        fontSize = 11.sp,
                                                         color = if (isSelected) activePalette.primaryContainer else textSecondary
                                                     )
                                                 }
@@ -1207,7 +1207,7 @@ fun UserSettingsScreen(
                                                     Text(
                                                         text = paletteHexSummary,
                                                         fontFamily = com.splitmate.app.ui.SplitMateTnumMonospace,
-                                                        fontSize = 10.sp,
+                                                        fontSize = 11.sp,
                                                         fontWeight = FontWeight.Bold,
                                                         color = if (isSelected) modePalette.primary else textSecondary.copy(alpha = 0.85f)
                                                     )

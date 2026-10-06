@@ -385,14 +385,14 @@ fun EditLoggedExpenseDialog(
                         OutlinedTextField(
                             value = pnrNumber,
                             onValueChange = { pnrNumber = it.filter { ch -> ch.isDigit() }.take(10) },
-                            label = { Text("10-Digit PNR", fontSize = 10.sp) },
+                            label = { Text("10-Digit PNR", fontSize = 11.sp) },
                             singleLine = true,
                             modifier = Modifier.weight(1f)
                         )
                         OutlinedTextField(
                             value = trainOrFlightNo,
                             onValueChange = { trainOrFlightNo = it },
-                            label = { Text("Train #", fontSize = 10.sp) },
+                            label = { Text("Train #", fontSize = 11.sp) },
                             singleLine = true,
                             modifier = Modifier.weight(1f)
                         )
@@ -401,14 +401,14 @@ fun EditLoggedExpenseDialog(
                         OutlinedTextField(
                             value = routeFromTo,
                             onValueChange = { routeFromTo = it },
-                            label = { Text("From - To", fontSize = 10.sp) },
+                            label = { Text("From - To", fontSize = 11.sp) },
                             singleLine = true,
                             modifier = Modifier.weight(1f)
                         )
                         OutlinedTextField(
                             value = coachAndSeats,
                             onValueChange = { coachAndSeats = it },
-                            label = { Text("Coach / Berths", fontSize = 10.sp) },
+                            label = { Text("Coach / Berths", fontSize = 11.sp) },
                             singleLine = true,
                             modifier = Modifier.weight(1f)
                         )
@@ -564,7 +564,7 @@ fun OverlappingAvatarStack(
                     .border(2.dp, SplitMateTheme.SurfaceWhite, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Text("+$remainingCount", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = SplitMateTheme.PrimaryDark)
+                Text("+$remainingCount", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SplitMateTheme.PrimaryDark)
             }
         }
     }

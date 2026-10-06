@@ -1262,7 +1262,7 @@ fun FlightExpenseReviewScreen(
                                         ) {
                                             Text(
                                                 text = "Change Payer",
-                                                fontSize = 10.5.sp,
+                                                fontSize = 11.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = FlightPassTokens.SkyBlueText
                                             )
@@ -1310,7 +1310,7 @@ fun FlightExpenseReviewScreen(
                                         ) {
                                             Text(
                                                 text = "Paid by: $payerMemberName",
-                                                fontSize = 10.5.sp,
+                                                fontSize = 11.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = FlightPassTokens.SkyBlueText
                                             )
@@ -1370,7 +1370,7 @@ fun FlightExpenseReviewScreen(
                                 ) {
                                     Text(
                                         text = "Exact split",
-                                        fontSize = 10.5.sp,
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = FlightPassTokens.StatusGreenText,
                                         modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
@@ -1500,7 +1500,7 @@ fun FlightExpenseReviewScreen(
                                                                 )
                                                                 Text(
                                                                     text = "On Ticket",
-                                                                    fontSize = 9.sp,
+                                                                    fontSize = 11.sp,
                                                                     fontWeight = FontWeight.ExtraBold,
                                                                     color = FlightPassTokens.SkyBlueText
                                                                 )
@@ -1516,7 +1516,7 @@ fun FlightExpenseReviewScreen(
                                                             Text(
                                                                 text = "Paid ${formatFlightPaiseExact(totalAirfarePaise)} · Gets back ${formatFlightPaiseExact(returnsPaise)}",
                                                                 style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
-                                                                fontSize = 9.5.sp,
+                                                                fontSize = 11.sp,
                                                                 fontWeight = FontWeight.Bold,
                                                                 color = FlightPassTokens.StatusGreenText,
                                                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
@@ -1542,7 +1542,7 @@ fun FlightExpenseReviewScreen(
                                                     if (!member.isPayer) {
                                                         Text(
                                                             text = "Set as Payer",
-                                                            fontSize = 10.5.sp,
+                                                            fontSize = 11.sp,
                                                             fontWeight = FontWeight.ExtraBold,
                                                             color = FlightPassTokens.SkyBlueText,
                                                             modifier = Modifier.clickable {
@@ -1678,7 +1678,7 @@ fun PaperSensoryFeedbackBanner(
                 Spacer(modifier = Modifier.width(5.dp))
                 Text(
                     text = if (isFeedbackEnabled) "Sound: ON" else "Sound: OFF",
-                    fontSize = 10.5.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     color = if (isFeedbackEnabled) FlightPassTokens.StatusGreenText else FlightPassTokens.TextSecondary
@@ -1771,7 +1771,7 @@ fun PnrSyncStatusBanner(
                         ) {
                             Text(
                                 text = "Confirmed CNF",
-                                fontSize = 9.5.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
                                 softWrap = false,
@@ -1799,7 +1799,7 @@ fun PnrSyncStatusBanner(
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
                                     text = rightStatusLabel,
-                                    fontSize = 10.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
@@ -2151,7 +2151,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
                                         text = flightDuration,
-                                        fontSize = 10.5.sp,
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = FlightPassTokens.PrimaryDark
                                     )
@@ -2199,7 +2199,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = flightDistance,
-                                fontSize = 9.5.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = FlightPassTokens.TextMuted,
                                 textAlign = TextAlign.Center,
@@ -2253,7 +2253,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
                     ) {
                         Text(
                             text = "Passengers (${passengers.size})",
-                            fontSize = 10.5.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = FlightPassTokens.TextSecondary,
                             letterSpacing = 0.1.sp
@@ -2266,7 +2266,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
                         ) {
                             Text(
                                 text = baggageLabel,
-                                fontSize = 9.5.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = FlightPassTokens.StatusGreenText,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
@@ -2401,7 +2401,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
                                 )
                                 Text(
                                     text = "Saved to your trip",
-                                    fontSize = 8.5.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     letterSpacing = 0.1.sp,
                                     color = FlightPassTokens.StampInk
@@ -2489,7 +2489,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = if (isFolded) "Stub Tucked in Wallet · Tap to Unfold" else "Tap Perforation to Tear Stub & Stamp Pass",
-                            fontSize = 10.5.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = if (isFolded) FlightPassTokens.SkyBlueText else FlightPassTokens.TextSecondary
                         )
@@ -2584,7 +2584,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
                             ) {
                                 Text(
                                     text = if (isFolded) "Tucked in Wallet" else "Ready for Ledger",
-                                    fontSize = 9.5.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (isFolded) FlightPassTokens.SkyBlueText else FlightPassTokens.StatusGreenText,
                                     modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
@@ -2659,7 +2659,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
                                 Text(
                                     text = "Your tickets",
                                     fontFamily = SplitMateTheme.FontDisplay,
-                                    fontSize = 10.5.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     letterSpacing = 0.1.sp,
                                     color = FlightPassTokens.AviationOnVariant
@@ -2668,7 +2668,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
                             Text(
                                 text = "PNR $pnrNumber · ₹${NumberFormat.getNumberInstance(Locale("en", "IN")).format(totalAirfare)}",
                                 style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
-                                fontSize = 10.5.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = FlightPassTokens.GoldFoil
                             )
@@ -2717,7 +2717,7 @@ fun EngravedAviationBarcode(
         Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = barcodeCaption.ifBlank { "PNR $pnrNumber" },
-            fontSize = 9.sp,
+            fontSize = 11.sp,
             fontWeight = FontWeight.ExtraBold,
             color = FlightPassTokens.TextMuted,
             letterSpacing = 0.1.sp,

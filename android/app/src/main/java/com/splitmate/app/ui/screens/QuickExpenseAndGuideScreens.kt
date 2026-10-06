@@ -1171,7 +1171,7 @@ fun QuickExpenseScreen(
                                                 Text(
                                                     text = person.initials,
                                                     fontFamily = SplitMateDisplayFontFamily,
-                                                    fontSize = 9.sp,
+                                                    fontSize = 11.sp,
                                                     fontWeight = FontWeight.ExtraBold,
                                                     color = person.avatarFg
                                                 )
@@ -1362,7 +1362,7 @@ fun QuickExpenseScreen(
                                                 Text(
                                                     text = "+${payerExtraPaise}p",
                                                     fontFamily = SplitMateBrandFontFamily,
-                                                    fontSize = 8.5.sp,
+                                                    fontSize = 11.sp,
                                                     fontWeight = FontWeight.ExtraBold,
                                                     color = QuickExpenseThemeTokens.SageText,
                                                     modifier = Modifier.padding(horizontal = 4.5.dp, vertical = 1.dp)
@@ -1571,7 +1571,7 @@ fun QuickExpenseScreen(
                                 Text(
                                     text = "Adds up exactly",
                                     style = SplitMateExpressiveTypography.labelSmallEmphasized.merge(SplitMateMonospaceTextStyle),
-                                    fontSize = 9.5.sp,
+                                    fontSize = 11.sp,
                                     color = if (isZeroDriftVerified) QuickExpenseThemeTokens.SageText else textSecondary,
                                     letterSpacing = 0.1.sp
                                 )
@@ -1616,7 +1616,7 @@ fun QuickExpenseScreen(
                                                         Text(
                                                             text = "Split Remainder Equally",
                                                             fontFamily = SplitMateBrandFontFamily,
-                                                            fontSize = 10.sp,
+                                                            fontSize = 11.sp,
                                                             fontWeight = FontWeight.ExtraBold,
                                                             color = activePalette.onSecondary
                                                         )
@@ -1656,7 +1656,7 @@ fun QuickExpenseScreen(
                                                     Text(
                                                         text = "+${payerExtraPaise}p",
                                                         fontFamily = SplitMateBrandFontFamily,
-                                                        fontSize = 10.sp,
+                                                        fontSize = 11.sp,
                                                         fontWeight = FontWeight.ExtraBold,
                                                         color = QuickExpenseThemeTokens.SageText
                                                     )
@@ -1669,7 +1669,7 @@ fun QuickExpenseScreen(
                                                     Text(
                                                         text = "Payer",
                                                         fontFamily = SplitMateBrandFontFamily,
-                                                        fontSize = 10.sp,
+                                                        fontSize = 11.sp,
                                                         fontWeight = FontWeight.ExtraBold,
                                                         color = QuickExpenseThemeTokens.SageText
                                                     )
@@ -2352,7 +2352,7 @@ fun EditFriendUpiDialog(
                                                     Text(
                                                         text = if (cleanDraftPhone10.length == 10) "+91 $cleanDraftPhone10" else "Offline Member • Tap to link phone",
                                                         fontFamily = SplitMateBrandFontFamily,
-                                                        fontSize = 10.sp,
+                                                        fontSize = 11.sp,
                                                         fontWeight = FontWeight.SemiBold,
                                                         color = if (cleanDraftPhone10.length == 10) QuickExpenseThemeTokens.SageText else QuickExpenseThemeTokens.TextSecondary,
                                                         maxLines = 1,

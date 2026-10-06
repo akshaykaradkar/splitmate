@@ -711,7 +711,7 @@ fun UpiExpressPaymentSheet(
                             Text(
                                 text = "Pay with UPI",
                                 fontFamily = FigtreeFontFamily,
-                                fontSize = 10.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 letterSpacing = 0.1.sp,
                                 color = SplitMateTheme.TextSecondary
@@ -751,7 +751,7 @@ fun UpiExpressPaymentSheet(
                             Text(
                                 text = "Pre-filled",
                                 fontFamily = FigtreeFontFamily,
-                                fontSize = 9.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 letterSpacing = 0.1.sp,
                                 color = SplitMateTheme.SageText
@@ -863,7 +863,7 @@ fun UpiExpressPaymentSheet(
                             Text(
                                 text = "Opens UPI app with amount pre-filled",
                                 fontFamily = FigtreeFontFamily,
-                                fontSize = 10.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = SplitMateTheme.SageText
                             )
@@ -904,7 +904,7 @@ fun UpiExpressPaymentSheet(
                             Text(
                                 text = "Select 10-Digit Phone",
                                 fontFamily = FigtreeFontFamily,
-                                fontSize = 10.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = SplitMateTheme.TextSecondary
                             )
@@ -923,7 +923,7 @@ fun UpiExpressPaymentSheet(
                     Text(
                         text = "${transferModel.toName}'s UPI ID",
                         fontFamily = FigtreeFontFamily,
-                        fontSize = 10.5.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.ExtraBold,
                         letterSpacing = 0.1.sp,
                         color = SplitMateTheme.TextSecondary
@@ -932,7 +932,7 @@ fun UpiExpressPaymentSheet(
                         Text(
                             text = "Gmail detected: $discoveredGmailPrefix",
                             fontFamily = FigtreeFontFamily,
-                            fontSize = 10.5.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = SplitMateTheme.SageText
                         )
@@ -940,7 +940,7 @@ fun UpiExpressPaymentSheet(
                         Text(
                             text = "Phone: $clean10Phone",
                             fontFamily = FigtreeFontFamily,
-                            fontSize = 10.5.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = SplitMateTheme.SageText
                         )
@@ -991,7 +991,7 @@ fun UpiExpressPaymentSheet(
                                     Text(
                                         text = "Saved",
                                         fontFamily = FigtreeFontFamily,
-                                        fontSize = 10.sp,
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = SplitMateTheme.SageText
                                     )
@@ -1055,7 +1055,7 @@ fun UpiExpressPaymentSheet(
                                 Text(
                                     text = "· $label",
                                     fontFamily = FigtreeFontFamily,
-                                    fontSize = 10.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = if (isCurrentSuffix) SplitMateTheme.ScreenBg.copy(alpha = 0.8f) else SplitMateTheme.TextSecondary
                                 )

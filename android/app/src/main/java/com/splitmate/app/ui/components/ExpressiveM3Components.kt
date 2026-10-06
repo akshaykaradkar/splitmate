@@ -1,5 +1,6 @@
 package com.splitmate.app.ui.components
 
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.FloatingActionButtonMenuItem
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -1646,6 +1647,7 @@ object SplitButtonDefaults {
         Surface(
             onClick = { onCheckedChange(!checked) },
             modifier = modifier
+                .minimumInteractiveComponentSize() // v2.4.0 D2: 48dp touch area for the Mark paid chevron
                 .height(height)
                 .width(width)
                 .semantics { stateDescription = stateText },

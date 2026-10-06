@@ -841,7 +841,7 @@ fun PnrExpenseReviewScreen(
                             text = "Train tickets in ${activeGroup?.name ?: "this trip"} (${existingPnrExpensesInGroup.size}) · tap to open or edit",
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 10.sp,
+                            fontSize = 11.sp,
                             letterSpacing = 0.1.sp,
                             color = TactilePaperPassTokens.SageConfirmedText
                         )
@@ -1197,7 +1197,7 @@ fun PnrSearchLookupCard(
                         text = "Enter your 10-digit PNR",
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 10.sp,
+                        fontSize = 11.sp,
                         letterSpacing = 0.1.sp,
                         color = TactilePaperPassTokens.InkMuted
                     )
@@ -1749,7 +1749,7 @@ fun TactilePaperBoardingPass(
                         text = "Total fare ($passengerCount ${if (passengerCount == 1) "passenger" else "passengers"})",
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 10.sp,
+                        fontSize = 11.sp,
                         letterSpacing = 0.1.sp,
                         color = TactilePaperPassTokens.InkMuted,
                         modifier = Modifier
@@ -1771,7 +1771,7 @@ fun TactilePaperBoardingPass(
                             text = "PNR $formattedPnr",
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp,
+                            fontSize = 11.sp,
                             letterSpacing = 0.6.sp,
                             color = TactilePaperPassTokens.InkSecondary
                         )
@@ -1870,7 +1870,7 @@ private fun MemberSplitSelectionCard(
                     text = "Who paid for this ticket?",
                     fontFamily = FigtreeFontFamily,
                     fontWeight = FontWeight.ExtraBold,
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
                     letterSpacing = 0.1.sp,
                     color = TactilePaperPassTokens.InkSecondary
                 )

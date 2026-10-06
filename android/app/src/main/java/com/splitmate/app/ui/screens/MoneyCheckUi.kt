@@ -144,6 +144,7 @@ fun MoneyCheckStatusRow(
             .clickable(onClick = onClick)
             .clearAndSetSemantics {
                 role = Role.Button
+                liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite
                 contentDescription = "$title. Double tap for details."
             }
     ) {
@@ -170,7 +171,7 @@ fun MoneyCheckStatusRow(
                 text = title,
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
@@ -347,7 +348,7 @@ fun MoneyCheckSheet(
                                 Text(
                                     text = issue.expenseId?.let(titleOf) ?: issue.title,
                                     style = MaterialTheme.typography.titleSmall,
-                                    maxLines = 1,
+                                    maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
