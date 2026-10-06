@@ -3714,7 +3714,7 @@ fun LedgersDashboardScreen(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
-                                        text = "Link Phone & 4-Digit PIN",
+                                        text = "Link phone and PIN",
                                         fontFamily = SplitMateTheme.FontDisplay,
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.ExtraBold,
@@ -4105,7 +4105,7 @@ fun LedgersDashboardScreen(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "Active Groups",
+                        text = "Active groups",
                         fontFamily = SplitMateTheme.FontDisplay,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.ExtraBold,
@@ -6193,7 +6193,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text(
-                                        text = "OWES (${payersList.size})",
+                                        text = "Owes (${payersList.size})",
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = SplitMateTheme.TerracottaText,

@@ -4460,7 +4460,7 @@ private fun TripHubPlanTimelineView(
                             color = TripHubTokens.ActiveTabPillBg
                         ) {
                             Text(
-                                text = "DAY ${dayIndex + 1}",
+                                text = "Day ${dayIndex + 1}",
                                 style = MaterialTheme.typography.labelSmall.merge(
                                     TextStyle(
                                         fontFamily = SplitMateTnumMonospace,
@@ -7018,8 +7018,8 @@ private fun AddBookingQuickSheet(
             val actions = listOf(
                 Triple("Train ticket", Icons.Rounded.Train, onSelectTrainPnr),
                 Triple("Flight", Icons.Rounded.FlightTakeoff, onSelectFlightPass),
-                Triple("Hotel, Rental, Cab or Shared Expense", Icons.AutoMirrored.Rounded.ReceiptLong, onSelectSharedExpense),
-                Triple("Share Trip Code & Invite Friends", Icons.Rounded.PersonAdd, onSelectSyncAndPerspective)
+                Triple("Stay, rental, cab or bill", Icons.AutoMirrored.Rounded.ReceiptLong, onSelectSharedExpense),
+                Triple("Invite friends with the trip code", Icons.Rounded.PersonAdd, onSelectSyncAndPerspective)
             )
 
             actions.forEach { (label, icon, callback) ->

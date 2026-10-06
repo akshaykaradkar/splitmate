@@ -1078,7 +1078,7 @@ fun FlightExpenseReviewScreen(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(
                                     text = if (existingFlightExpenseInGroup != null) {
-                                        "Already Added · Update Earlier Split ($exactButtonTotal)"
+                                        "Already added · update split ($exactButtonTotal)"
                                     } else {
                                         "Confirm $exactButtonTotal · Paid by $payerMemberName"
                                     },
@@ -1183,10 +1183,10 @@ fun FlightExpenseReviewScreen(
                         aircraftType = cabinSubtitle,
                         gateNumber = extractedTicket.travelDate.ifBlank { "Confirmed" },
                         boardingTime = extractedTicket.departureTime.ifBlank { "On Time" },
-                        originCode = extractedTicket.originIata.ifBlank { "ORG" },
+                        originCode = extractedTicket.originIata.ifBlank { "—" },
                         originAirportName = extractedTicket.originCity.ifBlank { extractedTicket.originAirportName.ifBlank { "Origin Airport" } },
                         departureTime = extractedTicket.departureTime.ifBlank { "--:--" },
-                        destinationCode = extractedTicket.destinationIata.ifBlank { "DST" },
+                        destinationCode = extractedTicket.destinationIata.ifBlank { "—" },
                         destinationAirportName = extractedTicket.destinationCity.ifBlank { extractedTicket.destinationAirportName.ifBlank { "Destination Airport" } },
                         arrivalTime = extractedTicket.arrivalTime.ifBlank { "--:--" },
                         flightDuration = extractedTicket.durationText.ifBlank { "Direct" },
@@ -1369,7 +1369,7 @@ fun FlightExpenseReviewScreen(
                                     border = BorderStroke(1.dp, FlightPassTokens.StatusGreenBorder)
                                 ) {
                                     Text(
-                                        text = "Exact Split",
+                                        text = "Exact split",
                                         fontSize = 10.5.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = FlightPassTokens.StatusGreenText,
@@ -1643,7 +1643,7 @@ fun PaperSensoryFeedbackBanner(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "Paper Tear & Gate-Stamp Acoustics",
+            text = "Ticket sounds",
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
             color = FlightPassTokens.TextSecondary,

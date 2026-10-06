@@ -2427,7 +2427,7 @@ class SplitMateV2ZeroRegressionAndSyncTest {
         )
         assertTrue(
             appSource.contains("Gets back (") &&
-                appSource.contains("OWES (") &&
+                appSource.contains("Owes (") &&
                 appSource.contains("Show top 3 rows") &&
                 appSource.contains("Your settlements") &&
                 appSource.contains("Other travelers' settlements") &&

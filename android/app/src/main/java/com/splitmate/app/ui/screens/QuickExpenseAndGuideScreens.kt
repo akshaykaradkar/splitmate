@@ -662,7 +662,7 @@ fun QuickExpenseScreen(
                     )
                 ) {
                     Text(
-                        if (pendingCommitAfterCategorySelection) "Save & Log Split" else "Save Category",
+                        if (pendingCommitAfterCategorySelection) "Save and split" else "Save category",
                         fontFamily = SplitMateBrandFontFamily,
                         fontWeight = FontWeight.Bold
                     )
@@ -1532,7 +1532,7 @@ fun QuickExpenseScreen(
                                                         nature = quickSplitNature,
                                                         beneficiaryName = quickSoleMember?.name,
                                                         beneficiaryIsCurrentUser = quickSoleMember?.isCurrentUser == true,
-                                                        sharedDetail = "$currencySymbol${formatPaiseForSplitBadge(perPersonPaise)}/person · Exact Split"
+                                                        sharedDetail = "$currencySymbol${formatPaiseForSplitBadge(perPersonPaise)}/person · exact split"
                                                     )
                                                 } else {
                                                     "Pick ≥1"
@@ -1919,7 +1919,7 @@ fun QuickExpenseScreen(
                                     }
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = "Log &\nSplit",
+                                        text = "Log &\nsplit",
                                         fontFamily = SplitMateDisplayFontFamily,
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.ExtraBold,
