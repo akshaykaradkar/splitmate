@@ -132,6 +132,45 @@ class AppScreenshotTest {
 
     @Test fun s09_trip_money_tab() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Money"); shot("09_trip_money_tab") }
 
+    // Full-app design audit coverage (every main surface).
+    @Test fun s18_trip_plan_tab() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Plan"); shot("18_trip_plan_tab") }
+
+    @Test fun s19_trip_travel_tab() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Travel"); shot("19_trip_travel_tab") }
+
+    @Test fun s20_trip_people_tab() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "People"); shot("20_trip_people_tab") }
+
+    @Test fun s21_settle_up_sheet() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Money"); tap(text = "Settle Up"); shot("21_settle_up_sheet") }
+
+    @Test fun s22_money_check_sheet() {
+        launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Money")
+        val row = compose.onAllNodes(hasContentDescription("Double tap for details", substring = true))[0]
+        runCatching { row.performScrollTo() }
+        row.performTouchInput { click(androidx.compose.ui.geometry.Offset(width / 2f, height / 2f)) }
+        shot("22_money_check_sheet")
+    }
+
+    @Test fun s23_shared_expense_form() {
+        launch(); tap(text = "Lake Tahoe Cabin"); tap(desc = "Add Booking"); tap(text = "Shared Expense"); shot("23_shared_expense_form")
+    }
+
+    @Test fun s24_more_booking_options() {
+        launch(); tap(text = "Lake Tahoe Cabin"); tap(desc = "Add Booking"); tap(text = "More Booking Options"); shot("24_more_booking_options")
+    }
+
+    @Test fun s25_money_tab_scrolled() {
+        launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Money")
+        compose.onRoot().performTouchInput { swipeUp(startY = height * 0.85f, endY = height * 0.2f) }
+        shot("25_money_tab_scrolled")
+    }
+
+    @Test fun s26_espresso_trip_money() {
+        launch(SplitMateThemeMode.WARM_ESPRESSO_NIGHT); tap(text = "Lake Tahoe Cabin"); tap(text = "Money"); shot("26_espresso_trip_money")
+    }
+
+    @Test fun s27_kyoto_trip_overview() {
+        launch(SplitMateThemeMode.KYOTO_MATCHA_YUZU); tap(text = "Lake Tahoe Cabin"); shot("27_kyoto_trip_overview")
+    }
+
     @Test fun s10_trip_scrolled() {
         launch(); tap(text = "Lake Tahoe Cabin")
         compose.onRoot().performTouchInput { swipeUp(startY = height * 0.85f, endY = height * 0.25f) }
