@@ -69,7 +69,12 @@ data class CloudGroupLedgerDocument(
     /** v2.3.5 (#5): group-shared custom categories; omitted from JSON + hash when empty. */
     val customCategories: List<CloudCustomCategory> = emptyList(),
     /** v2.3.5 (#1): trip lifecycle with its own LWW clock; omitted from JSON + hash when null. */
-    val tripLifecycle: TripLifecycleRecord? = null
+    val tripLifecycle: TripLifecycleRecord? = null,
+    /**
+     * v2.4.0 P4: compact edit history (newest 5 per expense, max 300), member ids only. Omitted from
+     * JSON when empty and never part of the structural hash, so it rides along with real changes.
+     */
+    val revisions: List<ExpenseRevisionEntity> = emptyList()
 )
 
 data class CloudRestoreSummary(
@@ -763,6 +768,10 @@ object CloudGroupSyncRepository {
         doc.tripLifecycle?.let {
             root.put(GroupLedgerExtrasCodec.KEY_TRIP_LIFECYCLE, GroupLedgerExtrasCodec.encodeTripLifecycle(it))
         }
+        // v2.4.0 P4: additive; older apps ignore it.
+        if (doc.revisions.isNotEmpty()) {
+            root.put(ExpenseVersionSync.KEY_REVISIONS, ExpenseVersionSync.encodeRevisions(doc.revisions))
+        }
 
         return root.toString()
     }
@@ -945,7 +954,8 @@ object CloudGroupSyncRepository {
                 ),
                 tripLifecycle = GroupLedgerExtrasCodec.decodeTripLifecycle(
                     root.optJSONObject(GroupLedgerExtrasCodec.KEY_TRIP_LIFECYCLE)
-                )
+                ),
+                revisions = ExpenseVersionSync.decodeRevisions(root.optJSONArray(ExpenseVersionSync.KEY_REVISIONS), groupId)
             )
         } catch (_: Exception) {
             null
@@ -1675,7 +1685,8 @@ object CloudGroupSyncRepository {
                         joinCode6 = resolvedJoinCode,
                         organizerRolesByKey = mergedOrganizerRolesByKey,
                         customCategories = mergedCustomCategories,
-                        tripLifecycle = mergedTripLifecycle
+                        tripLifecycle = mergedTripLifecycle,
+                        revisions = ExpenseVersionSync.compactForSync(singleDoc.revisions, mergedDeletedExpenseIds.keys)
                     ),
                     localUserPhone10 = normLocalPhone,
                     localUserAvatarSeed = localUserAvatarSeed,
@@ -1817,6 +1828,8 @@ object CloudGroupSyncRepository {
         val remoteExpenseById = remoteDoc?.expenses.orEmpty().associateBy { it.expenseId }
         val localSplitsByExpense = localDoc?.splits.orEmpty().groupBy { it.expenseId }
         val remoteSplitsByExpense = remoteDoc?.splits.orEmpty().groupBy { it.expenseId }
+        // v2.4.0 P4: a version recorded by ANY phone (synced history) counts as a known copy.
+        val effectiveHistory = ExpenseVersionSync.withKnown(versionHistory, localDoc?.revisions.orEmpty() + remoteDoc?.revisions.orEmpty())
         val versionDecisions = mutableMapOf<String, com.splitmate.app.ExpenseVersioning.Decision>()
         for ((id, localExp) in localExpenseById) {
             val remoteExp = remoteExpenseById[id] ?: continue
@@ -1826,7 +1839,7 @@ object CloudGroupSyncRepository {
                 remote = remoteExp,
                 remoteSplits = remoteSplitsByExpense[id].orEmpty(),
                 localDocWins = localDocWins,
-                history = versionHistory
+                history = effectiveHistory
             )
         }
         val localWinsExpense: (String) -> Boolean = { id ->
@@ -2084,7 +2097,10 @@ object CloudGroupSyncRepository {
             deletedSettlementIds = cleanDeletedSettlementIds,
             organizerRolesByKey = mergedOrganizerRolesByKey,
             customCategories = mergedCustomCategories,
-            tripLifecycle = mergedTripLifecycle
+            tripLifecycle = mergedTripLifecycle,
+            revisions = ExpenseVersionSync.mergeSyncedRevisions(
+                localDoc?.revisions.orEmpty(), remoteDoc?.revisions.orEmpty(), mergedDeletedExpenseIds.keys
+            )
         )
     }
 
@@ -2487,7 +2503,8 @@ object CloudGroupSyncRepository {
                 splits = splits,
                 remoteDoc = remoteDoc,
                 editorId = loadedMembers.firstOrNull { it.isCurrentUser }?.memberId ?: normLocalPhone,
-                nowMs = nowMs
+                nowMs = nowMs,
+                context = ctx
             )
             val expenses = prepared.expenses
             mergeHistory = prepared.history
@@ -2542,7 +2559,12 @@ object CloudGroupSyncRepository {
                 deletedSettlementIds = durableTombstones.deletedSettlementIds,
                 organizerRolesByKey = durableTombstones.organizerRolesByKey,
                 customCategories = GroupLedgerExtrasStore.load(ctx, groupId).customCategories,
-                tripLifecycle = GroupLedgerExtrasStore.load(ctx, groupId).tripLifecycle
+                tripLifecycle = GroupLedgerExtrasStore.load(ctx, groupId).tripLifecycle,
+                // v2.4.0 P4: this phone's history travels with the document (compact).
+                revisions = ExpenseVersionSync.compactForSync(
+                    runCatching { dao.getExpenseRevisionsForGroup(groupId) }.getOrDefault(emptyList()),
+                    durableTombstones.deletedExpenseIds.keys
+                )
             )
         }
 

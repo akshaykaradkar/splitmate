@@ -1527,6 +1527,7 @@ class SplitMateViewModel(
         viewModelScope.launch(ioDispatcher) {
             val d = dao
             if (d != null) {
+                com.splitmate.app.data.ExpenseEditClock.record(appContext, listOf(expenseEntity.expenseId)) // v2.4.0 P1: version by edit time
                 d.insertExpenseWithSplits(expenseEntity, splitEntities)
                 val normUserPhone = resolveEffectiveUserPhone10(d)
                 runCatching {
@@ -2645,6 +2646,7 @@ class SplitMateViewModel(
 
         viewModelScope.launch(ioDispatcher) {
             val d = dao ?: return@launch
+            com.splitmate.app.data.ExpenseEditClock.record(appContext, replacementSplitsByExpenseId.keys) // v2.4.0 P1: version by edit time
             replacementSplitsByExpenseId.forEach { (expId, newSplits) ->
                 d.replaceExpenseSplits(expId, newSplits)
             }
@@ -3712,6 +3714,8 @@ class SplitMateViewModel(
         viewModelScope.launch(ioDispatcher) {
             val d = dao
             if (d != null) {
+                // v2.4.0 P1: version by edit time (payer moves + recomputed shares are real edits).
+                com.splitmate.app.data.ExpenseEditClock.record(appContext, updatedGroupExpenses.map { it.expenseId } + replacementSplitsByExpenseId.keys)
                 d.reassignExpensePayer(groupId, targetMemberId, organizer.memberId)
                 updatedGroupExpenses.forEach { d.insertExpense(it) }
                 replacementSplitsByExpenseId.forEach { (expId, newSplits) ->
@@ -4457,6 +4461,7 @@ class SplitMateViewModel(
         viewModelScope.launch(ioDispatcher) {
             val d = dao
             if (d != null) {
+                com.splitmate.app.data.ExpenseEditClock.record(appContext, listOf(updatedExpense.expenseId)) // v2.4.0 P1: version by edit time
                 d.insertExpenseWithSplits(updatedExpense, updatedSplits)
                 val normUserPhone = resolveEffectiveUserPhone10(d)
                 runCatching {
@@ -4537,6 +4542,7 @@ class SplitMateViewModel(
         }
         viewModelScope.launch(ioDispatcher) {
             val d = dao ?: return@launch
+            com.splitmate.app.data.ExpenseEditClock.record(appContext, listOf(updated.expenseId)) // v2.4.0 P1: version by edit time
             d.insertExpense(updated)
             val normUserPhone = resolveEffectiveUserPhone10(d)
             runCatching {

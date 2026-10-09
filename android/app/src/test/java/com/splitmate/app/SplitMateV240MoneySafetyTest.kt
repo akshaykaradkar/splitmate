@@ -293,6 +293,69 @@ class SplitMateV240MoneySafetyTest {
     }
 
     // --------------------------------------------------------------------------------------------
+    // Edit time + synced history (follow-ups)
+    // --------------------------------------------------------------------------------------------
+
+    @Test
+    fun `an edit is versioned by when it was made, not when it synced`() {
+        val gid = "g_v240_edittime"
+        val people = sixPeople(gid).take(2)
+        val e = expense("exp_t", gid, "m1", 10_000L)
+        val seeds = ExpenseVersionSync.planLocalStamps(listOf(e), shares(e, people), emptyList(), emptySequence(), "m1", t0).second
+        val edited = e.copy(totalAmountCents = 9_000L, baseSubtotalCents = 9_000L)
+        // Edited offline at t0 + 1 hour, synced a day later.
+        val (stamps, _) = ExpenseVersionSync.planLocalStamps(
+            listOf(edited), shares(edited, people), seeds, emptySequence(), "m1", nowMs = t0 + day,
+            editTimeOf = { t0 + 3_600_000L }
+        )
+        assertEquals(t0 + 3_600_000L, stamps.getValue("exp_t").rowVersion)
+
+        // A concurrent edit made later on another phone (t0 + 2 hours) wins, even though ours synced last.
+        val other = e.copy(totalAmountCents = 7_000L, baseSubtotalCents = 7_000L, rowVersion = t0 + 7_200_000L, rowUpdatedBy = "m2")
+        val merged = merge(
+            doc(gid, people, listOf(stamps.getValue("exp_t")), shares(edited, people), at = t0 + day),
+            doc(gid, people, listOf(other), shares(other, people), at = t0 + 7_200_000L),
+            ExpenseVersioning.History()
+        )
+        assertEquals(7_000L, merged.expenses.single().totalAmountCents)
+    }
+
+    @Test
+    fun `edit history syncs compactly - member ids only, newest 5 per expense, deterministic union`() {
+        val gid = "g_v240_revsync"
+        val revs = (1..8).map { i ->
+            ExpenseRevisionEntity("exp_a_${i}_h$i", "exp_a", gid, i.toLong(), "h$i", "", i * 100L, "m1", "m2", t0 + i, "local")
+        } + ExpenseRevisionEntity("exp_gone_1_hx", "exp_gone", gid, 1L, "hx", "", 5L, "m1", null, t0, "local")
+        val compact = ExpenseVersionSync.compactForSync(revs, deletedExpenseIds = setOf("exp_gone"))
+        assertEquals(5, compact.size)
+        assertEquals((4L..8L).toSet(), compact.map { it.rowVersion }.toSet(), "newest 5 kept")
+
+        val json = ExpenseVersionSync.encodeRevisions(compact).toString()
+        assertFalse(json.contains("9000000"), "no phone numbers on the public topic")
+        val back = ExpenseVersionSync.decodeRevisions(org.json.JSONArray(json), gid)
+        assertEquals(compact.map { it.revisionId }.toSet(), back.map { it.revisionId }.toSet())
+
+        val a = ExpenseVersionSync.mergeSyncedRevisions(compact.take(3), compact.drop(2), emptySet())
+        val b = ExpenseVersionSync.mergeSyncedRevisions(compact.drop(2), compact.take(3), emptySet())
+        assertEquals(a, b, "every phone ends with the same list")
+    }
+
+    @Test
+    fun `a version recorded by another phone makes an old app's re-upload of it stale`() {
+        val gid = "g_v240_revknown"
+        val people = sixPeople(gid).take(2)
+        val v0 = expense("exp_k", gid, "m1", 90_000L)
+        val v1 = expense("exp_k", gid, "m1", 60_000L, rv = t0 + 9, by = "m2")
+        // This phone never saw v0 itself, but the cloud history (from m2's phone) lists it.
+        val synced = listOf(ExpenseRevisionEntity("exp_k_0_x", "exp_k", gid, 0L, ExpenseVersioning.contentHash(v0, shares(v0, people)), "", 90_000L, "m1", null, t0, "seed"))
+        val mine = doc(gid, people, listOf(v1), shares(v1, people), at = t0).copy(revisions = synced)
+        val oldApp = doc(gid, people, listOf(v0), shares(v0, people), at = t0 + day)
+        val merged = merge(mine, oldApp, ExpenseVersioning.History())
+        assertEquals(60_000L, merged.expenses.single().totalAmountCents)
+        assertTrue(merged.revisions.isNotEmpty(), "history keeps travelling")
+    }
+
+    // --------------------------------------------------------------------------------------------
     // P4 presentation
     // --------------------------------------------------------------------------------------------
 
