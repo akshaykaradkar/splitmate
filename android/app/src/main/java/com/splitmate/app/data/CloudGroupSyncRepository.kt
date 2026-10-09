@@ -1831,13 +1831,20 @@ object CloudGroupSyncRepository {
         // v2.4.0 P4: a version recorded by ANY phone (synced history) counts as a known copy.
         val effectiveHistory = ExpenseVersionSync.withKnown(versionHistory, localDoc?.revisions.orEmpty() + remoteDoc?.revisions.orEmpty())
         val versionDecisions = mutableMapOf<String, com.splitmate.app.ExpenseVersioning.Decision>()
+        // Review F4: compare copies with member ids mapped to this phone's ids (the same person can have
+        // a different member id on another phone), so a stale copy hashes the same as the one we know.
+        fun canonical(e: ExpenseEntity) = e.copy(payerId = memberIdRemap[e.payerId] ?: e.payerId)
+        fun canonical(rows: List<ExpenseSplitEntity>) = rows.map { sp ->
+            val mid = memberIdRemap[sp.memberId] ?: sp.memberId
+            if (mid != sp.memberId) sp.copy(memberId = mid) else sp
+        }
         for ((id, localExp) in localExpenseById) {
             val remoteExp = remoteExpenseById[id] ?: continue
             versionDecisions[id] = com.splitmate.app.ExpenseVersioning.decide(
-                local = localExp,
-                localSplits = localSplitsByExpense[id].orEmpty(),
-                remote = remoteExp,
-                remoteSplits = remoteSplitsByExpense[id].orEmpty(),
+                local = canonical(localExp),
+                localSplits = canonical(localSplitsByExpense[id].orEmpty()),
+                remote = canonical(remoteExp),
+                remoteSplits = canonical(remoteSplitsByExpense[id].orEmpty()),
                 localDocWins = localDocWins,
                 history = effectiveHistory
             )
@@ -2716,18 +2723,19 @@ object CloudGroupSyncRepository {
                     }
                 }
             }
-        }
 
-        // v2.4.0 P1 + P4: remember every version this merge produced or saw (edit history + stale copies).
-        ExpenseVersionSync.recordMergeOutcome(
-            dao = dao,
-            localDoc = localDoc,
-            remoteDoc = remoteDoc,
-            mergedDoc = mergedDoc,
-            history = mergeHistory,
-            skippedExpenseIds = skippedExpenseIds,
-            nowMs = nowMs
-        )
+            // v2.4.0 P1 + P4: remember every version this merge produced or saw (edit history + stale
+            // copies) in the SAME transaction as the rows (review F5).
+            ExpenseVersionSync.recordMergeOutcome(
+                dao = dao,
+                localDoc = localDoc,
+                remoteDoc = remoteDoc,
+                mergedDoc = mergedDoc,
+                history = mergeHistory,
+                skippedExpenseIds = skippedExpenseIds,
+                nowMs = nowMs
+            )
+        }
 
         if (ctx != null) {
             val newFlights = mergedDoc.flightVaultByPnr.filter { (k, v) -> localDoc?.flightVaultByPnr?.get(k) != v }

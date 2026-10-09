@@ -63,10 +63,15 @@ object ExpenseVersioning {
     /** What this phone knows: hashes of every version it has seen, per expense. */
     data class History(
         val knownHashesByExpense: Map<String, Set<String>> = emptyMap(),
-        val maxSeenVersion: Long = 0L
+        val maxSeenVersion: Long = 0L,
+        /** Highest version of each expense this phone has a record of (its history is complete up to it). */
+        val maxKnownVersionByExpense: Map<String, Long> = emptyMap()
     ) {
         fun knows(expenseId: String, hash: String): Boolean =
             knownHashesByExpense[expenseId]?.contains(hash) == true
+
+        fun isCompleteUpTo(expenseId: String, version: Long): Boolean =
+            (maxKnownVersionByExpense[expenseId] ?: -1L) >= version
     }
 
     enum class Side { LOCAL, REMOTE }
@@ -115,6 +120,11 @@ object ExpenseVersioning {
             return Decision(if (localDocWins) Side.LOCAL else Side.REMOTE)
         }
         if (history.knows(unversioned.expenseId, unversionedHash)) return Decision(versionedSide)
+        // Review F3: only adopt an unknown unversioned copy when this phone's history of the expense is
+        // complete up to the versioned side. A phone that joined late (or pruned old entries) can't
+        // tell a stale copy from a real edit, so it keeps the versioned side; a phone with the full
+        // history adopts a genuine old-app edit and its legacy version then reaches everyone.
+        if (!history.isCompleteUpTo(unversioned.expenseId, versionedVersion)) return Decision(versionedSide)
         val unversionedSide = if (versionedSide == Side.LOCAL) Side.REMOTE else Side.LOCAL
         return Decision(unversionedSide, stampVersion = versionedVersion + 1)
     }

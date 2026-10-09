@@ -212,12 +212,29 @@ interface SplitMateDao {
     @Upsert
     suspend fun insertExpenseRevisions(revisions: List<ExpenseRevisionEntity>)
 
-    /** Keeps only the newest [keep] revisions of an expense. */
+    /**
+     * Keeps only the newest [keep] change entries of an expense. Older-copy fingerprints ("seed",
+     * "superseded") are kept separately ([keepCopies]) so a stale upload stays recognisable (review F3).
+     */
     @Query(
-        "DELETE FROM expense_revisions WHERE expenseId = :expenseId AND revisionId NOT IN " +
-            "(SELECT revisionId FROM expense_revisions WHERE expenseId = :expenseId ORDER BY observedAtEpochMs DESC, rowVersion DESC LIMIT :keep)"
+        "DELETE FROM expense_revisions WHERE expenseId = :expenseId AND kind NOT IN ('seed', 'superseded') AND revisionId NOT IN " +
+            "(SELECT revisionId FROM expense_revisions WHERE expenseId = :expenseId AND kind NOT IN ('seed', 'superseded') " +
+            "ORDER BY observedAtEpochMs DESC, rowVersion DESC LIMIT :keep)"
     )
-    suspend fun pruneExpenseRevisions(expenseId: String, keep: Int)
+    suspend fun pruneExpenseRevisionChanges(expenseId: String, keep: Int)
+
+    @Query(
+        "DELETE FROM expense_revisions WHERE expenseId = :expenseId AND kind IN ('seed', 'superseded') AND revisionId NOT IN " +
+            "(SELECT revisionId FROM expense_revisions WHERE expenseId = :expenseId AND kind IN ('seed', 'superseded') " +
+            "ORDER BY observedAtEpochMs DESC, rowVersion DESC LIMIT :keepCopies)"
+    )
+    suspend fun pruneExpenseRevisionCopies(expenseId: String, keepCopies: Int)
+
+    @Transaction
+    suspend fun pruneExpenseRevisions(expenseId: String, keep: Int, keepCopies: Int = 64) {
+        pruneExpenseRevisionChanges(expenseId, keep)
+        pruneExpenseRevisionCopies(expenseId, keepCopies)
+    }
 
     @Query("DELETE FROM expense_revisions WHERE groupId = :groupId")
     suspend fun deleteExpenseRevisionsForGroup(groupId: String)

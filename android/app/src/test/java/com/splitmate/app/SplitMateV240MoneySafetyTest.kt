@@ -66,7 +66,8 @@ class SplitMateV240MoneySafetyTest {
     private fun historyOf(vararg pairs: Pair<ExpenseEntity, List<ExpenseSplitEntity>>) = ExpenseVersioning.History(
         knownHashesByExpense = pairs.groupBy({ it.first.expenseId }, { ExpenseVersioning.contentHash(it.first, it.second) })
             .mapValues { it.value.toSet() },
-        maxSeenVersion = pairs.maxOf { it.first.rowVersion }
+        maxSeenVersion = pairs.maxOf { it.first.rowVersion },
+        maxKnownVersionByExpense = pairs.groupBy({ it.first.expenseId }, { it.first.rowVersion }).mapValues { it.value.max() }
     )
 
     private fun merge(local: CloudGroupLedgerDocument, remote: CloudGroupLedgerDocument, h: ExpenseVersioning.History?) =
@@ -267,8 +268,8 @@ class SplitMateV240MoneySafetyTest {
         val (stamps1, revs1) = ExpenseVersionSync.planLocalStamps(listOf(e), s, seeds, emptySequence(), "m1", t0 + 1)
         assertTrue(stamps1.isEmpty() && revs1.isEmpty())
 
-        // Edited on this phone (any screen): new version above everything seen, including the cloud.
-        val edited = e.copy(totalAmountCents = 8_000L, baseSubtotalCents = 8_000L)
+        // Edited on this phone (any screen, so the row is PENDING): new version above everything seen.
+        val edited = e.copy(totalAmountCents = 8_000L, baseSubtotalCents = 8_000L, syncStatus = "PENDING")
         val (stamps2, revs2) = ExpenseVersionSync.planLocalStamps(listOf(edited), shares(edited, people), seeds, sequenceOf(t0 + 50_000), "m1", t0 + 2)
         val stamped = stamps2.getValue("exp_s")
         assertEquals(t0 + 50_001, stamped.rowVersion)
@@ -356,6 +357,105 @@ class SplitMateV240MoneySafetyTest {
     }
 
     // --------------------------------------------------------------------------------------------
+    // Independent review findings (F1-F7) regression tests
+    // --------------------------------------------------------------------------------------------
+
+    @Test
+    fun `F1 - an unsynced edit on the first sync after upgrade gets a version instead of being seeded`() {
+        val gid = "g_v240_f1"
+        val people = sixPeople(gid).take(2)
+        val untouched = expense("exp_u", gid, "m1", 10_000L)
+        val pending = expense("exp_p", gid, "m1", 5_400L).copy(syncStatus = "PENDING")
+        val edited = expense("exp_e", gid, "m1", 4_950L)
+        val (stamps, revs) = ExpenseVersionSync.planLocalStamps(
+            listOf(untouched, pending, edited), shares(untouched, people) + shares(pending, people) + shares(edited, people),
+            emptyList(), emptySequence(), "m1", nowMs = t0 + 100, editTimeOf = { id -> if (id == "exp_e") t0 + 50 else null }
+        )
+        assertEquals(setOf("exp_p", "exp_e"), stamps.keys)
+        assertEquals(t0 + 50, stamps.getValue("exp_e").rowVersion)
+        assertEquals("seed", revs.single { it.expenseId == "exp_u" }.kind)
+
+        // Scenario A from the review: the stamped 5,400 now beats the other phone's older versioned 6,000.
+        val remote6000 = expense("exp_p", gid, "m1", 6_000L, rv = t0 + 10, by = "m2")
+        val merged = merge(
+            doc(gid, people, listOf(stamps.getValue("exp_p")), shares(pending, people), at = t0 + 100),
+            doc(gid, people, listOf(remote6000), shares(remote6000, people), at = t0 + 10),
+            ExpenseVersionSync.historyOf(revs)
+        )
+        assertEquals(5_400L, merged.expenses.single().totalAmountCents)
+    }
+
+    @Test
+    fun `F2 - the edit clock keeps the latest edit since the last sync`() {
+        com.splitmate.app.data.ExpenseEditClock.clear(null, listOf("exp_f2"))
+        com.splitmate.app.data.ExpenseEditClock.record(null, listOf("exp_f2"), t0 + 1_000)
+        com.splitmate.app.data.ExpenseEditClock.record(null, listOf("exp_f2"), t0 + 5_000)
+        com.splitmate.app.data.ExpenseEditClock.record(null, listOf("exp_f2"), t0 + 3_000)
+        assertEquals(t0 + 5_000, com.splitmate.app.data.ExpenseEditClock.editTimeOf(null, "exp_f2"))
+        com.splitmate.app.data.ExpenseEditClock.clear(null, listOf("exp_f2"))
+    }
+
+    @Test
+    fun `F3 - a phone with incomplete history never adopts an unknown old-app copy`() {
+        val gid = "g_v240_f3"
+        val people = sixPeople(gid).take(2)
+        val v1 = expense("exp_f3", gid, "m1", 495_000L, rv = t0 + 10, by = "m2")
+        val staleUnknown = expense("exp_f3", gid, "m1", 795_000L) // this phone never saw 7,950
+        val joinedLate = ExpenseVersioning.History(maxKnownVersionByExpense = mapOf("exp_f3" to 0L))
+        val merged = merge(
+            doc(gid, people, listOf(v1), shares(v1, people), at = t0),
+            doc(gid, people, listOf(staleUnknown), shares(staleUnknown, people), at = t0 + day),
+            joinedLate
+        )
+        assertEquals(495_000L, merged.expenses.single().totalAmountCents)
+        assertEquals(t0 + 10, merged.expenses.single().rowVersion, "no legacy version is invented")
+
+        // Synced compaction drops display entries before older-copy fingerprints.
+        val many = (1..400).map { i -> ExpenseRevisionEntity("e${i}_1_c", "e$i", gid, 1L, "c$i", "", 1L, "m1", null, t0 + i, "local") } +
+            (1..50).map { i -> ExpenseRevisionEntity("e${i}_0_s", "e$i", gid, 0L, "s$i", "", 1L, "m1", null, t0, "seed") }
+        val compact = ExpenseVersionSync.compactForSync(many)
+        assertEquals(50, compact.count { it.kind == "seed" }, "every seed fingerprint survives the trip cap")
+        assertTrue(compact.size <= ExpenseVersionSync.SYNC_PER_TRIP)
+    }
+
+    @Test
+    fun `F4 - the same person under another phone's member id is recognised as the same copy`() {
+        val gid = "g_v240_f4"
+        val a = member("grp_akshay", gid, "Akshay", "9000000001", me = true)
+        val bAlias = member("b_me", gid, "Akshay", "9000000001")
+        val p = member("m2", gid, "Priya", "9000000002")
+        val old = expense("exp_f4", gid, "grp_akshay", 795_000L)
+        val oldShares = shares(old, listOf(a, p))
+        val edited = expense("exp_f4", gid, "grp_akshay", 495_000L, rv = t0 + 10, by = "grp_akshay")
+        // Old phone B: same stale 7,950, but Akshay is "b_me" there.
+        val staleOnB = old.copy(payerId = "b_me")
+        val staleShares = shares(staleOnB, listOf(bAlias, p))
+        val merged = merge(
+            doc(gid, listOf(a, p), listOf(edited), shares(edited, listOf(a, p)), at = t0),
+            doc(gid, listOf(bAlias, p), listOf(staleOnB), staleShares, at = t0 + day),
+            historyOf(old to oldShares, edited to shares(edited, listOf(a, p)))
+        )
+        assertEquals(495_000L, merged.expenses.single().totalAmountCents)
+    }
+
+    @Test
+    fun `F7 - a plain newer edit from another phone is not labelled as two edits at the same time`() {
+        val gid = "g_v240_f7"
+        val people = sixPeople(gid).take(2)
+        val mine = expense("exp_f7", gid, "m1", 10_000L, rv = t0 + 1, by = "m1")
+        val newer = expense("exp_f7", gid, "m1", 12_000L, rv = t0 + 9, by = "m2")
+        val local = doc(gid, people, listOf(mine), shares(mine, people), at = t0)
+        val remote = doc(gid, people, listOf(newer), shares(newer, people), at = t0)
+        val merged = merge(local, remote, historyOf(mine to shares(mine, people)))
+        val revs = ExpenseVersionSync.planMergeRevisions(local, remote, merged, historyOf(mine to shares(mine, people)), emptySet(), emptySet(), t0 + 10)
+        assertEquals("remote", revs.first { it.rowVersion == t0 + 9 }.kind)
+
+        val minePending = local.copy(expenses = listOf(mine.copy(syncStatus = "PENDING")))
+        val revs2 = ExpenseVersionSync.planMergeRevisions(minePending, remote, merged, null, emptySet(), emptySet(), t0 + 10)
+        assertEquals("concurrent", revs2.first { it.rowVersion == t0 + 9 }.kind)
+    }
+
+    // --------------------------------------------------------------------------------------------
     // P4 presentation
     // --------------------------------------------------------------------------------------------
 
@@ -390,12 +490,14 @@ class SplitMateV240MoneySafetyTest {
     private class Phone(val id: String, val oldApp: Boolean, val clockSkew: Long) {
         var doc: CloudGroupLedgerDocument? = null
         val known = mutableMapOf<String, MutableSet<String>>()
+        val maxKnown = mutableMapOf<String, Long>()
         var maxSeen = 0L
-        fun history() = ExpenseVersioning.History(known.mapValues { it.value.toSet() }, maxSeen)
+        fun history() = ExpenseVersioning.History(known.mapValues { it.value.toSet() }, maxSeen, maxKnown.toMap())
         fun remember(d: CloudGroupLedgerDocument?) {
             d ?: return
             d.expenses.forEach { e ->
                 known.getOrPut(e.expenseId) { mutableSetOf() } += ExpenseVersioning.contentHash(e, d.splits)
+                maxKnown[e.expenseId] = maxOf(maxKnown[e.expenseId] ?: -1L, e.rowVersion)
                 maxSeen = maxOf(maxSeen, e.rowVersion)
             }
         }

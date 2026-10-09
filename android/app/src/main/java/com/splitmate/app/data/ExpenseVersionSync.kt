@@ -25,17 +25,33 @@ object ExpenseVersionSync {
         .thenByDescending { it.rowVersion }
         .thenBy { it.revisionId }
 
-    /** The compact, deterministic history list that travels with the trip document. */
-    fun compactForSync(revisions: List<ExpenseRevisionEntity>, deletedExpenseIds: Set<String> = emptySet()): List<ExpenseRevisionEntity> =
-        revisions.asSequence()
+    /** Kinds that mark an older copy (needed to recognise stale uploads), never shown as changes. */
+    val KNOWN_COPY_KINDS = setOf("seed", "superseded")
+    const val SYNC_KNOWN_COPIES_PER_EXPENSE = 8
+
+    /**
+     * The compact, deterministic history list that travels with the trip document: per expense the
+     * newest [SYNC_PER_EXPENSE] changes plus up to [SYNC_KNOWN_COPIES_PER_EXPENSE] older-copy
+     * fingerprints. Review F3: when the trip cap bites, display entries are dropped before the
+     * older-copy fingerprints, which are what keeps a stale old-app upload from winning.
+     */
+    fun compactForSync(revisions: List<ExpenseRevisionEntity>, deletedExpenseIds: Set<String> = emptySet()): List<ExpenseRevisionEntity> {
+        val perExpense = revisions.asSequence()
             .filter { it.expenseId !in deletedExpenseIds }
             .groupBy { it.revisionId }
             // Same revision observed by two phones: keep the earliest observation (deterministic).
             .map { (_, same) -> same.minWith(compareBy<ExpenseRevisionEntity> { it.observedAtEpochMs }.thenBy { it.kind }) }
             .groupBy { it.expenseId }
-            .flatMap { (_, list) -> list.sortedWith(revisionOrder).take(SYNC_PER_EXPENSE) }
-            .sortedWith(revisionOrder)
-            .take(SYNC_PER_TRIP)
+            .flatMap { (_, list) ->
+                val (copies, changes) = list.partition { it.kind in KNOWN_COPY_KINDS }
+                changes.sortedWith(revisionOrder).take(SYNC_PER_EXPENSE) +
+                    copies.sortedWith(revisionOrder).take(SYNC_KNOWN_COPIES_PER_EXPENSE)
+            }
+        val (copies, changes) = perExpense.partition { it.kind in KNOWN_COPY_KINDS }
+        val keptCopies = copies.sortedWith(revisionOrder).take(SYNC_PER_TRIP)
+        val keptChanges = changes.sortedWith(revisionOrder).take((SYNC_PER_TRIP - keptCopies.size).coerceAtLeast(0))
+        return (keptChanges + keptCopies).sortedWith(revisionOrder)
+    }
 
     /** Union of two documents' history lists (P4), compacted. */
     fun mergeSyncedRevisions(
@@ -49,9 +65,12 @@ object ExpenseVersionSync {
         if (base == null || revisions.isEmpty()) return base
         val known = base.knownHashesByExpense.mapValues { it.value.toMutableSet() }.toMutableMap()
         revisions.forEach { known.getOrPut(it.expenseId) { mutableSetOf() } += it.contentHash }
+        val maxKnown = base.maxKnownVersionByExpense.toMutableMap()
+        revisions.forEach { maxKnown[it.expenseId] = maxOf(maxKnown[it.expenseId] ?: -1L, it.rowVersion) }
         return base.copy(
             knownHashesByExpense = known.mapValues { it.value.toSet() },
-            maxSeenVersion = maxOf(base.maxSeenVersion, revisions.maxOf { it.rowVersion })
+            maxSeenVersion = maxOf(base.maxSeenVersion, revisions.maxOf { it.rowVersion }),
+            maxKnownVersionByExpense = maxKnown
         )
     }
 
@@ -108,7 +127,8 @@ object ExpenseVersionSync {
     fun historyOf(revisions: List<ExpenseRevisionEntity>, extraVersions: Sequence<Long> = emptySequence()): ExpenseVersioning.History {
         val known = revisions.groupBy { it.expenseId }.mapValues { (_, list) -> list.map { it.contentHash }.toSet() }
         val maxSeen = (revisions.asSequence().map { it.rowVersion } + extraVersions).maxOrNull() ?: 0L
-        return ExpenseVersioning.History(knownHashesByExpense = known, maxSeenVersion = maxSeen)
+        val maxKnown = revisions.groupBy { it.expenseId }.mapValues { (_, list) -> list.maxOf { it.rowVersion } }
+        return ExpenseVersioning.History(knownHashesByExpense = known, maxSeenVersion = maxSeen, maxKnownVersionByExpense = maxKnown)
     }
 
     suspend fun loadHistory(dao: SplitMateDao, groupId: String): ExpenseVersioning.History =
@@ -145,29 +165,33 @@ object ExpenseVersionSync {
         /** When each edit was actually made on this phone (null = unknown, use [nowMs]). */
         editTimeOf: (String) -> Long? = { null }
     ): Pair<Map<String, ExpenseEntity>, List<ExpenseRevisionEntity>> {
-        if (revisions.isEmpty()) {
-            // First sync after the upgrade: remember today's content as the starting version.
-            return emptyMap<String, ExpenseEntity>() to expenses.map { e ->
-                revisionOf(e, ExpenseVersioning.contentHash(e, splits), "seed", nowMs)
-            }
-        }
-        var maxSeen = (revisions.asSequence().map { it.rowVersion } +
+        val maxSeen = (revisions.asSequence().map { it.rowVersion } +
             expenses.asSequence().map { it.rowVersion } + remoteVersions).maxOrNull() ?: 0L
         val byExpense = revisions.groupBy { it.expenseId }
+        val firstRun = revisions.isEmpty()
         val stamped = linkedMapOf<String, ExpenseEntity>()
         val newRevisions = mutableListOf<ExpenseRevisionEntity>()
+        // Review F1/F5: an edit made on this phone always leaves a trace: the row is PENDING until it is
+        // pushed, and the edit clock remembers when it happened.
+        fun editedHere(e: ExpenseEntity) =
+            e.syncStatus.equals("PENDING", ignoreCase = true) || editTimeOf(e.expenseId) != null
         for (e in expenses) {
             val hash = ExpenseVersioning.contentHash(e, splits)
             val known = byExpense[e.expenseId]
             when {
                 known != null && known.any { it.rowVersion == e.rowVersion && it.contentHash == hash } -> Unit
-                known == null && e.rowVersion > 0L ->
-                    // Arrived already versioned (joined from the cloud): remember it, don't re-stamp.
-                    newRevisions += revisionOf(e, hash, "remote", nowMs)
+                // First sync after the upgrade: untouched rows become the starting version (no data change).
+                firstRun && !editedHere(e) -> newRevisions += revisionOf(e, hash, "seed", nowMs)
+                // Arrived already versioned (joined from the cloud): remember it, don't re-stamp.
+                known == null && e.rowVersion > 0L && !editedHere(e) -> newRevisions += revisionOf(e, hash, "remote", nowMs)
+                // Differs from what we recorded but was not edited here (e.g. the app stopped after a
+                // merge was written but before its history was): record it, never give it a new version.
+                known != null && !editedHere(e) -> newRevisions += revisionOf(e, hash, "remote", nowMs)
                 else -> {
                     val editedAt = editTimeOf(e.expenseId)?.takeIf { it in 1..nowMs } ?: nowMs
+                    // Above every version seen in earlier syncs, but not pushed by other expenses stamped
+                    // in this same pass: each edit keeps its own edit time.
                     val version = ExpenseVersioning.nextVersion(editedAt, maxSeen)
-                    maxSeen = version
                     val next = e.copy(rowVersion = version, rowUpdatedBy = editorId.ifBlank { null })
                     stamped[e.expenseId] = next
                     newRevisions += revisionOf(next, hash, "local", nowMs)
@@ -205,8 +229,11 @@ object ExpenseVersionSync {
             // Only stamp rows nobody changed since we read them (an edit saved meanwhile is stamped next sync).
             val current = dao.getExpensesForGroup(groupId).associateBy { it.expenseId }
             val original = expenses.associateBy { it.expenseId }
+            // Review F6: shares too, so a share-only edit saved meanwhile keeps its own edit time.
+            val currentSplits = dao.getSplitsForGroup(groupId).groupBy { it.expenseId }.mapValues { it.value.toSet() }
+            val originalSplits = splits.groupBy { it.expenseId }.mapValues { it.value.toSet() }
             for ((id, next) in plannedStamps) {
-                if (current[id] == original[id]) {
+                if (current[id] == original[id] && currentSplits[id].orEmpty() == originalSplits[id].orEmpty()) {
                     dao.insertExpense(next)
                     applied[id] = next
                 }
@@ -263,8 +290,10 @@ object ExpenseVersionSync {
                 merged.rowUpdatedBy == ExpenseVersioning.LEGACY_EDITOR && local?.rowVersion != merged.rowVersion -> "legacy"
                 // The content went back to a copy this phone had already seen: show a heads-up.
                 changedHere && history?.knows(merged.expenseId, hash) == true -> "revert"
+                // Review F7: only a real conflict: this phone had an unsynced edit of its own and the
+                // other copy is a different versioned edit. A plain newer edit from elsewhere is "remote".
                 local != null && remote != null && local.rowVersion > 0L && remote.rowVersion > 0L &&
-                    localHash != remoteHash -> "concurrent"
+                    localHash != remoteHash && local.syncStatus.equals("PENDING", ignoreCase = true) -> "concurrent"
                 else -> "remote"
             }
             add(revisionOf(merged, hash, kind, nowMs))
@@ -284,7 +313,9 @@ object ExpenseVersionSync {
         skippedExpenseIds: Set<String>,
         nowMs: Long
     ) {
-        runCatching {
+        // Review F5: called INSIDE the ledger transaction and errors are not swallowed, so the merged rows
+        // and their history are written together (or not at all).
+        run {
             val existing = dao.getExpenseRevisionsForGroup(mergedDoc.group.groupId).map { it.revisionId }.toSet()
             // P4: history entries other phones recorded (synced list), plus what this merge saw.
             val received = mergedDoc.revisions.filter { it.revisionId !in existing }

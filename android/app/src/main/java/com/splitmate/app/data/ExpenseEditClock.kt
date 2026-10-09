@@ -17,14 +17,14 @@ object ExpenseEditClock {
     private fun prefs(context: Context?) =
         context?.applicationContext?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    /** Keeps the EARLIEST unversioned edit time (the first change since the last sync). */
+    /** Keeps the LATEST edit time since the last sync (review F2: the newest edit is what competes). */
     fun record(context: Context?, expenseIds: Collection<String>, atEpochMs: Long = System.currentTimeMillis()) {
         if (expenseIds.isEmpty()) return
         val p = prefs(context)
         val editor = p?.edit()
         for (id in expenseIds) {
             val existing = memory[id] ?: p?.getLong(id, 0L)?.takeIf { it > 0L }
-            val value = if (existing != null && existing in 1 until atEpochMs) existing else atEpochMs
+            val value = maxOf(existing ?: 0L, atEpochMs)
             memory[id] = value
             editor?.putLong(id, value)
         }
