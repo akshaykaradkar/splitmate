@@ -214,8 +214,14 @@ object ExpenseVersionSync {
             val keptRevisions = plannedRevisions.filter { it.kind != "local" || it.expenseId in applied }
             if (keptRevisions.isNotEmpty()) dao.insertExpenseRevisions(keptRevisions)
         }
-        // Versioned edits no longer need their edit time; unversioned ones keep it for the next sync.
-        ExpenseEditClock.clear(context, applied.keys)
+        // Versioned edits no longer need their edit time, and rows that turned out unchanged (a save
+        // with identical content) must not keep a stale one; edits not stamped yet keep theirs.
+        ExpenseEditClock.clear(
+            context,
+            applied.keys + expenses.map { it.expenseId }.filter { id ->
+                id !in plannedStamps && (ExpenseEditClock.editTimeOf(context, id) ?: 0L) < nowMs
+            }
+        )
         val allRevisions = revisions + plannedRevisions.filter { it.kind != "local" || it.expenseId in applied }
         val finalExpenses = expenses.map { applied[it.expenseId] ?: it }
         return Prepared(
