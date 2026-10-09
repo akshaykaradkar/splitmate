@@ -127,6 +127,7 @@ interface SplitMateDao {
         // v2.3.4: the group's plan manifest (incl. its local-only stay) goes with the group. Guide
         // packs are shared across groups and are evicted by hard expiry instead.
         deleteTripPlanManifestForGroup(groupId)
+        deleteExpenseRevisionsForGroup(groupId)
         deleteGroupById(groupId)
     }
 
@@ -198,7 +199,31 @@ interface SplitMateDao {
         // v2.3.4: plan manifests are children of groups (FK CASCADE); clear them explicitly too.
         deleteAllTripPlanManifests()
         deleteAllGroups()
+        deleteAllExpenseRevisions()
     }
+
+    // --- v2.4.0 P1 + P4: per-expense version history (local only) ---
+    @Query("SELECT * FROM expense_revisions WHERE groupId = :groupId ORDER BY observedAtEpochMs ASC, rowVersion ASC")
+    suspend fun getExpenseRevisionsForGroup(groupId: String): List<ExpenseRevisionEntity>
+
+    @Query("SELECT * FROM expense_revisions WHERE expenseId = :expenseId ORDER BY observedAtEpochMs DESC, rowVersion DESC")
+    fun observeExpenseRevisions(expenseId: String): Flow<List<ExpenseRevisionEntity>>
+
+    @Upsert
+    suspend fun insertExpenseRevisions(revisions: List<ExpenseRevisionEntity>)
+
+    /** Keeps only the newest [keep] revisions of an expense. */
+    @Query(
+        "DELETE FROM expense_revisions WHERE expenseId = :expenseId AND revisionId NOT IN " +
+            "(SELECT revisionId FROM expense_revisions WHERE expenseId = :expenseId ORDER BY observedAtEpochMs DESC, rowVersion DESC LIMIT :keep)"
+    )
+    suspend fun pruneExpenseRevisions(expenseId: String, keep: Int)
+
+    @Query("DELETE FROM expense_revisions WHERE groupId = :groupId")
+    suspend fun deleteExpenseRevisionsForGroup(groupId: String)
+
+    @Query("DELETE FROM expense_revisions")
+    suspend fun deleteAllExpenseRevisions()
 
     // --- v2.3.4 Trip Guide packs (shared across groups; evicted by hard expiry) ---
     @Query("SELECT * FROM trip_guide_pack WHERE destinationQid = :destinationQid LIMIT 1")

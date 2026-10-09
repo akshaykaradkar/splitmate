@@ -118,14 +118,22 @@ object SettlementDuplicateGuard {
  * ₹3,000 nobody owed sent part of a real payment to the wrong person. See the RCA (Bike Rentals).
  *
  * Valid expenses always satisfy `sum(finalOwedCents) == totalAmountCents` (the payer's row carries
- * any unassigned remainder). In that failure the split rows were the newer data, so the repair
- * trusts them and corrects the stale total. Itemized receipts (tax / tip / remainder / multiplier)
- * are left alone because their total can't be rebuilt from the rows alone.
+ * any unassigned remainder).
+ *
+ * v2.4.0 P2: [repairStaleTotal] is no longer run by the merge. It trusted the shares, and in the
+ * mirror case (new total + old shares from an older app) that would undo an edit (RCA risk R4).
+ * The cause itself is fixed by per-expense versions (P1); a copy that is still inconsistent is
+ * quarantined: flagged `q` on upload and shown by the Money check, where the organizer, payer or
+ * creator can fix it in one tap.
  */
 object ExpenseSplitIntegrity {
 
+    /**
+     * v2.4.0 P2 (RCA risk R5): an expense with no shares is NOT consistent: it credits the payer while
+     * nobody owes anything.
+     */
     fun isConsistent(expense: ExpenseEntity, splits: List<ExpenseSplitEntity>): Boolean =
-        splits.isEmpty() || splits.sumOf { it.finalOwedCents } == expense.totalAmountCents
+        splits.isNotEmpty() && splits.sumOf { it.finalOwedCents } == expense.totalAmountCents
 
     /** Returns [expense] with its total (and base subtotal) set to the split sum when it is stale. */
     fun repairStaleTotal(expense: ExpenseEntity, splits: List<ExpenseSplitEntity>): ExpenseEntity {

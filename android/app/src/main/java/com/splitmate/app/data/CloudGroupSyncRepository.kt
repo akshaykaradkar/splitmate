@@ -623,6 +623,7 @@ object CloudGroupSyncRepository {
 
     fun encodeGroupLedgerDocument(doc: CloudGroupLedgerDocument): String {
         val root = JSONObject()
+        val splitsByExpenseForEncode = doc.splits.groupBy { it.expenseId }
         root.put("updatedAtEpochMs", doc.updatedAtEpochMs)
         val resolvedOrganizerPhone = PhoneIdentityValidator.normalizeIndianPhone10(doc.organizerPhone10)
         val resolvedJoinCode = normalizeJoinCode6(doc.joinCode6).ifBlank { deriveGroupJoinCode6(doc.group.groupId) }
@@ -678,6 +679,11 @@ object CloudGroupSyncRepository {
                 // v2.3.5: additive, omitted when null so legacy expense JSON is byte-identical.
                 e.categoryRef?.takeIf { it.isNotBlank() }?.let { put("categoryRef", it) }
                 e.createdByPhone?.takeIf { it.isNotBlank() }?.let { put("createdByPhone", it) }
+                // v2.4.0 P1: per-expense version + editor (omitted on unversioned rows).
+                if (e.rowVersion > 0L) put("rv", e.rowVersion)
+                e.rowUpdatedBy?.takeIf { it.isNotBlank() }?.let { put("rby", it) }
+                // v2.4.0 P2: quarantine flag. Never blocks the upload; the Money check shows it.
+                if (!com.splitmate.app.ExpenseSplitIntegrity.isConsistent(e, splitsByExpenseForEncode[e.expenseId].orEmpty())) put("q", true)
             })
         }
         root.put("expenses", expensesArr)
@@ -835,7 +841,10 @@ object CloudGroupSyncRepository {
                         createdAt = e.optLong("createdAt", System.currentTimeMillis()),
                         categoryRef = e.optString("categoryRef", "").trim().take(80).takeIf { it.isNotEmpty() },
                         createdByPhone = PhoneIdentityValidator.normalizeIndianPhone10(e.optString("createdByPhone", ""))
-                            .takeIf { it.length == 10 }
+                            .takeIf { it.length == 10 },
+                        // v2.4.0 P1: absent on apps older than v2.4.0 (reads as unversioned).
+                        rowVersion = e.optLong("rv", 0L).coerceAtLeast(0L),
+                        rowUpdatedBy = e.optString("rby", "").trim().take(80).takeIf { it.isNotEmpty() }
                     )
                 )
             }
@@ -1000,6 +1009,8 @@ object CloudGroupSyncRepository {
                     // v2.3.5: only when present, so pre-v2.3.5 hashes stay byte-identical.
                     e.categoryRef?.takeIf { it.isNotBlank() }?.let { put("categoryRef", it) }
                     e.createdByPhone?.takeIf { it.isNotBlank() }?.let { put("createdByPhone", it) }
+                    // v2.4.0 P1: only when versioned, so unversioned hashes stay byte-identical.
+                    if (e.rowVersion > 0L) put("rv", e.rowVersion)
                 })
             }
             put("expenses", expensesArr)
@@ -1392,7 +1403,8 @@ object CloudGroupSyncRepository {
     private suspend fun fetchRemoteGroupLedgerOutcome(
         topic: String,
         localUserPhone10: String,
-        localUserAvatarSeed: String
+        localUserAvatarSeed: String,
+        versionHistory: com.splitmate.app.ExpenseVersioning.History? = null
     ): Pair<CloudGroupLedgerDocument?, Boolean> = withContext(Dispatchers.IO) {
         val lines = executeNtfyGetWithBackoff("https://ntfy.sh/$topic/json?poll=1&since=all")
             ?: return@withContext (null to false)
@@ -1425,7 +1437,8 @@ object CloudGroupSyncRepository {
                     localDoc = foldedDoc,
                     remoteDoc = doc,
                     localUserPhone10 = localUserPhone10,
-                    localUserAvatarSeed = localUserAvatarSeed
+                    localUserAvatarSeed = localUserAvatarSeed,
+                    versionHistory = versionHistory
                 )
             }
         }
@@ -1530,7 +1543,9 @@ object CloudGroupSyncRepository {
         remoteDoc: CloudGroupLedgerDocument?,
         localUserPhone10: String,
         localUserAvatarSeed: String = "",
-        localPresenceEpochMs: Long = System.currentTimeMillis()
+        localPresenceEpochMs: Long = System.currentTimeMillis(),
+        /** v2.4.0 P1: versions this phone already knows (null = no history, e.g. folding cloud snapshots). */
+        versionHistory: com.splitmate.app.ExpenseVersioning.History? = null
     ): CloudGroupLedgerDocument {
         val normLocalPhone = PhoneIdentityValidator.normalizeIndianPhone10(localUserPhone10)
         if (localDoc == null && remoteDoc == null) throw IllegalArgumentException("Both docs null")
@@ -1645,7 +1660,9 @@ object CloudGroupSyncRepository {
                 .ifBlank { deriveGroupJoinCode6(groupId) }
 
             if (!hasTombstonedEntities) {
-                val repairedSingleExpenses = com.splitmate.app.ExpenseSplitIntegrity.repairStaleTotals(singleDoc.expenses, singleDoc.splits)
+                // v2.4.0 P2: no blind repair (it trusted the shares and could undo an edit). A mismatch is
+                // kept as-is, flagged on upload and shown by the Money check.
+                val repairedSingleExpenses = singleDoc.expenses
                 val (singleSettlements, singleDeletedSettlementIds) = dropRedundantDuplicateSettlements(
                     repairedSingleExpenses, singleDoc.splits, singleDoc.settlements, singleDoc.deletedSettlementIds
                 )
@@ -1793,20 +1810,53 @@ object CloudGroupSyncRepository {
             ?: ""
 
         // 3. Merge expenses, remap cross-device payerId, and enforce PA-1 (reassign orphaned payerId to organizerMemberId)
+        // v2.4.0 P1: each expense present on both sides is decided on its own version
+        // (ExpenseVersioning.decide), not by which whole document is newer.
+        val localDocWins = localDoc != null && remoteDoc != null && localDoc.updatedAtEpochMs >= remoteDoc.updatedAtEpochMs
+        val localExpenseById = localDoc?.expenses.orEmpty().associateBy { it.expenseId }
+        val remoteExpenseById = remoteDoc?.expenses.orEmpty().associateBy { it.expenseId }
+        val localSplitsByExpense = localDoc?.splits.orEmpty().groupBy { it.expenseId }
+        val remoteSplitsByExpense = remoteDoc?.splits.orEmpty().groupBy { it.expenseId }
+        val versionDecisions = mutableMapOf<String, com.splitmate.app.ExpenseVersioning.Decision>()
+        for ((id, localExp) in localExpenseById) {
+            val remoteExp = remoteExpenseById[id] ?: continue
+            versionDecisions[id] = com.splitmate.app.ExpenseVersioning.decide(
+                local = localExp,
+                localSplits = localSplitsByExpense[id].orEmpty(),
+                remote = remoteExp,
+                remoteSplits = remoteSplitsByExpense[id].orEmpty(),
+                localDocWins = localDocWins,
+                history = versionHistory
+            )
+        }
+        val localWinsExpense: (String) -> Boolean = { id ->
+            versionDecisions[id]?.side?.let { it == com.splitmate.app.ExpenseVersioning.Side.LOCAL } ?: localDocWins
+        }
         val combinedExpenses = (localDoc?.expenses.orEmpty() + remoteDoc?.expenses.orEmpty())
             .filter { it.expenseId !in mergedDeletedExpenseIds }
             .groupBy { it.expenseId }
-            .map { (_, group) ->
-                val fromLocal = localDoc?.expenses?.let { l -> group.find { l.contains(it) } }
-                val fromRemote = remoteDoc?.expenses?.let { r -> group.find { r.contains(it) } }
+            .map { (expenseId, _) ->
+                val fromLocal = localExpenseById[expenseId]
+                val fromRemote = remoteExpenseById[expenseId]
+                val decision = versionDecisions[expenseId]
                 val chosenRaw = if (fromLocal != null && fromRemote != null) {
-                    if (localDoc.updatedAtEpochMs >= remoteDoc.updatedAtEpochMs) fromLocal else fromRemote
+                    val winner = if (localWinsExpense(expenseId)) fromLocal else fromRemote
+                    val stamp = decision?.stampVersion
+                    if (stamp != null) {
+                        winner.copy(rowVersion = stamp, rowUpdatedBy = com.splitmate.app.ExpenseVersioning.LEGACY_EDITOR)
+                    } else {
+                        winner
+                    }
                 } else {
                     fromLocal ?: fromRemote!!
                 }
                 // v2.3.5: an old client that edits an expense drops categoryRef/createdByPhone; keep the
                 // other side's value instead of erasing it (never touches any money field).
-                val loser = if (chosenRaw === fromLocal) fromRemote else fromLocal
+                val loser = when {
+                    fromLocal == null || fromRemote == null -> null
+                    localWinsExpense(expenseId) -> fromRemote
+                    else -> fromLocal
+                }
                 val chosen = if (loser != null &&
                     ((chosenRaw.categoryRef == null && loser.categoryRef != null) ||
                         (chosenRaw.createdByPhone == null && loser.createdByPhone != null))
@@ -1833,17 +1883,16 @@ object CloudGroupSyncRepository {
 
         // 4. Merge splits (remapping cross-device memberId) and enforce PA-6 (subset-only zero-drift redistribution when a participant was removed)
         val survivingExpenseMap = combinedExpenses.associateBy { it.expenseId }.toMutableMap()
-        val localSplitKeySet = localDoc?.splits.orEmpty().map { it.splitId }.toSet()
-        val remoteSplitKeySet = remoteDoc?.splits.orEmpty().map { it.splitId }.toSet()
         // v2.3.5 (#4 guard c): for an expense present on both sides, keep only the winning side's split
         // rows (same LWW choice as the expense row). The old union resurrected a removed participant's
         // stale row from the losing side, so the splits no longer summed to the expense total.
-        val (winnerLocalSplits, winnerRemoteSplits) = com.splitmate.app.ExpenseSplitMergeRules.pruneLosingSideSplits(
+        // v2.4.0 P1: per expense, all or nothing, following the expense row's winner.
+        val (winnerLocalSplits, winnerRemoteSplits) = com.splitmate.app.ExpenseSplitMergeRules.keepWinningSideSplits(
             localSplits = localDoc?.splits.orEmpty(),
             remoteSplits = remoteDoc?.splits.orEmpty(),
-            localExpenseIds = localDoc?.expenses.orEmpty().map { it.expenseId }.toSet(),
-            remoteExpenseIds = remoteDoc?.expenses.orEmpty().map { it.expenseId }.toSet(),
-            localWins = localDoc != null && remoteDoc != null && localDoc.updatedAtEpochMs >= remoteDoc.updatedAtEpochMs
+            localExpenseIds = localExpenseById.keys,
+            remoteExpenseIds = remoteExpenseById.keys,
+            localWinsFor = localWinsExpense
         )
         val rawMergedSplits = (winnerLocalSplits + winnerRemoteSplits)
             .filter { it.expenseId in survivingExpenseMap }
@@ -1852,15 +1901,10 @@ object CloudGroupSyncRepository {
                 if (remappedMid != sp.memberId) sp.copy(memberId = remappedMid) else sp
             }
             .groupBy { "${it.expenseId}|${it.memberId}" }
-            .map { (_, group) ->
-                val fromLocal = if (localDoc != null) group.find { it.splitId in localSplitKeySet } else null
-                val fromRemote = if (remoteDoc != null) group.find { it.splitId in remoteSplitKeySet } else null
-                if (fromLocal != null && fromRemote != null) {
-                    if (localDoc!!.updatedAtEpochMs >= remoteDoc!!.updatedAtEpochMs) fromLocal else fromRemote
-                } else {
-                    fromLocal ?: fromRemote ?: group.first()
-                }
-            }
+            // v2.4.0 P1: only the winning side's rows reach this point for any expense, so the old
+            // `find { it.splitId in remoteSplitKeySet }` (which found the LOCAL row again when ids
+            // matched: the RCA root cause) is gone. Duplicate member rows within one side keep the first.
+            .map { (_, group) -> group.first() }
 
         val finalSplits = mutableListOf<ExpenseSplitEntity>()
         val splitsByExpenseId = rawMergedSplits.groupBy { it.expenseId }
@@ -2014,7 +2058,10 @@ object CloudGroupSyncRepository {
             else -> remoteDoc!!.group
         }
 
-        val repairedExpenses = com.splitmate.app.ExpenseSplitIntegrity.repairStaleTotals(finalExpenses, finalSplits)
+        // v2.4.0 P2: no blind repair after a merge (RCA risk R4: it trusted the shares, and in the mirror
+        // case that undoes an edit). With P1 each expense's row and shares come from one copy; if that
+        // copy is itself inconsistent it is quarantined (flagged on upload, shown by the Money check).
+        val repairedExpenses = finalExpenses
         val (cleanSettlements, cleanDeletedSettlementIds) = dropRedundantDuplicateSettlements(
             repairedExpenses, finalSplits, allSettlements, mergedDeletedSettlementIds
         )
@@ -2393,11 +2440,16 @@ object CloudGroupSyncRepository {
         }
 
         val topic = "splitmate_v2_grp_${sanitizeTopicKey(groupId)}"
+        // v2.4.0 P1: versions this phone already knows, used while folding the recent cloud snapshots
+        // (an older app's stale copy among them loses to a newer version instead of winning by time).
+        val preMergeHistory = ExpenseVersionSync.loadHistory(dao, groupId)
         val (remoteDoc, remoteFetchSucceeded) = fetchRemoteGroupLedgerOutcome(
             topic = topic,
             localUserPhone10 = normLocalPhone,
-            localUserAvatarSeed = localAvatarSeed
+            localUserAvatarSeed = localAvatarSeed,
+            versionHistory = preMergeHistory
         )
+        var mergeHistory: com.splitmate.app.ExpenseVersioning.History? = preMergeHistory
 
         val localGroup = dao.getGroupById(groupId)
         var rawGroupMembers: List<GroupMemberEntity>? = null
@@ -2424,8 +2476,21 @@ object CloudGroupSyncRepository {
                 }
                 if (finalPhone != m.userPhone) m.copy(userPhone = finalPhone) else m
             }
-            val expenses = dao.getExpensesForGroup(groupId)
+            val rawExpenses = dao.getExpensesForGroup(groupId)
             val splits = dao.getSplitsForGroup(groupId)
+            // v2.4.0 P1: give every expense edited on this phone since its last known version a new
+            // hybrid-clock version (whichever screen made the edit) before merging.
+            val prepared = ExpenseVersionSync.prepareLocalExpenses(
+                dao = dao,
+                groupId = groupId,
+                expenses = rawExpenses,
+                splits = splits,
+                remoteDoc = remoteDoc,
+                editorId = loadedMembers.firstOrNull { it.isCurrentUser }?.memberId ?: normLocalPhone,
+                nowMs = nowMs
+            )
+            val expenses = prepared.expenses
+            mergeHistory = prepared.history
             val settlements = dao.getSettlementsForGroup(groupId)
             hasPendingLocalEntities = expenses.any { it.syncStatus.equals("PENDING", ignoreCase = true) } ||
                 settlements.any { it.syncStatus.equals("PENDING", ignoreCase = true) }
@@ -2489,7 +2554,8 @@ object CloudGroupSyncRepository {
             localDoc = localDoc,
             remoteDoc = remoteDoc,
             localUserPhone10 = normLocalPhone,
-            localUserAvatarSeed = localAvatarSeed
+            localUserAvatarSeed = localAvatarSeed,
+            versionHistory = mergeHistory
         )
 
         // Persist merged tombstones durably (PA-3)
@@ -2629,6 +2695,17 @@ object CloudGroupSyncRepository {
                 }
             }
         }
+
+        // v2.4.0 P1 + P4: remember every version this merge produced or saw (edit history + stale copies).
+        ExpenseVersionSync.recordMergeOutcome(
+            dao = dao,
+            localDoc = localDoc,
+            remoteDoc = remoteDoc,
+            mergedDoc = mergedDoc,
+            history = mergeHistory,
+            skippedExpenseIds = skippedExpenseIds,
+            nowMs = nowMs
+        )
 
         if (ctx != null) {
             val newFlights = mergedDoc.flightVaultByPnr.filter { (k, v) -> localDoc?.flightVaultByPnr?.get(k) != v }

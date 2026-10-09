@@ -127,4 +127,27 @@ object ExpenseSplitMergeRules {
         }
         return keptLocal to keptRemote
     }
+
+    /**
+     * v2.4.0 P1: for an expense present on both sides, keep ONLY the split rows of the side whose
+     * expense row won ([localWinsFor]), even when that side has no rows (an expense with no shares
+     * then fails the Money check instead of borrowing another copy's shares). Expenses present on
+     * one side keep that side's rows.
+     */
+    fun keepWinningSideSplits(
+        localSplits: List<ExpenseSplitEntity>,
+        remoteSplits: List<ExpenseSplitEntity>,
+        localExpenseIds: Set<String>,
+        remoteExpenseIds: Set<String>,
+        localWinsFor: (String) -> Boolean
+    ): Pair<List<ExpenseSplitEntity>, List<ExpenseSplitEntity>> {
+        val onBothSides = localExpenseIds intersect remoteExpenseIds
+        val keptLocal = localSplits.filter { sp ->
+            if (sp.expenseId in onBothSides) localWinsFor(sp.expenseId) else sp.expenseId in localExpenseIds
+        }
+        val keptRemote = remoteSplits.filter { sp ->
+            if (sp.expenseId in onBothSides) !localWinsFor(sp.expenseId) else sp.expenseId in remoteExpenseIds
+        }
+        return keptLocal to keptRemote
+    }
 }

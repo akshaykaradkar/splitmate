@@ -17,9 +17,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SettlementEntity::class,
         UserProfileEntity::class,
         TripGuidePackEntity::class,
-        TripPlanManifestEntity::class
+        TripPlanManifestEntity::class,
+        ExpenseRevisionEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class SplitMateRoomDatabase : RoomDatabase() {
@@ -190,6 +191,26 @@ abstract class SplitMateRoomDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v2.4.0 P1 + P4 (RCA Bike Rentals): per-expense version + local edit history. Additive only:
+         * existing rows read as version 0 with no editor, so no money value changes. A copy of the
+         * database is taken before this migration runs.
+         */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `expenses` ADD COLUMN `rowVersion` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `expenses` ADD COLUMN `rowUpdatedBy` TEXT DEFAULT NULL")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `expense_revisions` (`revisionId` TEXT NOT NULL, `expenseId` TEXT NOT NULL, " +
+                        "`groupId` TEXT NOT NULL, `rowVersion` INTEGER NOT NULL, `contentHash` TEXT NOT NULL, `title` TEXT NOT NULL, " +
+                        "`totalAmountCents` INTEGER NOT NULL, `payerId` TEXT NOT NULL, `editedBy` TEXT, `observedAtEpochMs` INTEGER NOT NULL, " +
+                        "`kind` TEXT NOT NULL, PRIMARY KEY(`revisionId`))"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_expense_revisions_groupId` ON `expense_revisions` (`groupId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_expense_revisions_expenseId` ON `expense_revisions` (`expenseId`)")
+            }
+        }
+
         fun getInstance(context: Context): SplitMateRoomDatabase {
             return INSTANCE ?: synchronized(this) {
                 // v2.3.4: keep a copy of the existing trips DB before the 7 -> 8 migration ever runs.
@@ -197,13 +218,14 @@ abstract class SplitMateRoomDatabase : RoomDatabase() {
                 if (INSTANCE == null) {
                     PreUpgradeDatabaseBackup.snapshotOnce(context.applicationContext, "splitmate_native_room.db", "before_v2.3.4")
                     PreUpgradeDatabaseBackup.snapshotOnce(context.applicationContext, "splitmate_native_room.db", "before_v2.3.5")
+                    PreUpgradeDatabaseBackup.snapshotOnce(context.applicationContext, "splitmate_native_room.db", "before_v2.4.0")
                 }
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     SplitMateRoomDatabase::class.java,
                     "splitmate_native_room.db"
                 )
-                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                     .fallbackToDestructiveMigrationFrom(1, 2, 3)
                     .fallbackToDestructiveMigrationOnDowngrade()
                     .build()

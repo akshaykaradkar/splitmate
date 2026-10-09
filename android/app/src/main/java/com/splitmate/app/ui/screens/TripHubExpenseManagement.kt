@@ -23,6 +23,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -126,6 +127,17 @@ fun TripHubExpenseManagementHost(
                     canModify = viewModel.canCurrentUserModifyExpense(exp, uiState),
                     onUseSharesTotal = { viewModel.useSharesTotalForExpense(exp.expenseId) },
                     onEdit = { editingExpenseId = exp.expenseId }
+                )
+            },
+            // v2.4.0 P4: edit history + revert heads-up with one-tap restore.
+            editHistory = {
+                val revisions by viewModel.observeExpenseRevisions(exp.expenseId)
+                    .collectAsState(initial = emptyList())
+                ExpenseEditHistorySection(
+                    revisions = revisions,
+                    memberNames = groupMembers.associate { it.memberId to it.name },
+                    canRestore = viewModel.canCurrentUserModifyExpense(exp, uiState),
+                    onRestoreTotal = { cents -> viewModel.restoreExpenseTotal(exp.expenseId, cents) }
                 )
             }
         )

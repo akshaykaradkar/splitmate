@@ -76,7 +76,9 @@ fun ActivityDetailSheet(
     canModify: Boolean = true,
     readOnlyReason: String = com.splitmate.app.ExpenseEditPermission.READ_ONLY_REASON,
     /** v2.3.6 P3 Money check: "Shares add up" line or the gap with its 1-tap fix. */
-    sharesCheck: (@Composable () -> Unit)? = null
+    sharesCheck: (@Composable () -> Unit)? = null,
+    /** v2.4.0 P4: "Edited 2 Oct · Akshay ₹7,950 → ₹4,950" history (and revert heads-up). */
+    editHistory: (@Composable () -> Unit)? = null
 ) {
     // v2.3.5 (#4): deleting an expense always asks for confirmation first.
     var showDeleteConfirm by remember(expense.expenseId) { mutableStateOf(false) }
@@ -312,6 +314,10 @@ fun ActivityDetailSheet(
             }
             }
             sharesCheck?.invoke()
+            if (editHistory != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                editHistory()
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 

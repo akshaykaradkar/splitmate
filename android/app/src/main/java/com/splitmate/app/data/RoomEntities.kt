@@ -112,7 +112,45 @@ data class ExpenseEntity(
     /** v2.3.5: stable category reference (`builtin:<key>` or `custom:<id>`); null on legacy rows (title is used). */
     val categoryRef: String? = null,
     /** v2.3.5: 10-digit phone of the member who logged the expense; null on legacy rows. */
-    val createdByPhone: String? = null
+    val createdByPhone: String? = null,
+    /**
+     * v2.4.0 P1 (RCA Bike Rentals): hybrid-logical-clock version of this expense's content. 0 on rows
+     * never edited since the upgrade (and on rows from apps older than v2.4.0). The higher version
+     * wins a merge, per expense, so a phone holding an older copy can no longer undo an edit.
+     */
+    val rowVersion: Long = 0L,
+    /** v2.4.0 P1: member id of the phone that produced [rowVersion] (tie-break + edit history). */
+    val rowUpdatedBy: String? = null
+)
+
+/**
+ * v2.4.0 P1 + P4: one observed version of an expense (local table, never synced as-is).
+ *
+ * - P1 uses the stored content hashes as "copies this phone already knows": when an app older than
+ *   v2.4.0 re-uploads one of them (it drops the version field), it is a stale copy and loses.
+ * - P4 renders the rows as the expense's edit history ("₹7,950 → ₹4,950 · Akshay · 2 Oct").
+ * Member ids only, never phone numbers.
+ */
+@Entity(
+    tableName = "expense_revisions",
+    indices = [
+        Index(value = ["groupId"]),
+        Index(value = ["expenseId"])
+    ]
+)
+data class ExpenseRevisionEntity(
+    @PrimaryKey val revisionId: String,
+    val expenseId: String,
+    val groupId: String,
+    val rowVersion: Long,
+    val contentHash: String,
+    val title: String,
+    val totalAmountCents: Long,
+    val payerId: String,
+    val editedBy: String?,
+    val observedAtEpochMs: Long,
+    /** seed | local | remote | legacy | revert | concurrent */
+    val kind: String
 )
 
 /**

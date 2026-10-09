@@ -8120,7 +8120,18 @@ fun AuditVaultScreen(
             onUndoExpense = { idToRollback ->
                 viewModel.rollbackExpense(idToRollback)
             },
-            canModify = viewModel.canCurrentUserModifyExpense(selectedExp, uiState)
+            canModify = viewModel.canCurrentUserModifyExpense(selectedExp, uiState),
+            // v2.4.0 P4: edit history + revert heads-up with one-tap restore.
+            editHistory = {
+                val revisions by viewModel.observeExpenseRevisions(selectedExp.expenseId)
+                    .collectAsState(initial = emptyList())
+                com.splitmate.app.ui.screens.ExpenseEditHistorySection(
+                    revisions = revisions,
+                    memberNames = groupMembers.associate { it.memberId to it.name },
+                    canRestore = viewModel.canCurrentUserModifyExpense(selectedExp, uiState),
+                    onRestoreTotal = { cents -> viewModel.restoreExpenseTotal(selectedExp.expenseId, cents) }
+                )
+            }
         )
     }
 

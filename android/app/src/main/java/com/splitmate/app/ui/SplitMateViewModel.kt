@@ -4480,6 +4480,34 @@ class SplitMateViewModel(
      * when [com.splitmate.app.MoneyCheck.canUseSharesTotal] says it is safe. Returns the previous
      * total (for Undo), or null when nothing changed.
      */
+    /** v2.4.0 P4: the expense's local edit history, newest first (empty without a database). */
+    fun observeExpenseRevisions(expenseId: String): kotlinx.coroutines.flow.Flow<List<com.splitmate.app.data.ExpenseRevisionEntity>> =
+        revisionFlowsByExpense.getOrPut(expenseId) {
+            dao?.observeExpenseRevisions(expenseId) ?: kotlinx.coroutines.flow.flowOf(emptyList())
+        }
+
+    private val revisionFlowsByExpense = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.flow.Flow<List<com.splitmate.app.data.ExpenseRevisionEntity>>>()
+
+    /**
+     * v2.4.0 P4: "Restore ₹4,950" after an amount was changed back. A normal edit (same title, payer
+     * and people), so it gets a new version and wins everywhere. Itemized receipts stay protected by
+     * the itemized edit guard.
+     */
+    fun restoreExpenseTotal(expenseId: String, totalCents: Long) {
+        val state = _uiState.value
+        val existing = state.expenses.find { it.expenseId == expenseId } ?: return
+        if (totalCents <= 0L) return
+        val participants = state.splits.filter { it.expenseId == expenseId && it.finalOwedCents > 0L }.map { it.memberId }
+        editExistingExpense(
+            expenseId = expenseId,
+            newTitle = existing.title,
+            newTotalRupees = totalCents / 100.0,
+            newPayerId = existing.payerId,
+            selectedMemberIds = participants.ifEmpty { null },
+            newTotalCentsOverride = totalCents
+        )
+    }
+
     fun useSharesTotalForExpense(expenseId: String): Long? {
         val state = _uiState.value
         val existing = state.expenses.find { it.expenseId == expenseId } ?: return null
