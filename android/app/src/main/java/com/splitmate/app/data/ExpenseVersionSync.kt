@@ -22,6 +22,7 @@ object ExpenseVersionSync {
     private const val FINGERPRINT_SUFFIX = "_fp"
 
     fun baseKind(kind: String): String = kind.removePrefix(RECEIVED_PREFIX)
+    private val OWN_HELD_KINDS = setOf("seed", "local", "remote", "legacy", "revert", "concurrent")
     fun isReceived(rev: ExpenseRevisionEntity): Boolean = rev.kind.startsWith(RECEIVED_PREFIX)
     /** P4: synced history is compact: the newest 5 entries per expense, at most 300 per trip. */
     const val SYNC_PER_EXPENSE = 5
@@ -132,7 +133,8 @@ object ExpenseVersionSync {
     fun historyOf(revisions: List<ExpenseRevisionEntity>, extraVersions: Sequence<Long> = emptySequence()): ExpenseVersioning.History {
         val known = revisions.groupBy { it.expenseId }.mapValues { (_, list) -> list.map { it.contentHash }.toSet() }
         val maxSeen = (revisions.asSequence().map { it.rowVersion } + extraVersions).maxOrNull() ?: 0L
-        val firstOwn = revisions.filterNot { isReceived(it) }.groupBy { it.expenseId }
+        // Review R2: only copies this phone actually HELD count (a fingerprint of a rejected copy doesn't).
+        val firstOwn = revisions.filter { !isReceived(it) && it.kind in OWN_HELD_KINDS }.groupBy { it.expenseId }
             .mapValues { (_, list) -> list.minOf { it.rowVersion } }
         return ExpenseVersioning.History(knownHashesByExpense = known, maxSeenVersion = maxSeen, firstOwnVersionByExpense = firstOwn)
     }
@@ -207,6 +209,10 @@ object ExpenseVersionSync {
                     // or its push that was delivered but never confirmed) must not get the strongest
                     // version "now". The trip's last local change time (which older apps also record)
                     // dates it: a newer edit made elsewhere still wins, a later offline edit here wins.
+                    // Known limit (review R4): older apps keep that time per trip, not per expense, so on
+                    // the first sync after upgrading, an unsynced offline edit is dated by the trip's last
+                    // unsynced change. Choosing an earlier time instead would make genuine offline edits
+                    // lose, which is the more common case; it only applies once, before any 2.4 edit.
                     val editedAt = editTimeOf(e.expenseId)?.takeIf { it in 1..nowMs }
                         ?: maxOf(e.createdAt, lastLocalChangeMs ?: 0L).coerceIn(1L, nowMs)
                     // Above every version seen in earlier syncs, but not pushed by other expenses stamped
@@ -217,7 +223,8 @@ object ExpenseVersionSync {
                     newRevisions += revisionOf(next, hash, "local", nowMs)
                     // Review N1: the copy this edit replaced becomes a synced fingerprint, so any phone
                     // recognises an older app's later re-upload of it as stale.
-                    known?.firstOrNull { it.rowVersion == e.rowVersion && !isReceived(it) }?.let { previous ->
+                    // Review R3: the source may be an entry this phone only holds as received.
+                    known?.firstOrNull { it.rowVersion == e.rowVersion && baseKind(it.kind) != "superseded" }?.let { previous ->
                         newRevisions += previous.copy(
                             revisionId = previous.revisionId.removeSuffix(FINGERPRINT_SUFFIX) + FINGERPRINT_SUFFIX,
                             kind = "superseded",
@@ -357,10 +364,14 @@ object ExpenseVersionSync {
             val received = mergedDoc.revisions
                 .filter { it.revisionId !in existing }
                 .map { if (isReceived(it)) it else it.copy(kind = RECEIVED_PREFIX + it.kind) }
-            val observed = planMergeRevisions(localDoc, remoteDoc, mergedDoc, history, existing + received.map { it.revisionId }, skippedExpenseIds, nowMs)
+            // Review R3: this phone's own observations are planned against what it already stored only,
+            // and written AFTER the received entries, so an own entry replaces "rx-" for the same id.
+            val observed = planMergeRevisions(localDoc, remoteDoc, mergedDoc, history, existing, skippedExpenseIds, nowMs)
             val revisions = (received + observed).distinctBy { it.revisionId }
             if (revisions.isEmpty()) return
-            dao.insertExpenseRevisions(revisions)
+            val observedIds = observed.map { it.revisionId }.toSet()
+            dao.insertExpenseRevisions(received.filter { it.revisionId !in observedIds })
+            dao.insertExpenseRevisions(observed)
             revisions.map { it.expenseId }.distinct().forEach { dao.pruneExpenseRevisions(it, KEEP_PER_EXPENSE, KEEP_PER_EXPENSE) }
         }
     }

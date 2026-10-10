@@ -484,6 +484,36 @@ class SplitMateV240MoneySafetyTest {
     }
 
     @Test
+    fun `R2 - a fingerprint of a rejected copy never makes a late-joining phone look complete`() {
+        val gid = "g_v240_r2"
+        val ownAtT = ExpenseRevisionEntity("x_10_a", "x", gid, 10L, "a", "", 1L, "m1", null, t0, "remote")
+        val rejectedOldCopy = ExpenseRevisionEntity("x_0_b_fp", "x", gid, 0L, "b", "", 1L, "m1", null, t0, "superseded")
+        val h = ExpenseVersionSync.historyOf(listOf(ownAtT, rejectedOldCopy))
+        assertFalse(h.isCompleteUpTo("x", 10L))
+        assertTrue(h.knows("x", "b"), "still recognised as a known stale copy")
+    }
+
+    @Test
+    fun `R3 - replacing a copy held only as received history still fingerprints it`() {
+        val gid = "g_v240_r3"
+        val people = sixPeople(gid).take(2)
+        val v1 = expense("exp_r3", gid, "m1", 10_000L, rv = t0 + 1, by = "m2")
+        val receivedV1 = ExpenseRevisionEntity("exp_r3_${t0 + 1}_x", "exp_r3", gid, t0 + 1, ExpenseVersioning.contentHash(v1, shares(v1, people)), "", 10_000L, "m1", "m2", t0, "rx-local")
+        val edited = v1.copy(totalAmountCents = 9_000L, baseSubtotalCents = 9_000L, syncStatus = "PENDING")
+        val (_, revs) = ExpenseVersionSync.planLocalStamps(listOf(edited), shares(edited, people), listOf(receivedV1), emptySequence(), "m1", t0 + 5)
+        assertEquals(receivedV1.contentHash, revs.single { it.kind == "superseded" }.contentHash)
+    }
+
+    @Test
+    fun `R5 - a member without a phone on one side resolves to the same key through the remap`() {
+        val gid = "g_v240_r5"
+        val withPhone = member("grp_a", gid, "Akshay", "9000000001")
+        val noPhone = GroupMemberEntity(memberId = "old_a", groupId = gid, name = "Akshay", avatarSeed = "", isCurrentUser = false, upiId = "", userPhone = "", inviteStatus = "JOINED")
+        val key = ExpenseVersioning.memberKeyOf(listOf(withPhone, noPhone)) { if (it == "old_a") "grp_a" else it }
+        assertEquals(key("grp_a"), key("old_a"))
+    }
+
+    @Test
     fun `N3 - a PENDING row without an edit time is versioned by its creation time, not now`() {
         val gid = "g_v240_n3"
         val people = sixPeople(gid).take(2)

@@ -76,7 +76,11 @@ object ExpenseVersioning {
         val phoneById = members.associate { m ->
             m.memberId to com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(m.userPhone, m.upiId)
         }
-        return { id -> phoneById[id]?.takeIf { it.length == 10 }?.let { "p:$it" } ?: "m:${fallback(id)}" }
+        return { id ->
+            val mapped = fallback(id)
+            (phoneById[id]?.takeIf { it.length == 10 } ?: phoneById[mapped]?.takeIf { it.length == 10 })
+                ?.let { "p:$it" } ?: "m:$mapped"
+        }
     }
 
     /** Hybrid logical clock: never below wall time, always above every version already seen. */

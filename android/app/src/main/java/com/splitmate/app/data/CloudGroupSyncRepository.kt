@@ -1834,8 +1834,11 @@ object CloudGroupSyncRepository {
         // Review F4: compare copies by device-independent member keys (phone number; member id mapped
         // through the merge's remap only when there is no phone), so the same copy hashes the same on
         // every phone, matching the fingerprints recorded anywhere.
-        val localMemberKey = com.splitmate.app.ExpenseVersioning.memberKeyOf(localDoc?.members.orEmpty()) { memberIdRemap[it] ?: it }
-        val remoteMemberKey = com.splitmate.app.ExpenseVersioning.memberKeyOf(remoteDoc?.members.orEmpty()) { memberIdRemap[it] ?: it }
+        // Review R5: one resolver over both documents' members, so a member without a phone on one side
+        // resolves through the merge's remap to the matched member's phone.
+        val allDocMembers = localDoc?.members.orEmpty() + remoteDoc?.members.orEmpty()
+        val localMemberKey = com.splitmate.app.ExpenseVersioning.memberKeyOf(allDocMembers) { memberIdRemap[it] ?: it }
+        val remoteMemberKey = localMemberKey
         for ((id, localExp) in localExpenseById) {
             val remoteExp = remoteExpenseById[id] ?: continue
             versionDecisions[id] = com.splitmate.app.ExpenseVersioning.decide(
@@ -2515,7 +2518,8 @@ object CloudGroupSyncRepository {
                 editorId = loadedMembers.firstOrNull { it.isCurrentUser }?.memberId ?: normLocalPhone,
                 nowMs = nowMs,
                 context = ctx,
-                members = loadedMembers,
+                // Review R1: the same phone-patched member list the local document and merge use.
+                members = members,
                 lastLocalChangeMs = priorLocalChangeMs
             )
             val expenses = prepared.expenses
