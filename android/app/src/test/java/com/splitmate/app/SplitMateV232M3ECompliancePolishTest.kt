@@ -177,7 +177,7 @@ class SplitMateV232M3ECompliancePolishTest {
         assertTrue(sheet.contains("fillWidth = true"))
         val components = src(componentsPath)
         assertTrue(components.contains("fillWidth: Boolean = false"))
-        assertTrue(components.contains("val buttonHeight = if (fillWidth) 48.dp else 40.dp"))
+        assertTrue(components.contains("val buttonHeight = if (fillWidth) SplitButtonDefaults.MediumContainerHeight else SplitButtonDefaults.ContainerHeight"))
     }
 
     @Test

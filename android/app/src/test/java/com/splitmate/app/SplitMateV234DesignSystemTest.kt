@@ -357,8 +357,10 @@ class SplitMateV234DesignSystemTest {
         assertEquals(4.dp, SplitButtonDefaults.InnerCornerSize)
         // Opinionated overload (Edit Expense, Create First Group) untouched.
         assertTrue(comp.contains("fillWidth: Boolean = false"))
-        assertTrue(comp.contains("val buttonHeight = if (fillWidth) 48.dp else 40.dp"))
-        assertTrue(comp.contains("if (menuExpanded) 180f else 0f"))
+        assertTrue(comp.contains("val buttonHeight = if (fillWidth) SplitButtonDefaults.MediumContainerHeight else SplitButtonDefaults.ContainerHeight"))
+        assertTrue(comp.contains("if (checked) 180f else 0f"))
+        // v2.4.0: delegates to the official M3 Expressive split button.
+        assertTrue(comp.contains("androidx.compose.material3.SplitButtonLayout("))
     }
 
     // ------------------------------------------------------------------
@@ -430,7 +432,6 @@ class SplitMateV234DesignSystemTest {
             "CircularWavyProgressIndicator",
             "ButtonGroup",
             "<T> ConnectedButtonGroup",
-            "ToggleFloatingActionButton",
             "FloatingActionButtonMenu",
             "ContainedLoadingIndicator",
             "LoadingIndicator",

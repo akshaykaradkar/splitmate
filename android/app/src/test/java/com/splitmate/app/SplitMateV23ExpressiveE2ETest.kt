@@ -514,10 +514,10 @@ class SplitMateV23ExpressiveE2ETest {
         @Test
         fun `F5_T1_03 ExpressiveM3Components defines FloatingActionButtonMenu and ToggleFloatingActionButton`() {
             val src = readSourceFile("ui/components/ExpressiveM3Components.kt")
-            assertTrue(src.contains("fun ToggleFloatingActionButton("))
+            // v2.4.0: the hand-built toggle FAB was removed; the menu uses the official material3 one.
+            assertTrue(src.contains("androidx.compose.material3.ToggleFloatingActionButton("))
             assertTrue(src.contains("fun FloatingActionButtonMenu("))
-            assertTrue(src.contains("if (checked) 28.dp else 20.dp"))
-            assertTrue(src.contains("if (checked) 90f else 0f"))
+            assertTrue(src.contains("ToggleFloatingActionButtonDefaults"), "official toggle FAB icon morph")
         }
 
         @Test
@@ -532,7 +532,7 @@ class SplitMateV23ExpressiveE2ETest {
         fun `F5_T1_05 ExpressiveM3Components defines SplitButtonLayout and HorizontalFloatingToolbar`() {
             val src = readSourceFile("ui/components/ExpressiveM3Components.kt")
             assertTrue(src.contains("fun SplitButtonLayout("))
-            assertTrue(src.contains("if (menuExpanded) 180f else 0f"))
+            assertTrue(src.contains("if (checked) 180f else 0f"))
             assertTrue(src.contains("fun HorizontalFloatingToolbar("))
             assertTrue(src.contains("palette.surfaceContainerHigh"))
             val action = ExpressiveMenuAction(label = "Export JSON", onClick = {}, subtitle = "Backup")
@@ -2889,8 +2889,10 @@ class SplitMateV23ExpressiveE2ETest {
         @Test
         fun `T3_14 F5 ExpressiveButtonGroup Weight Expansion x F16 Group Detail Action Row`() {
             val src = readSourceFile("ui/components/ExpressiveM3Components.kt")
-            assertTrue(src.contains("(item.weight + expandedWeightBoost).coerceAtLeast(0.2f)"))
-            assertTrue(src.contains("if (isPressed) 8.dp else 16.dp"))
+            // v2.4.0: official M3 Expressive ButtonGroup (press widens the button via animateWidth).
+            assertTrue(src.contains("androidx.compose.material3.ButtonGroup("))
+            assertTrue(src.contains(".animateWidth(interactionSource)"))
+            assertTrue(src.contains("expandedRatio = expandedWeightBoost"))
         }
 
         @Test

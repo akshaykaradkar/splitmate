@@ -1359,11 +1359,19 @@ fun TripHomeScreen(
             when (sectionTab) {
                 TripHubSectionTab.OVERVIEW -> {
                     val overviewNowMs = remember(classifiedExpenses) { System.currentTimeMillis() }
-                    val overviewItems = remember(classifiedExpenses, overviewNowMs) {
+                    val overviewItems = remember(classifiedExpenses, overviewNowMs, tripLifecycleState) {
+                        val scheduleOf: (ExpenseEntity) -> Long = { resolveExpenseSchedule(context, it).effectiveEpochMs }
+                        // v2.4.0 Trip Hub step 3: lead with what matters for where the trip is.
+                        val phase = TripHubLayoutRules.phaseOf(
+                            isEnded = tripLifecycleState == com.splitmate.app.data.TripLifecycleResolver.State.ENDED,
+                            scheduledMs = classifiedExpenses.map { scheduleOf(it.first) },
+                            nowMs = overviewNowMs
+                        )
                         TripHubLayoutRules.overviewItems(
                             all = classifiedExpenses,
-                            scheduleMsOf = { resolveExpenseSchedule(context, it).effectiveEpochMs },
-                            nowMs = overviewNowMs
+                            scheduleMsOf = scheduleOf,
+                            nowMs = overviewNowMs,
+                            phase = phase
                         )
                     }
                     TripHubOverviewFeed(

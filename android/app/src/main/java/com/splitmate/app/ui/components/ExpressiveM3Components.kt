@@ -832,45 +832,15 @@ fun ButtonGroup(
     expandedWeightBoost: Float = 0.15f
 ) {
     if (items.isEmpty()) return
-    Row(
+    // v2.4.0 Trip Hub step 3: the official M3 Expressive ButtonGroup. Pressing a button widens it
+    // (animateWidth on the theme's spring) while its neighbours give way; no hand-built weights.
+    androidx.compose.material3.ButtonGroup(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically
+        expandedRatio = expandedWeightBoost,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        items.forEachIndexed { index, item ->
+        items.forEach { item ->
             val interactionSource = remember { MutableInteractionSource() }
-            val isPressed by interactionSource.collectIsPressedAsState()
-            val animatedWeight by animateFloatAsState(
-                targetValue = if (isPressed) {
-                    (item.weight + expandedWeightBoost).coerceAtLeast(0.2f)
-                } else {
-                    item.weight.coerceAtLeast(0.2f)
-                },
-                animationSpec = SplitMateMotion.fastSpatial(),
-                label = "ButtonGroupWeight_$index"
-            )
-            val innerCorner by animateDpAsState(
-                targetValue = if (isPressed) 8.dp else 16.dp,
-                animationSpec = SplitMateMotion.fastSpatial(),
-                label = "ButtonGroupCorner_$index"
-            )
-            val shape = when {
-                items.size == 1 -> CircleShape
-                index == 0 -> RoundedCornerShape(
-                    topStart = 24.dp,
-                    bottomStart = 24.dp,
-                    topEnd = innerCorner,
-                    bottomEnd = innerCorner
-                )
-                index == items.lastIndex -> RoundedCornerShape(
-                    topStart = innerCorner,
-                    bottomStart = innerCorner,
-                    topEnd = 24.dp,
-                    bottomEnd = 24.dp
-                )
-                else -> RoundedCornerShape(innerCorner)
-            }
-
             val resolvedContainerColor = item.containerColor ?: if (item.isPrimary) {
                 MaterialTheme.colorScheme.primary
             } else {
@@ -881,20 +851,20 @@ fun ButtonGroup(
             } else {
                 MaterialTheme.colorScheme.onSecondaryContainer
             }
-
             FilledTonalButton(
                 onClick = item.onClick,
                 enabled = item.enabled,
                 interactionSource = interactionSource,
-                shape = shape,
+                shape = CircleShape,
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                 colors = ButtonDefaults.filledTonalButtonColors(
                     containerColor = resolvedContainerColor,
                     contentColor = resolvedContentColor
                 ),
                 modifier = Modifier
-                    .weight(animatedWeight)
-                    .height(44.dp)
+                    .animateWidth(interactionSource)
+                    .weight(item.weight.coerceAtLeast(0.2f))
+                    .heightIn(min = 48.dp)
             ) {
                 if (item.icon != null) {
                     Icon(
@@ -911,9 +881,6 @@ fun ButtonGroup(
                     } else {
                         MaterialTheme.typography.labelLarge
                     },
-                    fontFamily = FigtreeFontFamily,
-                    fontWeight = if (item.isPrimary) FontWeight.ExtraBold else FontWeight.Bold,
-                    fontSize = 12.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1025,85 +992,6 @@ data class ExpressiveFabMenuItem(
     val containerColor: Color? = null,
     val contentColor: Color? = null
 )
-
-/**
- * Material 3 Expressive `ToggleFloatingActionButton` that morphs from a `20.dp` squircle/pill
- * into a full `CircleShape` (`28.dp`) close button when [checked] is true.
- */
-@ExperimentalMaterial3ExpressiveApi
-@Composable
-fun ToggleFloatingActionButton(
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-    icon: ImageVector = Icons.Rounded.Add,
-    label: String? = null
-) {
-    val cornerRadius by animateDpAsState(
-        targetValue = if (checked) 28.dp else 20.dp,
-        animationSpec = SplitMateMotion.fastSpatial(),
-        label = "ToggleFabCorner"
-    )
-    val iconRotation by animateFloatAsState(
-        targetValue = if (checked) 90f else 0f,
-        animationSpec = SplitMateMotion.fastSpatial(),
-        label = "ToggleFabRotation"
-    )
-    val containerColor by animateColorAsState(
-        targetValue = if (checked) {
-            MaterialTheme.colorScheme.secondaryContainer
-        } else {
-            MaterialTheme.colorScheme.primary
-        },
-        animationSpec = SplitMateMotion.fastEffects(),
-        label = "ToggleFabContainerColor"
-    )
-    val contentColor by animateColorAsState(
-        targetValue = if (checked) {
-            MaterialTheme.colorScheme.onSecondaryContainer
-        } else {
-            MaterialTheme.colorScheme.onPrimary
-        },
-        animationSpec = SplitMateMotion.fastEffects(),
-        label = "ToggleFabContentColor"
-    )
-
-    Surface(
-        onClick = { onCheckedChange(!checked) },
-        shape = if (checked && cornerRadius >= 27.dp) CircleShape else RoundedCornerShape(cornerRadius),
-        color = containerColor,
-        contentColor = contentColor,
-        shadowElevation = 6.dp,
-        modifier = modifier.height(56.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(
-                horizontal = if (!checked && !label.isNullOrBlank()) 20.dp else 16.dp,
-                vertical = 14.dp
-            ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                imageVector = if (checked) Icons.Rounded.Close else icon,
-                contentDescription = label ?: if (checked) "Close menu" else "Open menu",
-                modifier = Modifier
-                    .size(22.dp)
-                    .graphicsLayer { rotationZ = iconRotation }
-            )
-            if (!checked && !label.isNullOrBlank()) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = label,
-                    style = SplitMateExpressiveTypography.labelLargeEmphasized,
-                    fontFamily = FigtreeFontFamily,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 14.sp
-                )
-            }
-        }
-    }
-}
 
 /**
  * SplitMate entry point for the Material 3 Expressive FAB menu.
@@ -1360,96 +1248,53 @@ fun SplitButtonLayout(
     fillWidth: Boolean = false
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
-    // Full-width mode (primary sheet actions) uses the M3E "Medium" 48.dp split-button size.
-    val buttonHeight = if (fillWidth) 48.dp else 40.dp
-    val outerCorner = buttonHeight / 2
-    val trailingInnerCorner by animateDpAsState(
-        targetValue = if (menuExpanded) outerCorner else 4.dp,
-        animationSpec = SplitMateMotion.fastSpatial(),
-        label = "SplitButtonTrailingInnerCorner"
-    )
-    val chevronRotation by animateFloatAsState(
-        targetValue = if (menuExpanded) 180f else 0f,
-        animationSpec = SplitMateMotion.fastSpatial(),
-        label = "SplitButtonChevronRotation"
-    )
-
+    // v2.4.0 Trip Hub step 3: the official M3 Expressive split button (SplitButtonLayout +
+    // SplitButtonDefaults.LeadingButton / TrailingButton): the trailing button's inner corners
+    // morph to a pill while its menu is open, with the library's own press squish and motion.
+    val buttonHeight = if (fillWidth) SplitButtonDefaults.MediumContainerHeight else SplitButtonDefaults.ContainerHeight
+    val colors = ButtonDefaults.buttonColors(containerColor = containerColor, contentColor = contentColor)
     Box(modifier = modifier) {
-        Row(
-            modifier = if (fillWidth) Modifier.fillMaxWidth() else Modifier,
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            // 1. Leading Action Chamber (50% outer start / 4.dp inner end)
-            Button(
-                onClick = onLeadingClick,
-                shape = RoundedCornerShape(
-                    topStart = outerCorner,
-                    bottomStart = outerCorner,
-                    topEnd = 4.dp,
-                    bottomEnd = 4.dp
-                ),
-                contentPadding = PaddingValues(start = 14.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = containerColor,
-                    contentColor = contentColor
-                ),
-                modifier = if (fillWidth) {
-                    Modifier
-                        .weight(1f)
-                        .height(buttonHeight)
-                } else {
-                    Modifier.height(buttonHeight)
-                }
-            ) {
-                if (leadingIcon != null) {
-                    Icon(
-                        imageVector = leadingIcon,
-                        contentDescription = null,
-                        modifier = Modifier.size(if (fillWidth) 18.dp else 16.dp)
+        androidx.compose.material3.SplitButtonLayout(
+            leadingButton = {
+                androidx.compose.material3.SplitButtonDefaults.LeadingButton(
+                    onClick = onLeadingClick,
+                    colors = colors,
+                    modifier = (if (fillWidth) Modifier.fillMaxWidth() else Modifier).heightIn(min = buttonHeight)
+                ) {
+                    if (leadingIcon != null) {
+                        Icon(
+                            imageVector = leadingIcon,
+                            contentDescription = null,
+                            modifier = Modifier.size(if (fillWidth) 18.dp else 16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(if (fillWidth) 8.dp else 6.dp))
+                    }
+                    Text(
+                        text = leadingText,
+                        style = SplitMateExpressiveTypography.labelLargeEmphasized,
+                        maxLines = 1
                     )
-                    Spacer(modifier = Modifier.width(if (fillWidth) 8.dp else 6.dp))
                 }
-                Text(
-                    text = leadingText,
-                    style = SplitMateExpressiveTypography.labelLargeEmphasized,
-                    fontFamily = FigtreeFontFamily,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = if (fillWidth) 14.sp else 12.sp,
-                    maxLines = 1
-                )
-            }
-
-            // 2. Morphing Trailing Menu Cap (D-shape morphing to CircleShape when menuExpanded)
-            Surface(
-                onClick = { menuExpanded = !menuExpanded },
-                shape = if (menuExpanded && trailingInnerCorner >= outerCorner - 1.dp) {
-                    CircleShape
-                } else {
-                    RoundedCornerShape(
-                        topStart = trailingInnerCorner,
-                        bottomStart = trailingInnerCorner,
-                        topEnd = outerCorner,
-                        bottomEnd = outerCorner
-                    )
-                },
-                color = containerColor,
-                contentColor = contentColor,
-                modifier = Modifier
-                    .height(buttonHeight)
-                    .width(if (fillWidth) 48.dp else 36.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Rounded.ExpandMore,
+            },
+            trailingButton = {
+                androidx.compose.material3.SplitButtonDefaults.TrailingButton(
+                    checked = menuExpanded,
+                    onCheckedChange = { menuExpanded = it },
+                    colors = colors,
+                    modifier = Modifier
+                        .heightIn(min = buttonHeight)
+                        .semantics { stateDescription = if (menuExpanded) "Menu expanded" else "Menu collapsed" }
+                ) {
+                    SplitButtonDefaults.TrailingIcon(
+                        checked = menuExpanded,
                         contentDescription = "More actions",
-                        modifier = Modifier
-                            .size(if (fillWidth) 22.dp else 18.dp)
-                            .graphicsLayer { rotationZ = chevronRotation }
+                        iconSize = if (fillWidth) 22.dp else 18.dp
                     )
                 }
-            }
-        }
+            },
+            modifier = if (fillWidth) Modifier.fillMaxWidth() else Modifier,
+            spacing = SplitButtonDefaults.Spacing
+        )
 
         DropdownMenu(
             expanded = menuExpanded,
@@ -1459,31 +1304,18 @@ fun SplitButtonLayout(
                 DropdownMenuItem(
                     text = {
                         Column {
-                            Text(
-                                text = item.label,
-                                fontFamily = FigtreeFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
+                            Text(text = item.label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                             if (!item.subtitle.isNullOrBlank()) {
                                 Text(
                                     text = item.subtitle,
-                                    fontFamily = FigtreeFontFamily,
-                                    fontWeight = FontWeight.Medium,
-                                    fontSize = 11.sp,
+                                    style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
                     },
                     leadingIcon = item.icon?.let { iconVec ->
-                        {
-                            Icon(
-                                imageVector = iconVec,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
+                        { Icon(imageVector = iconVec, contentDescription = null, modifier = Modifier.size(18.dp)) }
                     },
                     onClick = {
                         menuExpanded = false
@@ -1535,21 +1367,20 @@ fun SplitButtonLayout(
     onMenuDismissRequest: () -> Unit = {},
     menuContent: (@Composable ColumnScope.() -> Unit)? = null
 ) {
+    // v2.4.0 Trip Hub step 3: lays out through the official M3 Expressive SplitButtonLayout.
     Box(modifier = modifier) {
-        Row(
-            modifier = if (fillWidth) Modifier.fillMaxWidth() else Modifier,
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(spacing)
-        ) {
-            if (fillWidth) {
-                Box(modifier = Modifier.weight(1f), propagateMinConstraints = true) {
+        androidx.compose.material3.SplitButtonLayout(
+            leadingButton = {
+                if (fillWidth) {
+                    Box(modifier = Modifier.fillMaxWidth(), propagateMinConstraints = true) { leadingButton() }
+                } else {
                     leadingButton()
                 }
-            } else {
-                leadingButton()
-            }
-            trailingButton()
-        }
+            },
+            trailingButton = trailingButton,
+            modifier = if (fillWidth) Modifier.fillMaxWidth() else Modifier,
+            spacing = spacing
+        )
         if (menuContent != null) {
             DropdownMenu(
                 expanded = menuExpanded,
@@ -1597,21 +1428,12 @@ object SplitButtonDefaults {
         contentPadding: PaddingValues = PaddingValues(start = 16.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
         content: @Composable RowScope.() -> Unit
     ) {
-        val outerCorner = height / 2
-        Button(
+        // v2.4.0: the official M3 Expressive leading button (library shapes, press squish, motion).
+        androidx.compose.material3.SplitButtonDefaults.LeadingButton(
             onClick = onClick,
-            modifier = modifier.height(height),
+            modifier = modifier.heightIn(min = height),
             enabled = enabled,
-            shape = RoundedCornerShape(
-                topStart = outerCorner,
-                bottomStart = outerCorner,
-                topEnd = InnerCornerSize,
-                bottomEnd = InnerCornerSize
-            ),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = containerColor,
-                contentColor = contentColor
-            ),
+            colors = ButtonDefaults.buttonColors(containerColor = containerColor, contentColor = contentColor),
             contentPadding = contentPadding,
             content = content
         )
@@ -1637,33 +1459,19 @@ object SplitButtonDefaults {
         collapsedStateDescription: String = "Menu collapsed",
         content: @Composable () -> Unit = { TrailingIcon(checked = checked) }
     ) {
-        val outerCorner = height / 2
-        val innerCorner by animateDpAsState(
-            targetValue = if (checked) outerCorner else InnerCornerSize,
-            animationSpec = SplitMateMotion.fastSpatial(),
-            label = "SplitButtonSlotTrailingInnerCorner"
-        )
+        // v2.4.0: the official M3 Expressive trailing toggle (inner corners morph to a pill while open).
         val stateText = if (checked) expandedStateDescription else collapsedStateDescription
-        Surface(
-            onClick = { onCheckedChange(!checked) },
+        androidx.compose.material3.SplitButtonDefaults.TrailingButton(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
             modifier = modifier
-                .minimumInteractiveComponentSize() // v2.4.0 D2: 48dp touch area for the Mark paid chevron
-                .height(height)
-                .width(width)
+                .heightIn(min = height)
+                .widthIn(min = width)
                 .semantics { stateDescription = stateText },
             enabled = enabled,
-            shape = RoundedCornerShape(
-                topStart = innerCorner,
-                bottomStart = innerCorner,
-                topEnd = outerCorner,
-                bottomEnd = outerCorner
-            ),
-            color = containerColor,
-            contentColor = contentColor
+            colors = ButtonDefaults.buttonColors(containerColor = containerColor, contentColor = contentColor)
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                content()
-            }
+            content()
         }
     }
 

@@ -57,4 +57,36 @@ class SplitMateV240TripHubTest {
         assertEquals("You owe ₹5.00", TripHubLayoutRules.balanceChipLabel(-500, "₹5.00"))
         assertEquals("All settled", TripHubLayoutRules.balanceChipLabel(0, "₹0.00"))
     }
+
+    private val utc = java.time.ZoneOffset.UTC
+
+    @Test
+    fun `trip phase - before, during and after`() {
+        val day = 24 * hour
+        val start = t0 + 2 * day
+        val end = t0 + 4 * day
+        assertEquals(TripHubLayoutRules.TripPhase.BEFORE, TripHubLayoutRules.phaseOf(false, listOf(start, end), t0, utc))
+        assertEquals(TripHubLayoutRules.TripPhase.DURING, TripHubLayoutRules.phaseOf(false, listOf(start, end), t0 + 3 * day, utc))
+        assertEquals(TripHubLayoutRules.TripPhase.AFTER, TripHubLayoutRules.phaseOf(false, listOf(start, end), t0 + 6 * day, utc))
+        assertEquals(TripHubLayoutRules.TripPhase.AFTER, TripHubLayoutRules.phaseOf(true, listOf(start, end), t0, utc), "wrapped up")
+        assertEquals(TripHubLayoutRules.TripPhase.BEFORE, TripHubLayoutRules.phaseOf(false, emptyList(), t0, utc))
+    }
+
+    @Test
+    fun `during the trip Overview leads with today, after it only recent expenses`() {
+        val now = t0
+        val todayCab = exp("cab_today", t0 - 10, now + 2 * hour) to TripHubBookingCategory.CAB
+        val todayTrain = exp("train_today", t0 - 20, now + 5 * hour) to TripHubBookingCategory.TRAIN
+        val tomorrowFlight = exp("flight_tomorrow", t0 - 30, now + 26 * hour) to TripHubBookingCategory.FLIGHT
+        val oldFood = exp("food_old", t0 - 1_000, now - 30 * hour) to TripHubBookingCategory.FOOD
+        val all = listOf(todayCab, todayTrain, tomorrowFlight, oldFood)
+        val schedule: (ExpenseEntity) -> Long = { it.scheduledAtEpochMs ?: it.createdAt }
+        val during = TripHubLayoutRules.overviewItems(all, schedule, now, phase = TripHubLayoutRules.TripPhase.DURING, zone = utc)
+        assertEquals(listOf("train_today", "cab_today"), during.take(2).map { it.first.expenseId }, "today's plan first, tickets first")
+        assertEquals(4, during.size)
+        assertEquals(during.size, during.map { it.first.expenseId }.toSet().size, "no duplicates")
+
+        val after = TripHubLayoutRules.overviewItems(all, schedule, now, phase = TripHubLayoutRules.TripPhase.AFTER, zone = utc)
+        assertEquals(listOf("cab_today", "train_today", "flight_tomorrow"), after.map { it.first.expenseId }, "newest first, no ticket lead")
+    }
 }
