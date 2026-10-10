@@ -1831,22 +1831,22 @@ object CloudGroupSyncRepository {
         // v2.4.0 P4: a version recorded by ANY phone (synced history) counts as a known copy.
         val effectiveHistory = ExpenseVersionSync.withKnown(versionHistory, localDoc?.revisions.orEmpty() + remoteDoc?.revisions.orEmpty())
         val versionDecisions = mutableMapOf<String, com.splitmate.app.ExpenseVersioning.Decision>()
-        // Review F4: compare copies with member ids mapped to this phone's ids (the same person can have
-        // a different member id on another phone), so a stale copy hashes the same as the one we know.
-        fun canonical(e: ExpenseEntity) = e.copy(payerId = memberIdRemap[e.payerId] ?: e.payerId)
-        fun canonical(rows: List<ExpenseSplitEntity>) = rows.map { sp ->
-            val mid = memberIdRemap[sp.memberId] ?: sp.memberId
-            if (mid != sp.memberId) sp.copy(memberId = mid) else sp
-        }
+        // Review F4: compare copies by device-independent member keys (phone number; member id mapped
+        // through the merge's remap only when there is no phone), so the same copy hashes the same on
+        // every phone, matching the fingerprints recorded anywhere.
+        val localMemberKey = com.splitmate.app.ExpenseVersioning.memberKeyOf(localDoc?.members.orEmpty()) { memberIdRemap[it] ?: it }
+        val remoteMemberKey = com.splitmate.app.ExpenseVersioning.memberKeyOf(remoteDoc?.members.orEmpty()) { memberIdRemap[it] ?: it }
         for ((id, localExp) in localExpenseById) {
             val remoteExp = remoteExpenseById[id] ?: continue
             versionDecisions[id] = com.splitmate.app.ExpenseVersioning.decide(
-                local = canonical(localExp),
-                localSplits = canonical(localSplitsByExpense[id].orEmpty()),
-                remote = canonical(remoteExp),
-                remoteSplits = canonical(remoteSplitsByExpense[id].orEmpty()),
+                local = localExp,
+                localSplits = localSplitsByExpense[id].orEmpty(),
+                remote = remoteExp,
+                remoteSplits = remoteSplitsByExpense[id].orEmpty(),
                 localDocWins = localDocWins,
-                history = effectiveHistory
+                history = effectiveHistory,
+                localKey = localMemberKey,
+                remoteKey = remoteMemberKey
             )
         }
         val localWinsExpense: (String) -> Boolean = { id ->
@@ -2455,6 +2455,9 @@ object CloudGroupSyncRepository {
             additionalRemovedMemberPhones.isNotEmpty() ||
             additionalDeletedSettlementIds.isNotEmpty()
 
+        // v2.4.0 review N3: the trip's last local change BEFORE this sync re-stamps it (dates PENDING rows).
+        val priorLocalChangeMs = getLastLocalMutationEpoch(ctx, groupId).takeIf { it > 0L }
+
         // Mark group as having a pending cloud push BEFORE network I/O so if the device is offline,
         // the pending mutation is durably remembered and automatically pushed the instant internet returns!
         if (rawExplicitMutation) {
@@ -2511,7 +2514,9 @@ object CloudGroupSyncRepository {
                 remoteDoc = remoteDoc,
                 editorId = loadedMembers.firstOrNull { it.isCurrentUser }?.memberId ?: normLocalPhone,
                 nowMs = nowMs,
-                context = ctx
+                context = ctx,
+                members = loadedMembers,
+                lastLocalChangeMs = priorLocalChangeMs
             )
             val expenses = prepared.expenses
             mergeHistory = prepared.history

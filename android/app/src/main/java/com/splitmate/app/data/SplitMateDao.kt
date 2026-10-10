@@ -156,8 +156,13 @@ interface SplitMateDao {
     @Query("DELETE FROM settlements WHERE groupId = :groupId AND (fromMemberId = :memberId OR toMemberId = :memberId)")
     suspend fun deleteSettlementsForMember(groupId: String, memberId: String)
 
-    @Query("UPDATE expenses SET payerId = :newPayerId WHERE groupId = :groupId AND payerId = :oldPayerId")
+    /** v2.4.0 review N2: a payer move is a local edit, so the rows become PENDING (versioned next sync). */
+    @Query("UPDATE expenses SET payerId = :newPayerId, syncStatus = 'PENDING' WHERE groupId = :groupId AND payerId = :oldPayerId")
     suspend fun reassignExpensePayer(groupId: String, oldPayerId: String, newPayerId: String)
+
+    /** v2.4.0 review N2: share-only edits mark their expense PENDING too. */
+    @Query("UPDATE expenses SET syncStatus = 'PENDING' WHERE expenseId IN (:expenseIds)")
+    suspend fun markExpensesPending(expenseIds: List<String>)
 
     @Query("UPDATE expenses SET syncStatus = 'SYNCED' WHERE syncStatus = 'PENDING'")
     suspend fun markPendingExpensesSynced()

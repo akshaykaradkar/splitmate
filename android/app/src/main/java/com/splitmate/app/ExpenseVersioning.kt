@@ -33,15 +33,21 @@ object ExpenseVersioning {
      * included (not `categoryRef` / `createdByPhone`, which apps older than v2.3.5 drop), and never
      * sync bookkeeping (status, version, editor).
      */
-    fun contentHash(expense: ExpenseEntity, splits: List<ExpenseSplitEntity>): String {
+    fun contentHash(
+        expense: ExpenseEntity,
+        splits: List<ExpenseSplitEntity>,
+        /** Review F4: device-independent member key (phone number when known); see [memberKeyOf]. */
+        memberKey: (String) -> String = { it }
+    ): String {
         val rows = splits
             .filter { it.expenseId == expense.expenseId }
-            .sortedWith(compareBy<ExpenseSplitEntity> { it.memberId }.thenBy { it.finalOwedCents })
-            .joinToString(";") { "${it.memberId}=${it.finalOwedCents}/${it.baseClaimedCents}" }
+            .map { memberKey(it.memberId) to it }
+            .sortedWith(compareBy<Pair<String, ExpenseSplitEntity>> { it.first }.thenBy { it.second.finalOwedCents })
+            .joinToString(";") { (key, sp) -> "$key=${sp.finalOwedCents}/${sp.baseClaimedCents}" }
         val canonical = listOf(
             expense.expenseId,
             expense.title.trim(),
-            expense.payerId,
+            memberKey(expense.payerId),
             expense.totalAmountCents,
             expense.baseSubtotalCents,
             expense.taxCents,
@@ -57,6 +63,22 @@ object ExpenseVersioning {
         return digest.take(16).joinToString("") { "%02x".format(it) }
     }
 
+    /**
+     * Review F4: the same person can have a different member id on each phone (placeholder rows,
+     * `_me` ids, older apps). Keying members by their 10-digit phone (member id only when there is
+     * none) makes a copy hash the same on every phone. [fallback] maps an id without a phone (e.g.
+     * through the merge's member remap) before it is used as the key.
+     */
+    fun memberKeyOf(
+        members: List<com.splitmate.app.data.GroupMemberEntity>,
+        fallback: (String) -> String = { it }
+    ): (String) -> String {
+        val phoneById = members.associate { m ->
+            m.memberId to com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(m.userPhone, m.upiId)
+        }
+        return { id -> phoneById[id]?.takeIf { it.length == 10 }?.let { "p:$it" } ?: "m:${fallback(id)}" }
+    }
+
     /** Hybrid logical clock: never below wall time, always above every version already seen. */
     fun nextVersion(nowMs: Long, maxSeenVersion: Long): Long = maxOf(nowMs, maxSeenVersion + 1)
 
@@ -64,14 +86,19 @@ object ExpenseVersioning {
     data class History(
         val knownHashesByExpense: Map<String, Set<String>> = emptyMap(),
         val maxSeenVersion: Long = 0L,
-        /** Highest version of each expense this phone has a record of (its history is complete up to it). */
-        val maxKnownVersionByExpense: Map<String, Long> = emptyMap()
+        /**
+         * Lowest version of each expense this phone observed ITSELF (entries received from other
+         * phones' synced history don't count). Review N1: a phone that first saw an expense at version
+         * T (joined or reinstalled later) can't tell a stale copy from a real edit below T.
+         */
+        val firstOwnVersionByExpense: Map<String, Long> = emptyMap()
     ) {
         fun knows(expenseId: String, hash: String): Boolean =
             knownHashesByExpense[expenseId]?.contains(hash) == true
 
+        /** True when this phone itself saw this expense before [version] (so its record covers it). */
         fun isCompleteUpTo(expenseId: String, version: Long): Boolean =
-            (maxKnownVersionByExpense[expenseId] ?: -1L) >= version
+            firstOwnVersionByExpense[expenseId]?.let { it < version } == true
     }
 
     enum class Side { LOCAL, REMOTE }
@@ -90,15 +117,17 @@ object ExpenseVersioning {
         remote: ExpenseEntity,
         remoteSplits: List<ExpenseSplitEntity>,
         localDocWins: Boolean,
-        history: History?
+        history: History?,
+        localKey: (String) -> String = { it },
+        remoteKey: (String) -> String = { it }
     ): Decision {
         val lv = local.rowVersion
         val rv = remote.rowVersion
         if (lv <= 0L && rv <= 0L) {
             return Decision(if (localDocWins) Side.LOCAL else Side.REMOTE)
         }
-        val localHash = contentHash(local, localSplits)
-        val remoteHash = contentHash(remote, remoteSplits)
+        val localHash = contentHash(local, localSplits, localKey)
+        val remoteHash = contentHash(remote, remoteSplits, remoteKey)
         if (lv > 0L && rv > 0L) {
             val side = when {
                 lv != rv -> if (lv > rv) Side.LOCAL else Side.REMOTE
@@ -120,10 +149,10 @@ object ExpenseVersioning {
             return Decision(if (localDocWins) Side.LOCAL else Side.REMOTE)
         }
         if (history.knows(unversioned.expenseId, unversionedHash)) return Decision(versionedSide)
-        // Review F3: only adopt an unknown unversioned copy when this phone's history of the expense is
-        // complete up to the versioned side. A phone that joined late (or pruned old entries) can't
-        // tell a stale copy from a real edit, so it keeps the versioned side; a phone with the full
-        // history adopts a genuine old-app edit and its legacy version then reaches everyone.
+        // Review F3/N1: only adopt an unknown unversioned copy when this phone itself saw the expense
+        // before the versioned side (its own, never-pruned record covers it). A phone that joined or
+        // reinstalled later can't tell a stale copy from a real edit, so it keeps the versioned side;
+        // a phone with the full record adopts a genuine old-app edit and its legacy version spreads.
         if (!history.isCompleteUpTo(unversioned.expenseId, versionedVersion)) return Decision(versionedSide)
         val unversionedSide = if (versionedSide == Side.LOCAL) Side.REMOTE else Side.LOCAL
         return Decision(unversionedSide, stampVersion = versionedVersion + 1)

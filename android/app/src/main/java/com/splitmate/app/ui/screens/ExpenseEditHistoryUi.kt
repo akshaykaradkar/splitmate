@@ -67,7 +67,11 @@ object ExpenseHistoryPresentation {
 
     /** Newest first. Seeds and losing copies are not shown, but they are the "before" amounts. */
     fun changes(revisions: List<ExpenseRevisionEntity>): List<Change> {
-        val ordered = revisions.sortedWith(compareBy<ExpenseRevisionEntity> { it.observedAtEpochMs }.thenBy { it.rowVersion })
+        // Entries received from other phones carry a storage prefix; they display like any other.
+        val ordered = revisions
+            .map { it.copy(kind = com.splitmate.app.data.ExpenseVersionSync.baseKind(it.kind)) }
+            .distinctBy { "${it.rowVersion}|${it.contentHash}|${it.kind}" }
+            .sortedWith(compareBy<ExpenseRevisionEntity> { it.observedAtEpochMs }.thenBy { it.rowVersion })
         val baseline = ordered.filter { it.kind != "superseded" }
         val out = mutableListOf<Change>()
         var previous: ExpenseRevisionEntity? = null

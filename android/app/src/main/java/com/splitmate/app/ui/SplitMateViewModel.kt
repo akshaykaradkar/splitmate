@@ -2650,6 +2650,7 @@ class SplitMateViewModel(
             replacementSplitsByExpenseId.forEach { (expId, newSplits) ->
                 d.replaceExpenseSplits(expId, newSplits)
             }
+            d.markExpensesPending(replacementSplitsByExpenseId.keys.toList()) // v2.4.0 review N2
             val userPhone10 = resolveEffectiveUserPhone10(d)
             runCatching {
                 com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
@@ -3721,6 +3722,7 @@ class SplitMateViewModel(
                 replacementSplitsByExpenseId.forEach { (expId, newSplits) ->
                     d.replaceExpenseSplits(expId, newSplits)
                 }
+                d.markExpensesPending((updatedGroupExpenses.map { it.expenseId } + replacementSplitsByExpenseId.keys).distinct()) // v2.4.0 review N2
                 d.deleteSettlementsForMember(groupId, targetMemberId)
                 d.deleteMemberById(targetMemberId)
                 com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(

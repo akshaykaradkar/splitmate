@@ -34,10 +34,15 @@ class SplitMateV240MoneySafetyTest {
         groupId = id, name = "Ratnagiri", currencyCode = "INR", iconName = "Flight", isDemoSeed = false, createdAt = t0
     )
 
+    private val allMembers = mutableListOf<GroupMemberEntity>()
+
     private fun member(id: String, gid: String, name: String, phone: String, me: Boolean = false) = GroupMemberEntity(
         memberId = id, groupId = gid, name = name, avatarSeed = "$name|Neutral|open-peeps|Buckwheat",
         isCurrentUser = me, upiId = "$phone@upi", userPhone = phone, inviteStatus = "JOINED"
-    )
+    ).also { allMembers += it }
+
+    /** Same device-independent member key the sync uses (phone number). */
+    private fun key(): (String) -> String = ExpenseVersioning.memberKeyOf(allMembers.toList())
 
     private fun expense(id: String, gid: String, payer: String, total: Long, rv: Long = 0L, by: String? = null, title: String = "Bike rentals") =
         ExpenseEntity(
@@ -64,10 +69,10 @@ class SplitMateV240MoneySafetyTest {
         )
 
     private fun historyOf(vararg pairs: Pair<ExpenseEntity, List<ExpenseSplitEntity>>) = ExpenseVersioning.History(
-        knownHashesByExpense = pairs.groupBy({ it.first.expenseId }, { ExpenseVersioning.contentHash(it.first, it.second) })
+        knownHashesByExpense = pairs.groupBy({ it.first.expenseId }, { ExpenseVersioning.contentHash(it.first, it.second, key()) })
             .mapValues { it.value.toSet() },
         maxSeenVersion = pairs.maxOf { it.first.rowVersion },
-        maxKnownVersionByExpense = pairs.groupBy({ it.first.expenseId }, { it.first.rowVersion }).mapValues { it.value.max() }
+        firstOwnVersionByExpense = pairs.groupBy({ it.first.expenseId }, { it.first.rowVersion }).mapValues { it.value.min() }
     )
 
     private fun merge(local: CloudGroupLedgerDocument, remote: CloudGroupLedgerDocument, h: ExpenseVersioning.History?) =
@@ -274,7 +279,7 @@ class SplitMateV240MoneySafetyTest {
         val stamped = stamps2.getValue("exp_s")
         assertEquals(t0 + 50_001, stamped.rowVersion)
         assertEquals("m1", stamped.rowUpdatedBy)
-        assertEquals(listOf("local"), revs2.map { it.kind })
+        assertEquals(listOf("local", "superseded"), revs2.map { it.kind }, "the replaced copy is kept as a fingerprint")
     }
 
     @Test
@@ -369,7 +374,8 @@ class SplitMateV240MoneySafetyTest {
         val edited = expense("exp_e", gid, "m1", 4_950L)
         val (stamps, revs) = ExpenseVersionSync.planLocalStamps(
             listOf(untouched, pending, edited), shares(untouched, people) + shares(pending, people) + shares(edited, people),
-            emptyList(), emptySequence(), "m1", nowMs = t0 + 100, editTimeOf = { id -> if (id == "exp_e") t0 + 50 else null }
+            emptyList(), emptySequence(), "m1", nowMs = t0 + 100, editTimeOf = { id -> if (id == "exp_e") t0 + 50 else null },
+            lastLocalChangeMs = t0 + 60 // B's offline edit on the old app happened at t0 + 60
         )
         assertEquals(setOf("exp_p", "exp_e"), stamps.keys)
         assertEquals(t0 + 50, stamps.getValue("exp_e").rowVersion)
@@ -401,7 +407,8 @@ class SplitMateV240MoneySafetyTest {
         val people = sixPeople(gid).take(2)
         val v1 = expense("exp_f3", gid, "m1", 495_000L, rv = t0 + 10, by = "m2")
         val staleUnknown = expense("exp_f3", gid, "m1", 795_000L) // this phone never saw 7,950
-        val joinedLate = ExpenseVersioning.History(maxKnownVersionByExpense = mapOf("exp_f3" to 0L))
+        // This phone first saw the expense at version T (joined/reinstalled later): incomplete record.
+        val joinedLate = ExpenseVersioning.History(firstOwnVersionByExpense = mapOf("exp_f3" to t0 + 10))
         val merged = merge(
             doc(gid, people, listOf(v1), shares(v1, people), at = t0),
             doc(gid, people, listOf(staleUnknown), shares(staleUnknown, people), at = t0 + day),
@@ -455,6 +462,36 @@ class SplitMateV240MoneySafetyTest {
         assertEquals("concurrent", revs2.first { it.rowVersion == t0 + 9 }.kind)
     }
 
+    @Test
+    fun `N1 - received history never counts as this phone's own record, and a replaced copy becomes a fingerprint`() {
+        val gid = "g_v240_n1"
+        val people = sixPeople(gid).take(2)
+        val received = ExpenseRevisionEntity("x_5_h", "x", gid, 5L, "h", "", 1L, "m1", null, t0, "rx-local")
+        val own = ExpenseRevisionEntity("x_9_g", "x", gid, 9L, "g", "", 1L, "m1", null, t0, "remote")
+        val h = ExpenseVersionSync.historyOf(listOf(received, own))
+        assertFalse(h.isCompleteUpTo("x", 9L), "first own observation is 9; the received 5 doesn't count")
+        assertTrue(h.knows("x", "h"), "received entries still add known copies")
+
+        val v0 = expense("exp_n1", gid, "m1", 795_000L)
+        val seeds = ExpenseVersionSync.planLocalStamps(listOf(v0), shares(v0, people), emptyList(), emptySequence(), "m1", t0).second
+        val edited = v0.copy(totalAmountCents = 495_000L, baseSubtotalCents = 495_000L, syncStatus = "PENDING")
+        val (_, revs) = ExpenseVersionSync.planLocalStamps(listOf(edited), shares(edited, people), seeds, emptySequence(), "m1", t0 + 5)
+        val fp = revs.single { it.kind == "superseded" }
+        assertEquals(seeds.single().contentHash, fp.contentHash)
+        assertTrue(fp.revisionId.endsWith("_fp"), "fingerprint never collides with the displayed entry")
+        val wire = ExpenseVersionSync.decodeRevisions(ExpenseVersionSync.encodeRevisions(listOf(fp)), gid).single()
+        assertEquals(fp.revisionId, wire.revisionId)
+    }
+
+    @Test
+    fun `N3 - a PENDING row without an edit time is versioned by its creation time, not now`() {
+        val gid = "g_v240_n3"
+        val people = sixPeople(gid).take(2)
+        val stalePending = expense("exp_n3", gid, "m1", 795_000L).copy(syncStatus = "PENDING")
+        val (stamps, _) = ExpenseVersionSync.planLocalStamps(listOf(stalePending), shares(stalePending, people), emptyList(), emptySequence(), "m1", nowMs = t0 + 5 * day)
+        assertEquals(t0, stamps.getValue("exp_n3").rowVersion, "createdAt, so a newer real edit elsewhere still wins")
+    }
+
     // --------------------------------------------------------------------------------------------
     // P4 presentation
     // --------------------------------------------------------------------------------------------
@@ -490,14 +527,15 @@ class SplitMateV240MoneySafetyTest {
     private class Phone(val id: String, val oldApp: Boolean, val clockSkew: Long) {
         var doc: CloudGroupLedgerDocument? = null
         val known = mutableMapOf<String, MutableSet<String>>()
-        val maxKnown = mutableMapOf<String, Long>()
+        val firstOwn = mutableMapOf<String, Long>()
         var maxSeen = 0L
-        fun history() = ExpenseVersioning.History(known.mapValues { it.value.toSet() }, maxSeen, maxKnown.toMap())
+        fun history() = ExpenseVersioning.History(known.mapValues { it.value.toSet() }, maxSeen, firstOwn.toMap())
         fun remember(d: CloudGroupLedgerDocument?) {
             d ?: return
+            val k = ExpenseVersioning.memberKeyOf(d.members)
             d.expenses.forEach { e ->
-                known.getOrPut(e.expenseId) { mutableSetOf() } += ExpenseVersioning.contentHash(e, d.splits)
-                maxKnown[e.expenseId] = maxOf(maxKnown[e.expenseId] ?: -1L, e.rowVersion)
+                known.getOrPut(e.expenseId) { mutableSetOf() } += ExpenseVersioning.contentHash(e, d.splits, k)
+                firstOwn[e.expenseId] = minOf(firstOwn[e.expenseId] ?: Long.MAX_VALUE, e.rowVersion)
                 maxSeen = maxOf(maxSeen, e.rowVersion)
             }
         }

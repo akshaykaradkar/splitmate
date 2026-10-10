@@ -28,7 +28,8 @@ object ExpenseEditClock {
             memory[id] = value
             editor?.putLong(id, value)
         }
-        editor?.apply()
+        // Review N2: written synchronously, so an edit committed to Room never loses its edit time.
+        editor?.commit()
     }
 
     fun editTimeOf(context: Context?, expenseId: String): Long? =
