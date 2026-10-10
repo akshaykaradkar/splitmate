@@ -70,6 +70,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.rounded.Route
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
@@ -226,10 +227,10 @@ import kotlin.math.abs
 // 1. TRIP HUB SECTION TABS & CATEGORY CLASSIFIER (100% REAL ROOM DATA)
 // ==============================================================================
 
+/** v2.4.0 Trip Hub step 2: 4 tabs. Tickets now sit on their day in Plan (the Travel tab is gone). */
 enum class TripHubSectionTab(val title: String) {
     OVERVIEW("Overview"),
     PLAN("Plan"),
-    TRAVEL("Travel"),
     MONEY("Money"),
     PEOPLE("People")
 }
@@ -1178,16 +1179,6 @@ fun TripHomeScreen(
                 .nestedScroll(collapsingHeaderState.nestedScrollConnection)
         ) {
             TripHubCollapsingHeader(state = collapsingHeaderState) {
-            if (selectedSectionTab == TripHubSectionTab.TRAVEL && groupExpenses.isNotEmpty()) {
-                DynamicCategorySubFilterRow(
-                    categoryCounts = categoryCounts,
-                    selectedCategory = selectedCategoryFilter,
-                    onSelectCategory = { cat ->
-                        performCrispTactileHaptic(context, localView, heavy = false)
-                        selectedCategoryFilter = cat
-                    }
-                )
-            }
 
             // =================================================================
             // SUBTASK 3.1.3: COMPACT PERSPECTIVE NET BALANCE STRIP
@@ -1399,38 +1390,25 @@ fun TripHomeScreen(
                 }
 
                 TripHubSectionTab.PLAN -> {
-                    // v2.3.4: Bookings | Explore | Loop. The existing timeline is the Bookings sub-view, unchanged.
+                    // v2.4.0 Trip Hub step 2: Days | Explore. Tickets sit on their day (signature ticket
+                    // card); Loop opens from a "Make a loop" button on each day.
                     TripPlanTabHost(
                         groupId = resolvedGroupId,
-                        bookingsContent = {
+                        bookingsContent = { onMakeLoop ->
                             TripHubPlanTimelineView(
-                                classifiedExpenses = filteredClassifiedExpenses,
+                                classifiedExpenses = classifiedExpenses,
                                 groupMembers = groupMembers,
                                 onOpenTrainPnrReviewClick = onOpenTrainPnrReviewClick,
                                 onOpenFlightReviewClick = onOpenFlightReviewClick,
-                                onLogQuickExpenseClick = onLogQuickExpenseClick
+                                onLogQuickExpenseClick = onLogQuickExpenseClick,
+                                allSplits = groupSplits,
+                                activePerspectiveMember = activePerspectiveMember,
+                                onInspectBerthChart = { exp, snap -> inspectedBerthChartSnapshot = exp to snap },
+                                onDeleteExpense = { expenseId -> viewModel.rollbackExpense(expenseId) },
+                                onMakeLoop = onMakeLoop
                             )
                         },
                         onSubViewChanged = { planSubView = it }
-                    )
-                }
-
-                TripHubSectionTab.TRAVEL -> {
-                    TripHubTravelWalletView(
-                        classifiedExpenses = filteredClassifiedExpenses,
-                        firstTrainExpenseId = firstTrainExpenseId,
-                        groupMembers = groupMembers,
-                        allSplits = groupSplits,
-                        activePerspectiveMember = activePerspectiveMember,
-                        onOpenTrainPnrReviewClick = onOpenTrainPnrReviewClick,
-                        onOpenFlightReviewClick = onOpenFlightReviewClick,
-                        onSwitchToClassicLedgerClick = onSwitchToClassicLedgerClick,
-                        onInspectBerthChart = { exp, snap ->
-                            inspectedBerthChartSnapshot = exp to snap
-                        },
-                        onDeleteExpense = { expenseId ->
-                            viewModel.rollbackExpense(expenseId)
-                        }
                     )
                 }
 
@@ -1989,7 +1967,6 @@ private fun TripHubSectionTabsRow(
 private fun tripHubSectionIcon(tab: TripHubSectionTab, selected: Boolean): ImageVector = when (tab) {
     TripHubSectionTab.OVERVIEW -> if (selected) Icons.Rounded.SpaceDashboard else Icons.Outlined.SpaceDashboard
     TripHubSectionTab.PLAN -> if (selected) Icons.Rounded.Map else Icons.Outlined.Map
-    TripHubSectionTab.TRAVEL -> if (selected) Icons.Rounded.ConfirmationNumber else Icons.Outlined.ConfirmationNumber
     TripHubSectionTab.MONEY -> if (selected) Icons.Rounded.AccountBalanceWallet else Icons.Outlined.AccountBalanceWallet
     TripHubSectionTab.PEOPLE -> if (selected) Icons.Rounded.Group else Icons.Outlined.Group
 }
@@ -4587,7 +4564,13 @@ private fun TripHubPlanTimelineView(
     groupMembers: List<GroupMemberEntity>,
     onOpenTrainPnrReviewClick: (String) -> Unit,
     onOpenFlightReviewClick: (String) -> Unit,
-    onLogQuickExpenseClick: () -> Unit
+    onLogQuickExpenseClick: () -> Unit,
+    allSplits: List<ExpenseSplitEntity> = emptyList(),
+    activePerspectiveMember: GroupMemberEntity? = null,
+    onInspectBerthChart: (ExpenseEntity, LivePnrStatusSnapshot?) -> Unit = { _, _ -> },
+    onDeleteExpense: (String) -> Unit = {},
+    /** v2.4.0: opens the day loop (null when the guide is off). */
+    onMakeLoop: (() -> Unit)? = null
 ) {
     if (classifiedExpenses.isEmpty()) {
         LazyColumn(
@@ -4662,17 +4645,33 @@ private fun TripHubPlanTimelineView(
                             color = TripHubTokens.TextPrimary
                         )
                     }
-                    Text(
-                        text = "${dayItems.size} ${if (dayItems.size == 1) "item" else "items"}",
-                        style = MaterialTheme.typography.labelSmall.merge(
-                            TextStyle(
-                                fontFamily = SplitMateTnumMonospace,
-                                fontWeight = FontWeight.SemiBold,
-                                fontFeatureSettings = "tnum"
-                            )
-                        ),
-                        color = TripHubTokens.TextMuted
-                    )
+                    if (onMakeLoop != null) {
+                        // v2.4.0 Trip Hub step 2: Loop plans one day's route, so it lives on the day.
+                        androidx.compose.material3.FilledTonalButton(
+                            onClick = onMakeLoop,
+                            shape = CircleShape,
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                            modifier = Modifier
+                                .defaultMinSize(minHeight = 40.dp)
+                                .semantics { contentDescription = "Make a loop for day ${dayIndex + 1}" }
+                        ) {
+                            Icon(imageVector = Icons.Rounded.Route, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(text = "Make a loop", style = MaterialTheme.typography.labelLarge)
+                        }
+                    } else {
+                        Text(
+                            text = "${dayItems.size} ${if (dayItems.size == 1) "item" else "items"}",
+                            style = MaterialTheme.typography.labelSmall.merge(
+                                TextStyle(
+                                    fontFamily = SplitMateTnumMonospace,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontFeatureSettings = "tnum"
+                                )
+                            ),
+                            color = TripHubTokens.TextMuted
+                        )
+                    }
                 }
             }
 
@@ -4680,6 +4679,25 @@ private fun TripHubPlanTimelineView(
                 items = dayItems,
                 key = { _, it -> "plan_${it.first.expenseId}" }
             ) { itemIndex, (expense, category, schedule) ->
+                if (TripHubLayoutRules.isTicket(category)) {
+                    // v2.4.0 Trip Hub step 2: tickets keep their signature card (and open animation) on their day.
+                    TripHubFeedCard(
+                        expense = expense,
+                        category = category,
+                        legNumber = (dayItems.filter { it.second == TripHubBookingCategory.TRAIN }.indexOfFirst { it.first.expenseId == expense.expenseId } + 1).coerceAtLeast(1),
+                        groupMembers = groupMembers,
+                        allSplits = allSplits,
+                        activePerspectiveMember = activePerspectiveMember,
+                        onOpenTrainPnrReviewClick = onOpenTrainPnrReviewClick,
+                        onOpenFlightReviewClick = onOpenFlightReviewClick,
+                        onInspectBerthChart = onInspectBerthChart,
+                        onDeleteExpense = onDeleteExpense,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)
+                    )
+                    return@itemsIndexed
+                }
                 val payer = groupMembers.find { it.memberId == expense.payerId }
                 val timeLabel = schedule.timeLabel
                 val itemShape = segmentedIslandItemShape(

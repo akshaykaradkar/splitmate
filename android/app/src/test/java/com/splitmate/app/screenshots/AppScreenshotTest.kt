@@ -135,7 +135,8 @@ class AppScreenshotTest {
     // Full-app design audit coverage (every main surface).
     @Test fun s18_trip_plan_tab() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Plan"); shot("18_trip_plan_tab") }
 
-    @Test fun s19_trip_travel_tab() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Travel", exact = true); shot("19_trip_travel_tab") }
+    // v2.4.0: the Travel tab moved into Plan (tickets on their day).
+    @Test fun s19_trip_plan_days() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Plan", exact = true); shot("19_trip_plan_days") }
 
     @Test fun s20_trip_people_tab() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "People"); shot("20_trip_people_tab") }
 

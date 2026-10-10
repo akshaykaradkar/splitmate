@@ -29,6 +29,11 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -52,7 +57,7 @@ fun TripPlanTab(
     state: TripGuideUiState,
     actions: TripGuideActions,
     effects: Flow<TripGuideEffect>,
-    bookingsContent: @Composable () -> Unit,
+    bookingsContent: @Composable (onMakeLoop: (() -> Unit)?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val motion = LocalMotionScheme.current
@@ -60,8 +65,10 @@ fun TripPlanTab(
     PlanEffectsCollector(effects = effects, snackbarHostState = snackbarHostState)
 
     // Remote kill-switch: without the guide only Bookings remains, so the switch disappears.
-    val options = if (state.guideEnabled) PlanSubView.entries.toList() else listOf(PlanSubView.BOOKINGS)
-    val current = if (state.subView in options) state.subView else PlanSubView.BOOKINGS
+    // v2.4.0: Days | Explore in the switch; Loop is reached from a day ("Make a loop").
+    val options = if (state.guideEnabled) listOf(PlanSubView.BOOKINGS, PlanSubView.EXPLORE) else listOf(PlanSubView.BOOKINGS)
+    val reachable = if (state.guideEnabled) PlanSubView.entries.toList() else listOf(PlanSubView.BOOKINGS)
+    val current = if (state.subView in reachable) state.subView else PlanSubView.BOOKINGS
 
     // Stay sheet: opened manually (Stay chip / Loop CTA) or automatically whenever the ViewModel
     // reports stay feedback (e.g. a Maps link shared into the app). A dismissed feedback value
@@ -94,7 +101,24 @@ fun TripPlanTab(
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            if (options.size > 1) {
+            if (current == PlanSubView.LOOP) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
+                ) {
+                    androidx.compose.material3.TextButton(
+                        onClick = { actions.selectSubView(PlanSubView.BOOKINGS) },
+                        modifier = Modifier.defaultMinSize(minHeight = 48.dp)
+                    ) {
+                        androidx.compose.material3.Icon(
+                            imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Rounded.ArrowBack,
+                            contentDescription = null
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        androidx.compose.material3.Text("Back to days")
+                    }
+                }
+            } else if (options.size > 1) {
                 ConnectedButtonGroup(
                     options = options,
                     selectedIndex = options.indexOf(current),
@@ -120,7 +144,9 @@ fun TripPlanTab(
                 label = "PlanSubViewCrossfade"
             ) { view ->
                 when (view) {
-                    PlanSubView.BOOKINGS -> bookingsContent()
+                    PlanSubView.BOOKINGS -> bookingsContent(
+                        if (state.guideEnabled) ({ actions.selectSubView(PlanSubView.LOOP) }) else null
+                    )
                     PlanSubView.EXPLORE -> ExploreGuideView(
                         state = state,
                         actions = actions,

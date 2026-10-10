@@ -19,7 +19,8 @@ import com.splitmate.app.data.guide.nav.TravelMode
  */
 
 /** Sub-view switcher inside the Plan tab (decision #9). */
-enum class PlanSubView(val label: String) { BOOKINGS("Bookings"), EXPLORE("Explore"), LOOP("Loop") }
+/** v2.4.0: the switch shows Days | Explore; LOOP opens from "Make a loop" on a day. */
+enum class PlanSubView(val label: String) { BOOKINGS("Days"), EXPLORE("Explore"), LOOP("Loop") }
 
 /** Guide lifecycle (audit §5.3). */
 sealed interface GuidePhase {

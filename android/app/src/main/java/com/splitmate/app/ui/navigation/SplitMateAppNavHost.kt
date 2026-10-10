@@ -140,7 +140,8 @@ enum class TripHubTab(val title: String) {
     fun toSectionTab(): TripHubSectionTab = when (this) {
         OVERVIEW -> TripHubSectionTab.OVERVIEW
         PLAN -> TripHubSectionTab.PLAN
-        TRAVEL -> TripHubSectionTab.TRAVEL
+        // v2.4.0: the Travel tab moved into Plan (tickets on their day); old links open Plan.
+        TRAVEL -> TripHubSectionTab.PLAN
         MONEY -> TripHubSectionTab.MONEY
         PEOPLE -> TripHubSectionTab.PEOPLE
     }

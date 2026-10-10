@@ -27,7 +27,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 @Composable
 fun TripPlanTabHost(
     groupId: String,
-    bookingsContent: @Composable () -> Unit,
+    bookingsContent: @Composable (onMakeLoop: (() -> Unit)?) -> Unit,
     onSubViewChanged: (PlanSubView) -> Unit,
     modifier: Modifier = Modifier
 ) {

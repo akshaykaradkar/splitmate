@@ -127,7 +127,7 @@ class SplitMateV234PlanUiComplianceTest {
             assertTrue(
                 Regex(
                     """fun TripPlanTab\(\s*state: TripGuideUiState,\s*actions: TripGuideActions,\s*""" +
-                        """effects: Flow<TripGuideEffect>,\s*bookingsContent: @Composable \(\) -> Unit,\s*""" +
+                        """effects: Flow<TripGuideEffect>,\s*bookingsContent: @Composable \(onMakeLoop: \(\(\) -> Unit\)\?\) -> Unit,\s*""" +
                         """modifier: Modifier = Modifier\s*\)"""
                 ).containsMatchIn(s),
                 "TripPlanTab signature changed"
@@ -145,7 +145,7 @@ class SplitMateV234PlanUiComplianceTest {
             assertTrue(group in 0 until wavy, "Wavy bar must follow the switch")
             assertTrue(wavy < content, "Wavy bar must sit above the sub-view content")
             assertTrue(body.contains("actions.selectSubView(view)"))
-            assertTrue(body.contains("PlanSubView.BOOKINGS -> bookingsContent()"), "Bookings renders the timeline unchanged")
+            assertTrue(body.contains("PlanSubView.BOOKINGS -> bookingsContent("), "Days renders the timeline (v2.4.0: with the Make a loop hook)")
             assertTrue(body.contains("if (state.guideEnabled)"), "Kill-switch must hide Explore and Loop")
         }
 
@@ -390,13 +390,13 @@ class SplitMateV234PlanUiComplianceTest {
         fun tripHomeIntegration() {
             val home = src("ui/screens/TripHomeScreen.kt")
             val planStart = home.indexOf("TripHubSectionTab.PLAN -> {")
-            val planEnd = home.indexOf("TripHubSectionTab.TRAVEL -> {", planStart)
+            val planEnd = home.indexOf("TripHubSectionTab.MONEY -> {", planStart)
             assertTrue(planStart > 0 && planEnd > planStart, "PLAN branch not found")
             val branch = home.substring(planStart, planEnd)
             assertTrue(branch.contains("TripPlanTabHost("))
             assertTrue(branch.contains("groupId = resolvedGroupId"))
-            assertTrue(branch.contains("bookingsContent = {"))
-            assertTrue(branch.indexOf("TripHubPlanTimelineView(") > branch.indexOf("bookingsContent = {"))
+            assertTrue(branch.contains("bookingsContent = { onMakeLoop ->"))
+            assertTrue(branch.indexOf("TripHubPlanTimelineView(") > branch.indexOf("bookingsContent = { onMakeLoop ->"))
             assertTrue(branch.contains("onSubViewChanged = { planSubView = it }"))
 
             val fabStart = home.indexOf("floatingActionButton = {")
@@ -413,7 +413,7 @@ class SplitMateV234PlanUiComplianceTest {
             val s = plan("TripPlanTabHost.kt")
             assertTrue(
                 Regex(
-                    """fun TripPlanTabHost\(\s*groupId: String,\s*bookingsContent: @Composable \(\) -> Unit,\s*""" +
+                    """fun TripPlanTabHost\(\s*groupId: String,\s*bookingsContent: @Composable \(onMakeLoop: \(\(\) -> Unit\)\?\) -> Unit,\s*""" +
                         """onSubViewChanged: \(PlanSubView\) -> Unit,\s*modifier: Modifier = Modifier\s*\)"""
                 ).containsMatchIn(s)
             )
