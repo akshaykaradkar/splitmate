@@ -2518,8 +2518,9 @@ object CloudGroupSyncRepository {
                 editorId = loadedMembers.firstOrNull { it.isCurrentUser }?.memberId ?: normLocalPhone,
                 nowMs = nowMs,
                 context = ctx,
-                // Review R1: the same phone-patched member list the local document and merge use.
-                members = members,
+                // Review R1/Q1: the phone-patched local list plus the cloud's members, the same set the
+                // merge decision resolves against.
+                members = members + remoteDoc?.members.orEmpty(),
                 lastLocalChangeMs = priorLocalChangeMs
             )
             val expenses = prepared.expenses

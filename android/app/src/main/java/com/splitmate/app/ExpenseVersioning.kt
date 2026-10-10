@@ -73,8 +73,12 @@ object ExpenseVersioning {
         members: List<com.splitmate.app.data.GroupMemberEntity>,
         fallback: (String) -> String = { it }
     ): (String) -> String {
-        val phoneById = members.associate { m ->
-            m.memberId to com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(m.userPhone, m.upiId)
+        // Review Q1: the same member id can appear in several documents, with a phone in one and not in
+        // another (e.g. an owner row patched locally but phoneless in the cloud). Any known phone wins,
+        // so every resolver built from any mix of documents gives the same key.
+        val phoneById = members.groupBy { it.memberId }.mapValues { (_, rows) ->
+            rows.map { com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(it.userPhone, it.upiId) }
+                .firstOrNull { it.length == 10 }
         }
         return { id ->
             val mapped = fallback(id)

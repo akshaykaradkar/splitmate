@@ -514,6 +514,30 @@ class SplitMateV240MoneySafetyTest {
     }
 
     @Test
+    fun `Q1 - owner phoneless in the cloud but phone-patched locally - stale copy on first sync still loses`() {
+        val gid = "g_v240_q1"
+        val bLocal = member("B_me", gid, "Bhavesh", "9000000007", me = true)          // phone patched in locally
+        val bCloud = bLocal.copy(userPhone = "", upiId = "", isCurrentUser = false)    // old app never stored it
+        val a = member("A1", gid, "Akshay", "9000000008")
+        val stale = expense("exp_q1", gid, "B_me", 795_000L)
+        val staleShares = shares(stale, listOf(bLocal, a))
+        val edited = expense("exp_q1", gid, "B_me", 495_000L, rv = t0 + 10, by = "A1")
+        val editedShares = shares(edited, listOf(bLocal, a))
+        val localDoc = doc(gid, listOf(bLocal, a), listOf(stale), staleShares, at = t0 + day)
+        val remoteDoc = doc(gid, listOf(bCloud, a), listOf(edited), editedShares, at = t0 + 10)
+
+        // B's first sync after upgrading: seeds with the same member set the sync passes.
+        val seeds = ExpenseVersionSync.planLocalStamps(
+            listOf(stale), staleShares, emptyList(), emptySequence(), "B_me", t0 + day,
+            memberKey = ExpenseVersioning.memberKeyOf(localDoc.members + remoteDoc.members)
+        ).second
+        assertEquals("seed", seeds.single().kind)
+        val merged = merge(localDoc, remoteDoc, ExpenseVersionSync.historyOf(seeds))
+        assertEquals(495_000L, merged.expenses.single().totalAmountCents, "A's edit must win; B's stale copy is known")
+        assertEquals(t0 + 10, merged.expenses.single().rowVersion, "no legacy version is invented")
+    }
+
+    @Test
     fun `N3 - a PENDING row without an edit time is versioned by its creation time, not now`() {
         val gid = "g_v240_n3"
         val people = sixPeople(gid).take(2)

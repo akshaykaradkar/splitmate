@@ -318,9 +318,13 @@ object ExpenseVersionSync {
         fun add(rev: ExpenseRevisionEntity) {
             if (rev.revisionId !in existingRevisionIds && rev.revisionId !in out) out[rev.revisionId] = rev
         }
-        val mergedKey = ExpenseVersioning.memberKeyOf(mergedDoc.members)
-        val localKey = ExpenseVersioning.memberKeyOf(localDoc?.members.orEmpty())
-        val remoteKey = ExpenseVersioning.memberKeyOf(remoteDoc?.members.orEmpty())
+        // Review Q1: one resolver over every document's members (any known phone wins).
+        val sharedKey = ExpenseVersioning.memberKeyOf(
+            localDoc?.members.orEmpty() + remoteDoc?.members.orEmpty() + mergedDoc.members
+        )
+        val mergedKey = sharedKey
+        val localKey = sharedKey
+        val remoteKey = sharedKey
         for (merged in mergedDoc.expenses) {
             if (merged.expenseId in skippedExpenseIds) continue
             val hash = ExpenseVersioning.contentHash(merged, mergedDoc.splits, mergedKey)
