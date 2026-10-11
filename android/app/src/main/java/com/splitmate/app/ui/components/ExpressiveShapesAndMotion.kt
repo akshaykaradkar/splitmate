@@ -534,8 +534,9 @@ fun segmentedIslandItemShape(
     index: Int,
     totalCount: Int,
     isSelected: Boolean = false,
-    outerCorner: Dp = 24.dp,
-    innerCorner: Dp = 6.dp
+    // v2.4.0 D3: house segmented tokens are 16/4 (was 24/6).
+    outerCorner: Dp = 16.dp,
+    innerCorner: Dp = 4.dp
 ): RoundedCornerShape {
     if (isSelected || totalCount <= 1) {
         return RoundedCornerShape(outerCorner)
@@ -566,8 +567,9 @@ fun rememberAnimatedSegmentedIslandItemShape(
     index: Int,
     totalCount: Int,
     isSelected: Boolean = false,
-    outerCorner: Dp = 24.dp,
-    innerCorner: Dp = 6.dp
+    // v2.4.0 D3: house segmented tokens are 16/4 (was 24/6).
+    outerCorner: Dp = 16.dp,
+    innerCorner: Dp = 4.dp
 ): RoundedCornerShape {
     val targetTop = if (isSelected || totalCount <= 1 || index <= 0) outerCorner else innerCorner
     val targetBottom = if (isSelected || totalCount <= 1 || index >= totalCount - 1) outerCorner else innerCorner

@@ -2250,7 +2250,7 @@ private fun CompactPerspectiveNetBalanceStrip(
                 }
 
                 Surface(
-                    shape = MaterialTheme.shapes.small,
+                    shape = CircleShape, // v2.4.0 D3: same pill as the balance chip on other tabs
                     color = netBadgeBg,
                     modifier = Modifier
                         .weight(1f, fill = false)
@@ -2262,7 +2262,7 @@ private fun CompactPerspectiveNetBalanceStrip(
                         color = netBadgeTextColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                     )
                 }
             }
@@ -4712,7 +4712,7 @@ private fun TripHubPlanTimelineView(
                     index = itemIndex,
                     totalCount = dayItems.size,
                     outerCorner = 18.dp,
-                    innerCorner = 6.dp
+                    innerCorner = 4.dp
                 )
 
                 Surface(
@@ -5285,15 +5285,12 @@ private fun TripHubMoneySettlementView(
                     )
 
                     if (simplifiedTransfers.isNotEmpty()) {
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = TripHubTokens.SunkenWell,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        // v2.4.0 D3: a plain note line, not another box inside the card.
+                        run {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    .padding(horizontal = 4.dp, vertical = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
@@ -5502,7 +5499,7 @@ private fun TripHubMoneySettlementView(
                         index = index,
                         totalCount = myTransfers.size,
                         outerCorner = 20.dp,
-                        innerCorner = 6.dp
+                        innerCorner = 4.dp
                     )
 
                     if (pendingMarkPaidConfirm) {
@@ -5542,10 +5539,8 @@ private fun TripHubMoneySettlementView(
                         Surface(
                             shape = rowShape,
                             color = TripHubTokens.CardSurface,
-                            border = BorderStroke(
-                                width = 1.5.dp,
-                                color = if (isCurrentUserPayer) TripHubTokens.TerracottaIconTint.copy(alpha = 0.35f) else BuckwheatOlivePrimary.copy(alpha = 0.45f)
-                            ),
+                            // v2.4.0 D3: standard 1px card border; direction is shown by the You pay / You receive pill.
+                            border = BorderStroke(1.dp, TripHubTokens.CardBorder),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .animateContentSize(SplitMateMotion.defaultSpatial())
@@ -5823,7 +5818,7 @@ private fun TripHubMoneySettlementView(
                         index = index,
                         totalCount = otherTransfers.size,
                         outerCorner = 18.dp,
-                        innerCorner = 6.dp
+                        innerCorner = 4.dp
                     )
 
                     Surface(
@@ -6953,7 +6948,7 @@ private fun TripHubPeoplePerspectiveView(
                 totalCount = groupMembers.size,
                 isSelected = selectedMemberForActions?.memberId == member.memberId,
                 outerCorner = 20.dp,
-                innerCorner = 6.dp
+                innerCorner = 4.dp
             )
 
             Surface(
@@ -6965,10 +6960,8 @@ private fun TripHubPeoplePerspectiveView(
                 enabled = hasMemberActions,
                 shape = segmentedShape,
                 color = TripHubTokens.CardSurface,
-                border = BorderStroke(
-                    width = if (isMe) 1.2.dp else 1.dp,
-                    color = if (isMe) BuckwheatOlivePrimary.copy(alpha = 0.55f) else TripHubTokens.CardBorder
-                ),
+                // v2.4.0 D3: same 1px border for everyone; "(You)" and the role chip mark the current user.
+                border = BorderStroke(1.dp, TripHubTokens.CardBorder),
                 modifier = Modifier
                     .fillMaxWidth()
                     .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)

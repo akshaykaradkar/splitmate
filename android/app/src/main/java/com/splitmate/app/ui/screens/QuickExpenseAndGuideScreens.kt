@@ -61,7 +61,6 @@ import com.splitmate.app.ui.SplitMateExpressiveTypography
 import com.splitmate.app.ui.SplitMateMonospaceTextStyle
 import com.splitmate.app.ui.SplitMateTnumMonospace
 import com.splitmate.app.ui.components.ConnectedButtonGroup
-import com.splitmate.app.ui.components.ExpressiveGapLinearProgressIndicator
 import com.splitmate.app.ui.components.LinearWavyProgressIndicator
 import com.splitmate.app.ui.components.MaterialShapes
 import com.splitmate.app.ui.components.MorphPolygonShape
@@ -1114,7 +1113,8 @@ fun QuickExpenseScreen(
                         }
                     }
 
-                    // Compact Circular Avatars + Short Names for "Paid by" (Eliminates horizontal pill waste)
+                    // v2.4.0 D3: member avatars use the house Cookie9Sided shape (not circles).
+                    // Compact avatars + short names for "Paid by" (Eliminates horizontal pill waste)
                     if (participants.size > 1) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1159,12 +1159,12 @@ fun QuickExpenseScreen(
                                             Box(
                                                 modifier = Modifier
                                                     .size(22.dp)
-                                                    .clip(CircleShape)
+                                                    .clip(MemberAvatarShape)
                                                     .background(person.avatarBg)
                                                     .border(
                                                         width = if (isPayer) 1.5.dp else 0.5.dp,
                                                         color = if (isPayer) QuickExpenseThemeTokens.SageBorder else surfaceColor,
-                                                        shape = CircleShape
+                                                        shape = MemberAvatarShape
                                                     ),
                                                 contentAlignment = Alignment.Center
                                             ) {
@@ -1185,7 +1185,7 @@ fun QuickExpenseScreen(
                                                     contentScale = ContentScale.Crop,
                                                     modifier = Modifier
                                                         .fillMaxSize()
-                                                        .clip(CircleShape)
+                                                        .clip(MemberAvatarShape)
                                                 )
                                             }
                                             Spacer(modifier = Modifier.width(5.dp))
@@ -1238,7 +1238,7 @@ fun QuickExpenseScreen(
                                     modifier = Modifier.padding(horizontal = 11.dp, vertical = 4.dp)
                                 ) {
                                     Text(
-                                        text = if (selectedMemberIds.size == participants.size) "Clear" else "Select All (${participants.size})",
+                                        text = if (selectedMemberIds.size == participants.size) "Clear" else "Select all (${participants.size})",
                                         fontFamily = SplitMateBrandFontFamily,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
@@ -1300,14 +1300,14 @@ fun QuickExpenseScreen(
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxSize()
-                                                .clip(CircleShape)
+                                                .clip(MemberAvatarShape)
                                                 .background(
                                                     if (isSelected) person.avatarBg else person.avatarBg.copy(alpha = 0.45f)
                                                 )
                                                 .border(
-                                                    width = if (isSelected) 2.5.dp else 1.5.dp,
+                                                    width = 1.5.dp,
                                                     color = if (isSelected) QuickExpenseThemeTokens.SageBorder else surfaceColor,
-                                                    shape = CircleShape
+                                                    shape = MemberAvatarShape
                                                 ),
                                             contentAlignment = Alignment.Center
                                         ) {
@@ -1329,7 +1329,7 @@ fun QuickExpenseScreen(
                                                 alpha = if (isSelected) 1f else 0.45f,
                                                 modifier = Modifier
                                                     .fillMaxSize()
-                                                    .clip(CircleShape)
+                                                    .clip(MemberAvatarShape)
                                             )
                                         }
 
@@ -1383,22 +1383,7 @@ fun QuickExpenseScreen(
                                         overflow = TextOverflow.Ellipsis
                                     )
 
-                                    Spacer(modifier = Modifier.height(2.dp))
-
-                                    val shareRatio = if (isSelected && memberCount > 0) {
-                                        (1f / memberCount.toFloat()).coerceIn(0f, 1f)
-                                    } else 0f
-                                    ExpressiveGapLinearProgressIndicator(
-                                        progress = { shareRatio },
-                                        modifier = Modifier
-                                            .width(42.dp)
-                                            .height(3.dp),
-                                        color = if (isSelected) QuickExpenseThemeTokens.SageBorder else keypadBorder,
-                                        trackColor = keypadBorder.copy(alpha = 0.45f),
-                                        gapSize = 3.dp,
-                                        stopSize = 2.dp,
-                                        strokeWidth = 3.dp
-                                    )
+                                    // v2.4.0 D3: no per-person share bar (it only ever showed 1/N); the check badge marks who is in.
                                 }
                             }
                         }
@@ -1975,8 +1960,11 @@ private fun KeypadRow(
 }
 
 // ==============================================================================
-// TACTILE M3 SQUIRCLE KEY COMPONENT (24dp Radius + Soft Physics Shadow)
+// TACTILE M3 SQUIRCLE KEY COMPONENT (16dp button radius + soft physics)
 // ==============================================================================
+/** v2.4.0 D3: member avatars everywhere use the Cookie9Sided shape (rule P4_02). */
+private val MemberAvatarShape = com.splitmate.app.ui.components.RoundedPolygonShape(MaterialShapes.Cookie9Sided)
+
 @Composable
 fun TactileSquircleKey(
     label: String,
@@ -1997,7 +1985,8 @@ fun TactileSquircleKey(
         label = "KeyScale"
     )
     val morphCorner by androidx.compose.animation.core.animateDpAsState(
-        targetValue = if (isPressed) 12.dp else 24.dp,
+        // v2.4.0 D3: keys use the 16dp button corner (8dp while pressed).
+        targetValue = if (isPressed) 8.dp else 16.dp,
         animationSpec = SplitMateMotion.fastSpatial(),
         label = "GM3KeyCornerMorph"
     )

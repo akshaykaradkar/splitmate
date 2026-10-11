@@ -451,42 +451,42 @@ class SplitMateV23ExpressiveE2ETest {
         }
 
         @Test
-        fun `F4_T1_03 segmentedIslandItemShape returns 24dp all-around for single item list`() {
+        fun `F4_T1_03 segmentedIslandItemShape returns 16dp all-around for single item list`() {
             val shape = segmentedIslandItemShape(index = 0, totalCount = 1, isSelected = false)
-            assertEquals(24f, cornerPx(shape.topStart), 0.01f)
-            assertEquals(24f, cornerPx(shape.topEnd), 0.01f)
-            assertEquals(24f, cornerPx(shape.bottomStart), 0.01f)
-            assertEquals(24f, cornerPx(shape.bottomEnd), 0.01f)
+            assertEquals(16f, cornerPx(shape.topStart), 0.01f)
+            assertEquals(16f, cornerPx(shape.topEnd), 0.01f)
+            assertEquals(16f, cornerPx(shape.bottomStart), 0.01f)
+            assertEquals(16f, cornerPx(shape.bottomEnd), 0.01f)
         }
 
         @Test
-        fun `F4_T1_04 segmentedIslandItemShape returns 24dp outer and 6dp inner corners for top middle and bottom items`() {
+        fun `F4_T1_04 segmentedIslandItemShape returns 16dp outer and 4dp inner corners for top middle and bottom items`() {
             val top = segmentedIslandItemShape(index = 0, totalCount = 3, isSelected = false)
-            assertEquals(24f, cornerPx(top.topStart), 0.01f)
-            assertEquals(24f, cornerPx(top.topEnd), 0.01f)
-            assertEquals(6f, cornerPx(top.bottomStart), 0.01f)
-            assertEquals(6f, cornerPx(top.bottomEnd), 0.01f)
+            assertEquals(16f, cornerPx(top.topStart), 0.01f)
+            assertEquals(16f, cornerPx(top.topEnd), 0.01f)
+            assertEquals(4f, cornerPx(top.bottomStart), 0.01f)
+            assertEquals(4f, cornerPx(top.bottomEnd), 0.01f)
 
             val middle = segmentedIslandItemShape(index = 1, totalCount = 3, isSelected = false)
-            assertEquals(6f, cornerPx(middle.topStart), 0.01f)
-            assertEquals(6f, cornerPx(middle.topEnd), 0.01f)
-            assertEquals(6f, cornerPx(middle.bottomStart), 0.01f)
-            assertEquals(6f, cornerPx(middle.bottomEnd), 0.01f)
+            assertEquals(4f, cornerPx(middle.topStart), 0.01f)
+            assertEquals(4f, cornerPx(middle.topEnd), 0.01f)
+            assertEquals(4f, cornerPx(middle.bottomStart), 0.01f)
+            assertEquals(4f, cornerPx(middle.bottomEnd), 0.01f)
 
             val bottom = segmentedIslandItemShape(index = 2, totalCount = 3, isSelected = false)
-            assertEquals(6f, cornerPx(bottom.topStart), 0.01f)
-            assertEquals(6f, cornerPx(bottom.topEnd), 0.01f)
-            assertEquals(24f, cornerPx(bottom.bottomStart), 0.01f)
-            assertEquals(24f, cornerPx(bottom.bottomEnd), 0.01f)
+            assertEquals(4f, cornerPx(bottom.topStart), 0.01f)
+            assertEquals(4f, cornerPx(bottom.topEnd), 0.01f)
+            assertEquals(16f, cornerPx(bottom.bottomStart), 0.01f)
+            assertEquals(16f, cornerPx(bottom.bottomEnd), 0.01f)
         }
 
         @Test
-        fun `F4_T1_05 segmentedIslandItemShape morphs selected item to full 24dp outer CornerRadius`() {
+        fun `F4_T1_05 segmentedIslandItemShape morphs selected item to full 16dp outer CornerRadius`() {
             val selectedMiddle = segmentedIslandItemShape(index = 1, totalCount = 4, isSelected = true)
-            assertEquals(24f, cornerPx(selectedMiddle.topStart), 0.01f)
-            assertEquals(24f, cornerPx(selectedMiddle.topEnd), 0.01f)
-            assertEquals(24f, cornerPx(selectedMiddle.bottomStart), 0.01f)
-            assertEquals(24f, cornerPx(selectedMiddle.bottomEnd), 0.01f)
+            assertEquals(16f, cornerPx(selectedMiddle.topStart), 0.01f)
+            assertEquals(16f, cornerPx(selectedMiddle.topEnd), 0.01f)
+            assertEquals(16f, cornerPx(selectedMiddle.bottomStart), 0.01f)
+            assertEquals(16f, cornerPx(selectedMiddle.bottomEnd), 0.01f)
         }
 
         // --- F5: Official M3 Expressive Component Suite (7 Components) ---
@@ -1741,22 +1741,22 @@ class SplitMateV23ExpressiveE2ETest {
         @Test
         fun `F4_T2_01 segmentedIslandItemShape handles totalCount 0 or negative safely as outer CornerRadius`() {
             val zeroShape = segmentedIslandItemShape(index = 0, totalCount = 0)
-            assertEquals(24f, cornerPx(zeroShape.topStart), 0.01f)
-            assertEquals(24f, cornerPx(zeroShape.bottomEnd), 0.01f)
+            assertEquals(16f, cornerPx(zeroShape.topStart), 0.01f)
+            assertEquals(16f, cornerPx(zeroShape.bottomEnd), 0.01f)
 
             val negShape = segmentedIslandItemShape(index = -1, totalCount = -5)
-            assertEquals(24f, cornerPx(negShape.topStart), 0.01f)
+            assertEquals(16f, cornerPx(negShape.topStart), 0.01f)
         }
 
         @Test
         fun `F4_T2_02 segmentedIslandItemShape handles 2-item list top and bottom without middle item`() {
             val top = segmentedIslandItemShape(index = 0, totalCount = 2)
-            assertEquals(24f, cornerPx(top.topStart), 0.01f)
-            assertEquals(6f, cornerPx(top.bottomStart), 0.01f)
+            assertEquals(16f, cornerPx(top.topStart), 0.01f)
+            assertEquals(4f, cornerPx(top.bottomStart), 0.01f)
 
             val bottom = segmentedIslandItemShape(index = 1, totalCount = 2)
-            assertEquals(6f, cornerPx(bottom.topStart), 0.01f)
-            assertEquals(24f, cornerPx(bottom.bottomStart), 0.01f)
+            assertEquals(4f, cornerPx(bottom.topStart), 0.01f)
+            assertEquals(16f, cornerPx(bottom.bottomStart), 0.01f)
         }
 
         @Test
@@ -2756,10 +2756,10 @@ class SplitMateV23ExpressiveE2ETest {
             assertEquals(2, transfers.size)
             val topShape = segmentedIslandItemShape(index = 0, totalCount = transfers.size)
             val bottomShape = segmentedIslandItemShape(index = 1, totalCount = transfers.size)
-            assertEquals(24f, cornerPx(topShape.topStart), 0.01f)
-            assertEquals(6f, cornerPx(topShape.bottomStart), 0.01f)
-            assertEquals(6f, cornerPx(bottomShape.topStart), 0.01f)
-            assertEquals(24f, cornerPx(bottomShape.bottomStart), 0.01f)
+            assertEquals(16f, cornerPx(topShape.topStart), 0.01f)
+            assertEquals(4f, cornerPx(topShape.bottomStart), 0.01f)
+            assertEquals(4f, cornerPx(bottomShape.topStart), 0.01f)
+            assertEquals(16f, cornerPx(bottomShape.bottomStart), 0.01f)
         }
 
         @Test
@@ -4187,7 +4187,8 @@ class SplitMateV23ExpressiveE2ETest {
             // 4. White-box source contracts for Hero Moment 2 & preserved +1p coin-flight
             assertTrue(src.contains("ConnectedButtonGroup("))
             assertTrue(src.contains("options = QuickSplitMode.entries"))
-            assertTrue(src.contains("ExpressiveGapLinearProgressIndicator("))
+            // v2.4.0 D3: the per-person share bar was removed (static money data, no progress lines).
+            assertFalse(src.contains("ExpressiveGapLinearProgressIndicator("))
             assertTrue(src.contains("Morph(MaterialShapes.SoftBurst, MaterialShapes.Cookie9Sided)"))
             assertTrue(src.contains("MorphPolygonShape(badgeMorph, badgeMorphProgress)"))
             assertTrue(src.contains("amplitude = if (isZeroDriftVerified) 0f else 1f"))

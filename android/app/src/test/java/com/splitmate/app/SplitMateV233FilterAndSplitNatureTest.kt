@@ -95,7 +95,7 @@ class SplitMateV233FilterAndSplitNatureTest {
             assertFalse(p.showSettledCard)
             val empty = p.myFilterEmptyState!!
             assertEquals("You don't owe anyone", empty.title)
-            assertEquals("You get back ₹800.00 · see Gets Back", empty.subtitle)
+            assertEquals("You get back ₹800.00 · see Gets back", empty.subtitle)
             assertEquals(SettlementFilterPresentation.FILTER_GETS_BACK, empty.switchToFilterIndex)
         }
 

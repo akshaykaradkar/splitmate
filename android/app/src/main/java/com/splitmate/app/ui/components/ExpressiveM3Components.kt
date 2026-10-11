@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -1277,13 +1278,15 @@ fun SplitButtonLayout(
                 }
             },
             trailingButton = {
-                androidx.compose.material3.SplitButtonDefaults.TrailingButton(
+                // v2.4.0 D3: same trailing wrapper as the slot overload (min width keeps the
+                // pill end from being clipped when the label is long).
+                SplitButtonDefaults.TrailingButton(
                     checked = menuExpanded,
                     onCheckedChange = { menuExpanded = it },
-                    colors = colors,
-                    modifier = Modifier
-                        .heightIn(min = buttonHeight)
-                        .semantics { stateDescription = if (menuExpanded) "Menu expanded" else "Menu collapsed" }
+                    containerColor = containerColor,
+                    contentColor = contentColor,
+                    height = buttonHeight,
+                    width = SplitButtonDefaults.MediumContainerHeight
                 ) {
                     SplitButtonDefaults.TrailingIcon(
                         checked = menuExpanded,
@@ -1469,6 +1472,23 @@ object SplitButtonDefaults {
                 .widthIn(min = width)
                 .semantics { stateDescription = stateText },
             enabled = enabled,
+            // v2.4.0 D3: explicit shapes with dp outer corners (half the height): the alpha library drew
+            // percent-based outer corners square on first frame, leaving a flat trailing end.
+            shapes = androidx.compose.material3.SplitButtonShapes(
+                shape = RoundedCornerShape(
+                    topStart = CornerSize(InnerCornerSize),
+                    bottomStart = CornerSize(InnerCornerSize),
+                    topEnd = CornerSize(height / 2),
+                    bottomEnd = CornerSize(height / 2)
+                ),
+                pressedShape = RoundedCornerShape(
+                    topStart = CornerSize(InnerCornerSize * 2),
+                    bottomStart = CornerSize(InnerCornerSize * 2),
+                    topEnd = CornerSize(height / 2),
+                    bottomEnd = CornerSize(height / 2)
+                ),
+                checkedShape = CircleShape
+            ),
             colors = ButtonDefaults.buttonColors(containerColor = containerColor, contentColor = contentColor)
         ) {
             content()

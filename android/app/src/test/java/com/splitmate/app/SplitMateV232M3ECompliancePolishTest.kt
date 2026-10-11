@@ -184,7 +184,7 @@ class SplitMateV232M3ECompliancePolishTest {
     fun `P3_02 empty state condenses Create First Group and Join with Code into one SplitButtonLayout`() {
         val app = src(appPath)
         assertTrue(app.contains("leadingText = \"Create First Group\""))
-        assertTrue(app.contains("label = \"Join with Code\""))
+        assertTrue(app.contains("label = \"Join with code\""))
         assertFalse(app.contains("Text(\"Create First Group\""))
     }
 

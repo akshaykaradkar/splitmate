@@ -60,7 +60,7 @@ object SettlementFilterPresentation {
                 )
                 FILTER_OWES -> FilterEmptyState(
                     title = "You don't owe anyone",
-                    subtitle = "You get back ${me.formattedTotalIncoming} · see Gets Back",
+                    subtitle = "You get back ${me.formattedTotalIncoming} · see Gets back",
                     switchToFilterIndex = FILTER_GETS_BACK
                 )
                 else -> null
@@ -74,12 +74,12 @@ object SettlementFilterPresentation {
             when (filterIndex) {
                 FILTER_GETS_BACK -> FilterEmptyState(
                     title = "No other traveler gets money back",
-                    subtitle = "Everyone else only owes · see All Balances",
+                    subtitle = "Everyone else only owes · show Everyone",
                     switchToFilterIndex = FILTER_ALL
                 )
                 else -> FilterEmptyState(
                     title = "No other traveler owes money",
-                    subtitle = "Everyone else only gets back · see All Balances",
+                    subtitle = "Everyone else only gets back · show Everyone",
                     switchToFilterIndex = FILTER_ALL
                 )
             }

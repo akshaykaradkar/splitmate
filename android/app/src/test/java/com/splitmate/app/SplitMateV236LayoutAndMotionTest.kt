@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test
  * v2.3.6 B2: regression locks for user-reported layout bugs and Trip Hub UX changes.
  *  - Names must never be crushed into one-letter-per-line columns (weighted name, capped status).
  *  - Trip Hub chips/hero/banners collapse on scroll so bookings get the screen.
- *  - No progress line on settlement money data; "New Group" label has a single plus (icon).
+ *  - No progress line on settlement money data; "New group" label has a single plus (icon).
  */
 class SplitMateV236LayoutAndMotionTest {
 
@@ -86,7 +86,7 @@ class SplitMateV236LayoutAndMotionTest {
         assertFalse(home.contains("progress = { settlementProgress }"))
         val app = src("ui/SplitMateAppComposable.kt")
         assertFalse(app.contains("\"+ New Group\""))
-        assertTrue(app.contains("leadingText = \"New Group\""))
+        assertTrue(app.contains("leadingText = \"New group\""))
     }
 
     @Test

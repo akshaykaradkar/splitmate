@@ -2395,7 +2395,7 @@ class SplitMateV2ZeroRegressionAndSyncTest {
             "SplitMateCloudOtpOnboardingScreen must clearly distinguish offline mode secondary action (F10)"
         )
         assertTrue(
-            appSource.contains("Join with Code") && appSource.contains("fun JoinGroupByCodeDialog("),
+            appSource.contains("Join with code") && appSource.contains("fun JoinGroupByCodeDialog("),
             "LedgersDashboardScreen must expose 'Join with Code' buttons and JoinGroupByCodeDialog (F11)"
         )
 

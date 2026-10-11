@@ -1,6 +1,7 @@
 package com.splitmate.app
 
 import com.splitmate.app.ui.components.sharedGroupElement
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.liveRegion
 import com.splitmate.app.ui.*
@@ -2364,7 +2365,7 @@ fun LedgersDashboardScreen(
 
                             Surface(
                                 onClick = onNavigateToSettle,
-                                shape = SplitMateTheme.RadiusBadge,
+                                shape = CircleShape, // v2.4.0 D3: same pill as every other button
                                 color = SplitMateTheme.PrimaryDark,
                                 modifier = Modifier
                                     .minimumInteractiveComponentSize()
@@ -3194,8 +3195,8 @@ fun LedgersDashboardScreen(
                         index = expenseIdx,
                         totalCount = groupExpenses.size,
                         isSelected = isExpanded,
-                        outerCorner = 24.dp,
-                        innerCorner = 6.dp
+                        outerCorner = 20.dp,
+                        innerCorner = 4.dp
                     )
 
                     Card(
@@ -3636,9 +3637,9 @@ fun LedgersDashboardScreen(
                             Text(
                                 text = when {
                                     uiState.isCloudSyncing -> "Syncing"
-                                    onlineFriendsTotal > 0 -> "$onlineFriendsTotal Online"
-                                    hasCloudPhone -> "Auto-Sync"
-                                    else -> "Offline Ready"
+                                    onlineFriendsTotal > 0 -> "$onlineFriendsTotal online"
+                                    hasCloudPhone -> "Synced"
+                                    else -> "Works offline"
                                 },
                                 fontFamily = SplitMateTheme.FontRounded,
                                 fontSize = 11.sp,
@@ -3684,7 +3685,7 @@ fun LedgersDashboardScreen(
                     colors = CardDefaults.cardColors(containerColor = SplitMateTheme.SurfaceWhite),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, SplitMateTheme.Extended.sage.color.copy(alpha = 0.45f), SplitMateTheme.RadiusCard)
+                        .border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusCard)
                 ) {
                     Column(
                         modifier = Modifier.padding(14.dp),
@@ -3743,7 +3744,7 @@ fun LedgersDashboardScreen(
                                 color = SplitMateTheme.Extended.sage.color
                             ) {
                                 Text(
-                                    text = "Link Phone & PIN",
+                                    text = "Link phone & PIN",
                                     fontFamily = SplitMateTheme.FontRounded,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 11.sp,
@@ -4004,7 +4005,6 @@ fun LedgersDashboardScreen(
                         if (totalBalance != "₹0.00") {
                             Button(
                                 onClick = onNavigateToSettle,
-                                shape = SplitMateTheme.RadiusButton,
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = SplitMateTheme.PrimaryDark,
                                     contentColor = SplitMateTheme.ScreenBg
@@ -4027,7 +4027,6 @@ fun LedgersDashboardScreen(
                         } else {
                             FilledTonalButton(
                                 onClick = onNavigateToSettle,
-                                shape = SplitMateTheme.RadiusButton,
                                 colors = ButtonDefaults.filledTonalButtonColors(
                                     containerColor = SplitMateTheme.SurfaceWhite,
                                     contentColor = SplitMateTheme.PrimaryDark
@@ -4096,7 +4095,7 @@ fun LedgersDashboardScreen(
             )
         }
 
-        // 3. Section Header: Active Groups + M3 Expressive SplitButtonLayout (+ New Group | Join with Code)
+        // 3. Section Header: Active Groups + M3 Expressive SplitButtonLayout (+ New Group | Join with code)
         item {
             Row(
                 modifier = Modifier
@@ -4105,13 +4104,17 @@ fun LedgersDashboardScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // v2.4.0 D3: the title takes the leftover width so the split button is never clipped.
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Active groups",
                         fontFamily = SplitMateTheme.FontDisplay,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        color = SplitMateTheme.PrimaryDark
+                        color = SplitMateTheme.PrimaryDark,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Surface(
@@ -4133,20 +4136,20 @@ fun LedgersDashboardScreen(
                 }
 
                 SplitButtonLayout(
-                    leadingText = "New Group",
+                    leadingText = "New group",
                     leadingIcon = Icons.Rounded.Add,
                     onLeadingClick = { showNewGroupDialog = true },
                     containerColor = SplitMateTheme.SageSurface,
                     contentColor = SplitMateTheme.SageText,
                     menuItems = listOf(
                         ExpressiveMenuAction(
-                            label = "Join with Code",
+                            label = "Join with code",
                             subtitle = "Enter a 6-digit invite code",
                             icon = Icons.Rounded.GroupAdd,
                             onClick = { showJoinByCodeDialog = true }
                         ),
                         ExpressiveMenuAction(
-                            label = "Create New Group",
+                            label = "Create new group",
                             subtitle = "Start a shared trip or ledger",
                             icon = Icons.Rounded.Add,
                             onClick = { showNewGroupDialog = true }
@@ -4193,7 +4196,7 @@ fun LedgersDashboardScreen(
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "No active trips yet. Tap + New Group or Join with Code!",
+                            text = "No active trips yet. Tap + New Group or Join with code!",
                             fontFamily = SplitMateTheme.FontDisplay,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.ExtraBold,
@@ -4210,20 +4213,20 @@ fun LedgersDashboardScreen(
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(14.dp))
-                        // v2.3.2: "Create First Group" (primary) + "Join with Code" (menu) condensed into one M3E SplitButtonLayout.
+                        // v2.3.2: "Create First Group" (primary) + "Join with code" (menu) condensed into one M3E SplitButtonLayout.
                         SplitButtonLayout(
                             leadingText = "Create First Group",
                             leadingIcon = Icons.Rounded.Add,
                             onLeadingClick = { showNewGroupDialog = true },
                             menuItems = listOf(
                                 ExpressiveMenuAction(
-                                    label = "Join with Code",
+                                    label = "Join with code",
                                     icon = Icons.Rounded.GroupAdd,
                                     subtitle = "Enter an invite code from a friend",
                                     onClick = { showJoinByCodeDialog = true }
                                 ),
                                 ExpressiveMenuAction(
-                                    label = "Create New Group",
+                                    label = "Create new group",
                                     icon = Icons.Rounded.Add,
                                     subtitle = "Start a fresh trip or shared ledger",
                                     onClick = { showNewGroupDialog = true }
@@ -4257,7 +4260,7 @@ fun LedgersDashboardScreen(
                 index = groupIdx,
                 totalCount = displayedActiveGroups.size,
                 isSelected = false,
-                outerCorner = 24.dp,
+                outerCorner = 20.dp,
                 innerCorner = 8.dp
             )
 
@@ -5603,10 +5606,13 @@ fun ExpressiveThemeModePill(
             .defaultMinSize(minHeight = 40.dp)
             .testTag("TopBarExpressiveThemePill")
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        // v2.4.0 D3: icon-only, so the label can never be cut off ("Buckwhea…") in a crowded top bar.
+        // The theme name is spoken instead.
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .semantics { contentDescription = "Theme: $badgeLabel. Double tap to switch." },
+            contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = when (activeThemeMode) {
@@ -5614,17 +5620,9 @@ fun ExpressiveThemeModePill(
                     SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Icons.Rounded.DarkMode
                     SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Icons.Rounded.AutoAwesome
                 },
-                contentDescription = "Switch Theme Mode (${activeThemeMode.displayName})",
+                contentDescription = null,
                 tint = SplitMateTheme.PrimaryDark,
-                modifier = Modifier.size(14.dp)
-            )
-            Text(
-                text = badgeLabel,
-                fontFamily = SplitMateTheme.FontRounded,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = SplitMateTheme.PrimaryDark,
-                maxLines = 1
+                modifier = Modifier.size(20.dp)
             )
         }
     }
@@ -5802,14 +5800,14 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
     ) {
         item {
             Text(
-                text = "Settle up & Balances",
+                text = "Settle up",
                 fontFamily = SplitMateTheme.FontDisplay,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = SplitMateTheme.PrimaryDark
             )
             Text(
-                text = "Your settlements first, followed by simplified group balances",
+                text = "Your payments first, then everyone else's",
                 fontFamily = SplitMateTheme.FontRounded,
                 fontSize = 12.sp,
                 color = SplitMateTheme.TextSecondary
@@ -5935,18 +5933,10 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                 modifier = Modifier.size(42.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                CircularWavyProgressIndicator(
-                                    progress = { settlementProgressRatio },
-                                    modifier = Modifier.fillMaxSize(),
-                                    color = SplitMateTheme.SageText,
-                                    trackColor = SplitMateTheme.SageSurface,
-                                    strokeWidth = 3.dp,
-                                    amplitude = if (settlementProgressRatio >= 0.99f) 0f else 0.85f,
-                                    wavelength = 18.dp
-                                )
+                                // v2.4.0 D3: no progress ring on static money data; just the tonal shape tile.
                                 Box(
                                     modifier = Modifier
-                                        .size(30.dp)
+                                        .size(40.dp)
                                         .clip(MorphPolygonShape(morph = headerMorph, percentage = headerMorphProgress))
                                         .background(SplitMateTheme.SageSurface),
                                     contentAlignment = Alignment.Center
@@ -5955,7 +5945,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                         imageVector = Icons.Rounded.Groups,
                                         contentDescription = null,
                                         tint = SplitMateTheme.SageText,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
                             }
@@ -5963,7 +5953,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = "Trip Settlement Summary",
+                                        text = "Settlement summary",
                                         fontFamily = SplitMateTheme.FontDisplay,
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.ExtraBold,
@@ -5998,18 +5988,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
-                        LinearWavyProgressIndicator(
-                            progress = { settlementProgressRatio },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(10.dp),
-                            color = SplitMateTheme.SageText,
-                            trackColor = SplitMateTheme.SageSurface.copy(alpha = 0.55f),
-                            amplitude = if (settlementProgressRatio >= 0.99f) 0f else 0.85f,
-                            wavelength = 22.dp,
-                            strokeWidth = 3.dp
-                        )
+                        // v2.4.0 D3: no wavy progress on static money data (wavy is only for network work).
 
                         AnimatedVisibility(
                             visible = showMaxHeapGraphInspector,
@@ -6383,14 +6362,14 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                     }
 
                     ConnectedButtonGroup(
-                        options = listOf("All Balances", "Gets Back", "Owes"),
+                        options = listOf("Everyone", "Gets back", "Owes"),
                         selectedIndex = selectedBalanceFilterIndex,
                         onSelect = { idx, _ -> selectedBalanceFilterIndex = idx },
                         labelProvider = { it },
                         modifier = Modifier.fillMaxWidth(),
                         iconProvider = { option, _ ->
                             when (option) {
-                                "Gets Back" -> Icons.AutoMirrored.Rounded.TrendingUp
+                                "Gets back" -> Icons.AutoMirrored.Rounded.TrendingUp
                                 "Owes" -> Icons.AutoMirrored.Rounded.TrendingDown
                                 else -> Icons.Rounded.Groups
                             }
@@ -6603,13 +6582,13 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                         index = legIdx,
                                         totalCount = summary.incomingPayments.size,
                                         outerCorner = 16.dp,
-                                        innerCorner = 6.dp
+                                        innerCorner = 4.dp
                                     )
 
                                     Surface(
                                         shape = incomingLegShape,
                                         color = SplitMateTheme.SurfaceWhite,
-                                        border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
+                                        border = null, // v2.4.0 D3: segments sit on the tonal card, no inner border
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
@@ -7371,7 +7350,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                 totalCount = recordedSettlements.size,
                                 isSelected = false,
                                 outerCorner = 16.dp,
-                                innerCorner = 6.dp
+                                innerCorner = 4.dp
                             )
                             Surface(
                                 onClick = { selectedSettlementForSheet = settlement },
@@ -7876,7 +7855,7 @@ fun AuditVaultScreen(
                     index = expIdx,
                     totalCount = dateExpenses.size,
                     isSelected = isActivelyPulled,
-                    outerCorner = 24.dp,
+                    outerCorner = 20.dp,
                     innerCorner = 4.dp
                 )
 
