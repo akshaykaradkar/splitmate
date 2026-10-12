@@ -87,6 +87,8 @@ import com.splitmate.app.ui.extractInitialsFromNameOrSeed
 import com.splitmate.app.ui.formatIndianRupeesFromCents
 import com.splitmate.app.ui.performCrispTactileHaptic
 import kotlin.math.abs
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.FilledTonalButton
 
 /**
  * Compact Buckwheat Sage header pill displaying `"Invite & Trip Code"` with `Icons.Rounded.PersonAdd`.
@@ -135,46 +137,42 @@ fun PerspectiveAndSyncHeaderPill(
     val pillText = SplitMateTheme.SageText
     val pillBorder = SplitMateTheme.SageText.copy(alpha = 0.35f)
 
-    Surface(
+    // v2.4.0 rc3: official FilledTonalButton (sage tonal pair) with the shapes() press morph.
+    FilledTonalButton(
         onClick = {
             performCrispTactileHaptic(context, localView, heavy = false)
             onClick()
         },
-        shape = CircleShape,
-        color = Color.Transparent,
+        shapes = ButtonDefaults.shapes(),
+        colors = ButtonDefaults.filledTonalButtonColors(
+            containerColor = pillBg,
+            contentColor = pillText
+        ),
+        border = BorderStroke(1.dp, pillBorder),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp),
         modifier = modifier
             .minimumInteractiveComponentSize()
             .defaultMinSize(minHeight = 48.dp)
     ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.padding(vertical = 6.dp)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Row(
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(pillBg, CircleShape)
-                    .border(1.dp, pillBorder, CircleShape)
-                    .padding(horizontal = 12.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.PersonAdd,
-                    contentDescription = "Invite Friends & Trip Code",
-                    tint = pillText,
-                    modifier = Modifier.size(15.dp)
-                )
-                Text(
-                    text = "Invite & Trip Code",
-                    fontFamily = FigtreeFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
-                    color = pillText,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            Icon(
+                imageVector = Icons.Rounded.PersonAdd,
+                contentDescription = "Invite Friends & Trip Code",
+                tint = pillText,
+                modifier = Modifier.size(15.dp)
+            )
+            Text(
+                text = "Invite & Trip Code",
+                fontFamily = FigtreeFontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+                color = pillText,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -448,7 +446,8 @@ fun TripSyncAndPerspectiveSheet(
                                 }
                             }
 
-                            Surface(
+                            // v2.4.0 rc3: official FilledTonalButton with the shapes() press morph.
+                            FilledTonalButton(
                                 onClick = {
                                     performCrispTactileHaptic(context, localView, heavy = false)
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
@@ -458,12 +457,15 @@ fun TripSyncAndPerspectiveSheet(
                                     isFeedbackError = false
                                     feedbackBannerText = "Copied Trip Code $formattedJoinCode to clipboard"
                                 },
-                                shape = CircleShape,
-                                color = SplitMateTheme.SageSurface,
-                                border = BorderStroke(1.dp, SplitMateTheme.SageText.copy(alpha = 0.35f))
+                                shapes = ButtonDefaults.shapes(),
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = SplitMateTheme.SageSurface,
+                                    contentColor = SplitMateTheme.SageText
+                                ),
+                                border = BorderStroke(1.dp, SplitMateTheme.SageText.copy(alpha = 0.35f)),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
@@ -586,7 +588,7 @@ fun TripSyncAndPerspectiveSheet(
                                     runCatching { context.startActivity(fallbackIntent) }
                                 }
                             },
-                            shape = RoundedCornerShape(14.dp),
+                            shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(14.dp)),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = SplitMateTheme.SageText,
                                 contentColor = com.splitmate.app.ui.DesignSystemBindings.activePalette.onPrimary
@@ -621,7 +623,7 @@ fun TripSyncAndPerspectiveSheet(
                                 isFeedbackError = false
                                 feedbackBannerText = "Copied full invite message to clipboard"
                             },
-                            shape = RoundedCornerShape(14.dp),
+                            shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(14.dp)),
                             border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
                             modifier = Modifier
                                 .weight(0.95f)
@@ -729,7 +731,7 @@ fun TripSyncAndPerspectiveSheet(
                                             }
                                         }
                                     },
-                                    shape = RoundedCornerShape(12.dp),
+                                    shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(12.dp)),
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = SplitMateTheme.SageText,
                                         contentColor = com.splitmate.app.ui.DesignSystemBindings.activePalette.onPrimary
@@ -807,7 +809,7 @@ fun TripSyncAndPerspectiveSheet(
                                     feedbackBannerText = "Clipboard is empty"
                                 }
                             },
-                            shape = RoundedCornerShape(14.dp),
+                            shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(14.dp)),
                             border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
                             modifier = Modifier
                                 .weight(1f)
@@ -844,7 +846,7 @@ fun TripSyncAndPerspectiveSheet(
                                 }
                             },
                             enabled = manualPasteInput.isNotBlank(),
-                            shape = RoundedCornerShape(14.dp),
+                            shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(14.dp)),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = SplitMateTheme.PrimaryDark,
                                 contentColor = SplitMateTheme.ScreenBg,

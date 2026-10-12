@@ -37,6 +37,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -179,26 +181,29 @@ fun EditLoggedExpenseDialog(
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(quickCategories) { (cat, catIcon, isTrainCat) ->
                         val isSelected = editedTitle.equals(cat, ignoreCase = true)
-                        Surface(
+                        // v2.4.0 rc3: official M3 Expressive FilterChip (selected semantics, press morph).
+                        FilterChip(
+                            selected = isSelected,
                             onClick = {
                                 editedTitle = cat
                                 editedCategoryRef = null
                                 if (isTrainCat) includeTravelTicket = true
                             },
-                            shape = SplitMateTheme.RadiusBadge,
-                            color = if (isSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.SurfaceMuted
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
+                            shapes = FilterChipDefaults.shapes(shape = SplitMateTheme.RadiusBadge, selectedShape = SplitMateTheme.RadiusBadge),
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = SplitMateTheme.SurfaceMuted,
+                                selectedContainerColor = SplitMateTheme.PrimaryDark
+                            ),
+                            border = null,
+                            leadingIcon = {
                                 Icon(
                                     imageVector = catIcon,
                                     contentDescription = cat,
                                     tint = if (isSelected) SplitMateTheme.ScreenBg else SplitMateTheme.PrimaryDark,
                                     modifier = Modifier.size(13.dp)
                                 )
-                                Spacer(modifier = Modifier.width(5.dp))
+                            },
+                            label = {
                                 Text(
                                     text = cat,
                                     fontSize = 11.sp,
@@ -206,30 +211,33 @@ fun EditLoggedExpenseDialog(
                                     color = if (isSelected) SplitMateTheme.ScreenBg else SplitMateTheme.PrimaryDark
                                 )
                             }
-                        }
+                        )
                     }
                     // v2.3.4: the user's own categories + "More" (full catalog / create new).
                     items(customCategories, key = { "edit_custom_${it.title}" }) { cat ->
                         val isSelected = editedTitle.equals(cat.title, ignoreCase = true)
-                        Surface(
+                        // v2.4.0 rc3: official M3 Expressive FilterChip (selected semantics, press morph).
+                        FilterChip(
+                            selected = isSelected,
                             onClick = {
                                 editedTitle = cat.title
                                 editedCategoryRef = com.splitmate.app.ui.category.ExpenseCategoryRefs.refFor(cat)
                             },
-                            shape = SplitMateTheme.RadiusBadge,
-                            color = if (isSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.SurfaceMuted
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
+                            shapes = FilterChipDefaults.shapes(shape = SplitMateTheme.RadiusBadge, selectedShape = SplitMateTheme.RadiusBadge),
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = SplitMateTheme.SurfaceMuted,
+                                selectedContainerColor = SplitMateTheme.PrimaryDark
+                            ),
+                            border = null,
+                            leadingIcon = {
                                 Icon(
                                     imageVector = ExpenseCategoryIcons.forKey(cat.iconKey),
                                     contentDescription = null,
                                     tint = if (isSelected) SplitMateTheme.ScreenBg else SplitMateTheme.PrimaryDark,
                                     modifier = Modifier.size(13.dp)
                                 )
-                                Spacer(modifier = Modifier.width(5.dp))
+                            },
+                            label = {
                                 Text(
                                     text = cat.title,
                                     fontSize = 11.sp,
@@ -237,7 +245,7 @@ fun EditLoggedExpenseDialog(
                                     color = if (isSelected) SplitMateTheme.ScreenBg else SplitMateTheme.PrimaryDark
                                 )
                             }
-                        }
+                        )
                     }
                     item(key = "edit_more_categories") {
                         MoreCategoriesChip(onClick = { showCategorySheet = true })
@@ -289,19 +297,25 @@ fun EditLoggedExpenseDialog(
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(groupMembers, key = { it.memberId }) { mbr ->
                             val isSelected = mbr.memberId == selectedPayerId
-                            Surface(
+                            // v2.4.0 rc3: official M3 Expressive FilterChip (selected semantics, press morph).
+                            FilterChip(
+                                selected = isSelected,
                                 onClick = { selectedPayerId = mbr.memberId },
-                                shape = SplitMateTheme.RadiusBadge,
-                                color = if (isSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.SurfaceMuted
-                            ) {
-                                Text(
-                                    text = if (mbr.isCurrentUser) "${mbr.name} (You)" else mbr.name,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isSelected) SplitMateTheme.ScreenBg else SplitMateTheme.PrimaryDark,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                )
-                            }
+                                shapes = FilterChipDefaults.shapes(shape = SplitMateTheme.RadiusBadge, selectedShape = SplitMateTheme.RadiusBadge),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = SplitMateTheme.SurfaceMuted,
+                                    selectedContainerColor = SplitMateTheme.PrimaryDark
+                                ),
+                                border = null,
+                                label = {
+                                    Text(
+                                        text = if (mbr.isCurrentUser) "${mbr.name} (You)" else mbr.name,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) SplitMateTheme.ScreenBg else SplitMateTheme.PrimaryDark
+                                    )
+                                }
+                            )
                         }
                     }
 
@@ -315,7 +329,9 @@ fun EditLoggedExpenseDialog(
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(groupMembers, key = { "split_${it.memberId}" }) { mbr ->
                             val isIncluded = selectedSplitMemberIds.contains(mbr.memberId)
-                            Surface(
+                            // v2.4.0 rc3: official M3 Expressive FilterChip (selected semantics, press morph).
+                            FilterChip(
+                                selected = isIncluded,
                                 onClick = {
                                     selectedSplitMemberIds = if (isIncluded && selectedSplitMemberIds.size > 1) {
                                         selectedSplitMemberIds - mbr.memberId
@@ -323,22 +339,25 @@ fun EditLoggedExpenseDialog(
                                         selectedSplitMemberIds + mbr.memberId
                                     }
                                 },
-                                shape = SplitMateTheme.RadiusBadge,
-                                color = if (isIncluded) SplitMateTheme.SageSurface else SplitMateTheme.SurfaceMuted
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    if (isIncluded) {
+                                shapes = FilterChipDefaults.shapes(shape = SplitMateTheme.RadiusBadge, selectedShape = SplitMateTheme.RadiusBadge),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = SplitMateTheme.SurfaceMuted,
+                                    selectedContainerColor = SplitMateTheme.SageSurface
+                                ),
+                                border = null,
+                                leadingIcon = if (isIncluded) {
+                                    {
                                         Icon(
                                             imageVector = Icons.Rounded.Check,
                                             contentDescription = null,
                                             tint = SplitMateTheme.SageText,
                                             modifier = Modifier.size(13.dp)
                                         )
-                                        Spacer(modifier = Modifier.width(4.dp))
                                     }
+                                } else {
+                                    null
+                                },
+                                label = {
                                     Text(
                                         text = if (mbr.isCurrentUser) "${mbr.name} (You)" else mbr.name,
                                         fontSize = 11.sp,
@@ -346,7 +365,7 @@ fun EditLoggedExpenseDialog(
                                         color = if (isIncluded) SplitMateTheme.SageText else SplitMateTheme.TextSecondary
                                     )
                                 }
-                            }
+                            )
                         }
                     }
                     }
@@ -443,7 +462,7 @@ fun EditLoggedExpenseDialog(
                     }
                     onSave(finalTitle, parsedRupees, selectedPayerId, splitIdsToSave, editedCategoryRef)
                 },
-                shape = SplitMateTheme.RadiusButton,
+                shapes = ButtonDefaults.shapes(shape = SplitMateTheme.RadiusButton),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = SplitMateTheme.PrimaryDark,
                     contentColor = SplitMateTheme.ScreenBg
@@ -453,7 +472,7 @@ fun EditLoggedExpenseDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) {
                 Text("Cancel", fontWeight = FontWeight.Bold, color = SplitMateTheme.TextSecondary)
             }
         }

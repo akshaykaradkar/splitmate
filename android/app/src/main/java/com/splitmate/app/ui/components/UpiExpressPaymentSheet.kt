@@ -809,7 +809,7 @@ fun UpiExpressPaymentSheet(
                                 onMarkSettled()
                                 onDismiss()
                             },
-                            shape = RoundedCornerShape(12.dp),
+                            shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(12.dp)),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = SplitMateTheme.PrimaryDark,
                                 contentColor = SplitMateTheme.ScreenBg
@@ -834,15 +834,20 @@ fun UpiExpressPaymentSheet(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Surface(
+                // v2.4.0 rc3: official FilledTonalButton with the shapes() press morph.
+                FilledTonalButton(
                     onClick = { qrGalleryLauncher.launch("image/*") },
-                    shape = RoundedCornerShape(16.dp),
-                    color = SplitMateTheme.SageSurface,
+                    shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(16.dp)),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = SplitMateTheme.SageSurface,
+                        contentColor = SplitMateTheme.SageText
+                    ),
                     border = BorderStroke(1.dp, SplitMateTheme.AccentSage),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                     modifier = Modifier.weight(1.2f)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -871,19 +876,24 @@ fun UpiExpressPaymentSheet(
                     }
                 }
 
-                Surface(
+                // v2.4.0 rc3: official OutlinedButton with the shapes() press morph.
+                OutlinedButton(
                     onClick = {
                         phoneContactPickerLauncher.launch(
                             Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI)
                         )
                     },
-                    shape = RoundedCornerShape(16.dp),
-                    color = SplitMateTheme.SurfaceWhite,
+                    shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(16.dp)),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = SplitMateTheme.SurfaceWhite,
+                        contentColor = SplitMateTheme.PrimaryDark
+                    ),
                     border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                     modifier = Modifier.weight(1f)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -1015,7 +1025,10 @@ fun UpiExpressPaymentSheet(
                 ) {
                     items(QuickVpaBankSuffixes) { (suffix, label) ->
                         val isCurrentSuffix = exactVpaInput.endsWith(suffix, ignoreCase = true)
-                        Surface(
+                        val suffixChipShape = RoundedCornerShape(12.dp)
+                        // v2.4.0 rc3: official M3 Expressive FilterChip (selected semantics, press morph).
+                        FilterChip(
+                            selected = isCurrentSuffix,
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                 val currentPrefix = exactVpaInput.substringBefore("@").trim()
@@ -1032,35 +1045,42 @@ fun UpiExpressPaymentSheet(
                                 exactVpaInput = newVpa
                                 persistCombinedIdentity(newVpa = newVpa)
                             },
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isCurrentSuffix) SplitMateTheme.PrimaryDark else SplitMateTheme.SurfaceWhite,
-                            border = BorderStroke(
-                                1.dp,
-                                if (isCurrentSuffix) SplitMateTheme.PrimaryDark else SplitMateTheme.BorderLight
+                            shapes = FilterChipDefaults.shapes(shape = suffixChipShape, selectedShape = suffixChipShape),
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = SplitMateTheme.SurfaceWhite,
+                                selectedContainerColor = SplitMateTheme.PrimaryDark
                             ),
-                            modifier = Modifier.minimumInteractiveComponentSize()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    text = suffix,
-                                    fontFamily = FigtreeFontFamily,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = if (isCurrentSuffix) SplitMateTheme.ScreenBg else SplitMateTheme.PrimaryDark
-                                )
-                                Text(
-                                    text = "· $label",
-                                    fontFamily = FigtreeFontFamily,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (isCurrentSuffix) SplitMateTheme.ScreenBg.copy(alpha = 0.8f) else SplitMateTheme.TextSecondary
-                                )
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = isCurrentSuffix,
+                                borderColor = SplitMateTheme.BorderLight,
+                                selectedBorderColor = SplitMateTheme.PrimaryDark,
+                                borderWidth = 1.dp,
+                                selectedBorderWidth = 1.dp
+                            ),
+                            modifier = Modifier.minimumInteractiveComponentSize(),
+                            label = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = suffix,
+                                        fontFamily = FigtreeFontFamily,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = if (isCurrentSuffix) SplitMateTheme.ScreenBg else SplitMateTheme.PrimaryDark
+                                    )
+                                    Text(
+                                        text = "· $label",
+                                        fontFamily = FigtreeFontFamily,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (isCurrentSuffix) SplitMateTheme.ScreenBg.copy(alpha = 0.8f) else SplitMateTheme.TextSecondary
+                                    )
+                                }
                             }
-                        }
+                        )
                     }
                 }
             }
@@ -1107,7 +1127,8 @@ fun UpiExpressPaymentSheet(
             )
 
             // 5. SINGLE HERO 1-TAP GOOGLE PAY LAUNCHER (`tez://upi/pay`, Pre-Fills Exact Amount & Goes Straight to UPI PIN!)
-            Surface(
+            // v2.4.0 rc3: official Button with the shapes() press morph.
+            Button(
                 onClick = {
                     launchTrueOneTapUpi(
                         targetAppId = "gpay",
@@ -1115,13 +1136,17 @@ fun UpiExpressPaymentSheet(
                         targetPackage = "com.google.android.apps.nbu.paisa.user"
                     )
                 },
-                shape = RoundedCornerShape(20.dp),
-                color = SplitMateTheme.PrimaryDark,
+                shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(20.dp)),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = SplitMateTheme.PrimaryDark,
+                    contentColor = SplitMateTheme.SurfaceWhite
+                ),
                 border = BorderStroke(1.5.dp, SplitMateTheme.PrimaryDark),
+                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 15.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 15.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -1195,7 +1220,7 @@ fun UpiExpressPaymentSheet(
                     onMarkSettled()
                     onDismiss()
                 },
-                shape = RoundedCornerShape(16.dp),
+                shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(16.dp)),
                 colors = ButtonDefaults.outlinedButtonColors(
                     containerColor = SplitMateTheme.SurfaceWhite,
                     contentColor = SplitMateTheme.PrimaryDark

@@ -99,6 +99,11 @@ import androidx.compose.material.icons.rounded.VolunteerActivism
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material.icons.rounded.Work
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
@@ -133,6 +138,12 @@ import androidx.compose.ui.unit.sp
 import com.splitmate.app.ui.SplitMateBrandFontFamily
 import com.splitmate.app.ui.SplitMateDisplayFontFamily
 import com.splitmate.app.SplitMateTheme
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.OutlinedIconToggleButton
 
 // ==============================================================================
 // Icon + tone resolution
@@ -248,22 +259,31 @@ fun ExpenseCategoryChip(
     val (toneBg, toneFg) = ExpenseCategoryIcons.toneColors(category.tone, isDark)
     val selectedBg = SplitMateTheme.PrimaryDark
     val selectedFg = SplitMateTheme.SurfaceWhite
-    Surface(
+    // v2.4.0 rc3: official M3 Expressive FilterChip; the official selected shape morph replaces
+    // the hand-picked corner swap (20dp resting, 12dp selected).
+    FilterChip(
+        selected = selected,
         onClick = onClick,
-        shape = RoundedCornerShape(if (selected) 12.dp else 20.dp),
-        color = if (selected) selectedBg else SplitMateTheme.SurfaceWhite,
-        border = BorderStroke(1.dp, if (selected) selectedBg else SplitMateTheme.BorderLight),
+        shapes = FilterChipDefaults.shapes(shape = MaterialTheme.shapes.large, selectedShape = RoundedCornerShape(12.dp)),
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = SplitMateTheme.SurfaceWhite,
+            selectedContainerColor = selectedBg
+        ),
+        border = FilterChipDefaults.filterChipBorder(
+            enabled = true,
+            selected = selected,
+            borderColor = SplitMateTheme.BorderLight,
+            selectedBorderColor = selectedBg,
+            borderWidth = 1.dp,
+            selectedBorderWidth = 1.dp
+        ),
         modifier = modifier
             .heightIn(min = 40.dp)
             .semantics {
                 this.selected = selected
                 role = Role.Button
-            }
-    ) {
-        Row(
-            modifier = Modifier.padding(start = 6.dp, end = if (trailing != null) 4.dp else 12.dp, top = 5.dp, bottom = 5.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+            },
+        leadingIcon = {
             Box(
                 modifier = Modifier
                     .size(26.dp)
@@ -277,7 +297,9 @@ fun ExpenseCategoryChip(
                     modifier = Modifier.size(15.dp)
                 )
             }
-            Spacer(modifier = Modifier.width(7.dp))
+        },
+        trailingIcon = trailing,
+        label = {
             Text(
                 text = label,
                 fontFamily = SplitMateBrandFontFamily,
@@ -287,12 +309,8 @@ fun ExpenseCategoryChip(
                 overflow = TextOverflow.Ellipsis,
                 color = if (selected) selectedFg else SplitMateTheme.PrimaryDark
             )
-            if (trailing != null) {
-                Spacer(modifier = Modifier.width(2.dp))
-                trailing()
-            }
         }
-    }
+    )
 }
 
 // ==============================================================================
@@ -392,22 +410,20 @@ fun ExpenseCategoryPickerSheet(
                                     selected = cat.title.equals(selectedTitle.trim(), ignoreCase = true),
                                     onClick = { onSelect(cat) },
                                     trailing = {
-                                        Surface(
+                                        // v2.4.0 rc3: official IconButton with the shapes() press morph.
+                                        IconButton(
                                             onClick = { pendingDelete = cat },
-                                            shape = CircleShape,
-                                            color = Color.Transparent,
+                                            shapes = IconButtonDefaults.shapes(),
                                             modifier = Modifier
                                                 .size(28.dp)
                                                 .semantics { contentDescription = "Remove ${cat.title}" }
                                         ) {
-                                            Box(contentAlignment = Alignment.Center) {
-                                                Icon(
-                                                    Icons.Rounded.Close,
-                                                    contentDescription = null,
-                                                    tint = SplitMateTheme.TextSecondary,
-                                                    modifier = Modifier.size(14.dp)
-                                                )
-                                            }
+                                            Icon(
+                                                Icons.Rounded.Close,
+                                                contentDescription = null,
+                                                tint = SplitMateTheme.TextSecondary,
+                                                modifier = Modifier.size(14.dp)
+                                            )
                                         }
                                     }
                                 )
@@ -485,10 +501,10 @@ fun ExpenseCategoryPickerSheet(
                 TextButton(onClick = {
                     CustomExpenseCategoryStore.remove(context, cat.title)
                     pendingDelete = null
-                }) { Text("Remove", fontWeight = FontWeight.Bold, color = SplitMateTheme.TerracottaText) }
+                }, shapes = ButtonDefaults.shapes()) { Text("Remove", fontWeight = FontWeight.Bold, color = SplitMateTheme.TerracottaText) }
             },
             dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) {
+                TextButton(onClick = { pendingDelete = null }, shapes = ButtonDefaults.shapes()) {
                     Text("Keep", fontWeight = FontWeight.Bold, color = SplitMateTheme.PrimaryDark)
                 }
             }
@@ -510,19 +526,17 @@ private fun SectionLabel(text: String) {
 
 @Composable
 private fun CreateCategoryChip(label: String, onClick: () -> Unit) {
-    Surface(
+    // v2.4.0 rc3: official M3 AssistChip (sage tonal pair).
+    AssistChip(
         onClick = onClick,
         shape = RoundedCornerShape(20.dp),
-        color = SplitMateTheme.SageSurface,
+        colors = AssistChipDefaults.assistChipColors(containerColor = SplitMateTheme.SageSurface),
         border = BorderStroke(1.dp, SplitMateTheme.AccentSage),
-        modifier = Modifier.heightIn(min = 40.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        modifier = Modifier.heightIn(min = 40.dp),
+        leadingIcon = {
             Icon(Icons.Rounded.Add, contentDescription = null, tint = SplitMateTheme.SageText, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(6.dp))
+        },
+        label = {
             Text(
                 text = label,
                 fontFamily = SplitMateBrandFontFamily,
@@ -533,30 +547,28 @@ private fun CreateCategoryChip(label: String, onClick: () -> Unit) {
                 color = SplitMateTheme.SageText
             )
         }
-    }
+    )
 }
 
 /** Compact "More" chip used at the end of the existing quick-category rows. */
 @Composable
 fun MoreCategoriesChip(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Surface(
+    // v2.4.0 rc3: official M3 AssistChip.
+    AssistChip(
         onClick = onClick,
         shape = RoundedCornerShape(20.dp),
-        color = SplitMateTheme.SurfaceWhite,
+        colors = AssistChipDefaults.assistChipColors(containerColor = SplitMateTheme.SurfaceWhite),
         border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
-        modifier = modifier.heightIn(min = 32.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        modifier = modifier.heightIn(min = 32.dp),
+        leadingIcon = {
             Icon(
                 Icons.Rounded.MoreHoriz,
                 contentDescription = null,
                 tint = SplitMateTheme.PrimaryDark,
                 modifier = Modifier.size(14.dp)
             )
-            Spacer(modifier = Modifier.width(5.dp))
+        },
+        label = {
             Text(
                 text = "More",
                 fontFamily = SplitMateBrandFontFamily,
@@ -565,7 +577,7 @@ fun MoreCategoriesChip(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 color = SplitMateTheme.PrimaryDark
             )
         }
-    }
+    )
 }
 
 // ==============================================================================
@@ -674,19 +686,30 @@ fun CreateExpenseCategoryDialog(
                 ) {
                     SpendBucket.values().forEach { b ->
                         val isPicked = b == bucket
-                        Surface(
+                        // v2.4.0 rc3: official M3 Expressive FilterChip (selected semantics, press morph).
+                        FilterChip(
+                            selected = isPicked,
                             onClick = {
                                 bucket = b
                                 bucketPickedManually = true
                             },
-                            shape = RoundedCornerShape(20.dp),
-                            color = if (isPicked) SplitMateTheme.PrimaryDark else SplitMateTheme.SurfaceMuted,
-                            border = BorderStroke(1.dp, if (isPicked) SplitMateTheme.PrimaryDark else SplitMateTheme.BorderLight),
+                            shapes = FilterChipDefaults.shapes(shape = MaterialTheme.shapes.large, selectedShape = MaterialTheme.shapes.large),
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = SplitMateTheme.SurfaceMuted,
+                                selectedContainerColor = SplitMateTheme.PrimaryDark
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = isPicked,
+                                borderColor = SplitMateTheme.BorderLight,
+                                selectedBorderColor = SplitMateTheme.PrimaryDark,
+                                borderWidth = 1.dp,
+                                selectedBorderWidth = 1.dp
+                            ),
                             modifier = Modifier
                                 .heightIn(min = 36.dp)
-                                .semantics { selected = isPicked }
-                        ) {
-                            Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                .semantics { selected = isPicked },
+                            label = {
                                 Text(
                                     b.label,
                                     fontFamily = SplitMateBrandFontFamily,
@@ -695,7 +718,7 @@ fun CreateExpenseCategoryDialog(
                                     color = if (isPicked) SplitMateTheme.SurfaceWhite else SplitMateTheme.PrimaryDark
                                 )
                             }
-                        }
+                        )
                     }
                 }
 
@@ -713,14 +736,21 @@ fun CreateExpenseCategoryDialog(
                 ) {
                     ExpenseCategoryIconKeys.ALL.forEach { key ->
                         val isPicked = key == iconKey
-                        Surface(
-                            onClick = {
+                        // v2.4.0 rc3: official OutlinedIconToggleButton with the toggleable shapes morph.
+                        OutlinedIconToggleButton(
+                            checked = isPicked,
+                            onCheckedChange = {
                                 iconKey = key
                                 iconPickedManually = true
                                 if (!bucketPickedManually && name.isBlank()) bucket = ExpenseBucketResolver.suggestBucket(name, key)
                             },
-                            shape = RoundedCornerShape(if (isPicked) 14.dp else 24.dp),
-                            color = if (isPicked) SplitMateTheme.SageSurface else SplitMateTheme.SurfaceMuted,
+                            shapes = IconButtonDefaults.toggleableShapes(),
+                            colors = IconButtonDefaults.outlinedIconToggleButtonColors(
+                                containerColor = SplitMateTheme.SurfaceMuted,
+                                contentColor = SplitMateTheme.PrimaryDark,
+                                checkedContainerColor = SplitMateTheme.SageSurface,
+                                checkedContentColor = SplitMateTheme.SageText
+                            ),
                             border = BorderStroke(
                                 if (isPicked) 2.dp else 1.dp,
                                 if (isPicked) SplitMateTheme.SageText else SplitMateTheme.BorderLight
@@ -732,43 +762,44 @@ fun CreateExpenseCategoryDialog(
                                     contentDescription = "Icon ${key.replace('_', ' ')}"
                                 }
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = ExpenseCategoryIcons.forKey(key),
-                                    contentDescription = null,
-                                    tint = if (isPicked) SplitMateTheme.SageText else SplitMateTheme.PrimaryDark,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
+                            Icon(
+                                imageVector = ExpenseCategoryIcons.forKey(key),
+                                contentDescription = null,
+                                tint = if (isPicked) SplitMateTheme.SageText else SplitMateTheme.PrimaryDark,
+                                modifier = Modifier.size(22.dp)
+                            )
                         }
                     }
                 }
             }
         },
         confirmButton = {
-            Surface(
+            // v2.4.0 rc3: official Button with the shapes() press morph.
+            Button(
                 onClick = {
                     CustomExpenseCategoryStore.add(context, name, iconKey, bucket)
                         .onSuccess(onCreated)
                         .onFailure { error = it.message }
                 },
-                shape = RoundedCornerShape(24.dp),
-                color = SplitMateTheme.PrimaryDark,
+                shapes = ButtonDefaults.shapes(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = SplitMateTheme.PrimaryDark,
+                    contentColor = SplitMateTheme.SurfaceWhite
+                ),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
                 modifier = Modifier.heightIn(min = 44.dp)
             ) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-                    Text(
-                        "Create",
-                        fontFamily = SplitMateBrandFontFamily,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 14.sp,
-                        color = SplitMateTheme.SurfaceWhite
-                    )
-                }
+                Text(
+                    "Create",
+                    fontFamily = SplitMateBrandFontFamily,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 14.sp,
+                    color = SplitMateTheme.SurfaceWhite
+                )
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) {
                 Text("Cancel", fontWeight = FontWeight.Bold, color = SplitMateTheme.PrimaryDark)
             }
         }
