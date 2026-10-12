@@ -12,6 +12,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.Luggage
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.ui.semantics.stateDescription
@@ -1025,6 +1026,11 @@ fun TripHomeScreen(
     val isAllSettled = remember(activeMemberNetCents, openGroupDebtCents) {
         activeMemberNetCents == 0L && openGroupDebtCents == 0L
     }
+    // v2.4.0 D7: calm empty states only when there is truly nothing: no expenses AND every
+    // balance is zero (an expense deleted after a payment was recorded still shows the money UI).
+    val isEmptyTrip = remember(classifiedExpenses, netBalancesMap) {
+        TripHubLayoutRules.isEmptyTrip(classifiedExpenses.size, netBalancesMap.values)
+    }
 
     Scaffold(
         containerColor = TripHubTokens.CanvasBg,
@@ -1181,7 +1187,9 @@ fun TripHomeScreen(
             // =================================================================
             // SUBTASK 3.1.3: COMPACT PERSPECTIVE NET BALANCE STRIP
             // =================================================================
-            if (!TripHubLayoutRules.showsSpendCard(selectedSectionTab)) {
+            if (isEmptyTrip) {
+                // v2.4.0 D7: a brand-new trip shows no "All settled" chip or ₹0.00 spend card.
+            } else if (!TripHubLayoutRules.showsSpendCard(selectedSectionTab)) {
                 // v2.4.0 Trip Hub step 1: money stays on Money; elsewhere a small balance chip opens it.
                 TripHubBalanceChip(
                     activeMemberNetCents = activeMemberNetCents,
@@ -1419,6 +1427,20 @@ fun TripHomeScreen(
                 }
 
                 TripHubSectionTab.MONEY -> {
+                if (isEmptyTrip) {
+                    // v2.4.0 D7: nothing to settle or share yet.
+                    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
+                        item(key = "empty_money") {
+                            com.splitmate.app.ui.components.CalmEmptyState(
+                                icon = Icons.Rounded.AccountBalanceWallet,
+                                line = "No expenses yet. Split your first bill and balances show up here.",
+                                actionLabel = "Split a bill",
+                                actionIcon = Icons.AutoMirrored.Rounded.ReceiptLong,
+                                onAction = onLogQuickExpenseClick
+                            )
+                        }
+                    }
+                } else {
                     TripHubMoneySettlementView(
                         viewModel = viewModel,
                         groupId = resolvedGroupId,
@@ -1465,6 +1487,7 @@ fun TripHomeScreen(
                             }
                         }
                     )
+                }
                 }
 
                 TripHubSectionTab.PEOPLE -> {
@@ -2297,15 +2320,16 @@ private fun TripHubOverviewFeed(
     if (filteredClassifiedExpenses.isEmpty()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
         ) {
             item(key = "empty_trip_hub_state") {
-                EmptyTripHubStateCard(
-                    onLogTrainPnrClick = { onOpenTrainPnrReviewClick("") },
-                    onUploadFlightPdfClick = { onOpenFlightReviewClick("") },
-                    onLogSharedExpenseClick = onLogQuickExpenseClick,
-                    modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)
+                // v2.4.0 D7: calm empty state (was a card with three Title Case buttons).
+                com.splitmate.app.ui.components.CalmEmptyState(
+                    icon = Icons.Rounded.Luggage,
+                    line = "Nothing added yet. Tickets and bills show up here as you add them.",
+                    actionLabel = "Split a bill",
+                    actionIcon = Icons.AutoMirrored.Rounded.ReceiptLong,
+                    onAction = onLogQuickExpenseClick
                 )
             }
         }
@@ -4404,148 +4428,6 @@ private fun ExpandableSplitBreakdownDrawer(
 }
 
 @Composable
-private fun EmptyTripHubStateCard(
-    onLogTrainPnrClick: () -> Unit,
-    onUploadFlightPdfClick: () -> Unit,
-    onLogSharedExpenseClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
-    val localView = LocalView.current
-
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = TripHubTokens.CardSurface,
-        border = BorderStroke(1.dp, TripHubTokens.CardBorder),
-        modifier = modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(22.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
-                    .background(TripHubTokens.PositiveSagePillBg),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Train,
-                    contentDescription = null,
-                    tint = TripHubTokens.PositiveSageText,
-                    modifier = Modifier.size(28.dp)
-                )
-            }
-
-            Text(
-                text = "Your Trip Hub is Ready",
-                fontFamily = FigtreeFontFamily,
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 19.sp,
-                color = TripHubTokens.TextPrimary
-            )
-
-            Text(
-                text = "Add a train ticket with its PNR, upload a boarding pass, or add a stay, rental, cab or bill. Your bookings show up here as you add them.",
-                fontWeight = FontWeight.Medium,
-                style = MaterialTheme.typography.bodyMedium,
-                color = TripHubTokens.TextSecondary
-            )
-
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = {
-                        performCrispTactileHaptic(context, localView, heavy = false)
-                        onLogTrainPnrClick()
-                    },
-                    shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = DesignSystemBindings.activePalette.primary,
-                        contentColor = DesignSystemBindings.activePalette.onPrimary
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .minimumInteractiveComponentSize()
-                        .defaultMinSize(minHeight = 48.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Train,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "+ Log Train PNR",
-                        fontWeight = FontWeight.ExtraBold,
-                        style = MaterialTheme.typography.titleSmall)
-                }
-
-                OutlinedButton(
-                    onClick = {
-                        performCrispTactileHaptic(context, localView, heavy = false)
-                        onUploadFlightPdfClick()
-                    },
-                    shape = CircleShape,
-                    border = BorderStroke(1.dp, TripHubTokens.CardBorder),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .minimumInteractiveComponentSize()
-                        .defaultMinSize(minHeight = 48.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.FlightTakeoff,
-                        contentDescription = null,
-                        tint = TripHubTokens.TextPrimary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "+ Upload Flight PDF",
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = TripHubTokens.TextPrimary
-                    )
-                }
-
-                OutlinedButton(
-                    onClick = {
-                        performCrispTactileHaptic(context, localView, heavy = false)
-                        onLogSharedExpenseClick()
-                    },
-                    shape = CircleShape,
-                    border = BorderStroke(1.dp, TripHubTokens.CardBorder),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .minimumInteractiveComponentSize()
-                        .defaultMinSize(minHeight = 48.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.ReceiptLong,
-                        contentDescription = null,
-                        tint = TripHubTokens.TextPrimary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "+ Log Shared Expense",
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = TripHubTokens.TextPrimary
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun PerforatedTicketStubDivider() {
     val notchBg = TripHubTokens.CanvasBg
     val dashColor = TripHubTokens.CardBorder
@@ -4608,11 +4490,10 @@ private fun TripHubPlanTimelineView(
             contentPadding = PaddingValues(16.dp)
         ) {
             item(key = "empty_plan") {
-                EmptyTripHubStateCard(
-                    onLogTrainPnrClick = { onOpenTrainPnrReviewClick("") },
-                    onUploadFlightPdfClick = { onOpenFlightReviewClick("") },
-                    onLogSharedExpenseClick = onLogQuickExpenseClick,
-                    modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)
+                // v2.4.0 D7: calm empty state; tickets land on their day once added.
+                com.splitmate.app.ui.components.CalmEmptyState(
+                    icon = Icons.Rounded.Map,
+                    line = "Your days fill in as you add tickets and bookings."
                 )
             }
         }
@@ -7229,6 +7110,21 @@ private fun TripHubPeoplePerspectiveView(
                         }
                     }
                 }
+            }
+        }
+
+        if (groupMembers.size <= 1) {
+            item(key = "people_just_you_hint") {
+                // v2.4.0 D7: calm one-liner instead of an empty list.
+                Text(
+                    text = "Just you so far. Share the code and friends can join this trip.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TripHubTokens.TextSecondary,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 12.dp)
+                )
             }
         }
 

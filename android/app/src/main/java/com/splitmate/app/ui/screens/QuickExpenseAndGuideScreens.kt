@@ -61,7 +61,7 @@ import com.splitmate.app.ui.SplitMateExpressiveTypography
 import com.splitmate.app.ui.SplitMateMonospaceTextStyle
 import com.splitmate.app.ui.SplitMateTnumMonospace
 import com.splitmate.app.ui.components.ConnectedButtonGroup
-import com.splitmate.app.ui.components.LinearWavyProgressIndicator
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.splitmate.app.ui.components.MaterialShapes
 import com.splitmate.app.ui.components.MorphPolygonShape
 import com.splitmate.app.ui.components.SplitMateMotion
@@ -1460,106 +1460,107 @@ fun QuickExpenseScreen(
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
-                                        Text(
-                                            text = formattedDisplay,
-                                            fontFamily = SplitMateDisplayFontFamily,
-                                            fontSize = 42.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = textPrimary,
-                                            letterSpacing = (-1.5).sp,
-                                            lineHeight = 46.sp,
-                                            style = TextStyle(fontFeatureSettings = "tnum")
-                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = formattedDisplay,
+                                                fontFamily = SplitMateDisplayFontFamily,
+                                                fontSize = 42.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = textPrimary,
+                                                letterSpacing = (-1.5).sp,
+                                                lineHeight = 46.sp,
+                                                style = TextStyle(fontFeatureSettings = "tnum")
+                                            )
+                                            // v2.4.0 D7: the keypad types here from the first frame.
+                                            AmountInputCursor(color = activePalette.primary)
+                                        }
                                     }
 
                                     // Real-time Exact Split / Per-Person Share Pill (tapping triggers 1.2s 0.00c Drift verification pulse)
-                                    Surface(
-                                        onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                                            if (remainderPaise > 0L && !isRemainderEquallySplit) {
-                                                triggerRemainderCoinFlight()
-                                            } else {
-                                                isRemainderEquallySplit = true
-                                            }
-                                        },
-                                        shape = QuickExpenseThemeTokens.RadiusPill,
-                                        color = if (memberCount > 0) QuickExpenseThemeTokens.SageSurface else QuickExpenseThemeTokens.TerracottaSurface,
-                                        border = BorderStroke(
-                                            1.dp,
-                                            if (memberCount > 0) QuickExpenseThemeTokens.AccentSage else DesignSystemBindings.activePalette.errorContainer
-                                        )
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    // v2.4.0 D7: the per-person pill appears once there is an amount (the "pick someone"
+                                    // warning still shows straight away).
+                                    if (totalAmountPaise > 0L || memberCount == 0) {
+                                        Surface(
+                                            onClick = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                                if (remainderPaise > 0L && !isRemainderEquallySplit) {
+                                                    triggerRemainderCoinFlight()
+                                                } else {
+                                                    isRemainderEquallySplit = true
+                                                }
+                                            },
+                                            shape = QuickExpenseThemeTokens.RadiusPill,
+                                            color = if (memberCount > 0) QuickExpenseThemeTokens.SageSurface else QuickExpenseThemeTokens.TerracottaSurface,
+                                            border = BorderStroke(
+                                                1.dp,
+                                                if (memberCount > 0) QuickExpenseThemeTokens.AccentSage else DesignSystemBindings.activePalette.errorContainer
+                                            )
                                         ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(18.dp)
-                                                    .clip(MorphPolygonShape(badgeMorph, badgeMorphProgress))
-                                                    .background(
-                                                        if (memberCount > 0) QuickExpenseThemeTokens.SageBorder.copy(alpha = 0.18f)
-                                                        else QuickExpenseThemeTokens.TerracottaText.copy(alpha = 0.18f)
-                                                    ),
-                                                contentAlignment = Alignment.Center
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                             ) {
-                                                Icon(
-                                                    imageVector = if (memberCount > 0) Icons.Rounded.CheckCircle else Icons.Rounded.ErrorOutline,
-                                                    contentDescription = null,
-                                                    tint = if (memberCount > 0) QuickExpenseThemeTokens.SageText else QuickExpenseThemeTokens.TerracottaText,
-                                                    modifier = Modifier.size(13.dp)
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(18.dp)
+                                                        .clip(MorphPolygonShape(badgeMorph, badgeMorphProgress))
+                                                        .background(
+                                                            if (memberCount > 0) QuickExpenseThemeTokens.SageBorder.copy(alpha = 0.18f)
+                                                            else QuickExpenseThemeTokens.TerracottaText.copy(alpha = 0.18f)
+                                                        ),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector = if (memberCount > 0) Icons.Rounded.CheckCircle else Icons.Rounded.ErrorOutline,
+                                                        contentDescription = null,
+                                                        tint = if (memberCount > 0) QuickExpenseThemeTokens.SageText else QuickExpenseThemeTokens.TerracottaText,
+                                                        modifier = Modifier.size(13.dp)
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.width(5.dp))
+                                                Text(
+                                                    text = if (memberCount > 0) {
+                                                        com.splitmate.app.ExpenseSplitCopy.compactDetail(
+                                                            nature = quickSplitNature,
+                                                            beneficiaryName = quickSoleMember?.name,
+                                                            beneficiaryIsCurrentUser = quickSoleMember?.isCurrentUser == true,
+                                                            sharedDetail = "$currencySymbol${formatPaiseForSplitBadge(perPersonPaise)}/person · exact split"
+                                                        )
+                                                    } else {
+                                                        "Pick ≥1"
+                                                    },
+                                                    fontFamily = SplitMateBrandFontFamily,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = if (memberCount > 0) QuickExpenseThemeTokens.SageText else QuickExpenseThemeTokens.TerracottaText,
+                                                    style = TextStyle(fontFeatureSettings = "tnum")
                                                 )
                                             }
-                                            Spacer(modifier = Modifier.width(5.dp))
-                                            Text(
-                                                text = if (memberCount > 0) {
-                                                    com.splitmate.app.ExpenseSplitCopy.compactDetail(
-                                                        nature = quickSplitNature,
-                                                        beneficiaryName = quickSoleMember?.name,
-                                                        beneficiaryIsCurrentUser = quickSoleMember?.isCurrentUser == true,
-                                                        sharedDetail = "$currencySymbol${formatPaiseForSplitBadge(perPersonPaise)}/person · exact split"
-                                                    )
-                                                } else {
-                                                    "Pick ≥1"
-                                                },
-                                                fontFamily = SplitMateBrandFontFamily,
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = if (memberCount > 0) QuickExpenseThemeTokens.SageText else QuickExpenseThemeTokens.TerracottaText,
-                                                style = TextStyle(fontFeatureSettings = "tnum")
-                                            )
                                         }
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.height(4.dp))
-
-                                val allocatedRatio = if (memberCount > 0) {
-                                    if (remainderPaise == 0L || isRemainderEquallySplit) 1f else 0.92f
-                                } else 0f
-                                LinearWavyProgressIndicator(
-                                    progress = { allocatedRatio },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(6.dp),
-                                    color = if (isZeroDriftVerified) QuickExpenseThemeTokens.SageBorder else activePalette.secondary,
-                                    trackColor = keypadBorder.copy(alpha = 0.45f),
-                                    amplitude = if (isZeroDriftVerified) 0f else 1f,
-                                    wavelength = 24.dp,
-                                    gapSize = 4.dp,
-                                    stopSize = 4.dp,
-                                    strokeWidth = 5.dp
-                                )
-
-                                Spacer(modifier = Modifier.height(3.dp))
-
-                                Text(
-                                    text = "Adds up exactly",
-                                    style = SplitMateExpressiveTypography.labelSmallEmphasized.merge(SplitMateMonospaceTextStyle),
-                                    fontSize = 11.sp,
-                                    color = if (isZeroDriftVerified) QuickExpenseThemeTokens.SageText else textSecondary,
-                                    letterSpacing = 0.1.sp
-                                )
+                                // v2.4.0 D7: no progress line on money data (it was a fake 92% / 100% bar),
+                                // and "Adds up exactly" only once there is an amount to add up.
+                                if (totalAmountPaise > 0L && isZeroDriftVerified) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.CheckCircle,
+                                            contentDescription = null,
+                                            tint = QuickExpenseThemeTokens.SageText,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Adds up exactly",
+                                            style = SplitMateExpressiveTypography.labelSmallEmphasized.merge(SplitMateMonospaceTextStyle),
+                                            fontSize = 11.sp,
+                                            color = QuickExpenseThemeTokens.SageText,
+                                            letterSpacing = 0.1.sp
+                                        )
+                                    }
+                                }
 
                                 // High-contrast Peach Remainder Banner when remainderPaise > 0L & not yet reconciled
                                 if (remainderPaise > 0L && (!isRemainderEquallySplit || remainderCoinFlightProgress.value > 0f)) {
@@ -2638,3 +2639,44 @@ fun EditFriendUpiDialog(
     }
 }
 
+
+/**
+ * v2.4.0 D7 keypad-first: a thin blinking cursor after the amount, so the form reads as
+ * "type the amount" from the first frame. Holds still (always visible) under reduced motion.
+ * Decorative: hidden from accessibility services.
+ */
+@Composable
+private fun AmountInputCursor(color: Color) {
+    val reducedMotion = com.splitmate.app.ui.components.rememberReducedMotionEnabled()
+    val alpha = if (reducedMotion) {
+        1f
+    } else {
+        val blink = androidx.compose.animation.core.rememberInfiniteTransition(label = "AmountCursorBlink")
+        val value by blink.animateFloat(
+            initialValue = 1f,
+            targetValue = 0f,
+            animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                animation = androidx.compose.animation.core.keyframes {
+                    durationMillis = 1060
+                    1f at 0
+                    1f at 529
+                    0f at 530
+                    0f at 1059
+                },
+                repeatMode = androidx.compose.animation.core.RepeatMode.Restart
+            ),
+            label = "AmountCursorAlpha"
+        )
+        value
+    }
+    Box(
+        modifier = Modifier
+            .padding(start = 3.dp)
+            .width(3.dp)
+            .height(36.dp)
+            .graphicsLayer { this.alpha = alpha }
+            .clip(CircleShape)
+            .background(color)
+            .clearAndSetSemantics { }
+    )
+}

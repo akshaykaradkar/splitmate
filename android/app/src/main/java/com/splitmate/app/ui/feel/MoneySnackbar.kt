@@ -14,27 +14,39 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * v2.4.0 D5: one app-wide snackbar for money moments.
  *
  * - [offerUndo]: "Marked paid · ₹14.17 from Sam to Akshay" with an Undo action (about 4 seconds).
  * - [say]: a plain message, e.g. why a payment could not be recorded.
+ * - [announce] (v2.4.0 D7): a calm, non-urgent line such as "Priya joined Goa".
  *
  * It lives at the app root, so it survives leaving the screen where the payment was made.
+ * Money messages always win: [offerUndo] and [say] cancel any waiting or showing announcement,
+ * so an Undo is never pushed back behind "joined" lines.
  */
 @Stable
 class MoneySnackbar internal constructor(
     val hostState: SnackbarHostState,
     private val scope: CoroutineScope
 ) {
+    private val announceLock = Mutex()
+    private val announcements = mutableListOf<Job>()
+
     fun offerUndo(message: String, onUndo: () -> Unit) {
+        cancelAnnouncements()
         scope.launch {
             hostState.currentSnackbarData?.dismiss()
             val result = hostState.showSnackbar(
@@ -48,10 +60,33 @@ class MoneySnackbar internal constructor(
     }
 
     fun say(message: String) {
+        cancelAnnouncements()
         scope.launch {
             hostState.currentSnackbarData?.dismiss()
             hostState.showSnackbar(message = message, duration = SnackbarDuration.Short)
         }
+    }
+
+    /**
+     * v2.4.0 D7: shows [message] once nothing else is on screen, one at a time. It never dismisses
+     * what is showing (an open Undo stays usable). [onShown] runs right as the line appears, so a
+     * haptic lands with the text, not seconds earlier.
+     */
+    fun announce(message: String, onShown: () -> Unit = {}) {
+        val job = scope.launch {
+            announceLock.withLock {
+                snapshotFlow { hostState.currentSnackbarData }.first { it == null }
+                onShown()
+                hostState.showSnackbar(message = message, duration = SnackbarDuration.Short)
+            }
+        }
+        announcements += job
+        job.invokeOnCompletion { scope.launch { announcements.remove(job) } }
+    }
+
+    private fun cancelAnnouncements() {
+        announcements.toList().forEach { it.cancel() }
+        announcements.clear()
     }
 }
 

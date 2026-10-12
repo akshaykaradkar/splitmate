@@ -93,4 +93,12 @@ object TripHubLayoutRules {
 
     /** The spend hero card shows only on Money; everywhere else the compact chip. */
     fun showsSpendCard(tab: TripHubSectionTab): Boolean = tab == TripHubSectionTab.MONEY
+
+    /**
+     * v2.4.0 D7: a trip is "empty" (calm empty states, no balance chip, no ₹0.00 spend card) only
+     * when it has no expenses AND nobody's balance is non-zero. A leftover balance (for example a
+     * payment recorded before its expense was deleted) keeps the full money UI visible.
+     */
+    fun isEmptyTrip(expenseCount: Int, netBalances: Collection<Long>): Boolean =
+        expenseCount == 0 && netBalances.all { it == 0L }
 }

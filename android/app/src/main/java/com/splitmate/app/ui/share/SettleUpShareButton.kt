@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -39,6 +38,7 @@ import kotlinx.coroutines.launch
  * v2.3.5 (#2): M3 tonal "Share as image" button. Builds the [SettleUpShareModel] lazily on tap,
  * renders it off the main thread and opens the share sheet. Failures show a short toast.
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SettleUpShareButton(
     buildModel: () -> SettleUpShareModel,
@@ -54,14 +54,19 @@ fun SettleUpShareButton(
             if (isRendering) return@FilledTonalButton
             isRendering = true
             scope.launch {
+                val startedAt = System.currentTimeMillis()
                 val result = try {
                     val model = buildModel()
                     ShareImageHelper.renderAndShare(context, model, ShareImageHelper.captionFor(model))
                 } catch (c: CancellationException) {
+                    isRendering = false
                     throw c
                 } catch (t: Throwable) {
                     Result.failure(t)
                 }
+                // v2.4.0 D7: keep the progress visible for at least 400ms so it never flickers.
+                val shownFor = System.currentTimeMillis() - startedAt
+                if (shownFor < MIN_PROGRESS_VISIBLE_MS) kotlinx.coroutines.delay(MIN_PROGRESS_VISIBLE_MS - shownFor)
                 isRendering = false
                 if (result.isFailure) {
                     Toast.makeText(context, "Couldn't create the settle-up image. Try again.", Toast.LENGTH_SHORT).show()
@@ -69,29 +74,37 @@ fun SettleUpShareButton(
             }
         },
         enabled = !isRendering,
-        modifier = modifier.semantics { contentDescription = "Share settle-up as image" },
+        modifier = modifier.semantics {
+            contentDescription = if (isRendering) "Making settle-up image" else "Share settle-up as image"
+        },
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         colors = ButtonDefaults.filledTonalButtonColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            // Keep the tonal look while rendering (disabled only blocks a second tap).
+            disabledContainerColor = MaterialTheme.colorScheme.primaryContainer,
+            disabledContentColor = MaterialTheme.colorScheme.onPrimaryContainer
         )
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
             if (isRendering) {
-                // Short local render (not network / not money data): a small spinner on the button.
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
+                // v2.4.0 D7: short local render (not network, not money data): the M3 Expressive
+                // loading shape (static under reduced motion) instead of a plain spinner.
+                com.splitmate.app.ui.components.LoadingIndicator(
+                    size = 20.dp,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             } else {
                 Icon(imageVector = Icons.Rounded.Share, contentDescription = null, modifier = Modifier.size(18.dp))
             }
             Spacer(modifier = Modifier.width(8.dp))
-            Text(text = label, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(text = if (isRendering) "Making image…" else label, fontWeight = FontWeight.Bold, fontSize = 14.sp)
         }
     }
 }
+
+/** v2.4.0 D7: minimum time the share-image progress stays on screen. */
+private const val MIN_PROGRESS_VISIBLE_MS = 400L
 
 /**
  * Builds the share model for one group from existing UI state (no ViewModel changes). Transfers

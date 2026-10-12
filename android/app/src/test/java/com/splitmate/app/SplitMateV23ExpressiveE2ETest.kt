@@ -4195,7 +4195,8 @@ class SplitMateV23ExpressiveE2ETest {
             assertFalse(src.contains("ExpressiveGapLinearProgressIndicator("))
             assertTrue(src.contains("Morph(MaterialShapes.SoftBurst, MaterialShapes.Cookie9Sided)"))
             assertTrue(src.contains("MorphPolygonShape(badgeMorph, badgeMorphProgress)"))
-            assertTrue(src.contains("amplitude = if (isZeroDriftVerified) 0f else 1f"))
+            // v2.4.0 D7: the wavy "allocated" bar under the amount was removed (no progress lines on money).
+            assertFalse(src.contains("amplitude = if (isZeroDriftVerified) 0f else 1f"))
             assertTrue(src.contains("SplitMateExpressiveTypography.labelSmallEmphasized.merge(SplitMateMonospaceTextStyle)"))
             assertTrue(src.contains("remainderCoinFlightProgress"))
             assertTrue(src.contains("Split Remainder Equally"))
@@ -4620,9 +4621,10 @@ class SplitMateV23ExpressiveE2ETest {
             assertFalse(pnrSrc.contains("ExpressiveGapLinearProgressIndicator("))
             assertFalse(flightSrc.contains("ExpressiveGapLinearProgressIndicator("))
 
-            // 4. QuickExpenseAndGuideScreens ConnectedButtonGroup + LinearWavyProgressIndicator
+            // 4. QuickExpenseAndGuideScreens ConnectedButtonGroup; v2.4.0 D7: no progress line on the
+            //    amount (money data). Wavy progress is only for in-flight network work.
             assertTrue(quickExpenseSrc.contains("ConnectedButtonGroup("))
-            assertTrue(quickExpenseSrc.contains("LinearWavyProgressIndicator("))
+            assertFalse(quickExpenseSrc.contains("LinearWavyProgressIndicator("))
         }
     }
 }

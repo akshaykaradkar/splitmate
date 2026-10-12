@@ -359,6 +359,31 @@ class SplitMateViewModel(
     )
     val uiState: StateFlow<SplitMateUiState> = _uiState.asStateFlow()
 
+    /**
+     * v2.4.0 D7: one-shot "Priya joined Goa" lines, emitted when a refresh from Room shows a person
+     * newly JOINED in a trip that was already on this phone. Display only; never touches money.
+     */
+    private val _memberJoinedMessages = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 8)
+    val memberJoinedMessages: kotlinx.coroutines.flow.SharedFlow<String> = _memberJoinedMessages
+
+    /**
+     * v2.4.0 D7: called from the Room members collector with the previous and new member lists.
+     * Read-only; any failure is swallowed so it can never affect the members stream.
+     */
+    private fun announceMemberArrivals(previous: List<GroupMemberEntity>, current: List<GroupMemberEntity>) {
+        runCatching {
+            val state = _uiState.value
+            val arrivals = com.splitmate.app.MemberArrivals.detect(
+                beforeGroupIds = previous.map { it.groupId }.toSet(),
+                beforeMembers = previous,
+                afterMembers = current,
+                groupNames = state.groups.associate { it.groupId to it.name },
+                myPhone10 = com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianPhone10(state.userPhone)
+            )
+            com.splitmate.app.MemberArrivals.messages(arrivals).forEach { _memberJoinedMessages.tryEmit(it) }
+        }
+    }
+
     val activeGroupMembers: StateFlow<List<GroupMemberEntity>> = _uiState.map { state ->
         state.activeGroupMembers
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -792,6 +817,9 @@ class SplitMateViewModel(
                 }
             }
             launch {
+                // v2.4.0 D7 (review J1/J2): the "member joined" diff runs here, in the one serialized
+                // Room members stream. The first emission is the baseline, so app start is quiet.
+                var lastMembers: List<GroupMemberEntity>? = null
                 roomDao.observeAllMembers().collect { members ->
                     _uiState.update { curr ->
                         val syncedMembers = syncLocalOwnerAvatarSeeds(
@@ -802,6 +830,8 @@ class SplitMateViewModel(
                         )
                         curr.copy(members = syncedMembers)
                     }
+                    lastMembers?.let { previous -> announceMemberArrivals(previous, members) }
+                    lastMembers = members
                 }
             }
             launch {

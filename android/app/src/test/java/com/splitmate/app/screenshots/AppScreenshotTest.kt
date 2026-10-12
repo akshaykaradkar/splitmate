@@ -289,4 +289,22 @@ class AppScreenshotTest {
     @Test fun s06_espresso_home() { launch(SplitMateThemeMode.WARM_ESPRESSO_NIGHT); shot("06_ledgers_espresso") }
 
     @Test fun s07_kyoto_home() { launch(SplitMateThemeMode.KYOTO_MATCHA_YUZU); shot("07_ledgers_kyoto") }
+
+    // v2.4.0 D7: empty states of a brand-new trip (only you, no expenses).
+    private fun launchEmptyTrip(): SplitMateViewModel {
+        val vm = launch()
+        compose.runOnUiThread { vm.createNewGroup(name = "Goa Weekend", currencyCode = "INR", friendNamesCsv = "") }
+        settle()
+        tap(text = "Goa Weekend")
+        return vm
+    }
+
+    @Test fun s30_empty_trip_overview() { launchEmptyTrip(); shot("30_empty_trip_overview") }
+
+    @Test fun s31_empty_trip_money() { launchEmptyTrip(); tap(text = "Money"); shot("31_empty_trip_money") }
+
+    // No s32 (empty Plan): a new trip's Plan tab starts background guide lookups, which trips a
+    // Robolectric/Compose test-teardown deadlock (SeekableTransitionState vs snapshot apply). Logged as test debt.
+
+    @Test fun s33_empty_trip_people() { launchEmptyTrip(); tap(text = "People"); shot("33_empty_trip_people") }
 }

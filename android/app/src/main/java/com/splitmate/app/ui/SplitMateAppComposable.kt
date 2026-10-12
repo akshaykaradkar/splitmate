@@ -242,6 +242,19 @@ fun SplitMateApp(viewModel: SplitMateViewModel) {
     SplitMateThemeState.activeThemeMode = uiState.activeThemeMode
     DesignSystemBindings.activeThemeMode = uiState.activeThemeMode
 
+    // v2.4.0 D7: "member joined" moment: a calm snackbar line + soft Confirm haptic.
+    val memberJoinedSnackbar = com.splitmate.app.ui.feel.LocalMoneySnackbar.current
+    val memberJoinedHaptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+    LaunchedEffect(viewModel, memberJoinedSnackbar) {
+        viewModel.memberJoinedMessages.collect { line ->
+            memberJoinedSnackbar?.announce(line) {
+                memberJoinedHaptics.performHapticFeedback(
+                    com.splitmate.app.ui.feel.SplitMateHaptics.composeType(com.splitmate.app.ui.feel.Feel.Confirm)
+                )
+            }
+        }
+    }
+
     // Automatic Network Connectivity Monitor: flushes any offline PENDING expenses the instant internet returns
     DisposableEffect(context, uiState.hasRegisteredProfile) {
         val connectivityManager = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
