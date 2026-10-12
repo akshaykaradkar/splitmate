@@ -1086,7 +1086,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                             Icon(Icons.Rounded.Lock, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
                         },
                         trailingIcon = {
-                            IconButton(onClick = { isPinVisible = !isPinVisible }) {
+                            IconButton(onClick = { isPinVisible = !isPinVisible }, shapes = IconButtonDefaults.shapes()) {
                                 Icon(
                                     imageVector = if (isPinVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
                                     contentDescription = if (isPinVisible) "Hide PIN" else "Show PIN",
@@ -1150,7 +1150,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                             }
                         },
                         enabled = isValidPhone10 && (onboardingName.trim().isNotBlank() || !discoveredProfile?.name.isNullOrBlank()) && isPinReady && !uiState.isCloudSyncing,
-                        shape = SplitMateTheme.RadiusButton,
+                        shapes = ButtonDefaults.shapes(),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = SplitMateTheme.SageText,
                             contentColor = SplitMateTheme.Extended.sage.onColor
@@ -1229,6 +1229,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                     )
                     onCompleteToDashboard()
                 },
+                shapes = ButtonDefaults.shapes(),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
@@ -1341,7 +1342,7 @@ fun PendingGroupInviteCard(
             ) {
                 Button(
                     onClick = onAcceptClick,
-                    shape = SplitMateTheme.RadiusButton,
+                    shapes = ButtonDefaults.shapes(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = SplitMateTheme.Extended.sage.color,
                         contentColor = SplitMateTheme.Palette.surfaceContainerLow
@@ -1368,7 +1369,7 @@ fun PendingGroupInviteCard(
 
                 OutlinedButton(
                     onClick = onDeclineClick,
-                    shape = SplitMateTheme.RadiusButton,
+                    shapes = ButtonDefaults.shapes(),
                     colors = ButtonDefaults.outlinedButtonColors(
                         containerColor = SplitMateTheme.Palette.secondaryContainer,
                         contentColor = SplitMateTheme.Palette.secondary
@@ -2039,7 +2040,7 @@ fun LedgersDashboardScreen(
                 )
             },
             confirmButton = {
-                Surface(
+                OutlinedButton(
                     onClick = {
                         val id = expToDelete.expenseId
                         if (expandedExpenseId == id) expandedExpenseId = null
@@ -2047,33 +2048,32 @@ fun LedgersDashboardScreen(
                         viewModel.rollbackExpense(id)
                         deletingExpense = null
                     },
-                    shape = SplitMateTheme.RadiusBadge,
-                    color = SplitMateTheme.TerracottaSurface,
-                    border = BorderStroke(1.dp, SplitMateTheme.TerracottaText)
+                    shapes = ButtonDefaults.shapes(),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = SplitMateTheme.TerracottaSurface,
+                        contentColor = SplitMateTheme.TerracottaText
+                    ),
+                    border = BorderStroke(1.dp, SplitMateTheme.TerracottaText),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.DeleteOutline,
-                            contentDescription = null,
-                            tint = SplitMateTheme.TerracottaText,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Text(
-                            text = "Delete",
-                            fontFamily = SplitMateTheme.FontRounded,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 12.sp,
-                            color = SplitMateTheme.TerracottaText
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Rounded.DeleteOutline,
+                        contentDescription = null,
+                        tint = SplitMateTheme.TerracottaText,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        text = "Delete",
+                        fontFamily = SplitMateTheme.FontRounded,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 12.sp,
+                        color = SplitMateTheme.TerracottaText
+                    )
                 }
             },
             dismissButton = {
-                TextButton(onClick = { deletingExpense = null }) {
+                TextButton(onClick = { deletingExpense = null }, shapes = ButtonDefaults.shapes()) {
                     Text(
                         text = "Cancel",
                         fontFamily = SplitMateTheme.FontRounded,
@@ -2249,7 +2249,7 @@ fun LedgersDashboardScreen(
                         }
                     },
                     enabled = draftGroupName.trim().isNotEmpty(),
-                    shape = SplitMateTheme.RadiusBadge,
+                    shapes = ButtonDefaults.shapes(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = SplitMateTheme.PrimaryDark,
                         contentColor = SplitMateTheme.ScreenBg
@@ -2259,7 +2259,7 @@ fun LedgersDashboardScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { editingGroupTarget = null }) {
+                TextButton(onClick = { editingGroupTarget = null }, shapes = ButtonDefaults.shapes()) {
                     Text("Cancel", color = SplitMateTheme.TextSecondary)
                 }
             }
@@ -2318,42 +2318,40 @@ fun LedgersDashboardScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Surface(
+                        // v2.4.0 rc3: official buttons with the M3 Expressive press morph.
+                        OutlinedButton(
                             onClick = { viewModel.closeGroupDetail() },
-                            shape = SplitMateTheme.RadiusBadge,
-                            color = SplitMateTheme.SurfaceWhite,
+                            shapes = ButtonDefaults.shapes(),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = SplitMateTheme.SurfaceWhite,
+                                contentColor = SplitMateTheme.PrimaryDark
+                            ),
                             border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
-                            modifier = Modifier
-                                .minimumInteractiveComponentSize()
-                                .defaultMinSize(minHeight = 48.dp)
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                            modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                                    contentDescription = "Back to All Groups",
-                                    tint = SplitMateTheme.PrimaryDark,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "All Groups",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    color = SplitMateTheme.PrimaryDark
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                                contentDescription = "Back to All Groups",
+                                tint = SplitMateTheme.PrimaryDark,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "All Groups",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                softWrap = false,
+                                color = SplitMateTheme.PrimaryDark
+                            )
                         }
 
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Surface(
+                            FilledTonalButton(
                                 onClick = {
                                     val hasPerm = ContextCompat.checkSelfPermission(
                                         context,
@@ -2366,63 +2364,57 @@ fun LedgersDashboardScreen(
                                         addToGroupPermLauncher.launch(Manifest.permission.READ_CONTACTS)
                                     }
                                 },
-                                shape = SplitMateTheme.RadiusBadge,
-                                color = SplitMateTheme.SageSurface,
+                                shapes = ButtonDefaults.shapes(),
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = SplitMateTheme.SageSurface,
+                                    contentColor = SplitMateTheme.SageText
+                                ),
                                 border = BorderStroke(1.dp, SplitMateTheme.AccentSage),
-                                modifier = Modifier
-                                    .minimumInteractiveComponentSize()
-                                    .defaultMinSize(minHeight = 48.dp)
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.PersonAdd,
-                                        contentDescription = "Add Contact",
-                                        tint = SplitMateTheme.SageText,
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(5.dp))
-                                    Text(
-                                        text = "+ Contact",
-                                        fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 12.sp,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        color = SplitMateTheme.SageText
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Rounded.PersonAdd,
+                                    contentDescription = "Add Contact",
+                                    tint = SplitMateTheme.SageText,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = "+ Contact",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    color = SplitMateTheme.SageText
+                                )
                             }
 
-                            Surface(
+                            Button(
                                 onClick = onNavigateToSettle,
-                                shape = CircleShape, // v2.4.0 D3: same pill as every other button
-                                color = SplitMateTheme.PrimaryDark,
-                                modifier = Modifier
-                                    .minimumInteractiveComponentSize()
-                                    .defaultMinSize(minHeight = 48.dp)
+                                shapes = ButtonDefaults.shapes(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = SplitMateTheme.PrimaryDark,
+                                    contentColor = SplitMateTheme.ScreenBg
+                                ),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.SwapHoriz,
-                                        contentDescription = "Settle up",
-                                        tint = SplitMateTheme.ScreenBg,
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(5.dp))
-                                    Text(
-                                        text = "Settle up",
-                                        fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 12.sp,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        color = SplitMateTheme.ScreenBg
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Rounded.SwapHoriz,
+                                    contentDescription = "Settle up",
+                                    tint = SplitMateTheme.ScreenBg,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = "Settle up",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    color = SplitMateTheme.ScreenBg
+                                )
                             }
                         }
                     }
@@ -2437,35 +2429,32 @@ fun LedgersDashboardScreen(
                             onClick = { showClassicSyncSheet = true }
                         )
 
-                        Surface(
+                        OutlinedButton(
                             onClick = { onToggleTripHubView(true) },
-                            shape = SplitMateTheme.RadiusBadge,
-                            color = SplitMateTheme.SurfaceWhite,
+                            shapes = ButtonDefaults.shapes(),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = SplitMateTheme.SurfaceWhite,
+                                contentColor = SplitMateTheme.PrimaryDark
+                            ),
                             border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
-                            modifier = Modifier
-                                .minimumInteractiveComponentSize()
-                                .defaultMinSize(minHeight = 48.dp)
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                            modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.SpaceDashboard,
-                                    contentDescription = "Switch to Trip Hub v2.0",
-                                    tint = SplitMateTheme.PrimaryDark,
-                                    modifier = Modifier.size(15.dp)
-                                )
-                                Text(
-                                    text = "Trip Hub v2.0",
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 12.sp,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    color = SplitMateTheme.PrimaryDark
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Rounded.SpaceDashboard,
+                                contentDescription = "Switch to Trip Hub v2.0",
+                                tint = SplitMateTheme.PrimaryDark,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Trip Hub v2.0",
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                softWrap = false,
+                                color = SplitMateTheme.PrimaryDark
+                            )
                         }
                     }
                 }
@@ -2563,10 +2552,11 @@ fun LedgersDashboardScreen(
                             )
                             val firstEditable = groupMembers.firstOrNull { !it.isCurrentUser }
                             if (firstEditable != null) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(3.dp),
-                                    modifier = Modifier.clickable { editingFriend = firstEditable }
+                                TextButton(
+                                    onClick = { editingFriend = firstEditable },
+                                    shapes = ButtonDefaults.shapes(),
+                                    colors = ButtonDefaults.textButtonColors(contentColor = SplitMateTheme.SageText),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                                 ) {
                                     Text(
                                         text = "Manage All",
@@ -2574,6 +2564,7 @@ fun LedgersDashboardScreen(
                                         fontWeight = FontWeight.Bold,
                                         color = SplitMateTheme.SageText
                                     )
+                                    Spacer(modifier = Modifier.width(3.dp))
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
                                         contentDescription = null,
@@ -2706,7 +2697,7 @@ fun LedgersDashboardScreen(
                                 containerColor = SplitMateTheme.PrimaryDark,
                                 contentColor = SplitMateTheme.ScreenBg
                             ),
-                            shape = SplitMateTheme.RadiusButton,
+                            shapes = ButtonDefaults.shapes(),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .defaultMinSize(minHeight = 44.dp)
@@ -2735,18 +2726,20 @@ fun LedgersDashboardScreen(
                         fontWeight = FontWeight.ExtraBold,
                         color = SplitMateTheme.PrimaryDark
                     )
-                    Surface(
+                    Button(
                         onClick = onNavigateToSplit,
-                        shape = SplitMateTheme.RadiusBadge,
-                        color = SplitMateTheme.PrimaryDark,
-                        modifier = Modifier.minimumInteractiveComponentSize()
+                        shapes = ButtonDefaults.shapes(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SplitMateTheme.PrimaryDark,
+                            contentColor = SplitMateTheme.ScreenBg
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                     ) {
                         Text(
                             text = "+ Log Expense",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = SplitMateTheme.ScreenBg,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            color = SplitMateTheme.ScreenBg
                         )
                     }
                 }
@@ -2908,54 +2901,55 @@ fun LedgersDashboardScreen(
                                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        // Button to Flip to Flight Pass
-                                        Surface(
+                                        // Button to Flip to Flight Pass (v2.4.0 rc3: official buttons, press morph)
+                                        OutlinedButton(
                                             onClick = { isFlightSide = true },
-                                            shape = SplitMateTheme.RadiusBadge,
-                                            color = SplitMateTheme.Extended.flightChip.container,
+                                            shapes = ButtonDefaults.shapes(),
+                                            colors = ButtonDefaults.outlinedButtonColors(
+                                                containerColor = SplitMateTheme.Extended.flightChip.container,
+                                                contentColor = SplitMateTheme.Extended.flightPass.onColor
+                                            ),
                                             border = BorderStroke(1.dp, SplitMateTheme.Extended.flightChip.outline),
-                                            modifier = Modifier.minimumInteractiveComponentSize()
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 7.dp)
                                         ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.FlightTakeoff,
-                                                    contentDescription = "Flip to Flight Pass",
-                                                    tint = SplitMateTheme.Extended.flightPass.onColor,
-                                                    modifier = Modifier.size(13.dp)
-                                                )
-                                                Text(
-                                                    text = "Flight (${flightPnrExpensesInGroup.size})",
-                                                    fontFamily = SplitMateTheme.FontRounded,
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    fontSize = 11.sp,
-                                                    color = SplitMateTheme.Extended.flightPass.onColor
-                                                )
-                                                Icon(
-                                                    imageVector = Icons.Rounded.SwapHoriz,
-                                                    contentDescription = null,
-                                                    tint = SplitMateTheme.Extended.flightPass.onColor,
-                                                    modifier = Modifier.size(13.dp)
-                                                )
-                                            }
+                                            Icon(
+                                                imageVector = Icons.Rounded.FlightTakeoff,
+                                                contentDescription = "Flip to Flight Pass",
+                                                tint = SplitMateTheme.Extended.flightPass.onColor,
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "Flight (${flightPnrExpensesInGroup.size})",
+                                                fontFamily = SplitMateTheme.FontRounded,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 11.sp,
+                                                color = SplitMateTheme.Extended.flightPass.onColor
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Icon(
+                                                imageVector = Icons.Rounded.SwapHoriz,
+                                                contentDescription = null,
+                                                tint = SplitMateTheme.Extended.flightPass.onColor,
+                                                modifier = Modifier.size(13.dp)
+                                            )
                                         }
 
-                                        Surface(
+                                        Button(
                                             onClick = onNavigateToPnrSplit,
-                                            shape = SplitMateTheme.RadiusBadge,
-                                            color = SplitMateTheme.Extended.trainPass.color,
-                                            modifier = Modifier.minimumInteractiveComponentSize()
+                                            shapes = ButtonDefaults.shapes(),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = SplitMateTheme.Extended.trainPass.color,
+                                                contentColor = SplitMateTheme.Extended.trainPass.onColor
+                                            ),
+                                            contentPadding = PaddingValues(horizontal = 11.dp, vertical = 7.dp)
                                         ) {
                                             Text(
                                                 text = "+ PNR",
                                                 fontFamily = SplitMateTheme.FontRounded,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 fontSize = 11.sp,
-                                                color = SplitMateTheme.Extended.trainPass.onColor,
-                                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp)
+                                                color = SplitMateTheme.Extended.trainPass.onColor
                                             )
                                         }
                                     }
@@ -3063,53 +3057,56 @@ fun LedgersDashboardScreen(
                                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        // Button to Flip to Train Pass
-                                        Surface(
+                                        // Button to Flip to Train Pass (v2.4.0 rc3: official buttons, press morph)
+                                        OutlinedButton(
                                             onClick = { isFlightSide = false },
-                                            shape = SplitMateTheme.RadiusBadge,
-                                            color = SplitMateTheme.Extended.trainPass.container,
-                                            border = BorderStroke(1.dp, SplitMateTheme.Extended.trainPass.outline)
+                                            shapes = ButtonDefaults.shapes(),
+                                            colors = ButtonDefaults.outlinedButtonColors(
+                                                containerColor = SplitMateTheme.Extended.trainPass.container,
+                                                contentColor = SplitMateTheme.SageText
+                                            ),
+                                            border = BorderStroke(1.dp, SplitMateTheme.Extended.trainPass.outline),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 7.dp)
                                         ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.Train,
-                                                    contentDescription = "Flip to Train Pass",
-                                                    tint = SplitMateTheme.SageText,
-                                                    modifier = Modifier.size(13.dp)
-                                                )
-                                                Text(
-                                                    text = "Train (${trainPnrExpensesInGroup.size})",
-                                                    fontFamily = SplitMateTheme.FontRounded,
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    fontSize = 11.sp,
-                                                    color = SplitMateTheme.SageText
-                                                )
-                                                Icon(
-                                                    imageVector = Icons.Rounded.SwapHoriz,
-                                                    contentDescription = null,
-                                                    tint = SplitMateTheme.SageText,
-                                                    modifier = Modifier.size(13.dp)
-                                                )
-                                            }
+                                            Icon(
+                                                imageVector = Icons.Rounded.Train,
+                                                contentDescription = "Flip to Train Pass",
+                                                tint = SplitMateTheme.SageText,
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "Train (${trainPnrExpensesInGroup.size})",
+                                                fontFamily = SplitMateTheme.FontRounded,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 11.sp,
+                                                color = SplitMateTheme.SageText
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Icon(
+                                                imageVector = Icons.Rounded.SwapHoriz,
+                                                contentDescription = null,
+                                                tint = SplitMateTheme.SageText,
+                                                modifier = Modifier.size(13.dp)
+                                            )
                                         }
 
-                                        Surface(
+                                        OutlinedButton(
                                             onClick = onUploadFlightPdf,
-                                            shape = SplitMateTheme.RadiusBadge,
-                                            color = SplitMateTheme.Extended.flightPass.color,
-                                            border = BorderStroke(1.dp, SplitMateTheme.Extended.flightPass.outline)
+                                            shapes = ButtonDefaults.shapes(),
+                                            colors = ButtonDefaults.outlinedButtonColors(
+                                                containerColor = SplitMateTheme.Extended.flightPass.color,
+                                                contentColor = SplitMateTheme.Extended.flightPass.onColor
+                                            ),
+                                            border = BorderStroke(1.dp, SplitMateTheme.Extended.flightPass.outline),
+                                            contentPadding = PaddingValues(horizontal = 11.dp, vertical = 7.dp)
                                         ) {
                                             Text(
                                                 text = "+ PDF",
                                                 fontFamily = SplitMateTheme.FontRounded,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 fontSize = 11.sp,
-                                                color = SplitMateTheme.Extended.flightPass.onColor,
-                                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp)
+                                                color = SplitMateTheme.Extended.flightPass.onColor
                                             )
                                         }
                                     }
@@ -3477,69 +3474,72 @@ fun LedgersDashboardScreen(
                                         }
                                     )
                                 }
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Surface(
+                                // v2.4.0 rc3: the paired actions are an official ButtonGroup of official
+                                // FilledTonalButtons (press morph + neighbour give-way via animateWidth).
+                                androidx.compose.material3.ButtonGroup(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    val editInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                                    val deleteInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                                    val editTint = if (isFlightCard) {
+                                        SplitMateTheme.Extended.flightPass.onColor
+                                    } else {
+                                        SplitMateTheme.SageText
+                                    }
+                                    FilledTonalButton(
                                         onClick = { editingExpense = expense },
-                                        shape = SplitMateTheme.RadiusBadge,
-                                        color = if (isFlightCard) {
-                                            if (SplitMateTheme.isDark) SplitMateTheme.Extended.flightPass.color else SplitMateTheme.Extended.flightPass.container
-                                        } else {
-                                            SplitMateTheme.SageSurface
-                                        },
-                                        modifier = Modifier.minimumInteractiveComponentSize()
+                                        shapes = ButtonDefaults.shapes(),
+                                        colors = ButtonDefaults.filledTonalButtonColors(
+                                            containerColor = if (isFlightCard) {
+                                                if (SplitMateTheme.isDark) SplitMateTheme.Extended.flightPass.color else SplitMateTheme.Extended.flightPass.container
+                                            } else {
+                                                SplitMateTheme.SageSurface
+                                            },
+                                            contentColor = editTint
+                                        ),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp),
+                                        interactionSource = editInteraction,
+                                        modifier = Modifier.animateWidth(editInteraction)
                                     ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Edit,
-                                                contentDescription = "Edit Expense",
-                                                modifier = Modifier.size(13.dp),
-                                                tint = if (isFlightCard) {
-                                                    SplitMateTheme.Extended.flightPass.onColor
-                                                } else {
-                                                    SplitMateTheme.SageText
-                                                }
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                text = "Edit",
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (isFlightCard) {
-                                                    SplitMateTheme.Extended.flightPass.onColor
-                                                } else {
-                                                    SplitMateTheme.SageText
-                                                }
-                                            )
-                                        }
+                                        Icon(
+                                            imageVector = Icons.Rounded.Edit,
+                                            contentDescription = "Edit Expense",
+                                            modifier = Modifier.size(13.dp),
+                                            tint = editTint
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Edit",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = editTint
+                                        )
                                     }
 
-                                    Surface(
+                                    FilledTonalButton(
                                         onClick = { deletingExpense = expense },
-                                        shape = SplitMateTheme.RadiusBadge,
-                                        color = SplitMateTheme.TerracottaSurface,
-                                        modifier = Modifier.minimumInteractiveComponentSize()
+                                        shapes = ButtonDefaults.shapes(),
+                                        colors = ButtonDefaults.filledTonalButtonColors(
+                                            containerColor = SplitMateTheme.TerracottaSurface,
+                                            contentColor = SplitMateTheme.TerracottaText
+                                        ),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp),
+                                        interactionSource = deleteInteraction,
+                                        modifier = Modifier.animateWidth(deleteInteraction)
                                     ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.DeleteOutline,
-                                                contentDescription = "Delete Expense",
-                                                modifier = Modifier.size(13.dp),
-                                                tint = SplitMateTheme.TerracottaText
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                text = "Delete",
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = SplitMateTheme.TerracottaText
-                                            )
-                                        }
+                                        Icon(
+                                            imageVector = Icons.Rounded.DeleteOutline,
+                                            contentDescription = "Delete Expense",
+                                            modifier = Modifier.size(13.dp),
+                                            tint = SplitMateTheme.TerracottaText
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Delete",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = SplitMateTheme.TerracottaText
+                                        )
                                     }
                                 }
                             }
@@ -3778,20 +3778,24 @@ fun LedgersDashboardScreen(
                                 }
                             }
                             Spacer(modifier = Modifier.width(8.dp))
-                            Surface(
+                            // v2.4.0 rc3: official Button with the M3 Expressive press morph.
+                            Button(
                                 onClick = {
                                     showUpgradeOtpExpanded = !showUpgradeOtpExpanded
                                 },
-                                shape = SplitMateTheme.RadiusBadge,
-                                color = SplitMateTheme.Extended.sage.color
+                                shapes = ButtonDefaults.shapes(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = SplitMateTheme.Extended.sage.color,
+                                    contentColor = SplitMateTheme.Palette.surfaceContainerLow
+                                ),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                             ) {
                                 Text(
                                     text = "Link phone & PIN",
                                     fontFamily = SplitMateTheme.FontRounded,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 11.sp,
-                                    color = SplitMateTheme.Palette.surfaceContainerLow,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    color = SplitMateTheme.Palette.surfaceContainerLow
                                 )
                             }
                         }
@@ -3856,7 +3860,7 @@ fun LedgersDashboardScreen(
                                     }
                                 },
                                 enabled = isValidUpgradePhone && upgradeOtpInput.length == 4 && !uiState.isCloudSyncing,
-                                shape = SplitMateTheme.RadiusButton,
+                                shapes = ButtonDefaults.shapes(),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = SplitMateTheme.Extended.sage.color,
                                     contentColor = SplitMateTheme.Palette.surfaceContainerLow
@@ -4073,6 +4077,7 @@ fun LedgersDashboardScreen(
                         } else {
                             FilledTonalButton(
                                 onClick = onNavigateToSettle,
+                                shapes = ButtonDefaults.shapes(),
                                 colors = ButtonDefaults.filledTonalButtonColors(
                                     containerColor = SplitMateTheme.SurfaceWhite,
                                     contentColor = SplitMateTheme.PrimaryDark
@@ -4620,32 +4625,32 @@ fun LedgersDashboardScreen(
                                             )
                                         }
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        Surface(
+                                        // v2.4.0 rc3: official Button with the M3 Expressive press morph.
+                                        Button(
                                             onClick = {
                                                 viewModel.restoreDeclinedGroupInvite(context, declinedGroup.groupId)
                                             },
-                                            shape = SplitMateTheme.RadiusBadge,
-                                            color = SplitMateTheme.Extended.sage.color
+                                            shapes = ButtonDefaults.shapes(),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = SplitMateTheme.Extended.sage.color,
+                                                contentColor = SplitMateTheme.Palette.surfaceContainerLow
+                                            ),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp)
                                         ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.Restore,
-                                                    contentDescription = null,
-                                                    tint = SplitMateTheme.Palette.surfaceContainerLow,
-                                                    modifier = Modifier.size(14.dp)
-                                                )
-                                                Text(
-                                                    text = "Restore & Join",
-                                                    fontFamily = SplitMateTheme.FontRounded,
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    fontSize = 11.sp,
-                                                    color = SplitMateTheme.Palette.surfaceContainerLow
-                                                )
-                                            }
+                                            Icon(
+                                                imageVector = Icons.Rounded.Restore,
+                                                contentDescription = null,
+                                                tint = SplitMateTheme.Palette.surfaceContainerLow,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "Restore & Join",
+                                                fontFamily = SplitMateTheme.FontRounded,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 11.sp,
+                                                color = SplitMateTheme.Palette.surfaceContainerLow
+                                            )
                                         }
                                     }
                                 }
@@ -4981,7 +4986,7 @@ fun LedgersDashboardScreen(
                                 contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
                             }
                         },
-                        shape = SplitMateTheme.RadiusButton,
+                        shapes = ButtonDefaults.shapes(),
                         colors = ButtonDefaults.filledTonalButtonColors(
                             containerColor = SplitMateTheme.AccentSage,
                             contentColor = SplitMateTheme.Palette.onSurface
@@ -5059,6 +5064,7 @@ fun LedgersDashboardScreen(
                                                     it.name == member.name && it.cleanPhone == member.cleanPhone
                                                 }
                                             },
+                                            shapes = IconButtonDefaults.shapes(),
                                             modifier = Modifier.size(20.dp)
                                         ) {
                                             Icon(
@@ -5138,7 +5144,7 @@ fun LedgersDashboardScreen(
                                         }
                                         contactSearchQuery = ""
                                     },
-                                    shape = SplitMateTheme.RadiusButton,
+                                    shapes = ButtonDefaults.shapes(),
                                     colors = ButtonDefaults.filledTonalButtonColors(
                                         containerColor = SplitMateTheme.AccentSage,
                                         contentColor = SplitMateTheme.Palette.onSurface
@@ -5294,6 +5300,7 @@ fun LedgersDashboardScreen(
                     ) {
                         TextButton(
                             onClick = { showNewGroupDialog = false },
+                            shapes = ButtonDefaults.shapes(),
                             modifier = Modifier.height(40.dp),
                             contentPadding = PaddingValues(horizontal = 16.dp)
                         ) {
@@ -5334,7 +5341,7 @@ fun LedgersDashboardScreen(
                                 )
                                 showNewGroupDialog = false
                             },
-                            shape = SplitMateTheme.RadiusButton,
+                            shapes = ButtonDefaults.shapes(),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = SplitMateTheme.PrimaryDark,
                                 contentColor = SplitMateTheme.ScreenBg
@@ -5442,6 +5449,7 @@ fun JoinGroupByCodeDialog(
                     }
                     IconButton(
                         onClick = onDismiss,
+                        shapes = IconButtonDefaults.shapes(),
                         modifier = Modifier.size(40.dp)
                     ) {
                         Icon(
@@ -5540,7 +5548,7 @@ fun JoinGroupByCodeDialog(
                     }
 
                     if (inputCodeOrLink.isNotBlank()) {
-                        TextButton(onClick = { inputCodeOrLink = "" }) {
+                        TextButton(onClick = { inputCodeOrLink = "" }, shapes = ButtonDefaults.shapes()) {
                             Text(
                                 text = "Clear",
                                 fontFamily = SplitMateTheme.FontRounded,
@@ -5588,7 +5596,7 @@ fun JoinGroupByCodeDialog(
                         }
                     },
                     enabled = inputCodeOrLink.trim().isNotBlank() && !uiState.isCloudSyncing,
-                    shape = SplitMateTheme.RadiusButton,
+                    shapes = ButtonDefaults.shapes(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = SplitMateTheme.Palette.primary,
                         contentColor = SplitMateTheme.Palette.surfaceContainerLow
@@ -6707,7 +6715,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                                     Toast.makeText(context, "WhatsApp is not installed on this device", Toast.LENGTH_SHORT).show()
                                                                 }
                                                             },
-                                                            shape = SplitMateTheme.RadiusButton,
+                                                            shapes = ButtonDefaults.shapes(),
                                                             colors = ButtonDefaults.outlinedButtonColors(contentColor = SplitMateTheme.PrimaryDark),
                                                             modifier = Modifier
                                                                 .weight(1f)
@@ -7493,7 +7501,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                 viewModel.undoSettlement(selectedSettlement.settlementId)
                                 selectedSettlementForSheet = null
                             },
-                            shape = SplitMateTheme.RadiusButton,
+                            shapes = ButtonDefaults.shapes(),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 contentColor = SplitMateTheme.TerracottaText
                             ),
