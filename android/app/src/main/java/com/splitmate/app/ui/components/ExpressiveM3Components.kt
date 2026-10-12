@@ -107,6 +107,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.platform.LocalDensity
 import androidx.graphics.shapes.RoundedPolygon
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -153,11 +157,23 @@ object WavyProgressIndicatorDefaults {
     val ReducedMotionSegment: WavySegment = WavySegment(start = 0f, end = 0.4f)
 }
 
+/** Round-capped [Stroke] of [width] in px, as the official wavy indicators expect. */
+@Composable
+private fun rememberRoundStroke(width: Dp): Stroke {
+    val density = LocalDensity.current
+    val widthPx = with(density) { width.toPx() }.coerceAtLeast(2f)
+    return remember(widthPx) { Stroke(width = widthPx, cap = StrokeCap.Round) }
+}
+
 /**
  * Material 3 Expressive `LinearWavyProgressIndicator` with sinusoidal wave animation,
  * rounded stroke caps (`StrokeCap.Round`), `4.dp` active-to-track gap, and `4.dp` end-of-track stop dot.
- * Wave amplitude smoothly dampens to `0f` via [SplitMateMotion.defaultSpatial] when
- * progress reaches `1f` (`100%` settled or `0.00c` receipt equilibrium) or `0f`.
+ * Wave amplitude smoothly dampens to `0f` when progress reaches `1f` (`100%` settled or `0.00c`
+ * receipt equilibrium) or `0f`, and stays flat under reduced motion.
+ *
+ * v2.4.0 rc3: delegates to the official `androidx.compose.material3.LinearWavyProgressIndicator`
+ * (the library draws the wave, gap, stop dot and animates amplitude changes). This wrapper keeps the
+ * SplitMate signature, the spring-animated progress/colour and the reduced-motion flattening.
  */
 @ExperimentalMaterial3ExpressiveApi
 @Composable
@@ -173,22 +189,21 @@ fun LinearWavyProgressIndicator(
     stopSize: Dp = 4.dp,
     strokeWidth: Dp = 6.dp
 ) {
+    val reducedMotion = rememberReducedMotionEnabled()
     val rawProgress = progress().coerceIn(0f, 1f)
     val animatedProgress by animateFloatAsState(
         targetValue = rawProgress,
         animationSpec = SplitMateMotion.defaultSpatial(),
         label = "LinearWavyProgress"
     )
+    // The official indicator animates amplitude changes itself (Increasing/DecreasingAmplitude specs).
     val targetAmplitude = if (rawProgress <= 0.001f || rawProgress >= 0.999f) {
+        0f
+    } else if (reducedMotion) {
         0f
     } else {
         amplitude.coerceIn(0f, 1f)
     }
-    val effectiveAmplitude by animateFloatAsState(
-        targetValue = targetAmplitude,
-        animationSpec = SplitMateMotion.defaultSpatial(),
-        label = "LinearWavyAmplitude"
-    )
     val animatedActiveColor by animateColorAsState(
         targetValue = color,
         animationSpec = SplitMateMotion.defaultEffects(),
@@ -199,96 +214,24 @@ fun LinearWavyProgressIndicator(
         animationSpec = SplitMateMotion.defaultEffects(),
         label = "LinearWavyTrackColor"
     )
+    val stroke = rememberRoundStroke(strokeWidth)
 
-    val phaseDurationMs = remember(wavelength, waveSpeed) {
-        val speedRatio = if (waveSpeed.value > 0f) wavelength.value / waveSpeed.value else 1f
-        (speedRatio * 1000f).toInt().coerceIn(450, 4000)
-    }
-    val infiniteTransition = rememberInfiniteTransition(label = "LinearWavyPhaseTransition")
-    val phase by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = (2.0 * PI).toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = phaseDurationMs, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "LinearWavyPhase"
-    )
-
-    val wavePath = remember { Path() }
-
-    Canvas(
+    androidx.compose.material3.LinearWavyProgressIndicator(
+        progress = { animatedProgress },
+        // Same footprint as before: full width, stroke + 8.dp tall (the wave uses the spare height).
         modifier = modifier
             .fillMaxWidth()
-            .height(strokeWidth + 8.dp)
-    ) {
-        val strokePx = strokeWidth.toPx().coerceAtLeast(2f)
-        val halfStroke = strokePx / 2f
-        val centerY = size.height / 2f
-        val startX = halfStroke
-        val endX = (size.width - halfStroke).coerceAtLeast(startX)
-        val totalSpan = (endX - startX).coerceAtLeast(0f)
-        val activeEndX = startX + totalSpan * animatedProgress.coerceIn(0f, 1f)
-        val gapPx = gapSize.toPx()
-        val maxWaveHeightPx = ((size.height - strokePx) / 2f).coerceAtLeast(0f)
-        val waveAmpPx = maxWaveHeightPx * effectiveAmplitude
-        val wavelengthPx = wavelength.toPx().coerceAtLeast(8f)
-
-        // 1. Active Sinusoidal Wave Segment
-        if (animatedProgress > 0.002f && activeEndX > startX) {
-            if (waveAmpPx <= 0.2f) {
-                drawLine(
-                    color = animatedActiveColor,
-                    start = Offset(startX, centerY),
-                    end = Offset(activeEndX, centerY),
-                    strokeWidth = strokePx,
-                    cap = StrokeCap.Round
-                )
-            } else {
-                wavePath.reset()
-                val stepPx = 2.dp.toPx().coerceAtLeast(1.5f)
-                var x = startX
-                val startY = centerY + waveAmpPx * sin((2f * PI.toFloat() * x / wavelengthPx) + phase)
-                wavePath.moveTo(x, startY)
-                while (x < activeEndX) {
-                    x = (x + stepPx).coerceAtMost(activeEndX)
-                    val y = centerY + waveAmpPx * sin((2f * PI.toFloat() * x / wavelengthPx) + phase)
-                    wavePath.lineTo(x, y)
-                }
-                drawPath(
-                    path = wavePath,
-                    color = animatedActiveColor,
-                    style = Stroke(width = strokePx, cap = StrokeCap.Round)
-                )
-            }
-        }
-
-        // 2. Inactive Track Segment (separated by 4.dp gapSize)
-        val trackStartX = if (animatedProgress <= 0.002f) {
-            startX
-        } else {
-            activeEndX + gapPx + strokePx * 0.5f
-        }
-        if (trackStartX < endX) {
-            drawLine(
-                color = animatedTrackColor,
-                start = Offset(trackStartX, centerY),
-                end = Offset(endX, centerY),
-                strokeWidth = strokePx,
-                cap = StrokeCap.Round
-            )
-        }
-
-        // 3. End-of-Track Stop Indicator Dot (4.dp)
-        if (animatedProgress < 0.98f && stopSize > 0.dp) {
-            val stopRadius = (stopSize.toPx() / 2f).coerceAtMost(halfStroke)
-            drawCircle(
-                color = animatedActiveColor,
-                radius = stopRadius,
-                center = Offset(endX, centerY)
-            )
-        }
-    }
+            .height(strokeWidth + 8.dp),
+        color = animatedActiveColor,
+        trackColor = animatedTrackColor,
+        stroke = stroke,
+        trackStroke = stroke,
+        gapSize = gapSize,
+        stopSize = stopSize,
+        amplitude = { targetAmplitude },
+        wavelength = wavelength,
+        waveSpeed = waveSpeed
+    )
 }
 
 @ExperimentalMaterial3ExpressiveApi
@@ -320,13 +263,13 @@ fun LinearWavyProgressIndicator(
 }
 
 /**
- * INDETERMINATE Material 3 Expressive `LinearWavyProgressIndicator` (no `progress` parameter),
- * mirroring the official material3 1.4 indeterminate overload.
+ * INDETERMINATE Material 3 Expressive `LinearWavyProgressIndicator` (no `progress` parameter).
  *
- * Two phase-shifted segments travel from the start edge to the end edge of the track (see
- * [indeterminateWavySegments]); each segment carries a travelling sine wave. The wave amplitude
- * is constant while running and animates to `0f` (a flat bar) when reduced motion is enabled
- * (`ANIMATOR_DURATION_SCALE == 0`), in which case a static segment is drawn instead.
+ * v2.4.0 rc3: delegates to the official indeterminate
+ * `androidx.compose.material3.LinearWavyProgressIndicator` (the library's travelling segments and
+ * wave). When reduced motion is enabled (`ANIMATOR_DURATION_SCALE == 0`) nothing moves: a static,
+ * flat [WavyProgressIndicatorDefaults.ReducedMotionSegment] is drawn by the official determinate bar
+ * (amplitude 0, no stop dot) under indeterminate progress semantics.
  *
  * Usage rule (GEMINI.md v2.3.4 addendum): ONLY for in-flight network work. Prefer
  * [InFlightWavyProgressIndicator], which adds the 400ms minimum visibility and the exit animation.
@@ -362,38 +305,43 @@ fun LinearWavyProgressIndicator(
         animationSpec = SplitMateMotion.defaultEffects(),
         label = "LinearWavyIndeterminateTrackColor"
     )
-
-    val phaseDurationMs = remember(wavelength, waveSpeed) {
-        val speedRatio = if (waveSpeed.value > 0f) wavelength.value / waveSpeed.value else 1f
-        (speedRatio * 1000f).toInt().coerceIn(450, 4000)
-    }
-    // Continuous loaders legitimately run on a linear clock: the per-segment easing is applied
-    // by indeterminateWavySegments(), so the raw cycle fraction must advance uniformly.
-    val infiniteTransition = rememberInfiniteTransition(label = "LinearWavyIndeterminateTransition")
-    val phase by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = (2.0 * PI).toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = phaseDurationMs, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "LinearWavyIndeterminatePhase"
-    )
-    val cycle by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = WavyProgressIndicatorDefaults.INDETERMINATE_CYCLE_MILLIS,
-                easing = LinearEasing
-            ),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "LinearWavyIndeterminateCycle"
-    )
-
-    val wavePath = remember { Path() }
+    val stroke = rememberRoundStroke(strokeWidth)
     val description = contentDescription
+
+    if (reducedMotion) {
+        // Static frame: the official determinate bar, flat, frozen at the reduced-motion segment.
+        // The wrapper owns the semantics so TalkBack still hears an indeterminate loader.
+        val segment = WavyProgressIndicatorDefaults.ReducedMotionSegment
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .clearAndSetSemantics {
+                    progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate
+                    if (description != null) {
+                        this.contentDescription = description
+                        liveRegion = LiveRegionMode.Polite
+                    }
+                }
+        ) {
+            androidx.compose.material3.LinearWavyProgressIndicator(
+                progress = { segment.end },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(strokeWidth + 8.dp),
+                color = animatedActiveColor,
+                trackColor = animatedTrackColor,
+                stroke = stroke,
+                trackStroke = stroke,
+                gapSize = gapSize,
+                stopSize = 0.dp,
+                amplitude = { 0f },
+                wavelength = wavelength,
+                waveSpeed = 0.dp
+            )
+        }
+        return
+    }
+
     val labelModifier = if (description != null) {
         Modifier.semantics {
             this.contentDescription = description
@@ -402,106 +350,20 @@ fun LinearWavyProgressIndicator(
     } else {
         Modifier
     }
-
-    Canvas(
+    androidx.compose.material3.LinearWavyProgressIndicator(
         modifier = modifier
             .progressSemantics()
             .then(labelModifier)
             .fillMaxWidth()
-            .height(strokeWidth + 8.dp)
-    ) {
-        val strokePx = strokeWidth.toPx().coerceAtLeast(2f)
-        val halfStroke = strokePx / 2f
-        val centerY = size.height / 2f
-        val startX = halfStroke
-        val endX = (size.width - halfStroke).coerceAtLeast(startX)
-        val totalSpan = (endX - startX).coerceAtLeast(0f)
-        val gapPx = gapSize.toPx()
-        val maxWaveHeightPx = ((size.height - strokePx) / 2f).coerceAtLeast(0f)
-        val waveAmpPx = maxWaveHeightPx * effectiveAmplitude
-        val wavelengthPx = wavelength.toPx().coerceAtLeast(8f)
-        // State reads happen in the draw phase only: the running loader redraws, never recomposes.
-        val segments = if (reducedMotion) {
-            listOf(WavyProgressIndicatorDefaults.ReducedMotionSegment)
-        } else {
-            indeterminateWavySegments(cycle)
-        }
-        val currentPhase = if (reducedMotion) 0f else phase
-
-        var trackCursor = startX
-        segments.forEach { segment ->
-            val segmentStartX = startX + totalSpan * segment.start
-            val segmentEndX = startX + totalSpan * segment.end
-            val trackEndX = segmentStartX - gapPx - strokePx
-            if (trackEndX > trackCursor) {
-                drawLine(
-                    color = animatedTrackColor,
-                    start = Offset(trackCursor, centerY),
-                    end = Offset(trackEndX, centerY),
-                    strokeWidth = strokePx,
-                    cap = StrokeCap.Round
-                )
-            }
-            drawWavySegment(
-                path = wavePath,
-                startX = segmentStartX,
-                endX = segmentEndX,
-                centerY = centerY,
-                amplitudePx = waveAmpPx,
-                wavelengthPx = wavelengthPx,
-                phase = currentPhase,
-                color = animatedActiveColor,
-                strokePx = strokePx
-            )
-            trackCursor = max(trackCursor, segmentEndX + gapPx + strokePx)
-        }
-        if (trackCursor < endX) {
-            drawLine(
-                color = animatedTrackColor,
-                start = Offset(trackCursor, centerY),
-                end = Offset(endX, centerY),
-                strokeWidth = strokePx,
-                cap = StrokeCap.Round
-            )
-        }
-    }
-}
-
-/** Draws one active segment as a sine wave (or a flat rounded line when the amplitude is ~0). */
-private fun DrawScope.drawWavySegment(
-    path: Path,
-    startX: Float,
-    endX: Float,
-    centerY: Float,
-    amplitudePx: Float,
-    wavelengthPx: Float,
-    phase: Float,
-    color: Color,
-    strokePx: Float
-) {
-    if (endX <= startX) return
-    if (amplitudePx <= 0.2f) {
-        drawLine(
-            color = color,
-            start = Offset(startX, centerY),
-            end = Offset(endX, centerY),
-            strokeWidth = strokePx,
-            cap = StrokeCap.Round
-        )
-        return
-    }
-    path.reset()
-    val stepPx = 2.dp.toPx().coerceAtLeast(1.5f)
-    var x = startX
-    path.moveTo(x, centerY + amplitudePx * sin((2f * PI.toFloat() * x / wavelengthPx) + phase))
-    while (x < endX) {
-        x = (x + stepPx).coerceAtMost(endX)
-        path.lineTo(x, centerY + amplitudePx * sin((2f * PI.toFloat() * x / wavelengthPx) + phase))
-    }
-    drawPath(
-        path = path,
-        color = color,
-        style = Stroke(width = strokePx, cap = StrokeCap.Round)
+            .height(strokeWidth + 8.dp),
+        color = animatedActiveColor,
+        trackColor = animatedTrackColor,
+        stroke = stroke,
+        trackStroke = stroke,
+        gapSize = gapSize,
+        amplitude = effectiveAmplitude,
+        wavelength = wavelength,
+        waveSpeed = waveSpeed
     )
 }
 
@@ -512,6 +374,10 @@ data class WavySegment(val start: Float, val end: Float) {
 
 /**
  * Pure, deterministic geometry of the indeterminate bar at [cycleFraction] (wrapped into 0..1).
+ *
+ * v2.4.0 rc3: the running bar is now drawn by the official indeterminate
+ * `LinearWavyProgressIndicator`; this pure model is kept as the documented reference for the
+ * edge-to-edge segment behaviour (and its unit tests).
  *
  * Two segments travel edge-to-edge in overlapping windows of the cycle (`[0, 0.75]` and
  * `[0.45, 1]`). Inside its window a segment's head follows `1 - (1 - u)^2` (decelerating) and its
@@ -612,6 +478,9 @@ fun InFlightWavyProgressIndicator(
 /**
  * Material 3 Expressive `CircularWavyProgressIndicator` for Trip Harmony settlement meters
  * and per-traveler contribution rings.
+ *
+ * v2.4.0 rc3: delegates to the official `androidx.compose.material3.CircularWavyProgressIndicator`
+ * (48.dp container, as before). The wave flattens at 0% / 100% and under reduced motion.
  */
 @ExperimentalMaterial3ExpressiveApi
 @Composable
@@ -625,6 +494,7 @@ fun CircularWavyProgressIndicator(
     strokeWidth: Dp = 5.dp,
     gapSize: Dp = 4.dp
 ) {
+    val reducedMotion = rememberReducedMotionEnabled()
     val rawProgress = progress().coerceIn(0f, 1f)
     val animatedProgress by animateFloatAsState(
         targetValue = rawProgress,
@@ -633,14 +503,11 @@ fun CircularWavyProgressIndicator(
     )
     val targetAmplitude = if (rawProgress <= 0.001f || rawProgress >= 0.999f) {
         0f
+    } else if (reducedMotion) {
+        0f
     } else {
         amplitude.coerceIn(0f, 1f)
     }
-    val effectiveAmplitude by animateFloatAsState(
-        targetValue = targetAmplitude,
-        animationSpec = SplitMateMotion.defaultSpatial(),
-        label = "CircularWavyAmplitude"
-    )
     val animatedActiveColor by animateColorAsState(
         targetValue = color,
         animationSpec = SplitMateMotion.defaultEffects(),
@@ -651,80 +518,19 @@ fun CircularWavyProgressIndicator(
         animationSpec = SplitMateMotion.defaultEffects(),
         label = "CircularWavyTrackColor"
     )
+    val stroke = rememberRoundStroke(strokeWidth)
 
-    val infiniteTransition = rememberInfiniteTransition(label = "CircularWavyPhaseTransition")
-    val phase by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = (2.0 * PI).toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "CircularWavyPhase"
+    androidx.compose.material3.CircularWavyProgressIndicator(
+        progress = { animatedProgress },
+        modifier = modifier.size(48.dp),
+        color = animatedActiveColor,
+        trackColor = animatedTrackColor,
+        stroke = stroke,
+        trackStroke = stroke,
+        gapSize = gapSize,
+        amplitude = { targetAmplitude },
+        wavelength = wavelength
     )
-
-    val wavePath = remember { Path() }
-
-    Canvas(modifier = modifier.size(48.dp)) {
-        val strokePx = strokeWidth.toPx().coerceAtLeast(2f)
-        val maxAmpPx = (strokePx * 0.42f) * effectiveAmplitude
-        val baseRadius = (size.minDimension / 2f) - strokePx - maxAmpPx
-        if (baseRadius <= 2f) return@Canvas
-
-        val center = Offset(size.width / 2f, size.height / 2f)
-        val circumference = (2f * PI.toFloat() * baseRadius).coerceAtLeast(1f)
-        val numWaves = max(4, (circumference / wavelength.toPx().coerceAtLeast(8f)).toInt())
-        val gapAngleDeg = ((gapSize.toPx() + strokePx) / circumference) * 360f
-        val activeSweepDeg = (animatedProgress * 360f).coerceIn(0f, 360f)
-
-        // 1. Active Wavy Arc
-        if (activeSweepDeg > 1f) {
-            if (maxAmpPx <= 0.15f) {
-                drawArc(
-                    color = animatedActiveColor,
-                    startAngle = -90f,
-                    sweepAngle = activeSweepDeg,
-                    useCenter = false,
-                    topLeft = Offset(center.x - baseRadius, center.y - baseRadius),
-                    size = Size(baseRadius * 2f, baseRadius * 2f),
-                    style = Stroke(width = strokePx, cap = StrokeCap.Round)
-                )
-            } else {
-                wavePath.reset()
-                val steps = max(24, (activeSweepDeg * 0.6f).toInt())
-                for (i in 0..steps) {
-                    val fraction = i.toFloat() / steps.toFloat()
-                    val angleDeg = -90f + activeSweepDeg * fraction
-                    val angleRad = angleDeg * (PI.toFloat() / 180f)
-                    val r = baseRadius + maxAmpPx * sin(numWaves * angleRad + phase)
-                    val x = center.x + r * cos(angleRad)
-                    val y = center.y + r * sin(angleRad)
-                    if (i == 0) wavePath.moveTo(x, y) else wavePath.lineTo(x, y)
-                }
-                drawPath(
-                    path = wavePath,
-                    color = animatedActiveColor,
-                    style = Stroke(width = strokePx, cap = StrokeCap.Round)
-                )
-            }
-        }
-
-        // 2. Inactive Track Arc (with gapSize separation)
-        val trackStartDeg = -90f + activeSweepDeg + if (activeSweepDeg > 1f) gapAngleDeg else 0f
-        val trackSweepDeg = (360f - activeSweepDeg - if (activeSweepDeg > 1f) gapAngleDeg * 2f else 0f)
-            .coerceAtLeast(0f)
-        if (trackSweepDeg > 2f) {
-            drawArc(
-                color = animatedTrackColor,
-                startAngle = trackStartDeg,
-                sweepAngle = trackSweepDeg,
-                useCenter = false,
-                topLeft = Offset(center.x - baseRadius, center.y - baseRadius),
-                size = Size(baseRadius * 2f, baseRadius * 2f),
-                style = Stroke(width = strokePx, cap = StrokeCap.Round)
-            )
-        }
-    }
 }
 
 @ExperimentalMaterial3ExpressiveApi
@@ -754,6 +560,10 @@ fun CircularWavyProgressIndicator(
 /**
  * Material 3 Expressive flat linear progress indicator with rounded stroke caps,
  * `4.dp` active-to-track gap, and `4.dp` end-of-track stop dot.
+ *
+ * v2.4.0 rc3: delegates to the official
+ * `androidx.compose.material3.LinearProgressIndicator(progress, gapSize, drawStopIndicator)`.
+ * The bar keeps its previous footprint (stroke + 8.dp tall, centred stroke).
  */
 @Composable
 fun ExpressiveGapLinearProgressIndicator(
@@ -765,16 +575,48 @@ fun ExpressiveGapLinearProgressIndicator(
     stopSize: Dp = 4.dp,
     strokeWidth: Dp = 6.dp
 ) {
-    LinearWavyProgressIndicator(
-        progress = progress,
-        modifier = modifier,
-        color = color,
-        trackColor = trackColor,
-        amplitude = 0f,
-        gapSize = gapSize,
-        stopSize = stopSize,
-        strokeWidth = strokeWidth
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress().coerceIn(0f, 1f),
+        animationSpec = SplitMateMotion.defaultSpatial(),
+        label = "GapLinearProgress"
     )
+    val animatedActiveColor by animateColorAsState(
+        targetValue = color,
+        animationSpec = SplitMateMotion.defaultEffects(),
+        label = "GapLinearActiveColor"
+    )
+    val animatedTrackColor by animateColorAsState(
+        targetValue = trackColor,
+        animationSpec = SplitMateMotion.defaultEffects(),
+        label = "GapLinearTrackColor"
+    )
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(strokeWidth + 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        androidx.compose.material3.LinearProgressIndicator(
+            progress = { animatedProgress },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(strokeWidth),
+            color = animatedActiveColor,
+            trackColor = animatedTrackColor,
+            strokeCap = StrokeCap.Round,
+            gapSize = gapSize,
+            drawStopIndicator = {
+                if (stopSize > 0.dp) {
+                    androidx.compose.material3.ProgressIndicatorDefaults.drawStopIndicator(
+                        drawScope = this,
+                        stopSize = stopSize,
+                        color = animatedActiveColor,
+                        strokeCap = StrokeCap.Round
+                    )
+                }
+            }
+        )
+    }
 }
 
 @Composable

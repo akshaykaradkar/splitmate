@@ -179,7 +179,10 @@ class SplitMateV234DesignSystemTest {
         assertEquals(3, occurrences(comp, "fun LinearWavyProgressIndicator("))
         assertTrue(comp.contains("fun LinearWavyProgressIndicator(\n    modifier: Modifier = Modifier,"))
         assertTrue(comp.contains("if (reducedMotion) 0f else amplitude.coerceIn(0f, 1f)"))
-        assertTrue(comp.contains("indeterminateWavySegments(cycle)"))
+        // v2.4.0 rc3: the running bar is the official indeterminate LinearWavyProgressIndicator (it
+        // draws its own travelling segments); reduced motion draws the static ReducedMotionSegment.
+        assertTrue(comp.contains("androidx.compose.material3.LinearWavyProgressIndicator("))
+        assertTrue(comp.contains("WavyProgressIndicatorDefaults.ReducedMotionSegment"))
         assertTrue(comp.contains(".progressSemantics()"))
         assertTrue(comp.contains("liveRegion = LiveRegionMode.Polite"))
         // Existing determinate contracts stay intact.
