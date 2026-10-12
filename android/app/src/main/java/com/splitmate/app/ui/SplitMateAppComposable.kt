@@ -6637,7 +6637,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                 ) {
                                                     // v2.4.0 rc3: the person's own avatar (was a generic group icon).
                                                     AvatarToken(
-                                                        initials = fromRoomMember?.avatarSeed ?: leg.counterpartyName,
+                                                        initials = fromRoomMember?.avatarSeed?.ifBlank { leg.counterpartyName } ?: leg.counterpartyName,
                                                         bg = SplitMateTheme.SageSurface,
                                                         textColor = SplitMateTheme.SageText,
                                                         size = 28
@@ -6940,7 +6940,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                     ) {
                                                         if (summary.hasMultipleOutgoing) {
                                                             AvatarToken(
-                                                                initials = toRoomMember?.avatarSeed ?: leg.counterpartyName,
+                                                                initials = toRoomMember?.avatarSeed?.ifBlank { leg.counterpartyName } ?: leg.counterpartyName,
                                                                 bg = SplitMateTheme.SageSurface,
                                                                 textColor = SplitMateTheme.SageText,
                                                                 size = 28
@@ -6955,7 +6955,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                         } else {
                                                             // v2.4.0 rc3: the person's own avatar (was a generic group icon).
                                                             AvatarToken(
-                                                                initials = toRoomMember?.avatarSeed ?: leg.counterpartyName,
+                                                                initials = toRoomMember?.avatarSeed?.ifBlank { leg.counterpartyName } ?: leg.counterpartyName,
                                                                 bg = SplitMateTheme.SageSurface,
                                                                 textColor = SplitMateTheme.SageText,
                                                                 size = 28

@@ -31,8 +31,9 @@ class SplitMateV240Rc3Test {
     @Test
     fun `RC3_02 settle From and To rows show the person, not a group icon`() {
         val app = src("ui/SplitMateAppComposable.kt")
-        assertTrue(app.contains("initials = fromRoomMember?.avatarSeed ?: leg.counterpartyName"))
-        assertTrue(app.contains("initials = toRoomMember?.avatarSeed ?: leg.counterpartyName"))
+        // Blank seeds (name-only members) fall back to the name, so "Ravi" shows "R", not the default "S".
+        assertTrue(app.contains("initials = fromRoomMember?.avatarSeed?.ifBlank { leg.counterpartyName } ?: leg.counterpartyName"))
+        assertTrue(app.contains("initials = toRoomMember?.avatarSeed?.ifBlank { leg.counterpartyName } ?: leg.counterpartyName"))
     }
 
     @Test

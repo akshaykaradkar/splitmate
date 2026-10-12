@@ -2701,6 +2701,10 @@ private fun AmountInputCursor(color: Color) {
  */
 private fun Modifier.bleedHorizontally(start: androidx.compose.ui.unit.Dp, end: androidx.compose.ui.unit.Dp): Modifier =
     this.layout { measurable, constraints ->
+        if (!constraints.hasBoundedWidth) {
+            val plain = measurable.measure(constraints)
+            return@layout layout(plain.width, plain.height) { plain.place(0, 0) }
+        }
         val startPx = start.roundToPx()
         val endPx = end.roundToPx()
         val width = constraints.maxWidth + startPx + endPx
