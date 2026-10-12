@@ -2459,7 +2459,10 @@ fun SplitMateMaterial3ExpressiveTheme(
         dynamicColor = dynamicColor
     ) {
         // v2.4.0 D4: Compose haptics honour the in-app Haptics switch too.
-        com.splitmate.app.ui.feel.ProvideSplitMateHaptics(content)
+        // v2.4.0 D5: one app-wide snackbar for money moments (Undo after Mark paid).
+        com.splitmate.app.ui.feel.ProvideSplitMateHaptics {
+            com.splitmate.app.ui.feel.ProvideMoneySnackbar { content() }
+        }
     }
 }
 

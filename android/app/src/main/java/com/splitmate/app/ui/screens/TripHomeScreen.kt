@@ -263,14 +263,15 @@ fun SplitMateViewModel.recordSettlement(
     fromMemberId: String,
     toMemberId: String,
     amountCents: Long
-): Boolean {
+): String? {
     if (groupId.isNotBlank()) {
         selectActiveGroup(groupId)
     }
     val groupMembers = uiState.value.members.filter { it.groupId == groupId }
     val fromName = groupMembers.find { it.memberId == fromMemberId }?.name ?: fromMemberId
     val toName = groupMembers.find { it.memberId == toMemberId }?.name ?: toMemberId
-    return markGreedyTransferSettled(
+    // v2.4.0 D5: returns the new settlement id (null when refused) so the UI can offer Undo.
+    return markTransferPaid(
         SplitMateMathEngine.SimplifiedTransfer(
             fromMemberId = fromMemberId,
             fromName = fromName,
@@ -4379,6 +4380,25 @@ private fun ExpandableSplitBreakdownDrawer(
                     )
                 }
             }
+            // v2.4.0 D5: shares on a bill with tax or tip include each person's proportional part.
+            if (expense != null && com.splitmate.app.MoneyTrustRules.includesTaxOrTip(expense)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Info,
+                        contentDescription = null,
+                        tint = TripHubTokens.TextSecondary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "Each share includes its part of tax and tip",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TripHubTokens.TextSecondary
+                    )
+                }
+            }
         }
     }
 }
@@ -5224,9 +5244,19 @@ private fun TripHubMoneySettlementView(
                                     style = MaterialTheme.typography.titleMedium,
                                     color = TripHubTokens.TextPrimary
                                 )
+                                // v2.4.0 D5: say what the engine did ("We simplified 7 debts into 2 payments")
+                                // only when it really reduced the number of payments.
+                                val pairwiseDebts = remember(uiState.expenses, uiState.splits, uiState.settlements, groupId) {
+                                    val groupExpenses = uiState.expenses.filter { it.groupId == groupId }
+                                    val ids = groupExpenses.map { it.expenseId }.toSet()
+                                    com.splitmate.app.MoneyTrustRules.pairwiseDebtCount(
+                                        expenses = groupExpenses,
+                                        splits = uiState.splits.filter { it.expenseId in ids },
+                                        settlements = uiState.settlements.filter { it.groupId == groupId }
+                                    )
+                                }
                                 Text(
-                                    text = if (simplifiedTransfers.isEmpty()) "Everyone is settled"
-                                    else "${simplifiedTransfers.size} ${if (simplifiedTransfers.size == 1) "payment" else "payments"} to settle everyone",
+                                    text = com.splitmate.app.MoneyTrustRules.simplificationLine(pairwiseDebts, simplifiedTransfers.size),
                                     style = MaterialTheme.typography.bodySmall.merge(
                                         TextStyle(
                                             fontFamily = SplitMateTnumMonospace,
@@ -5497,10 +5527,18 @@ private fun TripHubMoneySettlementView(
                     val recipientFirstName = settlement.toName.trim().substringBefore(" ").ifBlank { settlement.toName }
                     var showRestrictionHint by remember(settlement.fromMemberId, settlement.toMemberId) { mutableStateOf(false) }
                     var pendingMarkPaidConfirm by remember(settlement.fromMemberId, settlement.toMemberId) { mutableStateOf(false) }
-                    // v2.4.0 D4: saved at tap time; on success Mark paid morphs into a "Paid" chip (Confirm haptic).
+                    // v2.4.0 D4/D5: saved at tap time; on success Mark paid morphs into a "Paid" chip
+                    // (Confirm haptic) and a snackbar offers Undo. Only when the Money check is failing
+                    // does it ask first (the dialog shows the warning).
                     val paidMorph = com.splitmate.app.ui.feel.rememberPaidMorphController()
+                    val moneySnackbar = com.splitmate.app.ui.feel.LocalMoneySnackbar.current
                     val commitMarkPaid: () -> Unit = {
-                        paidMorph.trigger {
+                        com.splitmate.app.ui.feel.markPaidWithUndo(
+                            morph = paidMorph,
+                            snackbar = moneySnackbar,
+                            viewModel = viewModel,
+                            summary = "$formattedAmount from ${settlement.fromName} to ${settlement.toName}"
+                        ) {
                             viewModel.recordSettlement(
                                 groupId = groupId,
                                 fromMemberId = settlement.fromMemberId,
@@ -5508,6 +5546,9 @@ private fun TripHubMoneySettlementView(
                                 amountCents = settlement.amountCents
                             )
                         }
+                    }
+                    val requestMarkPaid: () -> Unit = {
+                        if (markPaidWarning != null) pendingMarkPaidConfirm = true else commitMarkPaid()
                     }
                     val rowShape = segmentedIslandItemShape(
                         index = index,
@@ -5540,7 +5581,7 @@ private fun TripHubMoneySettlementView(
                                 icon = Icons.Rounded.CheckCircleOutline,
                                 containerColor = MaterialTheme.colorScheme.primaryContainer,
                                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                onTrigger = { pendingMarkPaidConfirm = true }
+                                onTrigger = requestMarkPaid
                             )
                         } else null,
                         shape = rowShape
@@ -5703,13 +5744,13 @@ private fun TripHubMoneySettlementView(
                                         SplitButtonLayout(
                                             leadingText = "Mark paid",
                                             leadingIcon = Icons.Rounded.CheckCircleOutline,
-                                            onLeadingClick = commitMarkPaid,
+                                            onLeadingClick = requestMarkPaid,
                                             menuItems = listOf(
                                                 ExpressiveMenuAction(
                                                     label = "Mark $formattedAmount as paid",
                                                     icon = Icons.Rounded.CheckCircleOutline,
                                                     subtitle = "${settlement.fromName} to ${settlement.toName}",
-                                                    onClick = commitMarkPaid
+                                                    onClick = requestMarkPaid
                                                 ),
                                                 ExpressiveMenuAction(
                                                     label = "Open settle up",
@@ -5896,7 +5937,25 @@ private fun TripHubMoneySettlementView(
                             }
 
                             var pendingOtherConfirm by remember(settlement.fromMemberId, settlement.toMemberId) { mutableStateOf(false) }
-                            val otherPaidMorph = com.splitmate.app.ui.feel.rememberPaidMorphController() // v2.4.0 D4
+                            // v2.4.0 D4/D5: same flow as your own rows: save now, Paid chip, Undo snackbar;
+                            // the confirm dialog only appears while the Money check is failing.
+                            val otherPaidMorph = com.splitmate.app.ui.feel.rememberPaidMorphController()
+                            val otherSnackbar = com.splitmate.app.ui.feel.LocalMoneySnackbar.current
+                            val commitOtherPaid: () -> Unit = {
+                                com.splitmate.app.ui.feel.markPaidWithUndo(
+                                    morph = otherPaidMorph,
+                                    snackbar = otherSnackbar,
+                                    viewModel = viewModel,
+                                    summary = "$formattedAmount from ${settlement.fromName} to ${settlement.toName}"
+                                ) {
+                                    viewModel.recordSettlement(
+                                        groupId = groupId,
+                                        fromMemberId = settlement.fromMemberId,
+                                        toMemberId = settlement.toMemberId,
+                                        amountCents = settlement.amountCents
+                                    )
+                                }
+                            }
                             if (pendingOtherConfirm) {
                                 TripHubMarkPaidConfirmDialog(
                                     fromName = settlement.fromName,
@@ -5905,14 +5964,7 @@ private fun TripHubMoneySettlementView(
                                     warning = markPaidWarning,
                                     onConfirm = {
                                         pendingOtherConfirm = false
-                                        otherPaidMorph.trigger {
-                                            viewModel.recordSettlement(
-                                                groupId = groupId,
-                                                fromMemberId = settlement.fromMemberId,
-                                                toMemberId = settlement.toMemberId,
-                                                amountCents = settlement.amountCents
-                                            )
-                                        }
+                                        commitOtherPaid()
                                     },
                                     onDismiss = { pendingOtherConfirm = false }
                                 )
@@ -5949,8 +6001,12 @@ private fun TripHubMoneySettlementView(
                                 com.splitmate.app.ui.feel.PaidMorph(isPaid = otherPaidMorph.isPaid, modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                                 Button(
                                     onClick = {
-                                        performCrispTactileHaptic(context, localView, heavy = false)
-                                        pendingOtherConfirm = true
+                                        if (markPaidWarning != null) {
+                                            performCrispTactileHaptic(context, localView, heavy = false)
+                                            pendingOtherConfirm = true
+                                        } else {
+                                            commitOtherPaid()
+                                        }
                                     },
                                     shape = CircleShape,
                                     colors = ButtonDefaults.buttonColors(
@@ -6251,7 +6307,7 @@ private fun TripHubPeoplePerspectiveView(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = "Settle Balance First",
+                                text = "Settle up first",
                                 fontWeight = FontWeight.ExtraBold,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = TripHubTokens.PositiveSageText
@@ -7102,6 +7158,23 @@ private fun TripHubPeoplePerspectiveView(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
+                            // v2.4.0 D5: what this traveler paid vs their share, with a thin M3 bar.
+                            val memberStanding = remember(uiState.expenses, uiState.splits, uiState.settlements, member.memberId, member.groupId) {
+                                val groupExpenses = uiState.expenses.filter { it.groupId == member.groupId }
+                                val ids = groupExpenses.map { it.expenseId }.toSet()
+                                com.splitmate.app.MoneyTrustRules.standings(
+                                    memberIds = listOf(member.memberId),
+                                    expenses = groupExpenses,
+                                    splits = uiState.splits.filter { it.expenseId in ids },
+                                    settlements = uiState.settlements.filter { it.groupId == member.groupId }
+                                ).getValue(member.memberId)
+                            }
+                            if (memberStanding.paidCents > 0L || memberStanding.shareCents > 0L) {
+                                com.splitmate.app.ui.components.TravelerStandingLine(
+                                    standing = memberStanding,
+                                    modifier = Modifier.padding(top = 6.dp)
+                                )
+                            }
                         }
                     }
 

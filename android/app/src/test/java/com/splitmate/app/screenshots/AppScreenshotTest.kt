@@ -239,7 +239,7 @@ class AppScreenshotTest {
         compose.onNode(androidx.compose.ui.test.isDialog()).captureRoboImage("$outDir/12c_delete_dialog.png")
     }
 
-    /** Step C: swipe a Money-tab settle row right -> "Mark paid" revealed; release -> confirmation. */
+    /** Step C: swipe a Money-tab settle row right -> "Mark paid" revealed; release -> saved with Undo (v2.4.0 D5). */
     @Test fun s14_mark_paid_swipe() {
         launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Money")
         val row = compose.onAllNodes(hasText("You receive", substring = true), useUnmergedTree = true)[0]
@@ -252,11 +252,11 @@ class AppScreenshotTest {
         }
         compose.mainClock.advanceTimeBy(300); frame("14a_mark_paid_armed")
         row.performTouchInput { up() }
-        compose.mainClock.advanceTimeBy(1500)
+        // Saved at once (Money check passes, so no dialog); the Undo snackbar is showing.
+        compose.mainClock.advanceTimeBy(600)
+        compose.onNode(hasText("Undo")).assertExists()
+        frame("14b_mark_paid_undo")
         compose.mainClock.autoAdvance = true
-        settle()
-        compose.onNode(hasText("as paid?", substring = true)).assertExists()
-        compose.onNode(androidx.compose.ui.test.isDialog()).captureRoboImage("$outDir/14b_mark_paid_dialog.png")
     }
 
     /** Step C: first-open entrance stagger, captured mid-way. */

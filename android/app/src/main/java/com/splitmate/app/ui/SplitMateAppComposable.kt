@@ -1655,7 +1655,7 @@ fun SplitMateMainDashboardScaffold(
                     },
                     text = {
                         Text(
-                            text = "Log Expense",
+                            text = "Log expense",
                             fontWeight = FontWeight.ExtraBold,
                             color = activeFabPalette.onPrimary,
                             fontFamily = SplitMateTheme.FontRounded
@@ -1996,7 +1996,7 @@ fun LedgersDashboardScreen(
             containerColor = SplitMateTheme.SurfaceWhite,
             title = {
                 Text(
-                    text = "Delete Expense?",
+                    text = "Delete this expense?",
                     fontFamily = SplitMateTheme.FontDisplay,
                     fontWeight = FontWeight.ExtraBold,
                     color = SplitMateTheme.PrimaryDark
@@ -2035,7 +2035,7 @@ fun LedgersDashboardScreen(
                         )
                         Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = "Delete Expense",
+                            text = "Delete",
                             fontFamily = SplitMateTheme.FontRounded,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 12.sp,
@@ -2497,7 +2497,7 @@ fun LedgersDashboardScreen(
 
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(
-                                    text = "Total Spend",
+                                    text = "Total spend",
                                     fontSize = 11.sp,
                                     color = SplitMateTheme.TextSecondary
                                 )
@@ -2696,7 +2696,7 @@ fun LedgersDashboardScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Group Expenses (${groupExpenses.size})",
+                        text = "Expenses (${groupExpenses.size})",
                         fontFamily = SplitMateTheme.FontDisplay,
                         fontSize = 17.sp,
                         fontWeight = FontWeight.ExtraBold,
@@ -6692,8 +6692,16 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                     // v2.4.0 D4: saved at tap time; on success Mark paid morphs into a "Paid" chip
                                                     // with one Confirm haptic (Reject if the save is refused).
                                                     val paidMorphIn = com.splitmate.app.ui.feel.rememberPaidMorphController()
+                                                    val moneySnackbarIn = com.splitmate.app.ui.feel.LocalMoneySnackbar.current
+                                                    // v2.4.0 D5: Undo snackbar after the save.
                                                     val performMarkPaidIn: () -> Unit = {
-                                                        paidMorphIn.trigger { viewModel.markGreedyTransferSettled(matchingTransfer.transfer) }
+                                                        val t = matchingTransfer.transfer
+                                                        com.splitmate.app.ui.feel.markPaidWithUndo(
+                                                            morph = paidMorphIn,
+                                                            snackbar = moneySnackbarIn,
+                                                            viewModel = viewModel,
+                                                            summary = "${formatIndianRupeesFromCents(t.amountCents)} from ${t.fromName} to ${t.toName}"
+                                                        ) { viewModel.markTransferPaid(t) }
                                                     }
                                                     com.splitmate.app.ui.feel.PaidMorph(
                                                         isPaid = paidMorphIn.isPaid,
@@ -7009,8 +7017,16 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                     // v2.4.0 D4: saved at tap time; on success Mark paid morphs into a "Paid" chip
                                                     // with one Confirm haptic (Reject if the save is refused).
                                                     val paidMorphOut = com.splitmate.app.ui.feel.rememberPaidMorphController()
+                                                    val moneySnackbarOut = com.splitmate.app.ui.feel.LocalMoneySnackbar.current
+                                                    // v2.4.0 D5: Undo snackbar after the save.
                                                     val performMarkPaidOut: () -> Unit = {
-                                                        paidMorphOut.trigger { viewModel.markGreedyTransferSettled(matchingTransfer.transfer) }
+                                                        val t = matchingTransfer.transfer
+                                                        com.splitmate.app.ui.feel.markPaidWithUndo(
+                                                            morph = paidMorphOut,
+                                                            snackbar = moneySnackbarOut,
+                                                            viewModel = viewModel,
+                                                            summary = "${formatIndianRupeesFromCents(t.amountCents)} from ${t.fromName} to ${t.toName}"
+                                                        ) { viewModel.markTransferPaid(t) }
                                                     }
                                                     com.splitmate.app.ui.feel.PaidMorph(
                                                         isPaid = paidMorphOut.isPaid,

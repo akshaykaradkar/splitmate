@@ -51,7 +51,7 @@ class SplitMateV240FeelTest {
         }
         val theme = src("ui/SplitMateTheme.kt")
         assertFalse(theme.contains("VibrationEffect.createOneShot"), "no raw vibrator pulse on top of the view haptic")
-        assertTrue(theme.contains("ProvideSplitMateHaptics(content)"), "Compose haptics honour the in-app switch")
+        assertTrue(theme.contains("ProvideSplitMateHaptics {"), "Compose haptics honour the in-app switch")
     }
 
     @Test

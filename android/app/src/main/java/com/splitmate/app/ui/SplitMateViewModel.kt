@@ -4010,7 +4010,14 @@ class SplitMateViewModel(
      * when it was refused (not allowed, or already recorded); the reason goes to the status banner.
      * v2.4.0 D4: the result lets the UI show the "Paid" chip and Confirm haptic only on success.
      */
-    fun markGreedyTransferSettled(transfer: SplitMateMathEngine.SimplifiedTransfer): Boolean {
+    fun markGreedyTransferSettled(transfer: SplitMateMathEngine.SimplifiedTransfer): Boolean =
+        markTransferPaid(transfer) != null
+
+    /**
+     * v2.4.0 D5: same as [markGreedyTransferSettled] but returns the new settlement id (null when
+     * refused), so the UI can offer Undo for exactly this payment via [undoSettlement].
+     */
+    fun markTransferPaid(transfer: SplitMateMathEngine.SimplifiedTransfer): String? {
         val state = _uiState.value
         if (!canCurrentUserMarkTransferPaid(state.activeGroupId, transfer.toMemberId, state)) {
             val restrictionMsg = getMarkPaidRestrictionLabel(
@@ -4022,7 +4029,7 @@ class SplitMateViewModel(
             _uiState.update { curr ->
                 curr.copy(statusBannerMessage = restrictionMsg)
             }
-            return false
+            return null
         }
         // v2.3.6 (device bug): never record the same payment twice. A double tap, or a stale row that
         // is still on screen after the payment was recorded, used to add a second identical settlement.
@@ -4040,10 +4047,9 @@ class SplitMateViewModel(
             _uiState.update { curr ->
                 curr.copy(statusBannerMessage = "Already recorded: ${transfer.fromName} → ${transfer.toName}")
             }
-            return false
+            return null
         }
-        insertSettlementAndSync(state, transfer, "Settled ${transfer.fromName} → ${transfer.toName}")
-        return true
+        return insertSettlementAndSync(state, transfer, "Settled ${transfer.fromName} → ${transfer.toName}")
     }
 
     /**
@@ -4091,11 +4097,12 @@ class SplitMateViewModel(
         return groupMembers.any { canCurrentUserMarkTransferPaid(state.activeGroupId, it.memberId, state) }
     }
 
+    /** Saves the settlement locally and starts a cloud sync. Returns the new settlement id. */
     private fun insertSettlementAndSync(
         state: SplitMateUiState,
         transfer: SplitMateMathEngine.SimplifiedTransfer,
         banner: String
-    ) {
+    ): String {
         com.splitmate.app.data.CloudGroupSyncRepository.setGroupPendingCloudPush(null, state.activeGroupId, true)
         val settlement = SettlementEntity(
             // v2.4.0 D4 review B3: unique suffix so two payments saved in the same millisecond never
@@ -4137,6 +4144,7 @@ class SplitMateViewModel(
                 }
             }
         }
+        return settlement.settlementId
     }
 
     /**
@@ -4236,9 +4244,14 @@ class SplitMateViewModel(
         rollbackExpense(expenseId)
     }
 
-    fun undoSettlement(settlementId: String) {
+    /**
+     * Removes [settlementId] (tombstoned first, then deleted and synced). [groupIdHint] is the trip
+     * the payment was saved in (v2.4.0 D5 review U1): used when the row is not in memory, so the
+     * tombstone never lands in whichever trip happens to be active.
+     */
+    fun undoSettlement(settlementId: String, groupIdHint: String? = null) {
         val removedSettlement = _uiState.value.settlements.find { it.settlementId == settlementId }
-        val targetGroupId = removedSettlement?.groupId ?: _uiState.value.activeGroupId
+        val targetGroupId = removedSettlement?.groupId ?: groupIdHint?.takeIf { it.isNotBlank() } ?: _uiState.value.activeGroupId
         val undoneAtMs = System.currentTimeMillis()
         if (targetGroupId.isNotBlank()) {
             com.splitmate.app.data.CloudGroupSyncRepository.setGroupPendingCloudPush(null, targetGroupId, true)
@@ -4274,8 +4287,10 @@ class SplitMateViewModel(
                             additionalDeletedSettlementIds = mapOf(settlementId to undoneAtMs),
                             isLocalMutation = true
                         )
-                        refreshStateFromDaoSnapshot(d = d)
                     }
+                    // v2.4.0 D5 review U2: refresh even if the sync failed, so the screen never keeps
+                    // showing a payment that Room no longer has.
+                    runCatching { refreshStateFromDaoSnapshot(d = d) }
                 }
             }
         }
