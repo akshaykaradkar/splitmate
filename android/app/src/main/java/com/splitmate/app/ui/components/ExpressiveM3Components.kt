@@ -6,7 +6,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -16,7 +15,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -64,8 +62,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -73,13 +69,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -1388,7 +1379,12 @@ object SplitButtonDefaults {
 // 7. HORIZONTAL FLOATING TOOLBAR (WITH ADJACENT FAB & NESTED SCROLL)
 // ==============================================================================
 
+// v2.4.0 rc3: every entry point in this section delegates to the official Material 3 Expressive
+// floating toolbar (androidx.compose.material3 1.5.0-alpha18). The official component owns the pill
+// shape, the tonal elevation and the collapse-into-FAB motion, so no shadow is drawn outside it.
+
 object FloatingToolbarDefaults {
+    /** Official `FloatingToolbarDefaults.StandardFloatingActionButton` with SplitMate's colour roles. */
     @Composable
     fun StandardFloatingActionButton(
         onClick: () -> Unit,
@@ -1397,46 +1393,56 @@ object FloatingToolbarDefaults {
         contentColor: Color = MaterialTheme.colorScheme.onPrimary,
         content: @Composable () -> Unit
     ) {
-        Surface(
+        androidx.compose.material3.FloatingToolbarDefaults.StandardFloatingActionButton(
             onClick = onClick,
-            shape = CircleShape,
-            color = containerColor,
+            modifier = modifier,
+            containerColor = containerColor,
             contentColor = contentColor,
-            shadowElevation = 6.dp,
-            modifier = modifier.size(52.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                content()
-            }
-        }
+            content = content
+        )
+    }
+
+    /** Official toolbar colours mapped to the Buckwheat tonal surface ladder. */
+    @Composable
+    internal fun splitMateToolbarColors(): androidx.compose.material3.FloatingToolbarColors {
+        val palette = LocalSplitMatePalette.current
+        return androidx.compose.material3.FloatingToolbarDefaults.standardFloatingToolbarColors(
+            toolbarContainerColor = palette.surfaceContainerHigh,
+            toolbarContentColor = palette.onSurface,
+            fabContainerColor = palette.primary,
+            fabContentColor = palette.onPrimary
+        )
     }
 }
 
 /**
  * Automatically toggles a [HorizontalFloatingToolbar]'s expanded/collapsed state
  * as the user scrolls vertically in the parent list.
+ *
+ * v2.4.0 rc3: delegates to the official `FloatingToolbarDefaults.floatingToolbarVerticalNestedScroll`.
  */
 fun Modifier.floatingToolbarVerticalNestedScroll(
     expanded: Boolean = true,
     onExpand: () -> Unit = {},
     onCollapse: () -> Unit = {}
-): Modifier = this.nestedScroll(
-    object : NestedScrollConnection {
-        override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-            if (available.y < -6f && expanded) {
-                onCollapse()
-            } else if (available.y > 6f && !expanded) {
-                onExpand()
-            }
-            return Offset.Zero
-        }
+): Modifier {
+    val base = this
+    return with(androidx.compose.material3.FloatingToolbarDefaults) {
+        base.floatingToolbarVerticalNestedScroll(
+            expanded = expanded,
+            onExpand = onExpand,
+            onCollapse = onCollapse
+        )
     }
-)
+}
 
 /**
  * Material 3 Expressive `HorizontalFloatingToolbar` hovering above the system navigation
- * bar in a `CircleShape` pill container (`LocalSplitMatePalette.current.surfaceContainerHigh`,
- * `6.dp` shadow elevation), paired side-by-side with an optional adjacent [floatingActionButton].
+ * bar (`LocalSplitMatePalette.current.surfaceContainerHigh` container), paired side-by-side with an
+ * optional adjacent [floatingActionButton].
+ *
+ * v2.4.0 rc3: delegates to the official `androidx.compose.material3.HorizontalFloatingToolbar`
+ * (the FAB overload when [floatingActionButton] is set).
  */
 @ExperimentalMaterial3ExpressiveApi
 @Composable
@@ -1446,50 +1452,26 @@ fun HorizontalFloatingToolbar(
     floatingActionButton: (@Composable () -> Unit)? = null,
     content: @Composable RowScope.() -> Unit
 ) {
-    val palette = LocalSplitMatePalette.current
-    val horizontalPad by animateDpAsState(
-        targetValue = if (expanded) 12.dp else 8.dp,
-        animationSpec = SplitMateMotion.defaultSpatial(),
-        label = "FloatingToolbarPadding"
-    )
-    Row(
+    val colors = FloatingToolbarDefaults.splitMateToolbarColors()
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(max = 72.dp)
             .padding(horizontal = 12.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
+        contentAlignment = Alignment.Center
     ) {
-        AnimatedVisibility(
-            visible = expanded,
-            enter = fadeIn(animationSpec = SplitMateMotion.fastEffects()) +
-                expandHorizontally(animationSpec = SplitMateMotion.defaultSpatial()),
-            exit = fadeOut(animationSpec = SplitMateMotion.fastEffects()) +
-                shrinkHorizontally(animationSpec = SplitMateMotion.defaultSpatial())
-        ) {
-            Surface(
-                shape = CircleShape,
-                color = palette.surfaceContainerHigh,
-                contentColor = palette.onSurface,
-                border = BorderStroke(1.dp, palette.outlineVariant.copy(alpha = 0.65f)),
-                modifier = Modifier
-                    .height(60.dp)
-                    .shadow(elevation = 6.dp, shape = CircleShape)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = horizontalPad, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    content = content
-                )
-            }
-        }
-
         if (floatingActionButton != null) {
-            if (expanded) {
-                Spacer(modifier = Modifier.width(10.dp))
-            }
-            floatingActionButton.invoke()
+            androidx.compose.material3.HorizontalFloatingToolbar(
+                expanded = expanded,
+                floatingActionButton = floatingActionButton,
+                colors = colors,
+                content = content
+            )
+        } else {
+            androidx.compose.material3.HorizontalFloatingToolbar(
+                expanded = expanded,
+                colors = colors,
+                content = content
+            )
         }
     }
 }
@@ -1497,6 +1479,8 @@ fun HorizontalFloatingToolbar(
 /**
  * Material 3 Expressive `VerticalFloatingToolbar` for edge-docked quick actions
  * and foldable/tablet vertical toolbars, paired with an optional [floatingActionButton].
+ *
+ * v2.4.0 rc3: delegates to the official `androidx.compose.material3.VerticalFloatingToolbar`.
  */
 @ExperimentalMaterial3ExpressiveApi
 @Composable
@@ -1506,49 +1490,24 @@ fun VerticalFloatingToolbar(
     floatingActionButton: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val palette = LocalSplitMatePalette.current
-    val verticalPad by animateDpAsState(
-        targetValue = if (expanded) 12.dp else 8.dp,
-        animationSpec = SplitMateMotion.defaultSpatial(),
-        label = "VerticalFloatingToolbarPadding"
-    )
-    Column(
-        modifier = modifier
-            .widthIn(max = 72.dp)
-            .padding(horizontal = 4.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
+    val colors = FloatingToolbarDefaults.splitMateToolbarColors()
+    Box(
+        modifier = modifier.padding(horizontal = 4.dp, vertical = 12.dp),
+        contentAlignment = Alignment.Center
     ) {
-        AnimatedVisibility(
-            visible = expanded,
-            enter = fadeIn(animationSpec = SplitMateMotion.fastEffects()) +
-                expandVertically(animationSpec = SplitMateMotion.defaultSpatial()),
-            exit = fadeOut(animationSpec = SplitMateMotion.fastEffects()) +
-                shrinkVertically(animationSpec = SplitMateMotion.defaultSpatial())
-        ) {
-            Surface(
-                shape = CircleShape,
-                color = palette.surfaceContainerHigh,
-                contentColor = palette.onSurface,
-                border = BorderStroke(1.dp, palette.outlineVariant.copy(alpha = 0.65f)),
-                modifier = Modifier
-                    .width(60.dp)
-                    .shadow(elevation = 6.dp, shape = CircleShape)
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = verticalPad),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    content = content
-                )
-            }
-        }
-
         if (floatingActionButton != null) {
-            if (expanded) {
-                Spacer(modifier = Modifier.height(10.dp))
-            }
-            floatingActionButton.invoke()
+            androidx.compose.material3.VerticalFloatingToolbar(
+                expanded = expanded,
+                floatingActionButton = floatingActionButton,
+                colors = colors,
+                content = content
+            )
+        } else {
+            androidx.compose.material3.VerticalFloatingToolbar(
+                expanded = expanded,
+                colors = colors,
+                content = content
+            )
         }
     }
 }

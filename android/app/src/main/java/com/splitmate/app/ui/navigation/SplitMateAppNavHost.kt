@@ -739,24 +739,18 @@ fun SplitMateGlobalBottomBar(
         HorizontalFloatingToolbar(
             expanded = true,
             floatingActionButton = {
-                Surface(
+                // v2.4.0 rc3: official M3 Expressive toolbar FAB (owns its shape, size and elevation).
+                androidx.compose.material3.FloatingToolbarDefaults.VibrantFloatingActionButton(
                     onClick = onQuickSplitClick,
-                    shape = CircleShape,
-                    color = activePalette.primary,
-                    contentColor = activePalette.onPrimary,
-                    shadowElevation = 6.dp,
-                    modifier = Modifier
-                        .minimumInteractiveComponentSize()
-                        .size(52.dp)
+                    containerColor = activePalette.primary,
+                    contentColor = activePalette.onPrimary
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Rounded.ElectricBolt,
-                            contentDescription = SplitMateNavRouteLabels.QUICK_SPLIT,
-                            tint = activePalette.onPrimary,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Rounded.ElectricBolt,
+                        contentDescription = SplitMateNavRouteLabels.QUICK_SPLIT,
+                        tint = activePalette.onPrimary,
+                        modifier = Modifier.size(22.dp)
+                    )
                 }
             }
         ) {
