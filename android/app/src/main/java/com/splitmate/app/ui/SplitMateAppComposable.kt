@@ -95,8 +95,6 @@ import com.splitmate.app.ui.components.ConnectedButtonGroup
 import com.splitmate.app.ui.components.ContainedLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import com.splitmate.app.ui.components.ExpressiveMenuAction
-import com.splitmate.app.ui.components.FloatingToolbarDefaults
-import com.splitmate.app.ui.components.HorizontalFloatingToolbar
 import com.splitmate.app.ui.components.LinearWavyProgressIndicator
 import com.splitmate.app.ui.components.MaterialShapes
 import com.splitmate.app.ui.components.MorphPolygonShape
@@ -1653,6 +1651,8 @@ fun SplitMateMainDashboardScaffold(
                     targetOffsetY = { it }
                 ) + fadeOut(animationSpec = SplitMateMotion.defaultEffects())
             ) {
+                // v2.4.0 rc3: official ExtendedFloatingActionButton (expanded overload) with its default
+                // M3 Expressive shape; it collapses to the icon with the toolbar scroll state.
                 ExtendedFloatingActionButton(
                     onClick = {
                         viewModel.navigateToSubFlow(
@@ -1660,6 +1660,7 @@ fun SplitMateMainDashboardScaffold(
                             originGroupDetailId = uiState.openedGroupDetailId
                         )
                     },
+                    expanded = isToolbarExpanded,
                     icon = {
                         Icon(
                             imageVector = Icons.Rounded.ElectricBolt,
@@ -1677,7 +1678,6 @@ fun SplitMateMainDashboardScaffold(
                     },
                     containerColor = activeFabPalette.primary,
                     contentColor = activeFabPalette.onPrimary,
-                    shape = RoundedCornerShape(20.dp),
                     elevation = FloatingActionButtonDefaults.elevation(
                         defaultElevation = 6.dp,
                         pressedElevation = 10.dp
@@ -1836,15 +1836,19 @@ fun ExpressiveNavigationRail(
     onTabSelected: (SplitMateTab) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    NavigationRail(
-        containerColor = containerColor,
-        contentColor = SplitMateTheme.PrimaryDark,
+    // v2.4.0 rc3: the official M3 Expressive WideNavigationRail (collapsed state) and its items.
+    androidx.compose.material3.WideNavigationRail(
+        colors = androidx.compose.material3.WideNavigationRailDefaults.colors(
+            containerColor = containerColor,
+            contentColor = SplitMateTheme.PrimaryDark
+        ),
         modifier = modifier.testTag("AdaptiveNavigationRail")
     ) {
         Spacer(modifier = Modifier.height(12.dp))
         SplitMateTab.values().filter { it.showInPrimaryNav }.forEach { tab ->
             val isSelected = selectedTab == tab
-            NavigationRailItem(
+            androidx.compose.material3.WideNavigationRailItem(
+                railExpanded = false,
                 selected = isSelected,
                 onClick = { onTabSelected(tab) },
                 icon = {
@@ -1861,10 +1865,10 @@ fun ExpressiveNavigationRail(
                         fontFamily = SplitMateTheme.FontRounded
                     )
                 },
-                colors = NavigationRailItemDefaults.colors(
+                colors = androidx.compose.material3.WideNavigationRailItemDefaults.colors(
                     selectedIconColor = SplitMateTheme.SageText,
                     selectedTextColor = SplitMateTheme.PrimaryDark,
-                    indicatorColor = SplitMateTheme.AccentSage,
+                    selectedIndicatorColor = SplitMateTheme.AccentSage,
                     unselectedIconColor = SplitMateTheme.TextSecondary,
                     unselectedTextColor = SplitMateTheme.TextSecondary
                 )
