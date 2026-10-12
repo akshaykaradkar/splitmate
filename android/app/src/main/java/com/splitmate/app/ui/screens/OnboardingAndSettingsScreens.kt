@@ -73,8 +73,8 @@ import com.splitmate.app.ui.toPalette
 private val SplitMateThemeMode.shortBadgeLabel: String
     get() = when (this) {
         SplitMateThemeMode.SUNLIT_BUCKWHEAT -> "Buckwheat"
-        SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> "Espresso"
-        SplitMateThemeMode.KYOTO_MATCHA_YUZU -> "Matcha"
+        SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> "Obsidian"
+        SplitMateThemeMode.KYOTO_MATCHA_YUZU -> "Jaipur"
     }
 
 private fun persistAndApplyExpressiveThemeMode(
@@ -1144,8 +1144,8 @@ fun UserSettingsScreen(
                                     )
                                     val paletteHexSummary = when (mode) {
                                         SplitMateThemeMode.SUNLIT_BUCKWHEAT -> "#FAF6F0 · #365314 · #D9F99D · #FED8C8"
-                                        SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> "#1C1815 · #A3E635 · #283D0E · #FB923C"
-                                        SplitMateThemeMode.KYOTO_MATCHA_YUZU -> "#DDF0D5 · #0F6B3E · #86EFAC · #FEF08A"
+                                        SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> "#15151A · #F5C451 · #2B2820 · #FF8AB0"
+                                        SplitMateThemeMode.KYOTO_MATCHA_YUZU -> "#FBF4EC · #5C53A5 · #E6DEFE · #AF2269"
                                     }
                                     Surface(
                                         onClick = {

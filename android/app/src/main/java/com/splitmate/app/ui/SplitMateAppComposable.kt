@@ -4273,9 +4273,15 @@ fun LedgersDashboardScreen(
                     .fillMaxWidth()
                     .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
                     .then(
-                        if (groupCard.netBalanceCents == 0L) {
-                            Modifier.border(1.dp, SplitMateTheme.BorderLight, groupIslandShape)
-                        } else Modifier
+                        when {
+                            groupCard.netBalanceCents == 0L ->
+                                Modifier.border(1.dp, SplitMateTheme.BorderLight, groupIslandShape)
+                            // v2.4.0 D6: dark fills are calm graphite / rose, so a 1dp accent
+                            // border carries the "gets back" (gold) vs "owes" (rose) signal.
+                            SplitMateTheme.isDark ->
+                                Modifier.border(1.dp, badgeTextColor.copy(alpha = 0.45f), groupIslandShape)
+                            else -> Modifier
+                        }
                     )
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {

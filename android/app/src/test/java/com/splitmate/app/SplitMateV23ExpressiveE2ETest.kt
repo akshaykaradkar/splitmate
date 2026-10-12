@@ -240,32 +240,34 @@ class SplitMateV23ExpressiveE2ETest {
 
         @Test
         fun `F1_T1_03 WarmEspressoNightPalette matches canonical espresso surfaces and lime-amber tokens`() {
+            // v2.4.0 D6: this slot is now "Obsidian Gold" (gold on deep charcoal, rose for owes).
             val p = SplitMateThemeMode.WARM_ESPRESSO_NIGHT.toPalette()
-            assertEquals(Color(0xFF14110F), p.surfaceContainerLowest)
-            assertEquals(Color(0xFF1C1815), p.surfaceContainerLow)
-            assertEquals(Color(0xFF25201C), p.surfaceContainer)
-            assertEquals(Color(0xFF302A24), p.surfaceContainerHigh)
-            assertEquals(Color(0xFF3B332C), p.surfaceContainerHighest)
-            assertEquals(Color(0xFFA3E635), p.primary)
-            assertEquals(Color(0xFF283D0E), p.primaryContainer)
-            assertEquals(Color(0xFFFB923C), p.secondary)
-            assertEquals(Color(0xFFA5B4FC), p.tertiary)
+            assertEquals(Color(0xFF0E0E11), p.surfaceContainerLowest)
+            assertEquals(Color(0xFF15151A), p.surfaceContainerLow)
+            assertEquals(Color(0xFF1D1D24), p.surfaceContainer)
+            assertEquals(Color(0xFF26262F), p.surfaceContainerHigh)
+            assertEquals(Color(0xFF31313C), p.surfaceContainerHighest)
+            assertEquals(Color(0xFFF5C451), p.primary)
+            assertEquals(Color(0xFF2B2820), p.primaryContainer)
+            assertEquals(Color(0xFFFF8AB0), p.secondary)
+            assertEquals(Color(0xFF7EE2B8), p.tertiary)
         }
 
         @Test
         fun `F1_T1_04 KyotoMatchaYuzuPalette matches canonical botanical stationery and hanko coral tokens`() {
+            // v2.4.0 D6: this slot is now "Jaipur Rani" (sandstone canvas, royal indigo, rani pink).
             val p = SplitMateThemeMode.KYOTO_MATCHA_YUZU.toPalette()
-            assertEquals(Color(0xFFEDF7EA), p.surfaceContainerLowest)
-            assertEquals(Color(0xFFDDF0D5), p.surfaceContainerLow)
-            assertEquals(Color(0xFFCCE6C2), p.surfaceContainer)
-            assertEquals(Color(0xFFBBDAAF), p.surfaceContainerHigh)
-            assertEquals(Color(0xFFA8CE9A), p.surfaceContainerHighest)
-            assertEquals(Color(0xFF0F6B3E), p.primary)
-            assertEquals(Color(0xFF86EFAC), p.primaryContainer)
-            assertEquals(Color(0xFFB45309), p.secondary)
-            assertEquals(Color(0xFFFEF08A), p.secondaryContainer)
-            assertEquals(Color(0xFF6B21A8), p.tertiary)
-            assertEquals(Color(0xFFF3E8FF), p.tertiaryContainer)
+            assertEquals(Color(0xFFFFFFFF), p.surfaceContainerLowest)
+            assertEquals(Color(0xFFFBF4EC), p.surfaceContainerLow)
+            assertEquals(Color(0xFFF4EADE), p.surfaceContainer)
+            assertEquals(Color(0xFFECE0D1), p.surfaceContainerHigh)
+            assertEquals(Color(0xFFE2D3C1), p.surfaceContainerHighest)
+            assertEquals(Color(0xFF5C53A5), p.primary)
+            assertEquals(Color(0xFFE6DEFE), p.primaryContainer)
+            assertEquals(Color(0xFFAF2269), p.secondary)
+            assertEquals(Color(0xFFFFD8E5), p.secondaryContainer)
+            assertEquals(Color(0xFF775A00), p.tertiary)
+            assertEquals(Color(0xFFFFDEA2), p.tertiaryContainer)
             assertNotEquals(SunlitBuckwheatPalette.primaryContainer, p.primaryContainer)
             assertNotEquals(SunlitBuckwheatPalette.secondaryContainer, p.secondaryContainer)
             assertNotEquals(SunlitBuckwheatPalette.tertiaryContainer, p.tertiaryContainer)
@@ -2871,7 +2873,7 @@ class SplitMateV23ExpressiveE2ETest {
             val presence = mapOf("9876543210" to (nowMs - 15_000L))
             assertTrue(CloudGroupSyncRepository.isPhoneOnlineNow("9876543210", presence, nowMs))
             val palette = WarmEspressoNightPalette
-            assertEquals(Color(0xFFA3E635), palette.primary)
+            assertEquals(Color(0xFFF5C451), palette.primary) // v2.4.0 D6 Obsidian Gold
         }
 
         @Test
@@ -3462,8 +3464,8 @@ class SplitMateV23ExpressiveE2ETest {
             assertEquals(WarmEspressoNightPalette.surfaceContainerLowest, SplitMateTheme.SurfaceWhite)
             assertEquals(WarmEspressoNightPalette.primaryContainer, SplitMateTheme.SageSurface)
             assertEquals(WarmEspressoNightPalette.onPrimaryContainer, SplitMateTheme.SageText)
-            assertEquals(Color(0xFF3A2019), SplitMateTheme.TerracottaSurface)
-            assertEquals(Color(0xFFFECDD3), SplitMateTheme.TerracottaText)
+            assertEquals(Color(0xFF3A1A26), SplitMateTheme.TerracottaSurface) // v2.4.0 D6 Obsidian rose
+            assertEquals(Color(0xFFFFD9E4), SplitMateTheme.TerracottaText)
 
             // Desync Scenario B: activeThemeMode is WARM_ESPRESSO_NIGHT (dark), but legacy SplitMateTheme.isDark is flipped to false
             DesignSystemBindings.activeThemeMode = SplitMateThemeMode.WARM_ESPRESSO_NIGHT

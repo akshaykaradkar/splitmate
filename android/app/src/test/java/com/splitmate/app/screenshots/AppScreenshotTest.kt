@@ -172,6 +172,15 @@ class AppScreenshotTest {
         launch(SplitMateThemeMode.KYOTO_MATCHA_YUZU); tap(text = "Lake Tahoe Cabin"); shot("27_kyoto_trip_overview")
     }
 
+    /** v2.4.0 D6: the third theme on the Money and People tabs. */
+    @Test fun s28_theme3_trip_money() {
+        launch(SplitMateThemeMode.KYOTO_MATCHA_YUZU); tap(text = "Lake Tahoe Cabin"); tap(text = "Money"); shot("28_theme3_trip_money")
+    }
+
+    @Test fun s29_theme3_trip_people() {
+        launch(SplitMateThemeMode.KYOTO_MATCHA_YUZU); tap(text = "Lake Tahoe Cabin"); tap(text = "People"); shot("29_theme3_trip_people")
+    }
+
     @Test fun s10_trip_scrolled() {
         launch(); tap(text = "Lake Tahoe Cabin")
         compose.onRoot().performTouchInput { swipeUp(startY = height * 0.85f, endY = height * 0.25f) }

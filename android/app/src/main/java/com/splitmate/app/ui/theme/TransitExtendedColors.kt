@@ -151,16 +151,42 @@ private val SunlitTrainTicket = TransitPassColors(
     decoration = Color(0xFF6B9440)
 )
 
-// Espresso Night keeps the deep forest pass (it already reads as a dark card).
-private val EspressoTrainTicket = SunlitTrainTicket
+// v2.4.0 D6: Obsidian Gold uses a graphite pass with gold accents (was the Sunlit forest green).
+private val EspressoTrainTicket = TransitPassColors(
+    color = Color(0xFF2E2A20),
+    onColor = White,
+    container = Color(0xFFFFE9B0),
+    onContainer = Color(0xFF2B1E00),
+    colorDeep = Color(0xFF1C1A14),
+    colorRaised = Color(0xFF3A3428),
+    colorRaisedOutline = Color(0xFF6B5A30),
+    onColorVariant = Color(0xFFFFE9B0),
+    onColorSubtle = Color(0xFFF3E3BC),
+    onColorMuted = Color(0xFFE0CFA4),
+    outline = Color(0xFF6B5A30),
+    containerOutline = Color(0xFFE8C97A),
+    highlight = Color(0xFFFFE29A),
+    signal = Color(0xFFF5C451),
+    decoration = Color(0xFF8A7444)
+)
 
-private val KyotoTrainTicket = SunlitTrainTicket.copy(
-    color = Color(0xFF1F3D1C),
-    onContainer = Color(0xFF142812),
-    colorDeep = Color(0xFF142812),
-    colorRaised = Color(0xFF2B5427),
-    colorRaisedOutline = Color(0xFF437A3D),
-    outline = Color(0xFF437A3D)
+// v2.4.0 D6: Jaipur Rani uses a rani-plum pass (the flight pass is indigo, so they stay distinct).
+private val KyotoTrainTicket = TransitPassColors(
+    color = Color(0xFF4A1B3D),
+    onColor = White,
+    container = Color(0xFFFFD8E5),
+    onContainer = Color(0xFF3E1432),
+    colorDeep = Color(0xFF3E1432),
+    colorRaised = Color(0xFF5E2A50),
+    colorRaisedOutline = Color(0xFF8A4A76),
+    onColorVariant = Color(0xFFFFD8E5),
+    onColorSubtle = Color(0xFFF2BCD3),
+    onColorMuted = Color(0xFFEAB4CB),
+    outline = Color(0xFF8A4A76),
+    containerOutline = Color(0xFFF2BCD3),
+    highlight = Color(0xFFFFD8E5),
+    signal = Color(0xFFFFD8E5),
+    decoration = Color(0xFFA0618C)
 )
 
 private val SunlitTrainDeck = TransitPassColors(
@@ -182,13 +208,42 @@ private val SunlitTrainDeck = TransitPassColors(
     decoration = Color(0xFFEAF5DC)
 )
 
-private val EspressoTrainDeck = SunlitTrainDeck
+// v2.4.0 D6: graphite + gold deck for Obsidian Gold (home "Split a train ticket" card).
+private val EspressoTrainDeck = TransitPassColors(
+    color = Color(0xFF2E2A20),
+    onColor = White,
+    container = Color(0xFFFFE9B0),
+    onContainer = Color(0xFF2B1E00),
+    colorDeep = Color(0xFF1C1A14),
+    colorRaised = Color(0xFF1C1A14),
+    colorRaisedOutline = Color(0xFF6B5A30),
+    onColorVariant = Color(0xFFFFF3D1),
+    onColorSubtle = Color(0xFFF3E3BC),
+    onColorMuted = Color(0xFFE0CFA4),
+    outline = Color(0xFF6B5A30),
+    containerOutline = Color(0xFFE8C97A),
+    highlight = Color(0xFFF5C451),
+    signal = Color(0xFFF5C451),
+    decoration = Color(0xFFFFF3D1)
+)
 
-private val KyotoTrainDeck = SunlitTrainDeck.copy(
-    color = Color(0xFF2B5427),
-    colorDeep = Color(0xFF1F3D1C),
-    colorRaised = Color(0xFF1F3D1C),
-    onContainer = Color(0xFF1F3D1C)
+// v2.4.0 D6: rani-plum deck for Jaipur Rani.
+private val KyotoTrainDeck = TransitPassColors(
+    color = Color(0xFF5A1F48),
+    onColor = White,
+    container = Color(0xFFFCE4EE),
+    onContainer = Color(0xFF4A1B3D),
+    colorDeep = Color(0xFF3E1432),
+    colorRaised = Color(0xFF3E1432),
+    colorRaisedOutline = Color(0xFFF2BCD3),
+    onColorVariant = Color(0xFFFCE4EE),
+    onColorSubtle = Color(0xFFF7CFE0),
+    onColorMuted = Color(0xFFF0BCD2),
+    outline = Color(0xFFF2BCD3),
+    containerOutline = Color(0xFFF2BCD3),
+    highlight = Color(0xFFFFDEA2),
+    signal = Color(0xFFFF9CC4),
+    decoration = Color(0xFFFCE4EE)
 )
 
 private val SunlitTrainHub = TransitPassColors(
@@ -209,20 +264,40 @@ private val SunlitTrainHub = TransitPassColors(
     decoration = Color(0xFF6B9440)
 )
 
-private val EspressoTrainHub = SunlitTrainHub.copy(
-    color = Color(0xFF264210),
-    container = Color(0xFF8BB85A),
-    colorDeep = Color(0xFF1B3009),
-    colorRaised = Color(0xFF1A300A),
-    colorRaisedOutline = Color(0xFF345718),
-    outline = Color(0xFF345718),
-    containerOutline = Color(0xFF759943),
-    signal = Color(0xFF759943)
+private val EspressoTrainHub = TransitPassColors(
+    color = Color(0xFF2E2A20),
+    onColor = White,
+    container = Color(0xFFF5C451),
+    onContainer = Color(0xFF2B1E00),
+    colorDeep = Color(0xFF1C1A14),
+    colorRaised = Color(0xFF1C1A14),
+    colorRaisedOutline = Color(0xFF4F4530),
+    onColorVariant = Color(0xFFFFE9B0),
+    onColorSubtle = Color(0xFFF3E3BC),
+    onColorMuted = Color(0xFFE0CFA4),
+    outline = Color(0xFF4F4530),
+    containerOutline = Color(0xFFC9A23F),
+    highlight = Color(0xFFF5C451),
+    signal = Color(0xFFF5C451),
+    decoration = Color(0xFF8A7444)
 )
 
-private val KyotoTrainHub = SunlitTrainHub.copy(
-    color = Color(0xFF1E3F24),
-    colorDeep = Color(0xFF142E19)
+private val KyotoTrainHub = TransitPassColors(
+    color = Color(0xFF4A1B3D),
+    onColor = White,
+    container = Color(0xFFE58AB3),
+    onContainer = Color(0xFF3E0020),
+    colorDeep = Color(0xFF33112A),
+    colorRaised = Color(0xFF3A1530),
+    colorRaisedOutline = Color(0xFF7A3A66),
+    onColorVariant = Color(0xFFFFD8E5),
+    onColorSubtle = Color(0xFFF2BCD3),
+    onColorMuted = Color(0xFFEAB4CB),
+    outline = Color(0xFF7A3A66),
+    containerOutline = Color(0xFFE58AB3),
+    highlight = Color(0xFFFFB3D1),
+    signal = Color(0xFFE58AB3),
+    decoration = Color(0xFFA0618C)
 )
 
 private val SunlitFlight = TransitPassColors(
@@ -249,18 +324,12 @@ private val EspressoFlight = SunlitFlight.copy(
     outline = Color(0xFF4E48A6)
 )
 
+// v2.4.0 D6: Jaipur Rani flight pass is a royal-indigo navy built from its primary (#5C53A5).
 private val KyotoFlight = SunlitFlight.copy(
-    color = Color(0xFF23383B),
-    container = Color(0xFFDDF0F2),
-    onContainer = Color(0xFF23383B),
-    colorDeep = Color(0xFF162527),
-    colorRaised = Color(0xFF2D4A4E),
-    colorRaisedOutline = Color(0xFF4F7A7E),
-    onColorSubtle = Color(0xFFB4D4D8),
-    onColorMuted = Color(0xFFB4D4D8),
-    outline = Color(0xFFB4D4D8),
-    containerOutline = Color(0xFFB4D4D8),
-    signal = Color(0xFF8CC7CC)
+    color = Color(0xFF332C70),
+    colorDeep = Color(0xFF221D4F),
+    colorRaised = Color(0xFF2E2866),
+    colorRaisedOutline = Color(0xFF6A62B8)
 )
 
 private val SunlitFlightHub = SunlitFlight.copy(
@@ -275,7 +344,8 @@ private val EspressoFlightHub = SunlitFlightHub.copy(
 )
 
 private val KyotoFlightHub = KyotoFlight.copy(
-    onColorVariant = Color(0xFFDCE3FD)
+    onColorVariant = Color(0xFFDCE3FD),
+    onColorSubtle = Color(0xFFC7D2FE)
 )
 
 private val SunlitBoardingPass = BoardingPassColors(
@@ -291,9 +361,10 @@ private val SunlitBoardingPass = BoardingPassColors(
     tearGradientEnd = Color(0xFF4F46E5)
 )
 
-private val EspressoBoardingPass = SunlitBoardingPass.copy(perforation = Color(0xFF4A443C))
+private val EspressoBoardingPass = SunlitBoardingPass.copy(perforation = Color(0xFF4A4552))
 
-private val KyotoBoardingPass = SunlitBoardingPass.copy(perforation = Color(0xFFB5CCA8))
+// Jaipur Rani: a deeper sandstone perforation that matches its canvas ladder.
+private val KyotoBoardingPass = SunlitBoardingPass.copy(perforation = Color(0xFFD9C8B4))
 
 private val SunlitStatusPending = StatusPillColors(
     roles = ExtendedColorRoles(
@@ -315,9 +386,7 @@ private val EspressoStatusPending = StatusPillColors(
     outline = Color(0xFF6B4E1B)
 )
 
-private val KyotoStatusPending = SunlitStatusPending.copy(
-    roles = SunlitStatusPending.roles.copy(container = Color(0xFFFEF9C3))
-)
+private val KyotoStatusPending = SunlitStatusPending
 
 private val SunlitMemberAvatars = listOf(
     Color(0xFFD7E8B6) to Color(0xFF2D4810),
@@ -337,7 +406,7 @@ private val EspressoMemberAvatars = listOf(
     Color(0xFF0C4A6E) to Color(0xFFE0F2FE)
 )
 
-// Kyoto Matcha is a light theme: the Sunlit pastel avatar pairs read correctly on its surfaces.
+// Jaipur Rani is a light theme: the Sunlit pastel avatar pairs read correctly on its surfaces.
 private val KyotoMemberAvatars = SunlitMemberAvatars
 
 /**
@@ -378,11 +447,11 @@ private fun buildTransitExtendedColors(palette: SplitMateExpressivePalette): Tra
             statusPending = EspressoStatusPending,
             statusConfirmed = StatusPillColors(
                 ExtendedColorRoles(confirmedText, confirmedOnText, palette.primaryContainer, confirmedText),
-                outline = Color(0xFF426128)
+                outline = Color(0xFF5A4E33)
             ),
             statusWaitlist = StatusPillColors(
                 ExtendedColorRoles(palette.secondary, palette.onSecondary, palette.secondaryContainer, palette.onSecondaryContainer),
-                outline = Color(0xFF7C3725)
+                outline = Color(0xFF7A2E4E)
             ),
             memberAvatars = EspressoMemberAvatars
         )
@@ -397,11 +466,11 @@ private fun buildTransitExtendedColors(palette: SplitMateExpressivePalette): Tra
             statusPending = KyotoStatusPending,
             statusConfirmed = StatusPillColors(
                 ExtendedColorRoles(confirmedText, confirmedOnText, palette.primaryContainer, confirmedText),
-                outline = Color(0xFFA8C6A3)
+                outline = Color(0xFFC9BEFB)
             ),
             statusWaitlist = StatusPillColors(
                 ExtendedColorRoles(palette.secondary, palette.onSecondary, palette.secondaryContainer, palette.onSecondaryContainer),
-                outline = Color(0xFFF7C6B5)
+                outline = Color(0xFFF5C2D6)
             ),
             memberAvatars = KyotoMemberAvatars
         )

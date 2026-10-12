@@ -74,11 +74,16 @@ import java.util.Locale
 // ==============================================================================
 // 3-THEME MATERIAL 3 EXPRESSIVE ENGINE (v2.3.0)
 // ==============================================================================
+// v2.4.0 D6: the enum constant names and `id`s are PERSISTED (prefs "expressive_theme_mode") and
+// must never change. Only the user-facing names do:
+//   WARM_ESPRESSO_NIGHT -> "Obsidian Gold" (dark), KYOTO_MATCHA_YUZU -> "Jaipur Rani" (light).
+// Old display names stay accepted by [fromId] through [legacyNames].
 enum class SplitMateThemeMode(
     val id: String,
     val displayName: String,
     val subtitle: String,
-    val isDark: Boolean
+    val isDark: Boolean,
+    val legacyNames: List<String> = emptyList()
 ) {
     SUNLIT_BUCKWHEAT(
         id = "SUNLIT_BUCKWHEAT",
@@ -88,15 +93,17 @@ enum class SplitMateThemeMode(
     ),
     WARM_ESPRESSO_NIGHT(
         id = "WARM_ESPRESSO_NIGHT",
-        displayName = "Warm Espresso Night",
-        subtitle = "Tactile Amber-on-Espresso Dark",
-        isDark = true
+        displayName = "Obsidian Gold",
+        subtitle = "Gold on deep charcoal",
+        isDark = true,
+        legacyNames = listOf("Warm Espresso Night")
     ),
     KYOTO_MATCHA_YUZU(
         id = "KYOTO_MATCHA_YUZU",
-        displayName = "Kyoto Matcha & Yuzu",
-        subtitle = "Botanical Stationery & Hanko Coral",
-        isDark = false
+        displayName = "Jaipur Rani",
+        subtitle = "Royal indigo on warm sandstone",
+        isDark = false,
+        legacyNames = listOf("Kyoto Matcha & Yuzu")
     );
 
     companion object {
@@ -109,6 +116,7 @@ enum class SplitMateThemeMode(
             return values().firstOrNull {
                 it.id.equals(clean, ignoreCase = true) ||
                     it.displayName.equals(clean, ignoreCase = true) ||
+                    it.legacyNames.any { legacy -> legacy.equals(clean, ignoreCase = true) } ||
                     it.name.equals(clean.replace(" ", "_"), ignoreCase = true)
             } ?: if (fallbackDark) WARM_ESPRESSO_NIGHT else SUNLIT_BUCKWHEAT
         }
@@ -182,68 +190,81 @@ val SunlitBuckwheatPalette = SplitMateExpressivePalette(
     inversePrimary = Color(0xFFB8D98D)
 )
 
+/**
+ * v2.4.0 D6 "Obsidian Gold" (dark). Persisted id stays WARM_ESPRESSO_NIGHT.
+ * - "Gets back" is gold (primary) and "owes" is a cool rose (secondary), so the two read apart
+ *   at a glance (warm vs cool), not only through the arrow icons.
+ * - primaryContainer is a gold-tinted graphite, not a saturated dark gold: large fills
+ *   (positive group cards, tonal buttons, chips) stay calm instead of muddy brown. Dark-theme
+ *   balance cards add a 1dp accent border so they still read as "positive" / "owes".
+ */
 val WarmEspressoNightPalette = SplitMateExpressivePalette(
     mode = SplitMateThemeMode.WARM_ESPRESSO_NIGHT,
-    surfaceContainerLowest = Color(0xFF14110F),
-    surfaceContainerLow = Color(0xFF1C1815),
-    surfaceContainer = Color(0xFF25201C),
-    surfaceContainerHigh = Color(0xFF302A24),
-    surfaceContainerHighest = Color(0xFF3B332C),
-    onSurface = Color(0xFFF5F0E6),
-    onSurfaceVariant = Color(0xFFB5ACA2),
-    primary = Color(0xFFA3E635),
-    onPrimary = Color(0xFF1A2E05),
-    primaryContainer = Color(0xFF283D0E),
-    onPrimaryContainer = Color(0xFFD9F99D),
-    secondary = Color(0xFFFB923C),
-    onSecondary = Color(0xFF431A08),
-    secondaryContainer = Color(0xFF6B3418),
-    onSecondaryContainer = Color(0xFFFED8C8),
-    tertiary = Color(0xFFA5B4FC),
-    onTertiary = Color(0xFF1E1B4B),
-    tertiaryContainer = Color(0xFF3A3580),
-    onTertiaryContainer = Color(0xFFE0E7FF),
-    outline = Color(0xFF968E85),
-    outlineVariant = Color(0xFF38312B),
+    surfaceContainerLowest = Color(0xFF0E0E11),
+    surfaceContainerLow = Color(0xFF15151A),
+    surfaceContainer = Color(0xFF1D1D24),
+    surfaceContainerHigh = Color(0xFF26262F),
+    surfaceContainerHighest = Color(0xFF31313C),
+    onSurface = Color(0xFFF4F1EA),
+    onSurfaceVariant = Color(0xFFB6B1A9),
+    primary = Color(0xFFF5C451),
+    onPrimary = Color(0xFF2B1E00),
+    primaryContainer = Color(0xFF2B2820),
+    onPrimaryContainer = Color(0xFFFFE29A),
+    secondary = Color(0xFFFF8AB0),
+    onSecondary = Color(0xFF4A0624),
+    secondaryContainer = Color(0xFF5A1733),
+    onSecondaryContainer = Color(0xFFFFD9E4),
+    tertiary = Color(0xFF7EE2B8),
+    onTertiary = Color(0xFF002B1B),
+    tertiaryContainer = Color(0xFF0F4A33),
+    onTertiaryContainer = Color(0xFFB8F5DA),
+    outline = Color(0xFF948F88),
+    outlineVariant = Color(0xFF353440),
     error = Color(0xFFFFB4AB),
     onError = Color(0xFF690005),
     errorContainer = Color(0xFF93000A),
     onErrorContainer = Color(0xFFFFDAD6),
-    inverseSurface = Color(0xFFF5F0E6),
-    inverseOnSurface = Color(0xFF2A2520),
-    inversePrimary = Color(0xFF365314)
+    inverseSurface = Color(0xFFF4F1EA),
+    inverseOnSurface = Color(0xFF222126),
+    inversePrimary = Color(0xFF6E5100)
 )
 
+/**
+ * v2.4.0 D6 "Jaipur Rani" (light). Persisted id stays KYOTO_MATCHA_YUZU.
+ * Jaipur sandstone canvas ladder + M3 tone-based accents: royal indigo primary (T40/T90/T10),
+ * rani-pink secondary ("owes"), turmeric tertiary.
+ */
 val KyotoMatchaYuzuPalette = SplitMateExpressivePalette(
     mode = SplitMateThemeMode.KYOTO_MATCHA_YUZU,
-    surfaceContainerLowest = Color(0xFFEDF7EA),
-    surfaceContainerLow = Color(0xFFDDF0D5),
-    surfaceContainer = Color(0xFFCCE6C2),
-    surfaceContainerHigh = Color(0xFFBBDAAF),
-    surfaceContainerHighest = Color(0xFFA8CE9A),
-    onSurface = Color(0xFF0A1F12),
-    onSurfaceVariant = Color(0xFF1E3F29),
-    primary = Color(0xFF0F6B3E),
+    surfaceContainerLowest = Color(0xFFFFFFFF),
+    surfaceContainerLow = Color(0xFFFBF4EC),
+    surfaceContainer = Color(0xFFF4EADE),
+    surfaceContainerHigh = Color(0xFFECE0D1),
+    surfaceContainerHighest = Color(0xFFE2D3C1),
+    onSurface = Color(0xFF221A25),
+    onSurfaceVariant = Color(0xFF574C59),
+    primary = Color(0xFF5C53A5),
     onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFF86EFAC),
-    onPrimaryContainer = Color(0xFF062E19),
-    secondary = Color(0xFFB45309),
+    primaryContainer = Color(0xFFE6DEFE),
+    onPrimaryContainer = Color(0xFF001257),
+    secondary = Color(0xFFAF2269),
     onSecondary = Color(0xFFFFFFFF),
-    secondaryContainer = Color(0xFFFEF08A),
-    onSecondaryContainer = Color(0xFF451A03),
-    tertiary = Color(0xFF6B21A8),
+    secondaryContainer = Color(0xFFFFD8E5),
+    onSecondaryContainer = Color(0xFF3E0020),
+    tertiary = Color(0xFF775A00),
     onTertiary = Color(0xFFFFFFFF),
-    tertiaryContainer = Color(0xFFF3E8FF),
-    onTertiaryContainer = Color(0xFF3B0764),
-    outline = Color(0xFF3F6638),
-    outlineVariant = Color(0xFF5E8F52), // v2.4.0 D2: was 2.09:1 on surface; now >= 3:1
-    error = Color(0xFF93000A),
+    tertiaryContainer = Color(0xFFFFDEA2),
+    onTertiaryContainer = Color(0xFF241A00),
+    outline = Color(0xFF776A5B),
+    outlineVariant = Color(0xFFE3D6C6),
+    error = Color(0xFFA3261B),
     onError = Color(0xFFFFFFFF),
-    errorContainer = Color(0xFFFFDAD6),
-    onErrorContainer = Color(0xFF410002),
-    inverseSurface = Color(0xFF233A2B),
-    inverseOnSurface = Color(0xFFEDF7EA),
-    inversePrimary = Color(0xFF86EFAC)
+    errorContainer = Color(0xFFFCDAD4),
+    onErrorContainer = Color(0xFF410E0B),
+    inverseSurface = Color(0xFF2B242F),
+    inverseOnSurface = Color(0xFFF7EFE6),
+    inversePrimary = Color(0xFFCBBEFF)
 )
 
 fun SplitMateThemeMode.toPalette(): SplitMateExpressivePalette = when (this) {

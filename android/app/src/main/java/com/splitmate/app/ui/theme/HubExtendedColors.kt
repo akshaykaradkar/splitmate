@@ -13,7 +13,7 @@ import com.splitmate.app.ui.SplitMateThemeMode
 // `SplitMateExpressivePalette`. Colours that have no baseline role (participant avatar hues,
 // category pastels, presence dot, RAC/WL warning, train/flight pass art) are declared here as
 // M3 "custom colour" groups: 4 roles each (color, onColor, colorContainer, onColorContainer),
-// resolved per theme (Sunlit Buckwheat, Warm Espresso Night, Kyoto Matcha & Yuzu).
+// resolved per theme (Sunlit Buckwheat, Obsidian Gold, Jaipur Rani; persisted ids unchanged).
 //
 // This is the ONLY file in the hub/quick-expense/category surface that may contain hex
 // literals. Sunlit Buckwheat values are the pre-v2.3.6 literals so the default theme looks the
@@ -159,22 +159,16 @@ object HubExtendedColors {
         HubColorRoles(Color(0xFF15803D), Color(0xFFFFFFFF), Color(0xFFD2F5DC), Color(0xFF1B6331))
     )
     private val ParticipantEspresso = listOf(
-        HubColorRoles(Color(0xFFA3E635), Color(0xFF1A2E05), Color(0xFF2F4417), Color(0xFFD7E8B6)),
+        // v2.4.0 D6: Obsidian Gold leads with gold instead of lime.
+        HubColorRoles(Color(0xFFF5C451), Color(0xFF2B1E00), Color(0xFF4A3A12), Color(0xFFFFE29A)),
         HubColorRoles(Color(0xFFFB923C), Color(0xFF431A08), Color(0xFF5A2618), Color(0xFFFFD8CC)),
         HubColorRoles(Color(0xFF93C5FD), Color(0xFF0B2550), Color(0xFF1E3A6E), Color(0xFFD0E2FF)),
         HubColorRoles(Color(0xFFF9A8D4), Color(0xFF500724), Color(0xFF5C1835), Color(0xFFFFD5E5)),
         HubColorRoles(Color(0xFFC4B5FD), Color(0xFF2E1065), Color(0xFF3B2470), Color(0xFFE5DCFF)),
         HubColorRoles(Color(0xFF86EFAC), Color(0xFF052E16), Color(0xFF1D4A2C), Color(0xFFD2F5DC))
     )
-    private val ParticipantKyoto = listOf(
-        // Yuzu instead of sage so the first avatar does not melt into the matcha canvas.
-        HubColorRoles(Color(0xFFB45309), Color(0xFFFFFFFF), Color(0xFFFEF08A), Color(0xFF451A03)),
-        HubColorRoles(Color(0xFF9A3412), Color(0xFFFFFFFF), Color(0xFFFFD8CC), Color(0xFF8A2E1A)),
-        HubColorRoles(Color(0xFF1D4ED8), Color(0xFFFFFFFF), Color(0xFFD0E2FF), Color(0xFF143E82)),
-        HubColorRoles(Color(0xFFBE185D), Color(0xFFFFFFFF), Color(0xFFFFD5E5), Color(0xFF801844)),
-        HubColorRoles(Color(0xFF6D28D9), Color(0xFFFFFFFF), Color(0xFFE5DCFF), Color(0xFF452285)),
-        HubColorRoles(Color(0xFF15803D), Color(0xFFFFFFFF), Color(0xFFD2F5DC), Color(0xFF1B6331))
-    )
+    // v2.4.0 D6: Jaipur Rani's sandstone canvas suits the Sunlit avatar hues as-is.
+    private val ParticipantKyoto = ParticipantSunlit
 
     fun participantPalette(mode: SplitMateThemeMode = activeMode): List<HubColorRoles> = when (mode) {
         SplitMateThemeMode.SUNLIT_BUCKWHEAT -> ParticipantSunlit
@@ -202,10 +196,8 @@ object HubExtendedColors {
         HubCategoryHue.ROSE to HubColorRoles(Color(0xFFFBCFE8), Color(0xFF3B1D2E), Color(0xFF3B1D2E), Color(0xFFFBCFE8)),
         HubCategoryHue.PEACH to HubColorRoles(Color(0xFFFED8C8), Color(0xFF3D231B), Color(0xFF3D231B), Color(0xFFFED8C8))
     )
-    private val CategoryKyoto: Map<HubCategoryHue, HubColorRoles> = CategoryLight + mapOf(
-        // Matcha canvas is already sage-green; lift the sage badge to a fresher leaf tone.
-        HubCategoryHue.SAGE to HubColorRoles(Color(0xFF0F6B3E), Color(0xFFFFFFFF), Color(0xFFD9F5C5), Color(0xFF14532D))
-    )
+    // v2.4.0 D6: the matcha-specific sage lift is gone; Jaipur uses the light category set.
+    private val CategoryKyoto: Map<HubCategoryHue, HubColorRoles> = CategoryLight
 
     fun categoryHue(hue: HubCategoryHue, mode: SplitMateThemeMode = activeMode): HubColorRoles = when (mode) {
         SplitMateThemeMode.SUNLIT_BUCKWHEAT -> CategoryLight.getValue(hue)
@@ -235,20 +227,43 @@ object HubExtendedColors {
         promoPill = Color(0xFFD7E8B6),
         onPromoPill = Color(0xFF1B2E0B)
     )
-    private val TrainEspresso = TrainSunlit.copy(
-        forestTop = Color(0xFF264210),
-        forestBottom = Color(0xFF1B3009),
-        nextUpPillBg = Color(0xFF759943),
-        nextUpPillText = Color(0xFF0F1F03),
-        berthCellBg = Color(0xFF1A300A),
-        berthCellBorder = Color(0xFF345718),
-        primaryCtaBg = Color(0xFF8BB85A)
+    // v2.4.0 D6: Obsidian Gold = graphite pass with gold accents.
+    private val TrainEspresso = HubTrainPassColors(
+        forestTop = Color(0xFF2E2A20),
+        forestBottom = Color(0xFF1C1A14),
+        onPass = Color(0xFFFFFFFF),
+        accentLime = Color(0xFFF5C451),
+        secondarySage = Color(0xFFFFE9B0),
+        nextUpPillBg = Color(0xFFD9AE45),
+        nextUpPillText = Color(0xFF2B1E00),
+        berthCellBg = Color(0xFF1C1A14),
+        berthCellBorder = Color(0xFF4F4530),
+        primaryCtaBg = Color(0xFFF5C451),
+        primaryCtaText = Color(0xFF2B1E00),
+        promoContainer = Color(0xFF2E2A20),
+        promoBorder = Color(0xFF5A4E33),
+        promoSubtitle = Color(0xFFE0CFA4),
+        promoPill = Color(0xFFFFE9B0),
+        onPromoPill = Color(0xFF2B1E00)
     )
-    private val TrainKyoto = TrainSunlit.copy(
-        forestTop = Color(0xFF1E3F24),
-        forestBottom = Color(0xFF142E19),
-        promoContainer = Color(0xFF1E3F24),
-        promoBorder = Color(0xFF3F6638)
+    // v2.4.0 D6: Jaipur Rani = rani-plum pass (the flight pass stays indigo).
+    private val TrainKyoto = HubTrainPassColors(
+        forestTop = Color(0xFF4A1B3D),
+        forestBottom = Color(0xFF33112A),
+        onPass = Color(0xFFFFFFFF),
+        accentLime = Color(0xFFFFB3D1),
+        secondarySage = Color(0xFFFFD8E5),
+        nextUpPillBg = Color(0xFFE58AB3),
+        nextUpPillText = Color(0xFF3E0020),
+        berthCellBg = Color(0xFF3A1530),
+        berthCellBorder = Color(0xFF7A3A66),
+        primaryCtaBg = Color(0xFFE58AB3),
+        primaryCtaText = Color(0xFF3E0020),
+        promoContainer = Color(0xFF4A1B3D),
+        promoBorder = Color(0xFF7A3A66),
+        promoSubtitle = Color(0xFFF2BCD3),
+        promoPill = Color(0xFFFFD8E5),
+        onPromoPill = Color(0xFF3E0020)
     )
 
     fun trainPass(mode: SplitMateThemeMode = activeMode): HubTrainPassColors = when (mode) {
@@ -272,9 +287,10 @@ object HubExtendedColors {
         navyTop = Color(0xFF242059),
         navyBottom = Color(0xFF16133B)
     )
+    // v2.4.0 D6: Jaipur Rani flight art is a royal-indigo navy built from its primary.
     private val FlightKyoto = FlightSunlit.copy(
-        navyTop = Color(0xFF23383B),
-        navyBottom = Color(0xFF162527)
+        navyTop = Color(0xFF332C70),
+        navyBottom = Color(0xFF221D4F)
     )
 
     fun flightPass(mode: SplitMateThemeMode = activeMode): HubFlightPassColors = when (mode) {

@@ -152,21 +152,22 @@ val SunlitBuckwheatAppShellExtendedColors = AppShellExtendedColors(
 )
 
 // ------------------------------------------------------------------------------
-// Warm Espresso Night (dark) - the former `if (SplitMateTheme.isDark)` literals; the
-// settlement boards fall back to the Espresso surface ladder exactly as before.
+// Obsidian Gold (dark; persisted id WARM_ESPRESSO_NIGHT) - v2.4.0 D6. The "sage" family is the
+// positive family and is gold here (it also paints the "Link phone & PIN" button); "terracotta"
+// is the owes family and is a cool rose. Settlement boards sit on the charcoal surface ladder.
 // ------------------------------------------------------------------------------
 val WarmEspressoNightAppShellExtendedColors = AppShellExtendedColors(
     sage = AppShellExtendedColor(
-        color = Color(0xFFA3E635),
-        onColor = Color(0xFF1A2E05),
-        container = Color(0xFF283D0E),
-        onContainer = Color(0xFFD9F99D)
+        color = Color(0xFFF5C451),
+        onColor = Color(0xFF2B1E00),
+        container = Color(0xFF2B2820),
+        onContainer = Color(0xFFFFE29A)
     ),
     terracotta = AppShellExtendedColor(
-        color = Color(0xFFFB923C),
-        onColor = Color(0xFF431A08),
-        container = Color(0xFF3A2019),
-        onContainer = Color(0xFFFECDD3)
+        color = Color(0xFFFF8AB0),
+        onColor = Color(0xFF4A0624),
+        container = Color(0xFF3A1A26),
+        onContainer = Color(0xFFFFD9E4)
     ),
     online = AppShellExtendedColor(
         color = Color(0xFF4ADE80),
@@ -175,11 +176,11 @@ val WarmEspressoNightAppShellExtendedColors = AppShellExtendedColors(
         onContainer = Color(0xFFBBF7D0)
     ),
     trainPass = AppShellExtendedColor(
-        color = Color(0xFF264010),
-        onColor = Color(0xFFD7E8B6),
-        container = Color(0xFF1F2B16),
-        onContainer = Color(0xFFD9F99D),
-        outline = Color(0xFF3D5428)
+        color = Color(0xFF4A3A12),
+        onColor = Color(0xFFFFE29A),
+        container = Color(0xFF221F18),
+        onContainer = Color(0xFFFFE29A),
+        outline = Color(0xFF4F4530)
     ),
     flightPass = AppShellExtendedColor(
         color = Color(0xFF282552),
@@ -204,83 +205,84 @@ val WarmEspressoNightAppShellExtendedColors = AppShellExtendedColors(
         outline = Color(0xFF4E48A6)
     ),
     settleSummary = AppShellExtendedColor(
-        color = Color(0xFFA3E635),
-        onColor = Color(0xFF1A2E05),
-        container = Color(0xFF14110F),
-        onContainer = Color(0xFFF5F0E6),
-        outline = Color(0xFF38312B)
+        color = Color(0xFFF5C451),
+        onColor = Color(0xFF2B1E00),
+        container = Color(0xFF0E0E11),
+        onContainer = Color(0xFFF4F1EA),
+        outline = Color(0xFF353440)
     ),
     settleReceive = AppShellExtendedColor(
-        color = Color(0xFFA3E635),
-        onColor = Color(0xFF1A2E05),
-        container = Color(0xFF14110F),
-        onContainer = Color(0xFFF5F0E6),
-        outline = Color(0xFF38312B)
+        color = Color(0xFFF5C451),
+        onColor = Color(0xFF2B1E00),
+        container = Color(0xFF0E0E11),
+        onContainer = Color(0xFFF4F1EA),
+        outline = Color(0xFF353440)
     ),
     settlePay = AppShellExtendedColor(
-        color = Color(0xFFFB923C),
-        onColor = Color(0xFF431A08),
-        container = Color(0xFF25201C),
-        onContainer = Color(0xFFFED8C8),
-        outline = Color(0xFF38312B)
+        color = Color(0xFFFF8AB0),
+        onColor = Color(0xFF4A0624),
+        container = Color(0xFF1D1D24),
+        onContainer = Color(0xFFFFD9E4),
+        outline = Color(0xFF353440)
     ),
-    heroGradientStart = Color(0xFF233216),
-    heroGradientEnd = Color(0xFF24201C),
+    heroGradientStart = Color(0xFF26221A),
+    heroGradientEnd = Color(0xFF261A20),
     pastelInkDark = Color(0xFF23201E),
     pastelInkLight = Color(0xFFFAF6F0)
 )
 
 // ------------------------------------------------------------------------------
-// Kyoto Matcha & Yuzu (light) - transit passes keep the Sunlit values they always used
-// (the old code only branched on dark); Kyoto-specific settlement/hero tints preserved.
+// Jaipur Rani (light; persisted id KYOTO_MATCHA_YUZU) - v2.4.0 D6. Indigo positive family
+// (also the "Link phone & PIN" button), rani-pink owes family, rani-plum train pass so it
+// stays distinct from the indigo flight pass. Flight surfaces keep the Sunlit indigo set.
 // ------------------------------------------------------------------------------
 val KyotoMatchaYuzuAppShellExtendedColors = AppShellExtendedColors(
     sage = AppShellExtendedColor(
-        color = Color(0xFF0F6B3E),
+        color = Color(0xFF5C53A5),
         onColor = Color(0xFFFFFFFF),
-        container = Color(0xFF86EFAC),
-        onContainer = Color(0xFF062E19)
+        container = Color(0xFFE6DEFE),
+        onContainer = Color(0xFF3F3785)
     ),
     terracotta = AppShellExtendedColor(
-        color = Color(0xFFB45309),
+        color = Color(0xFFAF2269),
         onColor = Color(0xFFFFFFFF),
-        container = Color(0xFFFEF08A),
-        onContainer = Color(0xFF451A03)
+        container = Color(0xFFFFD8E5),
+        onContainer = Color(0xFF7A1A4A)
     ),
-    online = AppShellExtendedColor(
-        color = Color(0xFF22C55E),
-        onColor = Color(0xFF052E16),
-        container = Color(0xFFDCFCE7),
-        // #15803D only reaches 3.7:1 on Kyoto #CCE6C2 chips; #14532D reaches 6.8:1.
-        onContainer = Color(0xFF14532D)
+    online = SunlitBuckwheatAppShellExtendedColors.online,
+    trainPass = AppShellExtendedColor(
+        color = Color(0xFF4A1B3D),
+        onColor = Color(0xFFFFD8E5),
+        container = Color(0xFFFBE9F0),
+        onContainer = Color(0xFF4A1B3D),
+        outline = Color(0xFFF0C4D6)
     ),
-    trainPass = SunlitBuckwheatAppShellExtendedColors.trainPass,
     flightPass = SunlitBuckwheatAppShellExtendedColors.flightPass,
     flightChip = SunlitBuckwheatAppShellExtendedColors.flightChip,
     flightTicket = SunlitBuckwheatAppShellExtendedColors.flightTicket,
     settleSummary = AppShellExtendedColor(
-        color = Color(0xFF0F6B3E),
+        color = Color(0xFF5C53A5),
         onColor = Color(0xFFFFFFFF),
-        container = Color(0xFFD2F4DC),
-        onContainer = Color(0xFF0A1F12),
-        outline = Color(0xFF75C993)
+        container = Color(0xFFEFEBFE),
+        onContainer = Color(0xFF221A25),
+        outline = Color(0xFFD6CCFB)
     ),
     settleReceive = AppShellExtendedColor(
-        color = Color(0xFF0F6B3E),
+        color = Color(0xFF5C53A5),
         onColor = Color(0xFFFFFFFF),
-        container = Color(0xFFD2F4DC),
-        onContainer = Color(0xFF0A1F12),
-        outline = Color(0xFF75C993)
+        container = Color(0xFFEFEBFE),
+        onContainer = Color(0xFF221A25),
+        outline = Color(0xFFD6CCFB)
     ),
     settlePay = AppShellExtendedColor(
-        color = Color(0xFFB45309),
+        color = Color(0xFFAF2269),
         onColor = Color(0xFFFFFFFF),
-        container = Color(0xFFFEF3C7),
-        onContainer = Color(0xFF451A03),
-        outline = Color(0xFFF59E0B).copy(alpha = 0.45f)
+        container = Color(0xFFFFF0F4),
+        onContainer = Color(0xFF7A1A4A),
+        outline = Color(0xFFF7D3E0)
     ),
-    heroGradientStart = Color(0xFFC4ECCB),
-    heroGradientEnd = Color(0xFFFEF08A),
+    heroGradientStart = Color(0xFFEAE3FE),
+    heroGradientEnd = Color(0xFFFCE1EC),
     pastelInkDark = Color(0xFF23201E),
     pastelInkLight = Color(0xFFFAF6F0)
 )
