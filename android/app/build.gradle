@@ -13,8 +13,8 @@ android {
         applicationId "com.splitmate.app"
         minSdk 26
         targetSdk 34
-        versionCode 54
-        versionName "2.3.5.1"
+        versionCode 55
+        versionName "2.4.0"
         resConfigs "en"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"

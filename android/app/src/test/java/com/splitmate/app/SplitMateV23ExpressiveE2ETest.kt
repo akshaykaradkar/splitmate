@@ -587,10 +587,10 @@ class SplitMateV23ExpressiveE2ETest {
         }
 
         @Test
-        fun `F6_T1_05 buildGradle configures versionCode 54 versionName 2_3_5_1 and graphics-shapes 1_0_1`() {
+        fun `F6_T1_05 buildGradle configures versionCode 55 versionName 2_4_0 and graphics-shapes 1_0_1`() {
             val gradleText = resolveBuildGradleFile().readText()
-            assertTrue(gradleText.contains("versionCode 54") || gradleText.contains("versionCode = 54"))
-            assertTrue(gradleText.contains("versionName \"2.3.5.1\"") || gradleText.contains("versionName = \"2.3.5.1\""))
+            assertTrue(gradleText.contains("versionCode 55") || gradleText.contains("versionCode = 55"))
+            assertTrue(gradleText.contains("versionName \"2.4.0\"") || gradleText.contains("versionName = \"2.4.0\""))
             assertTrue(gradleText.contains("androidx.graphics:graphics-shapes"))
         }
 
