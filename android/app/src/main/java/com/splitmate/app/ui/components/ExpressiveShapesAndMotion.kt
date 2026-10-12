@@ -4,6 +4,7 @@ import android.content.Context
 import android.provider.Settings
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.MotionScheme
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.snap
@@ -41,6 +42,12 @@ import androidx.graphics.shapes.toPath
  *   corner radii, press-width expansion, and polygon morphing.
  * - Effects springs (`dampingRatio == 1.0f`, critically damped) govern color,
  *   alpha, elevation, and scrim transitions with zero overshoot.
+ *
+ * v2.4.0 rc3: every spec now comes from the official `androidx.compose.material3.MotionScheme.expressive()`
+ * (fastSpatial / defaultSpatial / slowSpatial / fastEffects / defaultEffects / slowEffects). The
+ * constants below mirror the official expressive tokens and are only the fallback if a future
+ * library version stops returning a `SpringSpec`. Reduced motion still snaps through
+ * [SplitMateMotionScheme.reduced] / [LocalMotionScheme], exactly as before.
  */
 object SplitMateMotion {
     const val FAST_SPATIAL_DAMPING = 0.6f
@@ -61,23 +68,29 @@ object SplitMateMotion {
     const val SLOW_EFFECTS_DAMPING = 1.0f
     const val SLOW_EFFECTS_STIFFNESS = 800f
 
+    /** The official Material 3 Expressive motion scheme (plain object, no composition needed). */
+    private val expressive: MotionScheme = MotionScheme.expressive()
+
+    private fun <T> springFrom(spec: FiniteAnimationSpec<T>, damping: Float, stiffness: Float): SpringSpec<T> =
+        (spec as? SpringSpec<T>) ?: spring(dampingRatio = damping, stiffness = stiffness)
+
     fun <T> fastSpatial(): SpringSpec<T> =
-        spring(dampingRatio = FAST_SPATIAL_DAMPING, stiffness = FAST_SPATIAL_STIFFNESS)
+        springFrom(expressive.fastSpatialSpec(), FAST_SPATIAL_DAMPING, FAST_SPATIAL_STIFFNESS)
 
     fun <T> defaultSpatial(): SpringSpec<T> =
-        spring(dampingRatio = DEFAULT_SPATIAL_DAMPING, stiffness = DEFAULT_SPATIAL_STIFFNESS)
+        springFrom(expressive.defaultSpatialSpec(), DEFAULT_SPATIAL_DAMPING, DEFAULT_SPATIAL_STIFFNESS)
 
     fun <T> slowSpatial(): SpringSpec<T> =
-        spring(dampingRatio = SLOW_SPATIAL_DAMPING, stiffness = SLOW_SPATIAL_STIFFNESS)
+        springFrom(expressive.slowSpatialSpec(), SLOW_SPATIAL_DAMPING, SLOW_SPATIAL_STIFFNESS)
 
     fun <T> fastEffects(): SpringSpec<T> =
-        spring(dampingRatio = FAST_EFFECTS_DAMPING, stiffness = FAST_EFFECTS_STIFFNESS)
+        springFrom(expressive.fastEffectsSpec(), FAST_EFFECTS_DAMPING, FAST_EFFECTS_STIFFNESS)
 
     fun <T> defaultEffects(): SpringSpec<T> =
-        spring(dampingRatio = DEFAULT_EFFECTS_DAMPING, stiffness = DEFAULT_EFFECTS_STIFFNESS)
+        springFrom(expressive.defaultEffectsSpec(), DEFAULT_EFFECTS_DAMPING, DEFAULT_EFFECTS_STIFFNESS)
 
     fun <T> slowEffects(): SpringSpec<T> =
-        spring(dampingRatio = SLOW_EFFECTS_DAMPING, stiffness = SLOW_EFFECTS_STIFFNESS)
+        springFrom(expressive.slowEffectsSpec(), SLOW_EFFECTS_DAMPING, SLOW_EFFECTS_STIFFNESS)
 
     fun fastSpatialFloat(): SpringSpec<Float> = fastSpatial()
     fun defaultSpatialFloat(): SpringSpec<Float> = defaultSpatial()
