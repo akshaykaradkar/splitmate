@@ -144,6 +144,10 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -1302,24 +1306,26 @@ fun TripHomeScreen(
                                 modifier = Modifier.weight(1f)
                             )
                         }
-                        Surface(
-                            shape = RoundedCornerShape(999.dp),
-                            color = DesignSystemBindings.activePalette.secondary,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    performCrispTactileHaptic(context, localView, heavy = true)
-                                    viewModel.reassignDeclinedMemberSharesEqually(
-                                        context = context,
-                                        groupId = resolvedGroupId,
-                                        declinedMemberId = declinedMember.memberId
-                                    )
-                                }
+                        // v2.4.0 rc3: official Button with the shapes() press morph.
+                        Button(
+                            onClick = {
+                                performCrispTactileHaptic(context, localView, heavy = true)
+                                viewModel.reassignDeclinedMemberSharesEqually(
+                                    context = context,
+                                    groupId = resolvedGroupId,
+                                    declinedMemberId = declinedMember.memberId
+                                )
+                            },
+                            shapes = ButtonDefaults.shapes(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = DesignSystemBindings.activePalette.secondary,
+                                contentColor = DesignSystemBindings.activePalette.onSecondary
+                            ),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 9.dp),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                                modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -1699,6 +1705,7 @@ private fun TripHubTopBar(
             navigationIcon = {
                 IconButton(
                     onClick = onBackClick,
+                    shapes = IconButtonDefaults.shapes(),
                     modifier = Modifier
                         .minimumInteractiveComponentSize()
                         .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
@@ -1738,27 +1745,22 @@ private fun TripHubTopBar(
                 )
             },
             actions = {
-                Surface(
+                // v2.4.0 rc3: official OutlinedButton with the shapes() press morph.
+                androidx.compose.material3.OutlinedButton(
                     onClick = {
                         performCrispTactileHaptic(context, localView, heavy = false)
                         onOpenSyncAndPerspectiveSheet()
                     },
-                    shape = CircleShape,
-                    color = Color.Transparent,
-                    modifier = Modifier
-                        .minimumInteractiveComponentSize()
-                        .defaultMinSize(minHeight = 48.dp)
+                    shapes = ButtonDefaults.shapes(),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = TripHubTokens.SunkenWell,
+                        contentColor = TripHubTokens.TextPrimary
+                    ),
+                    border = BorderStroke(1.dp, TripHubTokens.CardBorder),
+                    contentPadding = PaddingValues(horizontal = 11.dp, vertical = 7.dp)
                 ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier.padding(vertical = 6.dp)
-                    ) {
+                    run {
                         Row(
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(TripHubTokens.SunkenWell, CircleShape)
-                                .border(1.dp, TripHubTokens.CardBorder, CircleShape)
-                                .padding(horizontal = 11.dp, vertical = 7.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
@@ -1795,6 +1797,7 @@ private fun TripHubTopBar(
 
                 IconButton(
                     onClick = onManualSyncClick,
+                    shapes = IconButtonDefaults.shapes(),
                     modifier = Modifier
                         .minimumInteractiveComponentSize()
                         .defaultMinSize(minWidth = 44.dp, minHeight = 48.dp)
@@ -1817,6 +1820,7 @@ private fun TripHubTopBar(
 
                 IconButton(
                     onClick = onToggleSearch,
+                    shapes = IconButtonDefaults.shapes(),
                     modifier = Modifier
                         .minimumInteractiveComponentSize()
                         .defaultMinSize(minWidth = 44.dp, minHeight = 48.dp)
@@ -1832,6 +1836,7 @@ private fun TripHubTopBar(
                 Box {
                     IconButton(
                         onClick = { showHeaderOverflow = true },
+                        shapes = IconButtonDefaults.shapes(),
                         modifier = Modifier
                             .minimumInteractiveComponentSize()
                             .defaultMinSize(minWidth = 44.dp, minHeight = 48.dp)
@@ -1917,7 +1922,7 @@ private fun TripHubTopBar(
                 },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { onSearchQueryChange("") }) {
+                        IconButton(onClick = { onSearchQueryChange("") }, shapes = IconButtonDefaults.shapes()) {
                             Icon(
                                 imageVector = Icons.Rounded.Close,
                                 contentDescription = "Clear search",
@@ -2027,52 +2032,49 @@ private fun DynamicCategorySubFilterRow(
             val chipBg = if (isSelected) TripHubTokens.ActiveTabPillBg else TripHubTokens.InactiveTabPillBg
             val chipText = if (isSelected) TripHubTokens.ActiveTabPillText else TripHubTokens.InactiveTabPillText
 
-            Surface(
+            // v2.4.0 rc3: official M3 Expressive FilterChip (selected semantics, press morph).
+            FilterChip(
+                selected = isSelected,
                 onClick = { onSelectCategory(category) },
-                shape = CircleShape,
-                color = Color.Transparent,
-                modifier = Modifier
-                    .minimumInteractiveComponentSize()
-                    .defaultMinSize(minHeight = 48.dp)
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.padding(vertical = 5.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(chipBg, CircleShape)
-                            .border(
-                                width = 1.dp,
-                                color = if (isSelected) Color.Transparent else TripHubTokens.CardBorder,
-                                shape = CircleShape
-                            )
-                            .padding(horizontal = 14.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        if (category != TripHubBookingCategory.ALL) {
-                            Icon(
-                                imageVector = category.icon,
-                                contentDescription = null,
-                                tint = chipText,
-                                modifier = Modifier.size(14.dp)
-                            )
-                        }
-                        Text(
-                            text = "${category.filterTitle} ($count)",
-                            style = TextStyle(
-                                fontFamily = FigtreeFontFamily,
-                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                fontSize = 12.sp,
-                                fontFeatureSettings = "tnum"
-                            ),
-                            color = chipText
+                shapes = FilterChipDefaults.shapes(shape = CircleShape, selectedShape = CircleShape),
+                colors = FilterChipDefaults.filterChipColors(
+                    containerColor = chipBg,
+                    selectedContainerColor = chipBg
+                ),
+                border = FilterChipDefaults.filterChipBorder(
+                    enabled = true,
+                    selected = isSelected,
+                    borderColor = TripHubTokens.CardBorder,
+                    selectedBorderColor = Color.Transparent,
+                    borderWidth = 1.dp,
+                    selectedBorderWidth = 1.dp
+                ),
+                modifier = Modifier.minimumInteractiveComponentSize(),
+                leadingIcon = if (category != TripHubBookingCategory.ALL) {
+                    {
+                        Icon(
+                            imageVector = category.icon,
+                            contentDescription = null,
+                            tint = chipText,
+                            modifier = Modifier.size(14.dp)
                         )
                     }
+                } else {
+                    null
+                },
+                label = {
+                    Text(
+                        text = "${category.filterTitle} ($count)",
+                        style = TextStyle(
+                            fontFamily = FigtreeFontFamily,
+                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                            fontSize = 12.sp,
+                            fontFeatureSettings = "tnum"
+                        ),
+                        color = chipText
+                    )
                 }
-            }
+            )
         }
     }
 }
@@ -2099,11 +2101,15 @@ private fun TripHubBalanceChip(
         else -> "All settled"
     }
     Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
-        Surface(
+        // v2.4.0 rc3: official FilledTonalButton (same tonal owe / get-back pair) with the press morph.
+        androidx.compose.material3.FilledTonalButton(
             onClick = onClick,
-            shape = CircleShape,
-            color = container,
-            contentColor = content,
+            shapes = ButtonDefaults.shapes(),
+            colors = ButtonDefaults.filledTonalButtonColors(
+                containerColor = container,
+                contentColor = content
+            ),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
             modifier = Modifier
                 .defaultMinSize(minHeight = 48.dp)
                 .clearAndSetSemantics {
@@ -2112,7 +2118,6 @@ private fun TripHubBalanceChip(
                 }
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -2388,7 +2393,7 @@ private fun TripHubOverviewFeed(
                 // v2.4.0: the full list lives on Money (one home for each thing).
                 androidx.compose.material3.OutlinedButton(
                     onClick = onSeeAllExpensesClick,
-                    shape = MaterialTheme.shapes.large,
+                    shapes = ButtonDefaults.shapes(shape = MaterialTheme.shapes.large),
                     modifier = Modifier
                         .fillMaxWidth()
                         .defaultMinSize(minHeight = 48.dp)
@@ -2809,14 +2814,18 @@ fun DeepGreenTrainTicketCard(
         // Main Deep-Green Ticket Pass + Bottom Stub.
         // v2.3.6 (device feedback): the whole ticket opens its pass (and morphs into it), not only
         // the small "Pass" button; the Berth Chart / Pass buttons inside keep their own taps.
-        Surface(
+        // v2.4.0 rc3: official M3 Card(onClick) (keeps the 1px border).
+        Card(
             onClick = {
                 performCrispTactileHaptic(context, localView, heavy = false)
                 onOpenTrainPnrReviewClick(pnrDigits)
             },
             enabled = pnrDigits.isNotBlank(),
             shape = RoundedCornerShape(20.dp),
-            color = TripHubTokens.CardSurface,
+            colors = CardDefaults.cardColors(
+                containerColor = TripHubTokens.CardSurface,
+                disabledContainerColor = TripHubTokens.CardSurface
+            ),
             border = BorderStroke(1.dp, TripHubTokens.CardBorder),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -3095,24 +3104,22 @@ fun DeepGreenTrainTicketCard(
 
                         if (berthCells.size > 4) {
                             val overflowCount = berthCells.size - 4
-                            Surface(
-                                onClick = {
-                                    performCrispTactileHaptic(context, localView, heavy = false)
-                                    showAllOverflowBerths = !showAllOverflowBerths
-                                },
-                                shape = CircleShape,
-                                color = Color.Transparent,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .minimumInteractiveComponentSize()
-                                    .defaultMinSize(minHeight = 48.dp)
+                            // v2.4.0 rc3: official FilledTonalButton with the shapes() press morph.
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier
-                                        .clip(CircleShape)
-                                        .background(trainBerthSurface, CircleShape)
-                                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                                FilledTonalButton(
+                                    onClick = {
+                                        performCrispTactileHaptic(context, localView, heavy = false)
+                                        showAllOverflowBerths = !showAllOverflowBerths
+                                    },
+                                    shapes = ButtonDefaults.shapes(),
+                                    colors = ButtonDefaults.filledTonalButtonColors(
+                                        containerColor = trainBerthSurface,
+                                        contentColor = TripHubTokens.TrainSecondarySage
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                                 ) {
                                     Text(
                                         text = if (showAllOverflowBerths) {
@@ -3220,14 +3227,19 @@ fun DeepGreenTrainTicketCard(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Surface(
+                        // v2.4.0 rc3: official OutlinedButton with the shapes() press morph.
+                        OutlinedButton(
                             onClick = {
                                 performCrispTactileHaptic(context, localView, heavy = false)
                                 onInspectBerthChart(expense, snapshot)
                             },
-                            shape = CircleShape,
-                            color = TripHubTokens.SunkenWell,
+                            shapes = ButtonDefaults.shapes(),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = TripHubTokens.SunkenWell,
+                                contentColor = TripHubTokens.TextPrimary
+                            ),
                             border = BorderStroke(1.dp, TripHubTokens.CardBorder),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
                             modifier = Modifier
                                 .weight(1f)
                                 .minimumInteractiveComponentSize()
@@ -3235,8 +3247,7 @@ fun DeepGreenTrainTicketCard(
                         ) {
                             Row(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                    .fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Center
                             ) {
@@ -3256,13 +3267,18 @@ fun DeepGreenTrainTicketCard(
                             }
                         }
 
-                        Surface(
+                        // v2.4.0 rc3: official Button with the shapes() press morph.
+                        Button(
                             onClick = {
                                 performCrispTactileHaptic(context, localView, heavy = false)
                                 onOpenTrainPnrReviewClick(pnrDigits)
                             },
-                            shape = CircleShape,
-                            color = TripHubTokens.TrainPrimaryCtaBg,
+                            shapes = ButtonDefaults.shapes(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = TripHubTokens.TrainPrimaryCtaBg,
+                                contentColor = TripHubTokens.TrainPrimaryCtaText
+                            ),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
                             modifier = Modifier
                                 .weight(1f)
                                 .minimumInteractiveComponentSize()
@@ -3270,8 +3286,7 @@ fun DeepGreenTrainTicketCard(
                         ) {
                             Row(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                    .fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Center
                             ) {
@@ -3395,13 +3410,17 @@ fun PeriwinkleFlightBookingCard(
             )
         }
 
-        Surface(
+        // v2.4.0 rc3: official M3 Card(onClick) (keeps the 1px border).
+        Card(
             onClick = {
                 performCrispTactileHaptic(context, localView, heavy = false)
                 onOpenFlightReviewClick("EXPENSE:${expense.expenseId}")
             },
             shape = RoundedCornerShape(20.dp),
-            color = TripHubTokens.CardSurface,
+            colors = CardDefaults.cardColors(
+                containerColor = TripHubTokens.CardSurface,
+                disabledContainerColor = TripHubTokens.CardSurface
+            ),
             border = BorderStroke(1.dp, TripHubTokens.CardBorder),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -3572,13 +3591,18 @@ fun PeriwinkleFlightBookingCard(
                         }
                     }
 
-                    Surface(
+                    // v2.4.0 rc3: official FilledTonalButton with the shapes() press morph.
+                    FilledTonalButton(
                         onClick = {
                             performCrispTactileHaptic(context, localView, heavy = false)
                             onOpenFlightReviewClick("EXPENSE:${expense.expenseId}")
                         },
-                        shape = CircleShape,
-                        color = TripHubTokens.PeriwinkleBoxBg,
+                        shapes = ButtonDefaults.shapes(),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = TripHubTokens.PeriwinkleBoxBg,
+                            contentColor = TripHubTokens.PeriwinkleIconTint
+                        ),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .minimumInteractiveComponentSize()
@@ -3586,8 +3610,7 @@ fun PeriwinkleFlightBookingCard(
                     ) {
                         Row(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                                .fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
@@ -3889,7 +3912,8 @@ fun LodgingBookingCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Surface(
+                    // v2.4.0 rc3: official OutlinedButton with the shapes() press morph.
+                    OutlinedButton(
                         onClick = {
                             performCrispTactileHaptic(context, localView, heavy = false)
                             try {
@@ -3903,16 +3927,19 @@ fun LodgingBookingCard(
                             } catch (_: Exception) {
                             }
                         },
-                        shape = CircleShape,
-                        color = TripHubTokens.SunkenWell,
+                        shapes = ButtonDefaults.shapes(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = TripHubTokens.SunkenWell,
+                            contentColor = TripHubTokens.TextPrimary
+                        ),
                         border = BorderStroke(1.dp, TripHubTokens.CardBorder),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 11.dp),
                         modifier = Modifier
                             .weight(1f)
                             .minimumInteractiveComponentSize()
                             .defaultMinSize(minHeight = 48.dp)
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
@@ -3932,21 +3959,25 @@ fun LodgingBookingCard(
                         }
                     }
 
-                    Surface(
+                    // v2.4.0 rc3: official OutlinedButton with the shapes() press morph.
+                    OutlinedButton(
                         onClick = {
                             performCrispTactileHaptic(context, localView, heavy = false)
                             showSplitDrawer = !showSplitDrawer
                         },
-                        shape = CircleShape,
-                        color = TripHubTokens.SunkenWell,
+                        shapes = ButtonDefaults.shapes(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = TripHubTokens.SunkenWell,
+                            contentColor = TripHubTokens.TextPrimary
+                        ),
                         border = BorderStroke(1.dp, TripHubTokens.CardBorder),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 11.dp),
                         modifier = Modifier
                             .weight(1.2f)
                             .minimumInteractiveComponentSize()
                             .defaultMinSize(minHeight = 48.dp)
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
@@ -4046,13 +4077,17 @@ fun GroundMobilityBookingCard(
             )
         }
 
-        Surface(
+        // v2.4.0 rc3: official M3 Card(onClick) (keeps the 1px border).
+        Card(
             onClick = {
                 performCrispTactileHaptic(context, localView, heavy = false)
                 showSplitDrawer = !showSplitDrawer
             },
             shape = RoundedCornerShape(20.dp),
-            color = TripHubTokens.CardSurface,
+            colors = CardDefaults.cardColors(
+                containerColor = TripHubTokens.CardSurface,
+                disabledContainerColor = TripHubTokens.CardSurface
+            ),
             border = BorderStroke(1.dp, TripHubTokens.CardBorder),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -4230,7 +4265,8 @@ fun GeneralSharedExpenseCard(
 
     val expenseActions = LocalTripHubExpenseActions.current
 
-    Surface(
+    // v2.4.0 rc3: official M3 Card(onClick) (keeps the 1px border).
+    Card(
         onClick = {
             performCrispTactileHaptic(context, localView, heavy = false)
             // v2.3.5 (#4): tap opens details (Edit / Delete); the chevron toggles the inline split.
@@ -4241,7 +4277,10 @@ fun GeneralSharedExpenseCard(
             }
         },
         shape = RoundedCornerShape(20.dp),
-        color = TripHubTokens.CardSurface,
+        colors = CardDefaults.cardColors(
+            containerColor = TripHubTokens.CardSurface,
+            disabledContainerColor = TripHubTokens.CardSurface
+        ),
         border = BorderStroke(1.dp, TripHubTokens.CardBorder),
         modifier = modifier
     ) {
@@ -4328,6 +4367,7 @@ fun GeneralSharedExpenseCard(
                             color = TripHubTokens.PositiveSageText
                         )
                         IconButton(
+                            shapes = IconButtonDefaults.shapes(),
                             onClick = {
                                 performCrispTactileHaptic(context, localView, heavy = false)
                                 expanded = !expanded
@@ -4416,7 +4456,7 @@ private fun ExpandableSplitBreakdownDrawer(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Rounded.Info,
+                        imageVector = Icons.Outlined.Info,
                         contentDescription = null,
                         tint = TripHubTokens.TextSecondary,
                         modifier = Modifier.size(14.dp)
@@ -4565,7 +4605,7 @@ private fun TripHubPlanTimelineView(
                         // v2.4.0 Trip Hub step 2: Loop plans one day's route, so it lives on the day.
                         androidx.compose.material3.FilledTonalButton(
                             onClick = onMakeLoop,
-                            shape = CircleShape,
+                            shapes = ButtonDefaults.shapes(),
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                             modifier = Modifier
                                 .defaultMinSize(minHeight = 40.dp)
@@ -4789,26 +4829,25 @@ private fun TripHubTravelWalletView(
                         letterSpacing = 0.1.sp,
                         color = TripHubTokens.TextMuted
                     )
-                    Surface(
+                    // v2.4.0 rc3: official TextButton with the shapes() press morph.
+                    TextButton(
                         onClick = {
                             performCrispTactileHaptic(context, localView, heavy = false)
                             onSwitchToClassicLedgerClick()
                         },
-                        shape = CircleShape,
-                        color = Color.Transparent,
+                        shapes = ButtonDefaults.shapes(),
+                        colors = ButtonDefaults.textButtonColors(contentColor = TripHubTokens.PositiveSageText),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                         modifier = Modifier
                             .minimumInteractiveComponentSize()
                             .defaultMinSize(minHeight = 48.dp)
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = "List view",
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = TripHubTokens.PositiveSageText,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
+                        Text(
+                            text = "List view",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = TripHubTokens.PositiveSageText
+                        )
                     }
                 }
 
@@ -4959,7 +4998,7 @@ private fun TripHubTravelWalletView(
 
 /**
  * Subtask 3.3.3: `Money` Tab — Greedy Minimum Cash Flow Settlements (`SplitMateMathEngine.simplifyDebtsGreedy`)
- * + Compact Max-Heap Graph Inspector (`Icons.Rounded.Info`, `48.dp` touch bounds) + `Mark paid`.
+ * + Compact Max-Heap Graph Inspector (`Icons.Outlined.Info`, `48.dp` touch bounds) + `Mark paid`.
  */
 @Composable
 private fun TripHubMoneySettlementView(
@@ -5078,7 +5117,7 @@ private fun TripHubMoneySettlementView(
                 )
             }
         }
-        // Header + Compact Max-Heap Graph Inspector Toggle (`Icons.Rounded.Info`, >= 48.dp touch bounds)
+        // Header + Compact Max-Heap Graph Inspector Toggle (`Icons.Outlined.Info`, >= 48.dp touch bounds)
         item(key = "greedy_settlement_header") {
             Surface(
                 shape = RoundedCornerShape(20.dp),
@@ -5152,6 +5191,7 @@ private fun TripHubMoneySettlementView(
                         }
 
                         IconButton(
+                            shapes = IconButtonDefaults.shapes(),
                             onClick = {
                                 performCrispTactileHaptic(context, localView, heavy = false)
                                 showGraphInspector = !showGraphInspector
@@ -5650,7 +5690,7 @@ private fun TripHubMoneySettlementView(
                                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                                             ) {
                                                 Icon(
-                                                    imageVector = Icons.Rounded.Info,
+                                                    imageVector = Icons.Outlined.Info,
                                                     contentDescription = null,
                                                     tint = TripHubTokens.TextSecondary,
                                                     modifier = Modifier.size(13.dp)
@@ -5901,7 +5941,7 @@ private fun TripHubMoneySettlementView(
                             performCrispTactileHaptic(context, localView, heavy = false)
                             showRecordPayment = true
                         },
-                        shape = CircleShape,
+                        shapes = ButtonDefaults.shapes(),
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 4.dp)
@@ -6066,7 +6106,7 @@ private fun TripHubPeoplePerspectiveView(
                         }
                     },
                     enabled = cleanTypedPhone10.length == 10 && editedMemberName.trim().isNotBlank(),
-                    shape = RoundedCornerShape(16.dp),
+                    shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(16.dp)),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = DesignSystemBindings.activePalette.primary,
                         contentColor = DesignSystemBindings.activePalette.onPrimary
@@ -6080,6 +6120,7 @@ private fun TripHubPeoplePerspectiveView(
             },
             dismissButton = {
                 TextButton(
+                    shapes = ButtonDefaults.shapes(),
                     onClick = {
                         editingMemberForPhoneInvite = null
                         editPhoneDialogStatus = null
@@ -6149,7 +6190,7 @@ private fun TripHubPeoplePerspectiveView(
                                 removeMemberStatusMsg = null
                                 onOpenSettleUpClick()
                             },
-                            shape = RoundedCornerShape(16.dp),
+                            shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(16.dp)),
                             border = BorderStroke(1.dp, TripHubTokens.PositiveSageText.copy(alpha = 0.45f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -6189,7 +6230,7 @@ private fun TripHubPeoplePerspectiveView(
                             }
                         }
                     },
-                    shape = RoundedCornerShape(16.dp),
+                    shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(16.dp)),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = DesignSystemBindings.activePalette.secondary,
                             contentColor = DesignSystemBindings.activePalette.onSecondary
@@ -6203,6 +6244,7 @@ private fun TripHubPeoplePerspectiveView(
             },
             dismissButton = {
                 TextButton(
+                    shapes = ButtonDefaults.shapes(),
                     onClick = {
                         confirmingRemoveMember = null
                         removeMemberStatusMsg = null
@@ -6285,7 +6327,7 @@ private fun TripHubPeoplePerspectiveView(
                             leaveTripStatusMsg = null
                             onOpenSettleUpClick()
                         },
-                        shape = RoundedCornerShape(16.dp),
+                        shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(16.dp)),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = DesignSystemBindings.activePalette.primary,
                         contentColor = DesignSystemBindings.activePalette.onPrimary
@@ -6309,7 +6351,7 @@ private fun TripHubPeoplePerspectiveView(
                                 }
                             }
                         },
-                        shape = RoundedCornerShape(16.dp),
+                        shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(16.dp)),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = DesignSystemBindings.activePalette.secondary,
                             contentColor = DesignSystemBindings.activePalette.onSecondary
@@ -6324,6 +6366,7 @@ private fun TripHubPeoplePerspectiveView(
             },
             dismissButton = {
                 TextButton(
+                    shapes = ButtonDefaults.shapes(),
                     onClick = {
                         showLeaveTripConfirmDialog = false
                         leaveTripStatusMsg = null
@@ -6723,7 +6766,7 @@ private fun TripHubPeoplePerspectiveView(
                             performCrispTactileHaptic(context, localView, heavy = false)
                             onAddMemberClick()
                         },
-                        shape = CircleShape,
+                        shapes = ButtonDefaults.shapes(),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = TripHubTokens.ActiveTabPillBg,
                             contentColor = TripHubTokens.ActiveTabPillText
@@ -6750,7 +6793,7 @@ private fun TripHubPeoplePerspectiveView(
                             performCrispTactileHaptic(context, localView, heavy = false)
                             onOpenSyncSheetClick()
                         },
-                        shape = CircleShape,
+                        shapes = ButtonDefaults.shapes(),
                         border = BorderStroke(1.dp, TripHubTokens.CardBorder),
                         modifier = Modifier
                             .weight(1.25f)
@@ -6810,6 +6853,7 @@ private fun TripHubPeoplePerspectiveView(
                             )
                             IconButton(
                                 onClick = { peopleFeedbackBanner = null },
+                                shapes = IconButtonDefaults.shapes(),
                                 modifier = Modifier // v2.4.0 D2: default 48dp target
                             ) {
                                 Icon(
@@ -7359,7 +7403,7 @@ private fun BerthChartInspectorDialog(
         confirmButton = {
             Button(
                 onClick = onOpenFullETicket,
-                shape = CircleShape,
+                shapes = ButtonDefaults.shapes(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = DesignSystemBindings.activePalette.primary,
                         contentColor = DesignSystemBindings.activePalette.onPrimary
@@ -7378,6 +7422,7 @@ private fun BerthChartInspectorDialog(
         dismissButton = {
             TextButton(
                 onClick = onDismiss,
+                shapes = ButtonDefaults.shapes(),
                 modifier = Modifier
                     .minimumInteractiveComponentSize()
                     .defaultMinSize(minHeight = 48.dp)
