@@ -1239,6 +1239,18 @@ fun UserSettingsScreen(
                                             onSelectThemeMode(targetMode)
                                             com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = false)
                                         },
+                                        // v2.4.0 rc3: M3 switch with a check icon in the thumb while on.
+                                        thumbContent = if (isDarkTheme) {
+                                            {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Check,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                )
+                                            }
+                                        } else {
+                                            null
+                                        },
                                         colors = SwitchDefaults.colors(
                                             checkedThumbColor = com.splitmate.app.ui.DesignSystemBindings.activePalette.onPrimary,
                                             checkedTrackColor = activePalette.primary,
@@ -1281,6 +1293,18 @@ fun UserSettingsScreen(
                                             if (it) {
                                                 com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = true)
                                             }
+                                        },
+                                        // v2.4.0 rc3: M3 switch with a check icon in the thumb while on.
+                                        thumbContent = if (hapticsEnabled) {
+                                            {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Check,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                )
+                                            }
+                                        } else {
+                                            null
                                         },
                                         colors = SwitchDefaults.colors(
                                             checkedThumbColor = com.splitmate.app.ui.DesignSystemBindings.activePalette.onPrimary,
@@ -1436,6 +1460,12 @@ fun UserSettingsScreen(
 // ==============================================================================
 // REUSABLE M3 EXPRESSIVE SETTINGS ROW COMPONENT
 // ==============================================================================
+/**
+ * v2.4.0 rc3: built on the official Material 3 `ListItem` (headline / supporting / leading /
+ * trailing slots, M3 list paddings and min heights). The whole row stays one click target; the
+ * tonal 40.dp icon chip, brand type and colours are unchanged, and the list item container is
+ * transparent so the parent card colour shows through.
+ */
 @Composable
 fun SettingsRowItem(
     icon: ImageVector,
@@ -1449,62 +1479,46 @@ fun SettingsRowItem(
     trailingContent: @Composable () -> Unit,
     onClick: () -> Unit
 ) {
-    Surface(
-        onClick = onClick,
-        color = Color.Transparent,
+    androidx.compose.material3.ListItem(
+        headlineContent = {
+            Text(
+                text = title,
+                fontFamily = SplitMateBrandFontFamily,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isDestructive) SplitMateThemeTokens.TerracottaText else titleColor
+            )
+        },
         modifier = Modifier
             .fillMaxWidth()
             .sizeIn(minHeight = 60.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
+            .clickable(onClick = onClick),
+        supportingContent = {
+            Text(
+                text = subtitle,
+                fontFamily = SplitMateBrandFontFamily,
+                fontSize = 12.sp,
+                color = subtitleColor,
+                maxLines = 2
+            )
+        },
+        leadingContent = {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(iconBg),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(iconBg),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = iconTint,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column {
-                    Text(
-                        text = title,
-                        fontFamily = SplitMateBrandFontFamily,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isDestructive) SplitMateThemeTokens.TerracottaText else titleColor
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = subtitle,
-                        fontFamily = SplitMateBrandFontFamily,
-                        fontSize = 12.sp,
-                        color = subtitleColor,
-                        maxLines = 2
-                    )
-                }
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(20.dp)
+                )
             }
-
-            Spacer(modifier = Modifier.width(8.dp))
-            trailingContent()
-        }
-    }
+        },
+        trailingContent = { trailingContent() },
+        colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent)
+    )
 }
