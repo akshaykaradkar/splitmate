@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CornerSize
+import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -1281,6 +1282,8 @@ object SplitButtonDefaults {
             onClick = onClick,
             modifier = modifier.heightIn(min = height),
             enabled = enabled,
+            // v2.4.0 rc3: official size-aware shapes (inner corner + pressed squish for this height).
+            shapes = androidx.compose.material3.SplitButtonDefaults.leadingButtonShapesFor(height),
             colors = ButtonDefaults.buttonColors(containerColor = containerColor, contentColor = contentColor),
             contentPadding = contentPadding,
             content = content
@@ -1319,25 +1322,42 @@ object SplitButtonDefaults {
             enabled = enabled,
             // v2.4.0 D3: explicit shapes with dp outer corners (half the height): the alpha library drew
             // percent-based outer corners square on first frame, leaving a flat trailing end.
-            shapes = androidx.compose.material3.SplitButtonShapes(
-                shape = RoundedCornerShape(
-                    topStart = CornerSize(InnerCornerSize),
-                    bottomStart = CornerSize(InnerCornerSize),
-                    topEnd = CornerSize(height / 2),
-                    bottomEnd = CornerSize(height / 2)
-                ),
-                pressedShape = RoundedCornerShape(
-                    topStart = CornerSize(InnerCornerSize * 2),
-                    bottomStart = CornerSize(InnerCornerSize * 2),
-                    topEnd = CornerSize(height / 2),
-                    bottomEnd = CornerSize(height / 2)
-                ),
-                checkedShape = CircleShape
+            // v2.4.0 rc3: everything else comes from the official size-aware trailing shapes: the
+            // inner (facing) corners at rest / pressed and the checked (menu open) shape. Only the
+            // outer end corners are overridden with explicit dp values to keep the D3 fix.
+            shapes = trailingShapesWithDpOuterCorners(
+                official = androidx.compose.material3.SplitButtonDefaults.trailingButtonShapesFor(height),
+                height = height
             ),
             colors = ButtonDefaults.buttonColors(containerColor = containerColor, contentColor = contentColor)
         ) {
             content()
         }
+    }
+
+    /**
+     * The official trailing [androidx.compose.material3.SplitButtonShapes] with the outer (end)
+     * corners pinned to `height / 2` in dp (see the D3 note in [TrailingButton]). Inner corners and
+     * the checked shape stay official; if the library ever stops using corner-based shapes we fall
+     * back to the house [InnerCornerSize] tokens.
+     */
+    private fun trailingShapesWithDpOuterCorners(
+        official: androidx.compose.material3.SplitButtonShapes,
+        height: Dp
+    ): androidx.compose.material3.SplitButtonShapes {
+        val outer = CornerSize(height / 2)
+        val inner = (official.shape as? CornerBasedShape)?.topStart ?: CornerSize(InnerCornerSize)
+        val innerPressed = (official.pressedShape as? CornerBasedShape)?.topStart ?: CornerSize(InnerCornerSize * 2)
+        return androidx.compose.material3.SplitButtonShapes(
+            shape = RoundedCornerShape(topStart = inner, topEnd = outer, bottomEnd = outer, bottomStart = inner),
+            pressedShape = RoundedCornerShape(
+                topStart = innerPressed,
+                topEnd = outer,
+                bottomEnd = outer,
+                bottomStart = innerPressed
+            ),
+            checkedShape = official.checkedShape ?: CircleShape
+        )
     }
 
     /** Chevron for [TrailingButton] that rotates 180 degrees while the menu is open. */
