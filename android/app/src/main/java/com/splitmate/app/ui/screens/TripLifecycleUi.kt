@@ -260,30 +260,32 @@ fun TripLifecycleCard(
 
         TripLifecycleResolver.State.ACTIVE -> {
             if (TripLifecycleResolver.canToggle(isOrganizer) && stats.totalSpentCents > 0L) {
-                Surface(
+                // v2.4.0 rc3: the official M3 assist chip, so it reads as an action (the grey pill
+                // looked disabled). Flag icon in primary, label in onSurface.
+                androidx.compose.material3.AssistChip(
                     onClick = { confirmWrapUp = true },
-                    shape = RoundedCornerShape(50),
-                    color = palette.surfaceContainer,
-                    border = BorderStroke(1.dp, palette.outlineVariant),
-                    modifier = modifier.heightIn(min = 40.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Rounded.Flag, contentDescription = null, tint = palette.onSurfaceVariant, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
+                    label = {
                         Text(
                             "Trip over? Wrap it up",
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
-                            color = palette.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                    }
-                }
+                    },
+                    leadingIcon = {
+                        Icon(Icons.Rounded.Flag, contentDescription = null, modifier = Modifier.size(16.dp))
+                    },
+                    shape = RoundedCornerShape(50),
+                    colors = androidx.compose.material3.AssistChipDefaults.assistChipColors(
+                        containerColor = palette.surfaceContainerLowest,
+                        labelColor = palette.onSurface,
+                        leadingIconContentColor = palette.primary
+                    ),
+                    border = BorderStroke(1.dp, palette.outlineVariant),
+                    modifier = modifier.heightIn(min = 40.dp)
+                )
             }
         }
     }

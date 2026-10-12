@@ -160,11 +160,13 @@ class SplitMateV234DesignSystemTest {
             assertEquals(p.surfaceContainerLow, r.bright)
             assertEquals(p.surfaceContainerHighest, r.dim)
         }
+        // v2.4.0 rc3: in this app Lowest = card, Low = canvas. In dark the card sits above the canvas,
+        // so the dark ladder rises canvas (low) < well (container) < card (lowest) < high < highest.
         val dark = WarmEspressoNightPalette.surfaceContainerRoles()
-        val darkLadder = listOf(dark.lowest, dark.low, dark.container, dark.high, dark.highest).map { it.brightness() }
-        darkLadder.zipWithNext().forEach { (a, b) -> assertTrue(a < b, "Espresso ladder must lighten") }
+        val darkLadder = listOf(dark.low, dark.container, dark.lowest, dark.high, dark.highest).map { it.brightness() }
+        darkLadder.zipWithNext().forEach { (a, b) -> assertTrue(a < b, "Dark ladder must lighten canvas -> well -> card -> high -> highest") }
         assertEquals(WarmEspressoNightPalette.surfaceContainerHighest, dark.bright)
-        assertEquals(WarmEspressoNightPalette.surfaceContainerLowest, dark.dim)
+        assertEquals(WarmEspressoNightPalette.surfaceContainerLow, dark.dim)
     }
 
     // ------------------------------------------------------------------

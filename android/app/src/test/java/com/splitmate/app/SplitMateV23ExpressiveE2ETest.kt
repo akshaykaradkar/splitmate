@@ -242,9 +242,9 @@ class SplitMateV23ExpressiveE2ETest {
         fun `F1_T1_03 WarmEspressoNightPalette matches canonical espresso surfaces and lime-amber tokens`() {
             // v2.4.0 D6: this slot is now "Obsidian Gold" (gold on deep charcoal, rose for owes).
             val p = SplitMateThemeMode.WARM_ESPRESSO_NIGHT.toPalette()
-            assertEquals(Color(0xFF0E0E11), p.surfaceContainerLowest)
-            assertEquals(Color(0xFF15151A), p.surfaceContainerLow)
-            assertEquals(Color(0xFF1D1D24), p.surfaceContainer)
+            assertEquals(Color(0xFF1F1F27), p.surfaceContainerLowest) // rc3: card above canvas
+            assertEquals(Color(0xFF141418), p.surfaceContainerLow)
+            assertEquals(Color(0xFF19191F), p.surfaceContainer)
             assertEquals(Color(0xFF26262F), p.surfaceContainerHigh)
             assertEquals(Color(0xFF31313C), p.surfaceContainerHighest)
             assertEquals(Color(0xFFF5C451), p.primary)
@@ -1498,15 +1498,14 @@ class SplitMateV23ExpressiveE2ETest {
                 assertTrue(sunlitLums[i] > sunlitLums[i + 1], "Sunlit luminance must decrease from Lowest to Highest")
             }
 
-            val espressoLums = listOf(
-                WarmEspressoNightPalette.surfaceContainerLowest,
-                WarmEspressoNightPalette.surfaceContainerLow,
-                WarmEspressoNightPalette.surfaceContainer,
-                WarmEspressoNightPalette.surfaceContainerHigh,
-                WarmEspressoNightPalette.surfaceContainerHighest
-            ).map { relativeLuminance(it) }
-            for (i in 0 until espressoLums.lastIndex) {
-                assertTrue(espressoLums[i] < espressoLums[i + 1], "Espresso luminance must increase from Lowest to Highest")
+            // v2.4.0 rc3: in this app Lowest = card and Low = canvas. In the dark theme the card must
+            // sit ABOVE the canvas (lighter, M3 tonal elevation), so the dark ladder is:
+            // canvas (Low) < well (Container) < card (Lowest) < High < Highest.
+            val e = WarmEspressoNightPalette
+            val darkOrder = listOf(e.surfaceContainerLow, e.surfaceContainer, e.surfaceContainerLowest, e.surfaceContainerHigh, e.surfaceContainerHighest)
+                .map { relativeLuminance(it) }
+            for (i in 0 until darkOrder.lastIndex) {
+                assertTrue(darkOrder[i] < darkOrder[i + 1], "Dark ladder must rise canvas < well < card < high < highest")
             }
 
             val kyotoLums = listOf(

@@ -200,9 +200,12 @@ val SunlitBuckwheatPalette = SplitMateExpressivePalette(
  */
 val WarmEspressoNightPalette = SplitMateExpressivePalette(
     mode = SplitMateThemeMode.WARM_ESPRESSO_NIGHT,
-    surfaceContainerLowest = Color(0xFF0E0E11),
-    surfaceContainerLow = Color(0xFF15151A),
-    surfaceContainer = Color(0xFF1D1D24),
+    // v2.4.0 rc3: in this app `surfaceContainerLowest` is the CARD and `surfaceContainerLow` the
+    // canvas (Buckwheat: white card on cream). In dark, cards must sit ABOVE the canvas (lighter),
+    // or they read as holes. Wells inside cards (`surfaceContainer`) sit between the two.
+    surfaceContainerLowest = Color(0xFF1F1F27),
+    surfaceContainerLow = Color(0xFF141418),
+    surfaceContainer = Color(0xFF19191F),
     surfaceContainerHigh = Color(0xFF26262F),
     surfaceContainerHighest = Color(0xFF31313C),
     onSurface = Color(0xFFF4F1EA),
@@ -305,7 +308,8 @@ fun SplitMateExpressivePalette.surfaceContainerRoles(): SplitMateSurfaceRoles = 
     high = surfaceContainerHigh,
     highest = surfaceContainerHighest,
     bright = if (mode.isDark) surfaceContainerHighest else surfaceContainerLow,
-    dim = if (mode.isDark) surfaceContainerLowest else surfaceContainerHighest
+    // v2.4.0 rc3: in dark the canvas (Low) is the darkest tone; Lowest is the raised card.
+    dim = if (mode.isDark) surfaceContainerLow else surfaceContainerHighest
 )
 
 object SplitMateThemeState {

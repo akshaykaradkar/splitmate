@@ -207,21 +207,21 @@ val WarmEspressoNightAppShellExtendedColors = AppShellExtendedColors(
     settleSummary = AppShellExtendedColor(
         color = Color(0xFFF5C451),
         onColor = Color(0xFF2B1E00),
-        container = Color(0xFF0E0E11),
+        container = Color(0xFF1F1F27),
         onContainer = Color(0xFFF4F1EA),
         outline = Color(0xFF353440)
     ),
     settleReceive = AppShellExtendedColor(
         color = Color(0xFFF5C451),
         onColor = Color(0xFF2B1E00),
-        container = Color(0xFF0E0E11),
+        container = Color(0xFF1F1F27),
         onContainer = Color(0xFFF4F1EA),
         outline = Color(0xFF353440)
     ),
     settlePay = AppShellExtendedColor(
         color = Color(0xFFFF8AB0),
         onColor = Color(0xFF4A0624),
-        container = Color(0xFF1D1D24),
+        container = Color(0xFF19191F),
         onContainer = Color(0xFFFFD9E4),
         outline = Color(0xFF353440)
     ),

@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.automirrored.rounded.Chat
@@ -4029,8 +4030,11 @@ fun LedgersDashboardScreen(
 
                         // Phase 3: Promote 'Settle up' as the sole Primary Action inside the Hero Balance Card
                         if (totalBalance != "₹0.00") {
+                            // v2.4.0 rc3: Settle up looks the same everywhere (⇄ icon, no trailing arrow)
+                            // and uses the official M3 Expressive press morph.
                             Button(
                                 onClick = onNavigateToSettle,
+                                shapes = ButtonDefaults.shapes(),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = SplitMateTheme.PrimaryDark,
                                     contentColor = SplitMateTheme.ScreenBg
@@ -4039,16 +4043,9 @@ fun LedgersDashboardScreen(
                                     .fillMaxWidth()
                                     .sizeIn(minHeight = 48.dp)
                             ) {
-                                Icon(Icons.Rounded.TaskAlt, contentDescription = null, tint = SplitMateTheme.ScreenBg, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Rounded.SwapHoriz, contentDescription = null, tint = SplitMateTheme.ScreenBg, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("Settle up", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.ScreenBg, fontWeight = FontWeight.Bold)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
-                                    contentDescription = null,
-                                    tint = SplitMateTheme.ScreenBg,
-                                    modifier = Modifier.size(16.dp)
-                                )
                             }
                         } else {
                             FilledTonalButton(
@@ -6005,7 +6002,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
                                             Icon(
-                                                imageVector = Icons.Rounded.Info,
+                                                imageVector = androidx.compose.material.icons.Icons.Outlined.Info, // v2.4.0 rc3: one info icon style
                                                 contentDescription = "Why were debts simplified?",
                                                 tint = if (showMaxHeapGraphInspector) SplitMateTheme.SageSurface else SplitMateTheme.SageText,
                                                 modifier = Modifier.size(13.dp)
@@ -6380,17 +6377,21 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                             fontWeight = FontWeight.ExtraBold,
                             color = SplitMateTheme.PrimaryDark
                         )
-                        Surface(
-                            shape = SplitMateTheme.RadiusBadge,
-                            color = if (yourSettlementsPresentation.showSettledCard) SplitMateTheme.SageSurface else SplitMateTheme.SurfaceMuted
-                        ) {
-                            Text(
-                                text = if (yourSettlementsPresentation.showSettledCard) "All settled" else "Priority view",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (yourSettlementsPresentation.showSettledCard) SplitMateTheme.SageText else SplitMateTheme.TextSecondary,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                            )
+                        // v2.4.0 rc3: only the meaningful All settled badge; the grey priority-view label
+                        // pill looked like a disabled button and did nothing.
+                        if (yourSettlementsPresentation.showSettledCard) {
+                            Surface(
+                                shape = SplitMateTheme.RadiusBadge,
+                                color = SplitMateTheme.SageSurface
+                            ) {
+                                Text(
+                                    text = "All settled",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SplitMateTheme.SageText,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
+                            }
                         }
                     }
 
@@ -6634,20 +6635,13 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     modifier = Modifier.weight(1f)
                                                 ) {
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .size(28.dp)
-                                                            .clip(CircleShape)
-                                                            .background(SplitMateTheme.SageSurface),
-                                                        contentAlignment = Alignment.Center
-                                                    ) {
-                                                        Icon(
-                                                            imageVector = Icons.Rounded.Groups,
-                                                            contentDescription = null,
-                                                            tint = SplitMateTheme.SageText,
-                                                            modifier = Modifier.size(15.dp)
-                                                        )
-                                                    }
+                                                    // v2.4.0 rc3: the person's own avatar (was a generic group icon).
+                                                    AvatarToken(
+                                                        initials = fromRoomMember?.avatarSeed ?: leg.counterpartyName,
+                                                        bg = SplitMateTheme.SageSurface,
+                                                        textColor = SplitMateTheme.SageText,
+                                                        size = 28
+                                                    )
                                                     Spacer(modifier = Modifier.width(10.dp))
                                                     Text(
                                                         text = "From ",
@@ -6959,20 +6953,13 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                                 color = SplitMateTheme.PrimaryDark
                                                             )
                                                         } else {
-                                                            Box(
-                                                                modifier = Modifier
-                                                                    .size(28.dp)
-                                                                    .clip(CircleShape)
-                                                                    .background(SplitMateTheme.SageSurface),
-                                                                contentAlignment = Alignment.Center
-                                                            ) {
-                                                                Icon(
-                                                                    imageVector = Icons.Rounded.Groups,
-                                                                    contentDescription = null,
-                                                                    tint = SplitMateTheme.SageText,
-                                                                    modifier = Modifier.size(15.dp)
-                                                                )
-                                                            }
+                                                            // v2.4.0 rc3: the person's own avatar (was a generic group icon).
+                                                            AvatarToken(
+                                                                initials = toRoomMember?.avatarSeed ?: leg.counterpartyName,
+                                                                bg = SplitMateTheme.SageSurface,
+                                                                textColor = SplitMateTheme.SageText,
+                                                                size = 28
+                                                            )
                                                             Spacer(modifier = Modifier.width(10.dp))
                                                             Text(
                                                                 text = "To ",

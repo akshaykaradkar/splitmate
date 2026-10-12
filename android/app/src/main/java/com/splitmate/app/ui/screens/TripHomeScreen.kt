@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.draw.clipToBounds
 import kotlin.math.roundToLong
 import androidx.compose.material.icons.outlined.Group
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.ConfirmationNumber
 import androidx.compose.material.icons.outlined.Map
@@ -136,6 +137,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.rounded.AddIcCall
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -5157,7 +5161,7 @@ private fun TripHubMoneySettlementView(
                                 .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Rounded.Info,
+                                imageVector = Icons.Outlined.Info, // v2.4.0 rc3: one info icon style (was solid black)
                                 contentDescription = "How payments were simplified",
                                 tint = TripHubTokens.PositiveSageText,
                                 modifier = Modifier.size(22.dp)
@@ -5321,16 +5325,23 @@ private fun TripHubMoneySettlementView(
                         style = MaterialTheme.typography.titleMedium,
                         color = TripHubTokens.TextPrimary
                     )
-                    Surface(
-                        shape = CircleShape,
-                        color = if (myTransfers.isEmpty()) TripHubTokens.PositiveSagePillBg else TripHubTokens.SunkenWell
-                    ) {
+                    // v2.4.0 rc3: a count is plain text (a grey pill looked like a disabled button);
+                    // "All settled" keeps its sage badge.
+                    if (myTransfers.isEmpty()) {
+                        Surface(shape = CircleShape, color = TripHubTokens.PositiveSagePillBg) {
+                            Text(
+                                text = "All settled",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TripHubTokens.PositiveSageText,
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
+                            )
+                        }
+                    } else {
                         Text(
-                            text = if (myTransfers.isEmpty()) "All settled" else "${myTransfers.size} ${if (myTransfers.size == 1) "payment" else "payments"}",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (myTransfers.isEmpty()) TripHubTokens.PositiveSageText else TripHubTokens.TextSecondary,
-                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
+                            text = "${myTransfers.size} ${if (myTransfers.size == 1) "payment" else "payments"}",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = TripHubTokens.TextSecondary
                         )
                     }
                 }
@@ -7020,7 +7031,9 @@ private fun TripHubPeoplePerspectiveView(
                     ) {
                         if (showQuickInviteAction) {
                             val isMissingPhone = cleanPhone10.isEmpty()
-                            Surface(
+                            // v2.4.0 rc3: official M3 Expressive tonal icon button. A phone icon means "add phone
+                            // and invite" (the person-plus icon read as "add someone who is already here").
+                            FilledTonalIconButton(
                                 onClick = {
                                     performCrispTactileHaptic(context, localView, heavy = false)
                                     if (isMissingPhone) {
@@ -7040,19 +7053,17 @@ private fun TripHubPeoplePerspectiveView(
                                         }
                                     }
                                 },
-                                shape = CircleShape,
-                                color = TripHubTokens.PositiveSagePillBg,
-                                border = BorderStroke(1.dp, TripHubTokens.PositiveSageText.copy(alpha = 0.35f)),
-                                modifier = Modifier.minimumInteractiveComponentSize().size(32.dp) // v2.4.0 D2: 48dp touch area
+                                shapes = IconButtonDefaults.shapes(),
+                                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                    containerColor = TripHubTokens.PositiveSagePillBg,
+                                    contentColor = TripHubTokens.PositiveSageText
+                                )
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = if (isMissingPhone) Icons.Rounded.PersonAdd else Icons.AutoMirrored.Rounded.Send,
-                                        contentDescription = if (isMissingPhone) "Add phone and invite" else "Share invite on WhatsApp",
-                                        tint = TripHubTokens.PositiveSageText,
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                }
+                                Icon(
+                                    imageVector = if (isMissingPhone) Icons.Rounded.AddIcCall else Icons.AutoMirrored.Rounded.Send,
+                                    contentDescription = if (isMissingPhone) "Add phone and invite" else "Share invite on WhatsApp",
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
                         }
                         if (hasMemberActions) {
@@ -7084,36 +7095,27 @@ private fun TripHubPeoplePerspectiveView(
         }
 
         item(key = "people_leave_trip_footer") {
-            OutlinedButton(
-                onClick = {
-                    performCrispTactileHaptic(context, localView, heavy = false)
-                    leaveTripStatusMsg = null
-                    showLeaveTripConfirmDialog = true
-                },
-                shape = RoundedCornerShape(18.dp),
-                border = BorderStroke(1.dp, DesignSystemBindings.activePalette.secondary.copy(alpha = 0.6f)),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = TripHubTokens.TerracottaPeachBg.copy(alpha = if (SplitMateTheme.isDark) 0.75f else 0.45f),
-                    contentColor = TripHubTokens.TerracottaIconTint
-                ),
-                modifier = Modifier
-                    .padding(top = 10.dp)
-                    .fillMaxWidth()
-                    .defaultMinSize(minHeight = 48.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.ExitToApp,
-                    contentDescription = null,
-                    tint = TripHubTokens.TerracottaIconTint,
-                    modifier = Modifier.size(17.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Leave trip",
-                    fontWeight = FontWeight.ExtraBold,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = TripHubTokens.TerracottaIconTint
-                )
+            // v2.4.0 rc3: a quiet text button in the error colour. It was a full-width peach button,
+            // louder than "Add traveler". The confirm dialog still guards it.
+            Box(modifier = Modifier.fillMaxWidth().padding(top = 10.dp), contentAlignment = Alignment.Center) {
+                TextButton(
+                    onClick = {
+                        performCrispTactileHaptic(context, localView, heavy = false)
+                        leaveTripStatusMsg = null
+                        showLeaveTripConfirmDialog = true
+                    },
+                    shapes = ButtonDefaults.shapes(),
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.defaultMinSize(minHeight = 48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.ExitToApp,
+                        contentDescription = null,
+                        modifier = Modifier.size(ButtonDefaults.IconSize)
+                    )
+                    Spacer(modifier = Modifier.width(ButtonDefaults.IconSpacing))
+                    Text(text = "Leave trip", style = MaterialTheme.typography.labelLarge)
+                }
             }
         }
     }

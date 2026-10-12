@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextStyle
@@ -964,15 +965,20 @@ fun QuickExpenseScreen(
                     }
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        // v2.4.0 rc3: chips scroll to the card edge instead of being cut 12dp inside it.
+                        contentPadding = PaddingValues(horizontal = 12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .bleedHorizontally(start = 12.dp, end = 12.dp)
                     ) {
                         items(quickCategoryPills) { (chipLabel, fullCategory, chipIcon) ->
                             val isChosen = expenseCategoryTitle.startsWith(fullCategory, ignoreCase = true) ||
                                 (fullCategory == "Train / PNR Ticket" && (expenseCategoryTitle.contains("PNR:") || expenseCategoryTitle.contains("Train", ignoreCase = true)))
-                            val selectedBg = if (isDark) activePalette.primary else activePalette.onSurface
-                            val selectedFg = if (isDark) activePalette.onPrimary else activePalette.surfaceContainerLowest
+                            // v2.4.0 rc3: one "selected" look for every chip row (same as Paid by): sage pill.
+                            val selectedBg = QuickExpenseThemeTokens.SageSurface
+                            val selectedFg = QuickExpenseThemeTokens.SageText
                             val chipCorner by androidx.compose.animation.core.animateDpAsState(
-                                targetValue = if (isChosen) 10.dp else 20.dp,
+                                targetValue = 20.dp, // rc3: always a full pill (no squarer selected state)
                                 animationSpec = SplitMateMotion.fastSpatial(),
                                 label = "GM3CategoryChipCorner"
                             )
@@ -986,8 +992,8 @@ fun QuickExpenseScreen(
                                     }
                                 },
                                 shape = RoundedCornerShape(chipCorner),
-                                color = if (isChosen) selectedBg else QuickExpenseThemeTokens.SageSurface,
-                                border = BorderStroke(1.dp, if (isChosen) selectedBg else QuickExpenseThemeTokens.AccentSage),
+                                color = if (isChosen) selectedBg else surfaceColor,
+                                border = BorderStroke(if (isChosen) 1.5.dp else 1.dp, if (isChosen) QuickExpenseThemeTokens.SageBorder else keypadBorder),
                                 modifier = Modifier
                                     .minimumInteractiveComponentSize()
                                     .heightIn(min = 32.dp)
@@ -999,7 +1005,7 @@ fun QuickExpenseScreen(
                                     Icon(
                                         imageVector = chipIcon,
                                         contentDescription = null,
-                                        tint = if (isChosen) selectedFg else QuickExpenseThemeTokens.SageText,
+                                        tint = if (isChosen) selectedFg else textSecondary,
                                         modifier = Modifier.size(14.dp)
                                     )
                                     Spacer(modifier = Modifier.width(5.dp))
@@ -1008,7 +1014,7 @@ fun QuickExpenseScreen(
                                         fontFamily = SplitMateBrandFontFamily,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (isChosen) selectedFg else QuickExpenseThemeTokens.SageText
+                                        color = if (isChosen) selectedFg else textPrimary
                                     )
                                 }
                             }
@@ -1017,16 +1023,17 @@ fun QuickExpenseScreen(
                         // v2.3.4: user-created categories sit right after the built-in pills.
                         items(customCategories, key = { "custom_cat_${it.title}" }) { cat ->
                             val isChosen = expenseCategoryTitle.equals(cat.title, ignoreCase = true)
-                            val selectedBg = if (isDark) activePalette.primary else activePalette.onSurface
-                            val selectedFg = if (isDark) activePalette.onPrimary else activePalette.surfaceContainerLowest
+                            // v2.4.0 rc3: one "selected" look for every chip row (same as Paid by): sage pill.
+                            val selectedBg = QuickExpenseThemeTokens.SageSurface
+                            val selectedFg = QuickExpenseThemeTokens.SageText
                             Surface(
                                 onClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                     expenseCategoryTitle = cat.title
                                 },
                                 shape = RoundedCornerShape(if (isChosen) 10.dp else 20.dp),
-                                color = if (isChosen) selectedBg else QuickExpenseThemeTokens.SageSurface,
-                                border = BorderStroke(1.dp, if (isChosen) selectedBg else QuickExpenseThemeTokens.AccentSage),
+                                color = if (isChosen) selectedBg else surfaceColor,
+                                border = BorderStroke(if (isChosen) 1.5.dp else 1.dp, if (isChosen) QuickExpenseThemeTokens.SageBorder else keypadBorder),
                                 modifier = Modifier
                                     .minimumInteractiveComponentSize()
                                     .heightIn(min = 32.dp)
@@ -1038,7 +1045,7 @@ fun QuickExpenseScreen(
                                     Icon(
                                         imageVector = com.splitmate.app.ui.category.ExpenseCategoryIcons.forKey(cat.iconKey),
                                         contentDescription = null,
-                                        tint = if (isChosen) selectedFg else QuickExpenseThemeTokens.SageText,
+                                        tint = if (isChosen) selectedFg else textSecondary,
                                         modifier = Modifier.size(14.dp)
                                     )
                                     Spacer(modifier = Modifier.width(5.dp))
@@ -1047,7 +1054,7 @@ fun QuickExpenseScreen(
                                         fontFamily = SplitMateBrandFontFamily,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (isChosen) selectedFg else QuickExpenseThemeTokens.SageText
+                                        color = if (isChosen) selectedFg else textPrimary
                                     )
                                 }
                             }
@@ -1072,10 +1079,11 @@ fun QuickExpenseScreen(
                                 expenseCategoryTitle.isNotBlank()
                             // A picked catalog category (e.g. "Breakfast") shows its own icon instead of the pencil.
                             val matchedCatalogCategory = com.splitmate.app.ui.category.exactExpenseCategoryFor(expenseCategoryTitle)
-                            val selectedBg = if (isDark) activePalette.primary else activePalette.onSurface
-                            val selectedFg = if (isDark) activePalette.onPrimary else activePalette.surfaceContainerLowest
+                            // v2.4.0 rc3: one "selected" look for every chip row (same as Paid by): sage pill.
+                            val selectedBg = QuickExpenseThemeTokens.SageSurface
+                            val selectedFg = QuickExpenseThemeTokens.SageText
                             val customChipCorner by androidx.compose.animation.core.animateDpAsState(
-                                targetValue = if (isCustomNote) 10.dp else 20.dp,
+                                targetValue = 20.dp, // rc3: always a full pill
                                 animationSpec = SplitMateMotion.fastSpatial(),
                                 label = "GM3CustomChipCorner"
                             )
@@ -1083,7 +1091,7 @@ fun QuickExpenseScreen(
                                 onClick = { showEditTitleDialog = true },
                                 shape = RoundedCornerShape(customChipCorner),
                                 color = if (isCustomNote) selectedBg else surfaceColor,
-                                border = BorderStroke(1.dp, if (isCustomNote) selectedBg else keypadBorder),
+                                border = BorderStroke(if (isCustomNote) 1.5.dp else 1.dp, if (isCustomNote) QuickExpenseThemeTokens.SageBorder else keypadBorder),
                                 modifier = Modifier
                                     .minimumInteractiveComponentSize()
                                     .heightIn(min = 32.dp)
@@ -1131,7 +1139,11 @@ fun QuickExpenseScreen(
                             LazyRow(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)
+                                // v2.4.0 rc3: payer chips scroll to the card's right edge (were cut inside it).
+                                contentPadding = PaddingValues(end = 12.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .bleedHorizontally(start = 0.dp, end = 12.dp)
                             ) {
                                 items(participants, key = { "payer_${it.id}" }) { person ->
                                     val isPayer = person.id == selectedPayerId
@@ -2681,3 +2693,17 @@ private fun AmountInputCursor(color: Color) {
             .clearAndSetSemantics { }
     )
 }
+
+/**
+ * v2.4.0 rc3: lets a horizontally scrolling row extend past its parent's padding to the card edge
+ * (the card's shape clips it), so chips scroll off the edge instead of being cut inside the card.
+ * Pair with matching `contentPadding` so the first and last chips still line up with the content.
+ */
+private fun Modifier.bleedHorizontally(start: androidx.compose.ui.unit.Dp, end: androidx.compose.ui.unit.Dp): Modifier =
+    this.layout { measurable, constraints ->
+        val startPx = start.roundToPx()
+        val endPx = end.roundToPx()
+        val width = constraints.maxWidth + startPx + endPx
+        val placeable = measurable.measure(constraints.copy(minWidth = width, maxWidth = width))
+        layout(constraints.maxWidth, placeable.height) { placeable.place(-startPx, 0) }
+    }
