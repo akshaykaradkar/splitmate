@@ -3959,9 +3959,11 @@ class SplitMateV23ExpressiveE2ETest {
 
             val onboardingSrc = readSourceFile("ui/screens/OnboardingAndSettingsScreens.kt")
             assertTrue(onboardingSrc.contains("themeModes.forEachIndexed"))
-            assertTrue(onboardingSrc.contains("segmentedIslandItemShape("))
-            assertTrue(onboardingSrc.contains("outerCorner = 20.dp"))
-            assertTrue(onboardingSrc.contains("innerCorner = 6.dp"))
+            // v2.4.0 rc3: the theme rows are the official M3 Expressive selectable SegmentedListItem
+            // group (ListItemDefaults.segmentedShapes) instead of the hand-built island shape.
+            assertTrue(onboardingSrc.contains("SegmentedListItem("))
+            assertTrue(onboardingSrc.contains("shapes = ListItemDefaults.segmentedShapes(index = idx, count = themeModes.size)"))
+            assertFalse(onboardingSrc.contains("segmentedIslandItemShape("))
             assertTrue(onboardingSrc.contains("ConnectedButtonGroup("))
             assertTrue(onboardingSrc.contains("Morph(MaterialShapes.SoftBurst, MaterialShapes.Cookie9Sided)"))
             assertTrue(onboardingSrc.contains("SplitMateDiceBearStyles"))

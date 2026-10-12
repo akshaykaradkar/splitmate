@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -25,7 +26,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -36,7 +37,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
@@ -62,7 +62,6 @@ import com.splitmate.app.ui.components.MaterialShapes
 import com.splitmate.app.ui.components.MorphPolygonShape
 import com.splitmate.app.ui.components.RoundedPolygonShape
 import com.splitmate.app.ui.components.SplitMateMotion
-import com.splitmate.app.ui.components.segmentedIslandItemShape
 import com.splitmate.app.ui.extractInitialsFromNameOrSeed
 import com.splitmate.app.ui.inferGenderFromFirstName
 import com.splitmate.app.ui.toPalette
@@ -464,15 +463,18 @@ fun OnboardingSetupScreen(
                         )
                         onCompleteProfile(finalName, finalPhone, selectedCurrency, styledSeed)
                     },
-                    shape = SplitMateThemeTokens.RadiusPill,
+                    // v2.4.0 rc3: official M3 Expressive press morph, medium size token and the
+                    // button's own elevation token.
+                    shapes = ButtonDefaults.shapes(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = primaryText,
                         contentColor = screenBg
                     ),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp),
+                    contentPadding = ButtonDefaults.MediumContentPadding,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(58.dp)
-                        .shadow(8.dp, shape = SplitMateThemeTokens.RadiusPill)
+                        .heightIn(min = ButtonDefaults.MediumContainerHeight)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -623,22 +625,25 @@ fun UserSettingsScreen(
         )
     }
 
+    // v2.4.0 rc3: official M3 Expressive collapsing app bar; the title shrinks as the list scrolls.
+    val settingsScrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Scaffold(
         containerColor = screenBg,
+        modifier = Modifier.nestedScroll(settingsScrollBehavior.nestedScrollConnection),
         topBar = {
-            TopAppBar(
+            MediumFlexibleTopAppBar(
                 title = {
                     Text(
                         text = "Settings",
                         fontFamily = SplitMateDisplayFontFamily,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 20.sp,
                         color = textPrimary
                     )
                 },
                 navigationIcon = {
                     IconButton(
                         onClick = onBackClick,
+                        shapes = IconButtonDefaults.shapes(),
                         modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                     ) {
                         Icon(
@@ -649,8 +654,10 @@ fun UserSettingsScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = screenBg
-                )
+                    containerColor = screenBg,
+                    scrolledContainerColor = screenBg
+                ),
+                scrollBehavior = settingsScrollBehavior
             )
         }
     ) { innerPadding ->
@@ -719,23 +726,25 @@ fun UserSettingsScreen(
                                     gender = selectedGender,
                                     highlighted = true
                                 )
-                                Surface(
+                                // v2.4.0 rc3: official FilledIconButton with the press morph.
+                                FilledIconButton(
                                     onClick = { currentSeedSuffix = (100..999).random().toString() },
-                                    shape = CircleShape,
-                                    color = activePalette.primary,
-                                    border = BorderStroke(1.5.dp, activePalette.surfaceContainerLow),
+                                    shapes = IconButtonDefaults.shapes(),
+                                    colors = IconButtonDefaults.filledIconButtonColors(
+                                        containerColor = activePalette.primary,
+                                        contentColor = activePalette.onPrimary
+                                    ),
                                     modifier = Modifier
                                         .size(28.dp)
                                         .align(Alignment.BottomEnd)
+                                        .border(1.5.dp, activePalette.surfaceContainerLow, CircleShape)
                                 ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Casino,
-                                            contentDescription = "Shuffle Look",
-                                            tint = activePalette.onPrimary,
-                                            modifier = Modifier.size(15.dp)
-                                        )
-                                    }
+                                    Icon(
+                                        imageVector = Icons.Rounded.Casino,
+                                        contentDescription = "Shuffle Look",
+                                        tint = activePalette.onPrimary,
+                                        modifier = Modifier.size(15.dp)
+                                    )
                                 }
                             }
                             Text(
@@ -857,20 +866,26 @@ fun UserSettingsScreen(
                                     items(SplitMateDiceBearStyles, key = { it.id }) { styleSpec ->
                                         val isSelected = selectedStyleId == styleSpec.id
                                         val staticChipSeed = "StylePreview_${styleSpec.id}|${selectedGender.id}|${styleSpec.id}|$selectedColorPresetId"
-                                        Surface(
+                                        // v2.4.0 rc3: official M3 Expressive FilterChip (selectable semantics,
+                                        // official shapes and press feedback) instead of a clickable surface.
+                                        FilterChip(
+                                            selected = isSelected,
                                             onClick = { selectedStyleId = styleSpec.id },
-                                            shape = RoundedCornerShape(16.dp),
-                                            color = if (isSelected) activePalette.primary else cardBg,
-                                            border = BorderStroke(
-                                                width = if (isSelected) 1.5.dp else 1.dp,
-                                                color = if (isSelected) activePalette.primary else borderColor
-                                            )
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
+                                            shapes = FilterChipDefaults.shapes(),
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                containerColor = cardBg,
+                                                selectedContainerColor = activePalette.primary
+                                            ),
+                                            border = FilterChipDefaults.filterChipBorder(
+                                                enabled = true,
+                                                selected = isSelected,
+                                                borderColor = borderColor,
+                                                selectedBorderColor = activePalette.primary,
+                                                borderWidth = 1.dp,
+                                                selectedBorderWidth = 1.5.dp
+                                            ),
+                                            modifier = Modifier.heightIn(min = 48.dp),
+                                            leadingIcon = {
                                                 SplitMateCharacterAvatar(
                                                     name = staticChipSeed,
                                                     phone = "",
@@ -880,7 +895,9 @@ fun UserSettingsScreen(
                                                     gender = selectedGender,
                                                     highlighted = isSelected
                                                 )
-                                                Column {
+                                            },
+                                            label = {
+                                                Column(modifier = Modifier.padding(vertical = 7.dp)) {
                                                     Text(
                                                         text = styleSpec.label,
                                                         fontFamily = SplitMateBrandFontFamily,
@@ -896,7 +913,7 @@ fun UserSettingsScreen(
                                                     )
                                                 }
                                             }
-                                        }
+                                        )
                                     }
                                 }
                             }
@@ -920,20 +937,25 @@ fun UserSettingsScreen(
                                 ) {
                                     items(SplitMateAvatarColorPresets, key = { it.id }) { preset ->
                                         val isSelected = selectedColorPresetId == preset.id
-                                        Surface(
+                                        // v2.4.0 rc3: official M3 Expressive FilterChip for the backdrop palette.
+                                        FilterChip(
+                                            selected = isSelected,
                                             onClick = { selectedColorPresetId = preset.id },
-                                            shape = RoundedCornerShape(16.dp),
-                                            color = if (isSelected) preset.primaryBgColor else cardBg,
-                                            border = BorderStroke(
-                                                width = if (isSelected) 2.dp else 1.dp,
-                                                color = if (isSelected) preset.accentRingColor else borderColor
-                                            )
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                            ) {
+                                            shapes = FilterChipDefaults.shapes(),
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                containerColor = cardBg,
+                                                selectedContainerColor = preset.primaryBgColor
+                                            ),
+                                            border = FilterChipDefaults.filterChipBorder(
+                                                enabled = true,
+                                                selected = isSelected,
+                                                borderColor = borderColor,
+                                                selectedBorderColor = preset.accentRingColor,
+                                                borderWidth = 1.dp,
+                                                selectedBorderWidth = 2.dp
+                                            ),
+                                            modifier = Modifier.heightIn(min = 48.dp),
+                                            leadingIcon = {
                                                 Box(
                                                     modifier = Modifier
                                                         .size(16.dp)
@@ -945,6 +967,8 @@ fun UserSettingsScreen(
                                                         )
                                                         .border(1.5.dp, preset.accentRingColor, CircleShape)
                                                 )
+                                            },
+                                            label = {
                                                 Text(
                                                     text = preset.label,
                                                     fontFamily = SplitMateBrandFontFamily,
@@ -953,7 +977,7 @@ fun UserSettingsScreen(
                                                     color = if (isSelected) com.splitmate.app.ui.DesignSystemBindings.activePalette.onSurface else textPrimary
                                                 )
                                             }
-                                        }
+                                        )
                                     }
                                 }
                             }
@@ -971,14 +995,15 @@ fun UserSettingsScreen(
                                     onUpdateUserProfile(clean, cleanPhone, encodedSeed)
                                     Toast.makeText(context, "Saved Profile", Toast.LENGTH_SHORT).show()
                                 },
-                                shape = SplitMateThemeTokens.RadiusPill,
+                                // v2.4.0 rc3: official press morph; 48dp min height keeps the touch target.
+                                shapes = ButtonDefaults.shapes(),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = activePalette.primary,
                                     contentColor = activePalette.onPrimary
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(46.dp)
+                                    .heightIn(min = 48.dp)
                             ) {
                                 Text(
                                     text = "Save profile",
@@ -1004,46 +1029,44 @@ fun UserSettingsScreen(
                         modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
                     )
 
-                    Card(
-                        shape = SplitMateThemeTokens.RadiusCard,
-                        colors = CardDefaults.cardColors(containerColor = cardBg),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, borderColor, SplitMateThemeTokens.RadiusCard)
+                    // v2.4.0 rc3: an official segmented list section (rounded, tonal rows), not a bordered card.
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)
                     ) {
-                        Column {
-                            SettingsRowItem(
-                                icon = Icons.Rounded.Share,
-                                iconBg = activePalette.tertiaryContainer,
-                                iconTint = activePalette.onTertiaryContainer,
-                                title = "Share a trip summary",
-                                subtitle = "Send balances and expenses to WhatsApp, or copy them ($activeGroupsCount active groups)",
-                                titleColor = textPrimary,
-                                subtitleColor = textSecondary,
-                                trailingContent = {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                                        contentDescription = null,
-                                        tint = textPrimary
-                                    )
-                                },
-                                onClick = {
-                                    val summaryText = onExportLedgerText().ifBlank {
-                                        "SplitMate Trip Summary (${editedName.ifBlank { userName }})\nActive Groups: $activeGroupsCount"
-                                    }
-                                    runCatching {
-                                        val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                            type = "text/plain"
-                                            putExtra(android.content.Intent.EXTRA_TEXT, summaryText)
-                                        }
-                                        context.startActivity(
-                                            android.content.Intent.createChooser(shareIntent, "Share Trip Summary")
-                                                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                                        )
-                                    }
+                        SettingsRowItem(
+                            icon = Icons.Rounded.Share,
+                            shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
+                            containerColor = cardBg,
+                            iconBg = activePalette.tertiaryContainer,
+                            iconTint = activePalette.onTertiaryContainer,
+                            title = "Share a trip summary",
+                            subtitle = "Send balances and expenses to WhatsApp, or copy them ($activeGroupsCount active groups)",
+                            titleColor = textPrimary,
+                            subtitleColor = textSecondary,
+                            trailingContent = {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                                    contentDescription = null,
+                                    tint = textPrimary
+                                )
+                            },
+                            onClick = {
+                                val summaryText = onExportLedgerText().ifBlank {
+                                    "SplitMate Trip Summary (${editedName.ifBlank { userName }})\nActive Groups: $activeGroupsCount"
                                 }
-                            )
-                        }
+                                runCatching {
+                                    val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(android.content.Intent.EXTRA_TEXT, summaryText)
+                                    }
+                                    context.startActivity(
+                                        android.content.Intent.createChooser(shareIntent, "Share Trip Summary")
+                                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    )
+                                }
+                            }
+                        )
                     }
                 }
             }
@@ -1118,20 +1141,18 @@ fun UserSettingsScreen(
                             }
 
                             // v2.4.0 rc2: one way to pick a theme (the rows below); the duplicate button group is gone.
-
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            // v2.4.0 rc3: the rows are the official M3 Expressive selectable SegmentedListItem
+                            // group (ListItemDefaults.segmentedShapes), not a hand-built island shape.
+                            Column(
+                                modifier = Modifier.selectableGroup(),
+                                verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)
+                            ) {
                                 themeModes.forEachIndexed { idx, mode ->
                                     val modePalette = mode.toPalette()
                                     val isSelected = selectedThemeMode == mode
-                                    val rowShape = segmentedIslandItemShape(
-                                        index = idx,
-                                        totalCount = themeModes.size,
-                                        isSelected = isSelected,
-                                        outerCorner = 20.dp,
-                                        innerCorner = 6.dp
-                                    )
                                     // v2.4.0: colour swatches only; hex codes are not shown to people.
-                                    Surface(
+                                    SegmentedListItem(
+                                        selected = isSelected,
                                         onClick = {
                                             selectedThemeMode = mode
                                             isDarkTheme = mode.isDark
@@ -1139,59 +1160,40 @@ fun UserSettingsScreen(
                                             onSelectThemeMode(mode)
                                             com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = false)
                                         },
-                                        shape = rowShape,
-                                        color = if (isSelected) modePalette.primaryContainer.copy(alpha = 0.52f) else mutedBg.copy(alpha = 0.55f),
-                                        border = BorderStroke(
-                                            width = if (isSelected) 1.5.dp else 1.dp,
-                                            color = if (isSelected) modePalette.primary else borderColor
+                                        shapes = ListItemDefaults.segmentedShapes(index = idx, count = themeModes.size),
+                                        colors = ListItemDefaults.segmentedColors(
+                                            containerColor = mutedBg.copy(alpha = 0.55f),
+                                            selectedContainerColor = modePalette.primaryContainer.copy(alpha = 0.52f)
                                         ),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                                modifier = Modifier.weight(1f)
-                                            ) {
-                                                Row(horizontalArrangement = Arrangement.spacedBy((-6).dp)) {
-                                                    listOf(
-                                                        modePalette.surfaceContainerLow,
-                                                        modePalette.primary,
-                                                        modePalette.primaryContainer,
-                                                        modePalette.secondaryContainer
-                                                    ).forEach { swatch ->
-                                                        Box(
-                                                            modifier = Modifier
-                                                                .size(20.dp)
-                                                                .clip(CircleShape)
-                                                                .background(swatch)
-                                                                .border(1.dp, modePalette.onSurface.copy(alpha = 0.3f), CircleShape)
-                                                        )
-                                                    }
-                                                }
-                                                Column {
-                                                    Text(
-                                                        text = mode.displayName,
-                                                        fontFamily = SplitMateBrandFontFamily,
-                                                        fontSize = 13.sp,
-                                                        fontWeight = FontWeight.ExtraBold,
-                                                        color = textPrimary
-                                                    )
-                                                    Text(
-                                                        text = mode.subtitle,
-                                                        fontFamily = SplitMateBrandFontFamily,
-                                                        fontSize = 11.sp,
-                                                        color = textSecondary
+                                        modifier = Modifier.fillMaxWidth(),
+                                        leadingContent = {
+                                            Row(horizontalArrangement = Arrangement.spacedBy((-6).dp)) {
+                                                listOf(
+                                                    modePalette.surfaceContainerLow,
+                                                    modePalette.primary,
+                                                    modePalette.primaryContainer,
+                                                    modePalette.secondaryContainer
+                                                ).forEach { swatch ->
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(20.dp)
+                                                            .clip(CircleShape)
+                                                            .background(swatch)
+                                                            .border(1.dp, modePalette.onSurface.copy(alpha = 0.3f), CircleShape)
                                                     )
                                                 }
                                             }
-                                            if (isSelected) {
+                                        },
+                                        supportingContent = {
+                                            Text(
+                                                text = mode.subtitle,
+                                                fontFamily = SplitMateBrandFontFamily,
+                                                fontSize = 11.sp,
+                                                color = textSecondary
+                                            )
+                                        },
+                                        trailingContent = if (isSelected) {
+                                            {
                                                 Icon(
                                                     imageVector = Icons.Rounded.CheckCircle,
                                                     contentDescription = "Active Theme",
@@ -1199,130 +1201,138 @@ fun UserSettingsScreen(
                                                     modifier = Modifier.size(20.dp)
                                                 )
                                             }
+                                        } else {
+                                            null
                                         }
+                                    ) {
+                                        Text(
+                                            text = mode.displayName,
+                                            fontFamily = SplitMateBrandFontFamily,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = textPrimary
+                                        )
                                     }
                                 }
                             }
                         }
                     }
 
-                    Card(
-                        shape = SplitMateThemeTokens.RadiusCard,
-                        colors = CardDefaults.cardColors(containerColor = cardBg),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, borderColor, SplitMateThemeTokens.RadiusCard)
+                    // v2.4.0 rc3: an official segmented list section (rounded, tonal rows), not a bordered card.
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)
                     ) {
-                        Column {
-                            SettingsRowItem(
-                                icon = if (isDarkTheme) Icons.Rounded.DarkMode else Icons.Rounded.LightMode,
-                                iconBg = activePalette.tertiaryContainer,
-                                iconTint = activePalette.onTertiaryContainer,
-                                title = "Dark mode",
-                                subtitle = "Use the dark Obsidian Gold theme",
-                                titleColor = textPrimary,
-                                subtitleColor = textSecondary,
-                                trailingContent = {
-                                    Switch(
-                                        checked = isDarkTheme,
-                                        onCheckedChange = {
-                                            isDarkTheme = it
-                                            val targetMode = if (it) {
-                                                SplitMateThemeMode.WARM_ESPRESSO_NIGHT
-                                            } else if (selectedThemeMode == SplitMateThemeMode.WARM_ESPRESSO_NIGHT) {
-                                                SplitMateThemeMode.SUNLIT_BUCKWHEAT
-                                            } else {
-                                                selectedThemeMode
-                                            }
-                                            selectedThemeMode = targetMode
-                                            persistAndApplyExpressiveThemeMode(context, targetMode)
-                                            onSelectThemeMode(targetMode)
-                                            com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = false)
-                                        },
-                                        // v2.4.0 rc3: M3 switch with a check icon in the thumb while on.
-                                        thumbContent = if (isDarkTheme) {
-                                            {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.Check,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(SwitchDefaults.IconSize)
-                                                )
-                                            }
+                        SettingsRowItem(
+                            icon = if (isDarkTheme) Icons.Rounded.DarkMode else Icons.Rounded.LightMode,
+                            shapes = ListItemDefaults.segmentedShapes(index = 0, count = 2),
+                            containerColor = cardBg,
+                            iconBg = activePalette.tertiaryContainer,
+                            iconTint = activePalette.onTertiaryContainer,
+                            title = "Dark mode",
+                            subtitle = "Use the dark Obsidian Gold theme",
+                            titleColor = textPrimary,
+                            subtitleColor = textSecondary,
+                            trailingContent = {
+                                Switch(
+                                    checked = isDarkTheme,
+                                    onCheckedChange = {
+                                        isDarkTheme = it
+                                        val targetMode = if (it) {
+                                            SplitMateThemeMode.WARM_ESPRESSO_NIGHT
+                                        } else if (selectedThemeMode == SplitMateThemeMode.WARM_ESPRESSO_NIGHT) {
+                                            SplitMateThemeMode.SUNLIT_BUCKWHEAT
                                         } else {
-                                            null
-                                        },
-                                        colors = SwitchDefaults.colors(
-                                            checkedThumbColor = com.splitmate.app.ui.DesignSystemBindings.activePalette.onPrimary,
-                                            checkedTrackColor = activePalette.primary,
-                                            uncheckedThumbColor = activePalette.onSurface,
-                                            uncheckedTrackColor = mutedBg
-                                        )
-                                    )
-                                },
-                                onClick = {
-                                    val nextDark = !isDarkTheme
-                                    isDarkTheme = nextDark
-                                    val targetMode = if (nextDark) {
-                                        SplitMateThemeMode.WARM_ESPRESSO_NIGHT
+                                            selectedThemeMode
+                                        }
+                                        selectedThemeMode = targetMode
+                                        persistAndApplyExpressiveThemeMode(context, targetMode)
+                                        onSelectThemeMode(targetMode)
+                                        com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = false)
+                                    },
+                                    // v2.4.0 rc3: M3 switch with a check icon in the thumb while on.
+                                    thumbContent = if (isDarkTheme) {
+                                        {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Check,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(SwitchDefaults.IconSize)
+                                            )
+                                        }
                                     } else {
-                                        SplitMateThemeMode.SUNLIT_BUCKWHEAT
-                                    }
-                                    selectedThemeMode = targetMode
-                                    persistAndApplyExpressiveThemeMode(context, targetMode)
-                                    onSelectThemeMode(targetMode)
-                                    com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = false)
-                                }
-                            )
-
-                            HorizontalDivider(color = borderColor.copy(alpha = 0.5f))
-
-                            SettingsRowItem(
-                                icon = Icons.Rounded.Vibration,
-                                iconBg = SplitMateThemeTokens.AccentSage.copy(alpha = 0.45f),
-                                iconTint = SplitMateThemeTokens.SageText,
-                                title = "Vibration",
-                                subtitle = "A light tap when you type amounts and save",
-                                titleColor = textPrimary,
-                                subtitleColor = textSecondary,
-                                trailingContent = {
-                                    Switch(
-                                        checked = hapticsEnabled,
-                                        onCheckedChange = {
-                                            hapticsEnabled = it
-                                            prefs.edit().putBoolean("pref_haptics", it).apply()
-                                            if (it) {
-                                                com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = true)
-                                            }
-                                        },
-                                        // v2.4.0 rc3: M3 switch with a check icon in the thumb while on.
-                                        thumbContent = if (hapticsEnabled) {
-                                            {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.Check,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(SwitchDefaults.IconSize)
-                                                )
-                                            }
-                                        } else {
-                                            null
-                                        },
-                                        colors = SwitchDefaults.colors(
-                                            checkedThumbColor = com.splitmate.app.ui.DesignSystemBindings.activePalette.onPrimary,
-                                            checkedTrackColor = activePalette.primary,
-                                            uncheckedThumbColor = activePalette.onSurface,
-                                            uncheckedTrackColor = mutedBg
-                                        )
+                                        null
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = com.splitmate.app.ui.DesignSystemBindings.activePalette.onPrimary,
+                                        checkedTrackColor = activePalette.primary,
+                                        uncheckedThumbColor = activePalette.onSurface,
+                                        uncheckedTrackColor = mutedBg
                                     )
-                                },
-                                onClick = {
-                                    hapticsEnabled = !hapticsEnabled
-                                    prefs.edit().putBoolean("pref_haptics", hapticsEnabled).apply()
-                                    if (hapticsEnabled) {
-                                        com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = true)
-                                    }
+                                )
+                            },
+                            onClick = {
+                                val nextDark = !isDarkTheme
+                                isDarkTheme = nextDark
+                                val targetMode = if (nextDark) {
+                                    SplitMateThemeMode.WARM_ESPRESSO_NIGHT
+                                } else {
+                                    SplitMateThemeMode.SUNLIT_BUCKWHEAT
                                 }
-                            )
-                        }
+                                selectedThemeMode = targetMode
+                                persistAndApplyExpressiveThemeMode(context, targetMode)
+                                onSelectThemeMode(targetMode)
+                                com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = false)
+                            }
+                        )
+
+                        SettingsRowItem(
+                            icon = Icons.Rounded.Vibration,
+                            shapes = ListItemDefaults.segmentedShapes(index = 1, count = 2),
+                            containerColor = cardBg,
+                            iconBg = SplitMateThemeTokens.AccentSage.copy(alpha = 0.45f),
+                            iconTint = SplitMateThemeTokens.SageText,
+                            title = "Vibration",
+                            subtitle = "A light tap when you type amounts and save",
+                            titleColor = textPrimary,
+                            subtitleColor = textSecondary,
+                            trailingContent = {
+                                Switch(
+                                    checked = hapticsEnabled,
+                                    onCheckedChange = {
+                                        hapticsEnabled = it
+                                        prefs.edit().putBoolean("pref_haptics", it).apply()
+                                        if (it) {
+                                            com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = true)
+                                        }
+                                    },
+                                    // v2.4.0 rc3: M3 switch with a check icon in the thumb while on.
+                                    thumbContent = if (hapticsEnabled) {
+                                        {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Check,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(SwitchDefaults.IconSize)
+                                            )
+                                        }
+                                    } else {
+                                        null
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = com.splitmate.app.ui.DesignSystemBindings.activePalette.onPrimary,
+                                        checkedTrackColor = activePalette.primary,
+                                        uncheckedThumbColor = activePalette.onSurface,
+                                        uncheckedTrackColor = mutedBg
+                                    )
+                                )
+                            },
+                            onClick = {
+                                hapticsEnabled = !hapticsEnabled
+                                prefs.edit().putBoolean("pref_haptics", hapticsEnabled).apply()
+                                if (hapticsEnabled) {
+                                    com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = true)
+                                }
+                            }
+                        )
                     }
                 }
             }
@@ -1339,15 +1349,15 @@ fun UserSettingsScreen(
                         modifier = Modifier.padding(start = 4.dp)
                     )
 
-                    Card(
-                        shape = SplitMateThemeTokens.RadiusCard,
-                        colors = CardDefaults.cardColors(containerColor = cardBg),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, borderColor, SplitMateThemeTokens.RadiusCard)
+                    // v2.4.0 rc3: an official segmented list section (rounded, tonal rows), not a bordered card.
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)
                     ) {
                         SettingsRowItem(
                             icon = Icons.Rounded.DeleteForever,
+                            shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
+                            containerColor = cardBg,
                             iconBg = SplitMateThemeTokens.TerracottaSurface,
                             iconTint = SplitMateThemeTokens.TerracottaText,
                             title = "Reset app data",
@@ -1389,71 +1399,58 @@ fun UserSettingsScreen(
     }
 
     // Confirmation Dialog for Reset App Data
+    // v2.4.0 rc3: official M3 AlertDialog (tonal surface, icon / title / text / button slots).
     if (showResetDataDialog) {
-        Dialog(onDismissRequest = { showResetDataDialog = false }) {
-            Surface(
-                shape = RoundedCornerShape(28.dp),
-                color = cardBg,
-                shadowElevation = 16.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, borderColor, RoundedCornerShape(28.dp))
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+        AlertDialog(
+            onDismissRequest = { showResetDataDialog = false },
+            containerColor = cardBg,
+            icon = {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(SplitMateThemeTokens.TerracottaSurface),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(42.dp)
-                                .clip(CircleShape)
-                                .background(SplitMateThemeTokens.TerracottaSurface),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Rounded.DeleteForever, contentDescription = null, tint = SplitMateThemeTokens.TerracottaText)
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "Reset app data?",
-                            fontFamily = SplitMateDisplayFontFamily,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = textPrimary
-                        )
-                    }
-                    Text(
-                        text = "Permanently delete all groups, members, and expense history from this device. This action cannot be undone.",
-                        fontFamily = SplitMateBrandFontFamily,
-                        color = textSecondary,
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        TextButton(
-                            onClick = { showResetDataDialog = false },
-                            shape = SplitMateThemeTokens.RadiusButton
-                        ) {
-                            Text("Cancel", fontFamily = SplitMateBrandFontFamily, fontWeight = FontWeight.Bold, color = textPrimary)
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Button(
-                            onClick = {
-                                showResetDataDialog = false
-                                onClearVaultClick()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = SplitMateThemeTokens.TerracottaText),
-                            shape = SplitMateThemeTokens.RadiusButton
-                        ) {
-                            Text("Reset Data", fontFamily = SplitMateBrandFontFamily, fontWeight = FontWeight.Bold, color = com.splitmate.app.ui.DesignSystemBindings.activePalette.onPrimary)
-                        }
-                    }
+                    Icon(Icons.Rounded.DeleteForever, contentDescription = null, tint = SplitMateThemeTokens.TerracottaText)
+                }
+            },
+            title = {
+                Text(
+                    text = "Reset app data?",
+                    fontFamily = SplitMateDisplayFontFamily,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = textPrimary
+                )
+            },
+            text = {
+                Text(
+                    text = "Permanently delete all groups, members, and expense history from this device. This action cannot be undone.",
+                    fontFamily = SplitMateBrandFontFamily,
+                    color = textSecondary
+                )
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showResetDataDialog = false },
+                    shapes = ButtonDefaults.shapes()
+                ) {
+                    Text("Cancel", fontFamily = SplitMateBrandFontFamily, fontWeight = FontWeight.Bold, color = textPrimary)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showResetDataDialog = false
+                        onClearVaultClick()
+                    },
+                    shapes = ButtonDefaults.shapes(),
+                    colors = ButtonDefaults.buttonColors(containerColor = SplitMateThemeTokens.TerracottaText)
+                ) {
+                    Text("Reset Data", fontFamily = SplitMateBrandFontFamily, fontWeight = FontWeight.Bold, color = com.splitmate.app.ui.DesignSystemBindings.activePalette.onPrimary)
                 }
             }
-        }
+        )
     }
 }
 
@@ -1461,10 +1458,12 @@ fun UserSettingsScreen(
 // REUSABLE M3 EXPRESSIVE SETTINGS ROW COMPONENT
 // ==============================================================================
 /**
- * v2.4.0 rc3: built on the official Material 3 `ListItem` (headline / supporting / leading /
- * trailing slots, M3 list paddings and min heights). The whole row stays one click target; the
- * tonal 40.dp icon chip, brand type and colours are unchanged, and the list item container is
- * transparent so the parent card colour shows through.
+ * v2.4.0 rc3: built on the official Material 3 Expressive interactive list items (headline /
+ * supporting / leading / trailing slots, M3 list paddings and min heights, official press
+ * feedback). With [shapes] the row is an official `SegmentedListItem` inside a rounded settings
+ * section (`ListItemDefaults.segmentedShapes`); without it, an official clickable `ListItem` on a
+ * transparent container. The whole row stays one click target; the tonal 40.dp icon chip, brand
+ * type and colours are unchanged.
  */
 @Composable
 fun SettingsRowItem(
@@ -1476,49 +1475,68 @@ fun SettingsRowItem(
     titleColor: Color = SplitMateThemeTokens.PrimaryDark,
     subtitleColor: Color = SplitMateThemeTokens.TextSecondary,
     isDestructive: Boolean = false,
+    shapes: ListItemShapes? = null,
+    containerColor: Color = Color.Transparent,
     trailingContent: @Composable () -> Unit,
     onClick: () -> Unit
 ) {
-    androidx.compose.material3.ListItem(
-        headlineContent = {
-            Text(
-                text = title,
-                fontFamily = SplitMateBrandFontFamily,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (isDestructive) SplitMateThemeTokens.TerracottaText else titleColor
+    val headline: @Composable () -> Unit = {
+        Text(
+            text = title,
+            fontFamily = SplitMateBrandFontFamily,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (isDestructive) SplitMateThemeTokens.TerracottaText else titleColor
+        )
+    }
+    val supporting: @Composable () -> Unit = {
+        Text(
+            text = subtitle,
+            fontFamily = SplitMateBrandFontFamily,
+            fontSize = 12.sp,
+            color = subtitleColor,
+            maxLines = 2
+        )
+    }
+    val leading: @Composable () -> Unit = {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(iconBg),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconTint,
+                modifier = Modifier.size(20.dp)
             )
-        },
-        modifier = Modifier
-            .fillMaxWidth()
-            .sizeIn(minHeight = 60.dp)
-            .clickable(onClick = onClick),
-        supportingContent = {
-            Text(
-                text = subtitle,
-                fontFamily = SplitMateBrandFontFamily,
-                fontSize = 12.sp,
-                color = subtitleColor,
-                maxLines = 2
-            )
-        },
-        leadingContent = {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(iconBg),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = iconTint,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        },
-        trailingContent = { trailingContent() },
-        colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent)
-    )
+        }
+    }
+    val rowModifier = Modifier
+        .fillMaxWidth()
+        .sizeIn(minHeight = 60.dp)
+    if (shapes != null) {
+        SegmentedListItem(
+            onClick = onClick,
+            shapes = shapes,
+            modifier = rowModifier,
+            leadingContent = leading,
+            trailingContent = { trailingContent() },
+            supportingContent = supporting,
+            colors = ListItemDefaults.segmentedColors(containerColor = containerColor),
+            content = headline
+        )
+    } else {
+        ListItem(
+            onClick = onClick,
+            modifier = rowModifier,
+            leadingContent = leading,
+            trailingContent = { trailingContent() },
+            supportingContent = supporting,
+            colors = ListItemDefaults.colors(containerColor = containerColor),
+            content = headline
+        )
+    }
 }
