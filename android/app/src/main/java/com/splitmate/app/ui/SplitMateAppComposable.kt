@@ -4,6 +4,7 @@ import com.splitmate.app.ui.components.sharedGroupElement
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.onClick
 import com.splitmate.app.ui.*
 import android.Manifest
 import android.content.Intent
@@ -3623,18 +3624,22 @@ fun LedgersDashboardScreen(
                         com.splitmate.app.data.PhoneIdentityValidator.normalizeIndianMobile(uiState.userPhone).length == 10
                     }
                     // Automatic Cloud Sync & Live Online Presence Pill
-                    Surface(
+                    // v2.4.0 rc3: official OutlinedButton with the M3 Expressive press morph.
+                    OutlinedButton(
                         onClick = { viewModel.syncAllGroupsWithCloud(context) },
-                        shape = CircleShape,
-                        color = if (onlineFriendsTotal > 0) SplitMateTheme.Extended.online.container else SplitMateTheme.SurfaceWhite,
+                        shapes = ButtonDefaults.shapes(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = if (onlineFriendsTotal > 0) SplitMateTheme.Extended.online.container else SplitMateTheme.SurfaceWhite,
+                            contentColor = if (onlineFriendsTotal > 0) SplitMateTheme.Extended.online.onContainer else SplitMateTheme.PrimaryDark
+                        ),
                         border = BorderStroke(
                             1.dp,
                             if (onlineFriendsTotal > 0) SplitMateTheme.Extended.online.color.copy(alpha = 0.45f) else SplitMateTheme.BorderLight
-                        )
+                        ),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             if (uiState.isCloudSyncing) {
                                 ContainedLoadingIndicator(
@@ -3683,18 +3688,18 @@ fun LedgersDashboardScreen(
                         }
                     )
 
-                    Box(
+                    // v2.4.0 rc3: official IconButton (press morph via IconButtonDefaults.shapes()) around
+                    // the avatar. v2.4.0 rc2: TalkBack said only "button"; now "Open settings". The child
+                    // semantics carry the click label, which merges into the button's own click action.
+                    IconButton(
+                        onClick = onAvatarSettingsClick,
+                        shapes = IconButtonDefaults.shapes(),
                         modifier = Modifier
-                            .clip(CircleShape)
-                            // v2.4.0 rc2: TalkBack said only "button"; now "Open settings".
-                            .clickable(
-                                onClickLabel = "Open settings",
-                                role = androidx.compose.ui.semantics.Role.Button,
-                                onClick = onAvatarSettingsClick
-                            )
-                            .semantics(mergeDescendants = true) { contentDescription = "Open settings" }
+                            .size(48.dp)
+                            .semantics { contentDescription = "Open settings" }
                     ) {
                         SplitMateCharacterAvatar(
+                            modifier = Modifier.semantics { onClick(label = "Open settings", action = null) },
                             name = uiState.avatarSeed.ifBlank { uiState.currentUserName.ifBlank { "You" } },
                             phone = uiState.userPhone,
                             size = 38.dp,
@@ -5620,52 +5625,41 @@ fun ExpressiveThemeModePill(
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
-    val pillCorner by animateDpAsState(
-        targetValue = when (activeThemeMode) {
-            SplitMateThemeMode.SUNLIT_BUCKWHEAT -> 20.dp
-            SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> 12.dp
-            SplitMateThemeMode.KYOTO_MATCHA_YUZU -> 16.dp
-        },
-        animationSpec = SplitMateMotion.fastSpatial(),
-        label = "ExpressiveThemeModePillCorner"
-    )
     val badgeLabel = when (activeThemeMode) {
         SplitMateThemeMode.SUNLIT_BUCKWHEAT -> "Buckwheat"
         SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> "Espresso"
         SplitMateThemeMode.KYOTO_MATCHA_YUZU -> "Matcha"
     }
-    Surface(
+    // v2.4.0 rc3: official OutlinedIconButton cycling the theme, with the M3 Expressive press morph
+    // (IconButtonDefaults.shapes()) instead of a hand-animated corner radius.
+    OutlinedIconButton(
         onClick = {
             haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
             onCycleTheme()
         },
-        shape = RoundedCornerShape(pillCorner),
-        color = SplitMateTheme.SageSurface.copy(alpha = if (isDarkTheme) 0.82f else 0.72f),
+        shapes = IconButtonDefaults.shapes(),
+        colors = IconButtonDefaults.outlinedIconButtonColors(
+            containerColor = SplitMateTheme.SageSurface.copy(alpha = if (isDarkTheme) 0.82f else 0.72f),
+            contentColor = SplitMateTheme.PrimaryDark
+        ),
         border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
         modifier = modifier
-            .minimumInteractiveComponentSize()
-            .defaultMinSize(minHeight = 40.dp)
+            .size(IconButtonDefaults.smallContainerSize())
             .testTag("TopBarExpressiveThemePill")
+            // v2.4.0 D3: icon-only, so the label can never be cut off ("Buckwhea…") in a crowded top bar.
+            // The theme name is spoken instead.
+            .semantics { contentDescription = "Theme: $badgeLabel. Double tap to switch." }
     ) {
-        // v2.4.0 D3: icon-only, so the label can never be cut off ("Buckwhea…") in a crowded top bar.
-        // The theme name is spoken instead.
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .semantics { contentDescription = "Theme: $badgeLabel. Double tap to switch." },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = when (activeThemeMode) {
-                    SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Icons.Rounded.LightMode
-                    SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Icons.Rounded.DarkMode
-                    SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Icons.Rounded.AutoAwesome
-                },
-                contentDescription = null,
-                tint = SplitMateTheme.PrimaryDark,
-                modifier = Modifier.size(20.dp)
-            )
-        }
+        Icon(
+            imageVector = when (activeThemeMode) {
+                SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Icons.Rounded.LightMode
+                SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Icons.Rounded.DarkMode
+                SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Icons.Rounded.AutoAwesome
+            },
+            contentDescription = null,
+            tint = SplitMateTheme.PrimaryDark,
+            modifier = Modifier.size(20.dp)
+        )
     }
 }
 
