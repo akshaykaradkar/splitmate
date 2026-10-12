@@ -3969,11 +3969,19 @@ fun LedgersDashboardScreen(
                                             .clip(CircleShape)
                                             .background(SplitMateTheme.BrandCoral)
                                     )
-                                } else {
+                                } else if (uiState.isCloudSyncing) {
+                                    // v2.4.0 rc3: the loader runs only while a cloud sync is in flight.
                                     ContainedLoadingIndicator(
                                         modifier = Modifier.size(18.dp),
                                         containerColor = SplitMateTheme.SageSurface,
                                         indicatorColor = SplitMateTheme.SageText
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Rounded.CloudDone,
+                                        contentDescription = null,
+                                        tint = SplitMateTheme.SageText,
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(6.dp))
