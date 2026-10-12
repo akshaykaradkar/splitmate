@@ -53,7 +53,7 @@ import com.splitmate.app.ui.SplitMateTnumMonospace
 import com.splitmate.app.ui.SplitMateViewModel.ExpenseSplitBreakdownSummary
 import com.splitmate.app.ui.cleanDisplayExpenseTitle
 import com.splitmate.app.ui.components.EditorialFinancialTotalText
-import com.splitmate.app.ui.components.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import com.splitmate.app.ui.components.ExpressiveMenuAction
 import com.splitmate.app.ui.components.SplitButtonLayout
 import com.splitmate.app.ui.components.rememberAnimatedSegmentedIslandItemShape

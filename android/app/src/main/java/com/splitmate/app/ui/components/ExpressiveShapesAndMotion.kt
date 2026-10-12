@@ -3,6 +3,7 @@ package com.splitmate.app.ui.components
 import android.content.Context
 import android.provider.Settings
 import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.snap

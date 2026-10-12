@@ -8,7 +8,7 @@ import com.splitmate.app.ui.KyotoMatchaYuzuPalette
 import com.splitmate.app.ui.SplitMateExpressivePalette
 import com.splitmate.app.ui.SunlitBuckwheatPalette
 import com.splitmate.app.ui.WarmEspressoNightPalette
-import com.splitmate.app.ui.components.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import com.splitmate.app.ui.components.GuideShapeTokens
 import com.splitmate.app.ui.components.LoadingIndicatorDefaults
 import com.splitmate.app.ui.components.MaterialShapes
@@ -421,14 +421,16 @@ class SplitMateV234DesignSystemTest {
     @Test
     fun `DS_15 module-wide opt-in flag and annotated look-alike surface`() {
         val gradle = resolveFile("build.gradle", "app/build.gradle", "android/app/build.gradle").readText()
-        // v2.3.6 Wave 4: both the local look-alike opt-in and the real material3 Expressive opt-in
-        assertTrue(gradle.contains("\"-opt-in=com.splitmate.app.ui.components.ExperimentalMaterial3ExpressiveApi\""))
+        // v2.4.0 rc3: the local look-alike marker was removed; only the real material3 Expressive
+        // opt-in remains (every wrapper now delegates to the official implementation).
+        assertFalse(gradle.contains("\"-opt-in=com.splitmate.app.ui.components.ExperimentalMaterial3ExpressiveApi\""))
         assertTrue(gradle.contains("\"-opt-in=androidx.compose.material3.ExperimentalMaterial3ExpressiveApi\""))
         assertTrue(gradle.contains("jvmTarget = '17'"))
 
         val comp = src(componentsPath)
-        assertTrue(comp.contains("@RequiresOptIn(message = \"This Material 3 Expressive API is experimental.\")"))
-        assertTrue(comp.contains("annotation class ExperimentalMaterial3ExpressiveApi"))
+        // v2.4.0 rc3: no local annotation class; the file imports the official marker instead.
+        assertFalse(comp.contains("annotation class ExperimentalMaterial3ExpressiveApi"))
+        assertTrue(comp.contains("import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi"))
         listOf(
             "LinearWavyProgressIndicator",
             "CircularWavyProgressIndicator",

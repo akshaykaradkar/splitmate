@@ -199,7 +199,7 @@ import com.splitmate.app.ui.components.ActiveTravelPassMode
 import com.splitmate.app.ui.components.AnimatedTransitDeckHeroCard
 import com.splitmate.app.ui.components.ButtonGroup
 import com.splitmate.app.ui.components.ContainedLoadingIndicator
-import com.splitmate.app.ui.components.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import com.splitmate.app.ui.components.ExpressiveActionItem
 import com.splitmate.app.ui.components.ExpressiveFabMenuItem
 import com.splitmate.app.ui.components.ExpressiveMenuAction

@@ -93,7 +93,7 @@ import com.splitmate.app.ui.components.ActiveTravelPassMode
 import com.splitmate.app.ui.components.AnimatedTransitDeckHeroCard
 import com.splitmate.app.ui.components.ConnectedButtonGroup
 import com.splitmate.app.ui.components.ContainedLoadingIndicator
-import com.splitmate.app.ui.components.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import com.splitmate.app.ui.components.ExpressiveMenuAction
 import com.splitmate.app.ui.components.FloatingToolbarDefaults
 import com.splitmate.app.ui.components.HorizontalFloatingToolbar

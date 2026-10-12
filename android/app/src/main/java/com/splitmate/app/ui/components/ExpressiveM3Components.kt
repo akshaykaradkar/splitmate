@@ -117,20 +117,13 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 
-/**
- * Opt-in marker for SplitMate's local Material 3 Expressive look-alike components.
- *
- * material3 is frozen at 1.2.1, which has none of the official Expressive APIs, so this package
- * ships look-alikes with matching names. Every look-alike is annotated with this marker so the
- * v3.0 swap surface is explicit. The module opts in globally via
- * `-opt-in=com.splitmate.app.ui.components.ExperimentalMaterial3ExpressiveApi` in
- * `android/app/build.gradle`; after the upgrade, point the flag at
- * `androidx.compose.material3.ExperimentalMaterial3ExpressiveApi`.
- */
-@RequiresOptIn(message = "This Material 3 Expressive API is experimental.")
-@Retention(AnnotationRetention.BINARY)
-annotation class ExperimentalMaterial3ExpressiveApi
+// v2.4.0 rc3: the local `ExperimentalMaterial3ExpressiveApi` look-alike marker is gone. material3 is
+// on 1.5.0-alpha14, so every wrapper in this file carries the official
+// `androidx.compose.material3.ExperimentalMaterial3ExpressiveApi` (opted in module-wide through
+// `-opt-in=androidx.compose.material3.ExperimentalMaterial3ExpressiveApi` in android/app/build.gradle)
+// and delegates to the official Material 3 Expressive implementation.
 
 // ==============================================================================
 // 1. M3 EXPRESSIVE WAVY & GAP PROGRESS INDICATORS
