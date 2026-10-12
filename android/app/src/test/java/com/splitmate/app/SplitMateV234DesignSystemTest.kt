@@ -257,8 +257,10 @@ class SplitMateV234DesignSystemTest {
         assertTrue(comp.contains("containerShape: Shape = CircleShape"))
         val contained = functionBody(comp, "ContainedLoadingIndicator")
         assertTrue(contained.contains("contentDescription: String? = null"))
-        assertTrue(contained.contains("LoadingIndicatorDefaults.morphSpring()"))
-        assertTrue(contained.contains("MorphPolygonShape("))
+        // v2.4.0 rc3: the loader delegates to the official material3 ContainedLoadingIndicator, which
+        // owns its spring-driven morph (no hand-built MorphPolygonShape loop any more).
+        assertTrue(contained.contains("androidx.compose.material3.ContainedLoadingIndicator("))
+        assertTrue(contained.contains("polygons = sequence"))
         assertFalse(contained.contains("tween("), "morph loop must be spring-driven")
         assertFalse(contained.contains("rememberInfiniteTransition"))
         // Existing default sequence preserved for current call sites.
@@ -324,7 +326,8 @@ class SplitMateV234DesignSystemTest {
         assertTrue(shapes.contains("Settings.Global.ANIMATOR_DURATION_SCALE"))
         assertTrue(shapes.contains("fun rememberReducedMotionEnabled(): Boolean"))
         val contained = functionBody(src(componentsPath), "ContainedLoadingIndicator")
-        assertTrue(contained.contains("if (reducedMotion || sequence.size < 2) return@LaunchedEffect"))
+        // v2.4.0 rc3: no local morph loop to stop; reduced motion (or < 2 polygons) draws one static shape.
+        assertTrue(contained.contains("if (reducedMotion || sequence.size < 2) {"))
         assertTrue(contained.contains("sequence.first().toShape()"))
     }
 

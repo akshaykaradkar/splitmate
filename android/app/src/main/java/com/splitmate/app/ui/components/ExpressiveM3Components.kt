@@ -892,6 +892,10 @@ fun FloatingActionButtonMenu(
 
 /**
  * Default polygon sets and spring tokens for [ContainedLoadingIndicator] and [LoadingIndicator].
+ *
+ * v2.4.0 rc3: both loaders now delegate to the official material3 loaders, which own their morph and
+ * rotation motion. The polygon sets below are still passed through; the morph spring tokens and
+ * [loadingIndicatorFrame] are kept as the documented reference model (and for their unit tests).
  */
 object LoadingIndicatorDefaults {
     /**
@@ -970,10 +974,13 @@ fun loadingIndicatorFrame(
 /**
  * Material 3 Expressive `ContainedLoadingIndicator`: morphs sequentially through [polygons]
  * (default [LoadingIndicatorDefaults.IndeterminateIndicatorPolygons]) inside a tonal
- * [containerShape]. Each morph is driven by a spatial spring ([LoadingIndicatorDefaults.morphSpring])
- * rather than a linear tween. With reduced motion (`ANIMATOR_DURATION_SCALE == 0`) the first
- * polygon is drawn statically. Pass [contentDescription] (e.g. "Loading guide") to expose a
- * TalkBack label on a polite live region.
+ * [containerShape]. With reduced motion (`ANIMATOR_DURATION_SCALE == 0`) the first polygon is drawn
+ * once, statically. Pass [contentDescription] (e.g. "Loading guide") to expose a TalkBack label on
+ * a polite live region.
+ *
+ * v2.4.0 rc3: delegates to the official `androidx.compose.material3.ContainedLoadingIndicator`
+ * (library morph + rotation springs, 38/48 indicator-to-container ratio). [containerSize] still
+ * sizes the container; a smaller `Modifier.size(...)` from the caller wins, as before.
  */
 @ExperimentalMaterial3ExpressiveApi
 @Composable
@@ -987,68 +994,67 @@ fun ContainedLoadingIndicator(
     contentDescription: String? = null
 ) {
     val sequence = remember(polygons) { polygons.ifEmpty { MaterialShapes.morphSequence } }
-    val morphs = remember(sequence) {
-        sequence.indices.map { idx ->
-            val start = sequence[idx]
-            val end = sequence[(idx + 1) % sequence.size]
-            Morph(start, end)
-        }
-    }
     val reducedMotion = rememberReducedMotionEnabled()
-    val stage = remember(sequence) { Animatable(0f) }
-    var targetStage by remember(sequence) { mutableIntStateOf(0) }
+    val labelModifier = loadingLabelModifier(contentDescription)
 
-    LaunchedEffect(sequence, reducedMotion) {
-        if (reducedMotion || sequence.size < 2) return@LaunchedEffect
-        val wrapStage = sequence.size * LoadingIndicatorDefaults.STAGE_WRAP_CYCLES
-        while (isActive) {
-            var next = targetStage + 1
-            if (next > wrapStage) {
-                // Seamless wrap: same polygon and same rotation (wrapStage * 90deg % 360 == 0).
-                stage.snapTo(stage.value - wrapStage)
-                next -= wrapStage
-            }
-            targetStage = next
-            stage.animateTo(
-                targetValue = next.toFloat(),
-                animationSpec = LoadingIndicatorDefaults.morphSpring()
-            )
-            delay(LoadingIndicatorDefaults.MORPH_HOLD_MILLIS)
-        }
+    if (reducedMotion || sequence.size < 2) {
+        // The official loader always animates and needs >= 2 polygons: draw the first shape once.
+        val staticShape = remember(sequence) { sequence.first().toShape() }
+        StaticLoadingShape(
+            modifier = modifier.then(labelModifier).size(containerSize),
+            shape = staticShape,
+            indicatorColor = indicatorColor,
+            containerColor = containerColor,
+            containerShape = containerShape
+        )
+        return
     }
 
-    val description = contentDescription
-    val labelModifier = if (description != null) {
+    androidx.compose.material3.ContainedLoadingIndicator(
+        modifier = modifier.then(labelModifier).size(containerSize),
+        containerColor = containerColor,
+        indicatorColor = indicatorColor,
+        containerShape = containerShape,
+        polygons = sequence
+    )
+}
+
+/** TalkBack label for the loaders: a polite live region announcing [contentDescription]. */
+private fun loadingLabelModifier(contentDescription: String?): Modifier =
+    if (contentDescription != null) {
         Modifier.semantics {
-            this.contentDescription = description
+            this.contentDescription = contentDescription
             liveRegion = LiveRegionMode.Polite
         }
     } else {
         Modifier
     }
-    val indicatorShape: Shape = if (reducedMotion || sequence.size < 2) {
-        remember(sequence) { sequence.first().toShape() }
-    } else {
-        val frame = loadingIndicatorFrame(stage.value, targetStage, sequence.size)
-        MorphPolygonShape(
-            morph = morphs[frame.morphIndex],
-            percentage = frame.morphProgress,
-            rotationDegrees = frame.rotationDegrees
-        )
-    }
 
+/**
+ * Reduced-motion frame shared by [ContainedLoadingIndicator] and [LoadingIndicator]: one official
+ * `MaterialShapes` polygon, drawn once at the official indicator-to-container ratio (38/48).
+ */
+@Composable
+private fun StaticLoadingShape(
+    modifier: Modifier,
+    shape: Shape,
+    indicatorColor: Color,
+    containerColor: Color,
+    containerShape: Shape
+) {
+    val ratio = androidx.compose.material3.LoadingIndicatorDefaults.IndicatorSize /
+        androidx.compose.material3.LoadingIndicatorDefaults.ContainerWidth
     Box(
         modifier = modifier
-            .then(labelModifier)
-            .size(containerSize)
+            .progressSemantics()
             .clip(containerShape)
             .background(containerColor, containerShape),
         contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
-                .size(containerSize * 0.62f)
-                .clip(indicatorShape)
+                .fillMaxSize(ratio)
+                .clip(shape)
                 .background(indicatorColor)
         )
     }
@@ -1527,6 +1533,9 @@ fun VerticalFloatingToolbar(
  * Material 3 Expressive uncontained `LoadingIndicator` cycling through
  * [polygons] (default [LoadingIndicatorDefaults.IndeterminateIndicatorPolygons]) without an
  * outer container. Honours reduced motion and [contentDescription] like [ContainedLoadingIndicator].
+ *
+ * v2.4.0 rc3: delegates to the official `androidx.compose.material3.LoadingIndicator`; [size] is the
+ * container size (the official shape fills 38/48 of it).
  */
 @ExperimentalMaterial3ExpressiveApi
 @Composable
@@ -1537,13 +1546,26 @@ fun LoadingIndicator(
     polygons: List<RoundedPolygon> = LoadingIndicatorDefaults.IndeterminateIndicatorPolygons,
     contentDescription: String? = null
 ) {
-    ContainedLoadingIndicator(
-        modifier = modifier,
-        containerSize = size,
-        containerColor = Color.Transparent,
-        indicatorColor = color,
-        polygons = polygons,
-        contentDescription = contentDescription
+    val sequence = remember(polygons) { polygons.ifEmpty { MaterialShapes.morphSequence } }
+    val reducedMotion = rememberReducedMotionEnabled()
+    val labelModifier = loadingLabelModifier(contentDescription)
+
+    if (reducedMotion || sequence.size < 2) {
+        val staticShape = remember(sequence) { sequence.first().toShape() }
+        StaticLoadingShape(
+            modifier = modifier.then(labelModifier).size(size),
+            shape = staticShape,
+            indicatorColor = color,
+            containerColor = Color.Transparent,
+            containerShape = CircleShape
+        )
+        return
+    }
+
+    androidx.compose.material3.LoadingIndicator(
+        modifier = modifier.then(labelModifier).size(size),
+        color = color,
+        polygons = sequence
     )
 }
 

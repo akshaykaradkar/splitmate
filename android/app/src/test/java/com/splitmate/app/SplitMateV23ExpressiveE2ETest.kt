@@ -527,7 +527,8 @@ class SplitMateV23ExpressiveE2ETest {
             val src = readSourceFile("ui/components/ExpressiveM3Components.kt")
             assertTrue(src.contains("fun ContainedLoadingIndicator("))
             assertTrue(src.contains("MaterialShapes.morphSequence"))
-            assertTrue(src.contains("MorphPolygonShape("))
+            // v2.4.0 rc3: the morph is drawn by the official material3 ContainedLoadingIndicator now.
+            assertTrue(src.contains("androidx.compose.material3.ContainedLoadingIndicator("))
         }
 
         @Test
