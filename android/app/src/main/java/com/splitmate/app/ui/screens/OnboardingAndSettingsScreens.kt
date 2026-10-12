@@ -57,7 +57,7 @@ import com.splitmate.app.ui.SplitMateThemeMode
 import com.splitmate.app.ui.SplitMateThemeState
 import com.splitmate.app.ui.buildDiceBearOpenPeepsUrl
 import com.splitmate.app.ui.components.ConnectedButtonGroup
-import com.splitmate.app.ui.components.LinearWavyProgressIndicator
+import com.splitmate.app.ui.components.ExpressiveGapLinearProgressIndicator
 import com.splitmate.app.ui.components.MaterialShapes
 import com.splitmate.app.ui.components.MorphPolygonShape
 import com.splitmate.app.ui.components.RoundedPolygonShape
@@ -289,7 +289,8 @@ fun OnboardingSetupScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                LinearWavyProgressIndicator(
+                // v2.4.0 rc3: setup steps are static progress, so a flat official gap bar (wavy is for network work).
+                ExpressiveGapLinearProgressIndicator(
                     progress = setupStepsCompleted / 4f,
                     modifier = Modifier.fillMaxWidth(),
                     color = SplitMateThemeTokens.SageText,
