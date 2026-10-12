@@ -11,8 +11,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -29,7 +27,6 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -63,6 +60,9 @@ import com.splitmate.app.ui.SplitMateMonospaceTextStyle
 import com.splitmate.app.ui.SplitMateTnumMonospace
 import com.splitmate.app.ui.components.ConnectedButtonGroup
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import com.splitmate.app.ui.components.MaterialShapes
 import com.splitmate.app.ui.components.MorphPolygonShape
 import com.splitmate.app.ui.components.SplitMateMotion
@@ -618,6 +618,7 @@ fun QuickExpenseScreen(
             },
             confirmButton = {
                 Button(
+                    shapes = ButtonDefaults.shapes(),
                     onClick = {
                         com.splitmate.app.ui.performCrispTactileHaptic(context, dialogView, heavy = true)
                         val finalTitle = if (isTravelTicketMode) {
@@ -670,6 +671,7 @@ fun QuickExpenseScreen(
             },
             dismissButton = {
                 TextButton(
+                    shapes = ButtonDefaults.shapes(),
                     onClick = {
                         showEditTitleDialog = false
                         pendingCommitAfterCategorySelection = false
@@ -707,41 +709,41 @@ fun QuickExpenseScreen(
             TopAppBar(
                 title = {
                     Box {
-                        Surface(
+                        // v2.4.0 rc3: official FilledTonalButton (sage tonal pair) with the press morph.
+                        FilledTonalButton(
                             onClick = { showGroupDropdown = true },
-                            shape = QuickExpenseThemeTokens.RadiusPill,
-                            color = QuickExpenseThemeTokens.SageSurface,
+                            shapes = ButtonDefaults.shapes(),
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = QuickExpenseThemeTokens.SageSurface,
+                                contentColor = QuickExpenseThemeTokens.SageText
+                            ),
                             border = BorderStroke(1.dp, QuickExpenseThemeTokens.AccentSage.copy(alpha = 0.7f)),
-                            modifier = Modifier.clip(QuickExpenseThemeTokens.RadiusPill)
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 7.dp)
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
-                            ) {
-                                Icon(
-                                    imageVector = resolveGroupCategoryIcon(activeGroupIconName, activeGroupName),
-                                    contentDescription = null,
-                                    tint = QuickExpenseThemeTokens.SageText,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = activeGroupName,
-                                    fontFamily = SplitMateBrandFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    color = QuickExpenseThemeTokens.SageText,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Icon(
-                                    imageVector = Icons.Rounded.KeyboardArrowDown,
-                                    contentDescription = "Switch Group",
-                                    tint = QuickExpenseThemeTokens.SageText,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
+                            Icon(
+                                imageVector = resolveGroupCategoryIcon(activeGroupIconName, activeGroupName),
+                                contentDescription = null,
+                                tint = QuickExpenseThemeTokens.SageText,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = activeGroupName,
+                                fontFamily = SplitMateBrandFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = QuickExpenseThemeTokens.SageText,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.Rounded.KeyboardArrowDown,
+                                contentDescription = "Switch Group",
+                                tint = QuickExpenseThemeTokens.SageText,
+                                modifier = Modifier.size(16.dp)
+                            )
                         }
 
                         DropdownMenu(
@@ -780,32 +782,32 @@ fun QuickExpenseScreen(
                 actions = {
                     val firstEditable = activeMembers.firstOrNull { !it.isCurrentUser }
                     if (hasSelectedGroup && firstEditable != null) {
-                        Surface(
+                        // v2.4.0 rc3: official OutlinedButton with the press morph.
+                        OutlinedButton(
                             onClick = { editingFriend = firstEditable },
-                            shape = QuickExpenseThemeTokens.RadiusPill,
-                            color = surfaceColor,
+                            shapes = ButtonDefaults.shapes(),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = surfaceColor,
+                                contentColor = textPrimary
+                            ),
                             border = BorderStroke(1.dp, keypadBorder),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                             modifier = Modifier.padding(end = 12.dp)
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.ManageAccounts,
-                                    contentDescription = "Edit members",
-                                    tint = textPrimary,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(5.dp))
-                                Text(
-                                    text = "Edit members",
-                                    fontFamily = SplitMateBrandFontFamily,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = textPrimary
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Rounded.ManageAccounts,
+                                contentDescription = "Edit members",
+                                tint = textPrimary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(
+                                text = "Edit members",
+                                fontFamily = SplitMateBrandFontFamily,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = textPrimary
+                            )
                         }
                     }
                 },
@@ -876,7 +878,7 @@ fun QuickExpenseScreen(
                         Button(
                             onClick = {},
                             enabled = false,
-                            shape = QuickExpenseThemeTokens.RadiusPill,
+                            shapes = ButtonDefaults.shapes(),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(56.dp)
@@ -977,12 +979,10 @@ fun QuickExpenseScreen(
                             // v2.4.0 rc3: one "selected" look for every chip row (same as Paid by): sage pill.
                             val selectedBg = QuickExpenseThemeTokens.SageSurface
                             val selectedFg = QuickExpenseThemeTokens.SageText
-                            val chipCorner by androidx.compose.animation.core.animateDpAsState(
-                                targetValue = 20.dp, // rc3: always a full pill (no squarer selected state)
-                                animationSpec = SplitMateMotion.fastSpatial(),
-                                label = "GM3CategoryChipCorner"
-                            )
-                            Surface(
+                            // v2.4.0 rc3: official M3 Expressive FilterChip (always a full pill, official
+                            // press morph and selected semantics) instead of a clickable surface.
+                            FilterChip(
+                                selected = isChosen,
                                 onClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                     if (fullCategory == "Train / PNR Ticket") {
@@ -991,24 +991,29 @@ fun QuickExpenseScreen(
                                         expenseCategoryTitle = fullCategory
                                     }
                                 },
-                                shape = RoundedCornerShape(chipCorner),
-                                color = if (isChosen) selectedBg else surfaceColor,
-                                border = BorderStroke(if (isChosen) 1.5.dp else 1.dp, if (isChosen) QuickExpenseThemeTokens.SageBorder else keypadBorder),
-                                modifier = Modifier
-                                    .minimumInteractiveComponentSize()
-                                    .heightIn(min = 32.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
+                                shapes = FilterChipDefaults.shapes(shape = CircleShape, selectedShape = CircleShape),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = surfaceColor,
+                                    selectedContainerColor = selectedBg
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = isChosen,
+                                    borderColor = keypadBorder,
+                                    selectedBorderColor = QuickExpenseThemeTokens.SageBorder,
+                                    borderWidth = 1.dp,
+                                    selectedBorderWidth = 1.5.dp
+                                ),
+                                modifier = Modifier.minimumInteractiveComponentSize(),
+                                leadingIcon = {
                                     Icon(
                                         imageVector = chipIcon,
                                         contentDescription = null,
                                         tint = if (isChosen) selectedFg else textSecondary,
                                         modifier = Modifier.size(14.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(5.dp))
+                                },
+                                label = {
                                     Text(
                                         text = chipLabel,
                                         fontFamily = SplitMateBrandFontFamily,
@@ -1017,7 +1022,7 @@ fun QuickExpenseScreen(
                                         color = if (isChosen) selectedFg else textPrimary
                                     )
                                 }
-                            }
+                            )
                         }
 
                         // v2.3.4: user-created categories sit right after the built-in pills.
@@ -1026,29 +1031,36 @@ fun QuickExpenseScreen(
                             // v2.4.0 rc3: one "selected" look for every chip row (same as Paid by): sage pill.
                             val selectedBg = QuickExpenseThemeTokens.SageSurface
                             val selectedFg = QuickExpenseThemeTokens.SageText
-                            Surface(
+                            // v2.4.0 rc3: official FilterChip, same pill as the built-in categories.
+                            FilterChip(
+                                selected = isChosen,
                                 onClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                     expenseCategoryTitle = cat.title
                                 },
-                                shape = RoundedCornerShape(if (isChosen) 10.dp else 20.dp),
-                                color = if (isChosen) selectedBg else surfaceColor,
-                                border = BorderStroke(if (isChosen) 1.5.dp else 1.dp, if (isChosen) QuickExpenseThemeTokens.SageBorder else keypadBorder),
-                                modifier = Modifier
-                                    .minimumInteractiveComponentSize()
-                                    .heightIn(min = 32.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
+                                shapes = FilterChipDefaults.shapes(shape = CircleShape, selectedShape = CircleShape),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = surfaceColor,
+                                    selectedContainerColor = selectedBg
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = isChosen,
+                                    borderColor = keypadBorder,
+                                    selectedBorderColor = QuickExpenseThemeTokens.SageBorder,
+                                    borderWidth = 1.dp,
+                                    selectedBorderWidth = 1.5.dp
+                                ),
+                                modifier = Modifier.minimumInteractiveComponentSize(),
+                                leadingIcon = {
                                     Icon(
                                         imageVector = com.splitmate.app.ui.category.ExpenseCategoryIcons.forKey(cat.iconKey),
                                         contentDescription = null,
                                         tint = if (isChosen) selectedFg else textSecondary,
                                         modifier = Modifier.size(14.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(5.dp))
+                                },
+                                label = {
                                     Text(
                                         text = cat.shortLabel.take(16),
                                         fontFamily = SplitMateBrandFontFamily,
@@ -1057,7 +1069,7 @@ fun QuickExpenseScreen(
                                         color = if (isChosen) selectedFg else textPrimary
                                     )
                                 }
-                            }
+                            )
                         }
 
                         // v2.3.4: "More" opens the full catalog (Breakfast, Auto, Bike Rental, Fuel…) + create-your-own.
@@ -1082,24 +1094,25 @@ fun QuickExpenseScreen(
                             // v2.4.0 rc3: one "selected" look for every chip row (same as Paid by): sage pill.
                             val selectedBg = QuickExpenseThemeTokens.SageSurface
                             val selectedFg = QuickExpenseThemeTokens.SageText
-                            val customChipCorner by androidx.compose.animation.core.animateDpAsState(
-                                targetValue = 20.dp, // rc3: always a full pill
-                                animationSpec = SplitMateMotion.fastSpatial(),
-                                label = "GM3CustomChipCorner"
-                            )
-                            Surface(
+                            // v2.4.0 rc3: official FilterChip (always a full pill).
+                            FilterChip(
+                                selected = isCustomNote,
                                 onClick = { showEditTitleDialog = true },
-                                shape = RoundedCornerShape(customChipCorner),
-                                color = if (isCustomNote) selectedBg else surfaceColor,
-                                border = BorderStroke(if (isCustomNote) 1.5.dp else 1.dp, if (isCustomNote) QuickExpenseThemeTokens.SageBorder else keypadBorder),
-                                modifier = Modifier
-                                    .minimumInteractiveComponentSize()
-                                    .heightIn(min = 32.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
+                                shapes = FilterChipDefaults.shapes(shape = CircleShape, selectedShape = CircleShape),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = surfaceColor,
+                                    selectedContainerColor = selectedBg
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = isCustomNote,
+                                    borderColor = keypadBorder,
+                                    selectedBorderColor = QuickExpenseThemeTokens.SageBorder,
+                                    borderWidth = 1.dp,
+                                    selectedBorderWidth = 1.5.dp
+                                ),
+                                modifier = Modifier.minimumInteractiveComponentSize(),
+                                leadingIcon = {
                                     Icon(
                                         imageVector = if (isCustomNote && matchedCatalogCategory != null) {
                                             com.splitmate.app.ui.category.ExpenseCategoryIcons.forKey(matchedCatalogCategory.iconKey)
@@ -1108,7 +1121,8 @@ fun QuickExpenseScreen(
                                         tint = if (isCustomNote) selectedFg else textSecondary,
                                         modifier = Modifier.size(13.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(4.dp))
+                                },
+                                label = {
                                     Text(
                                         text = if (isCustomNote) expenseCategoryTitle.take(16) else "+ Custom Note",
                                         fontFamily = SplitMateBrandFontFamily,
@@ -1117,7 +1131,7 @@ fun QuickExpenseScreen(
                                         color = if (isCustomNote) selectedFg else textPrimary
                                     )
                                 }
-                            }
+                            )
                         }
                     }
 
@@ -1151,23 +1165,28 @@ fun QuickExpenseScreen(
                                     val payerAvatarUrl = remember(person.avatarSeed) {
                                         buildDiceBearOpenPeepsUrl(person.avatarSeed)
                                     }
-                                    Surface(
+                                    // v2.4.0 rc3: official M3 Expressive FilterChip (selected semantics, press morph).
+                                    FilterChip(
+                                        selected = isPayer,
                                         onClick = {
                                             haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                             selectedPayerId = person.id
                                         },
-                                        shape = QuickExpenseThemeTokens.RadiusPill,
-                                        color = if (isPayer) QuickExpenseThemeTokens.SageSurface else surfaceColor,
-                                        border = BorderStroke(
-                                            1.dp,
-                                            if (isPayer) QuickExpenseThemeTokens.SageBorder else keypadBorder
+                                        shapes = FilterChipDefaults.shapes(shape = QuickExpenseThemeTokens.RadiusPill, selectedShape = QuickExpenseThemeTokens.RadiusPill),
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            containerColor = surfaceColor,
+                                            selectedContainerColor = QuickExpenseThemeTokens.SageSurface
                                         ),
-                                        modifier = Modifier.minimumInteractiveComponentSize()
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(start = 4.dp, end = 9.dp, top = 3.dp, bottom = 3.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
+                                        border = FilterChipDefaults.filterChipBorder(
+                                            enabled = true,
+                                            selected = isPayer,
+                                            borderColor = keypadBorder,
+                                            selectedBorderColor = QuickExpenseThemeTokens.SageBorder,
+                                            borderWidth = 1.dp,
+                                            selectedBorderWidth = 1.dp
+                                        ),
+                                        modifier = Modifier.minimumInteractiveComponentSize(),
+                                        leadingIcon = {
                                             Box(
                                                 modifier = Modifier
                                                     .size(22.dp)
@@ -1200,7 +1219,8 @@ fun QuickExpenseScreen(
                                                         .clip(MemberAvatarShape)
                                                 )
                                             }
-                                            Spacer(modifier = Modifier.width(5.dp))
+                                        },
+                                        label = {
                                             Text(
                                                 text = if (person.name.contains("(You)")) "$shortFirstName (You)" else shortFirstName,
                                                 fontFamily = SplitMateBrandFontFamily,
@@ -1210,7 +1230,7 @@ fun QuickExpenseScreen(
                                                 maxLines = 1
                                             )
                                         }
-                                    }
+                                    )
                                 }
                             }
                         }
@@ -1231,7 +1251,8 @@ fun QuickExpenseScreen(
                                 color = textPrimary
                             )
 
-                            Surface(
+                            // v2.4.0 rc3: official extra-small FilledTonalButton (sage tonal pair, press morph).
+                            FilledTonalButton(
                                 onClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                     selectedMemberIds = if (selectedMemberIds.size == participants.size) {
@@ -1240,24 +1261,23 @@ fun QuickExpenseScreen(
                                         participants.map { it.id }.toSet()
                                     }
                                 },
-                                shape = QuickExpenseThemeTokens.RadiusPill,
-                                color = QuickExpenseThemeTokens.SageSurface,
+                                shapes = ButtonDefaults.shapes(),
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = QuickExpenseThemeTokens.SageSurface,
+                                    contentColor = QuickExpenseThemeTokens.SageText
+                                ),
                                 border = BorderStroke(1.dp, QuickExpenseThemeTokens.AccentSage.copy(alpha = 0.8f)),
-                                modifier = Modifier.minimumInteractiveComponentSize()
+                                contentPadding = ButtonDefaults.ExtraSmallContentPadding,
+                                modifier = Modifier.heightIn(min = ButtonDefaults.ExtraSmallContainerHeight)
                             ) {
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = if (selectedMemberIds.size == participants.size) "Clear" else "Select all (${participants.size})",
-                                        fontFamily = SplitMateBrandFontFamily,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = QuickExpenseThemeTokens.SageText,
-                                        style = TextStyle(fontFeatureSettings = "tnum")
-                                    )
-                                }
+                                Text(
+                                    text = if (selectedMemberIds.size == participants.size) "Clear" else "Select all (${participants.size})",
+                                    fontFamily = SplitMateBrandFontFamily,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = QuickExpenseThemeTokens.SageText,
+                                    style = TextStyle(fontFeatureSettings = "tnum")
+                                )
                             }
                         }
 
@@ -1790,16 +1810,23 @@ fun QuickExpenseScreen(
                             modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Surface(
+                            // v2.4.0 rc3: official FilledTonalButton (sage tonal pair) with the shapes() press morph.
+                            FilledTonalButton(
                                 onClick = {
                                     com.splitmate.app.ui.performCrispTactileHaptic(context, rightColView, feel = com.splitmate.app.ui.feel.Feel.Tick)
                                     showEditTitleDialog = true
                                     onLogExpenseClick()
                                 },
-                                shape = QuickExpenseThemeTokens.RadiusKeySquircle,
-                                color = QuickExpenseThemeTokens.SageSurface,
-                                shadowElevation = 0.dp,
+                                shapes = ButtonDefaults.shapes(
+                                    shape = QuickExpenseThemeTokens.RadiusKeySquircle,
+                                    pressedShape = MaterialTheme.shapes.small
+                                ),
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = QuickExpenseThemeTokens.SageSurface,
+                                    contentColor = QuickExpenseThemeTokens.SageText
+                                ),
                                 border = BorderStroke(1.dp, QuickExpenseThemeTokens.AccentSage),
+                                contentPadding = PaddingValues(0.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(54.dp)
@@ -1855,7 +1882,7 @@ fun QuickExpenseScreen(
                             } else {
                                 QuickExpenseThemeTokens.SageText
                             }
-                            Surface(
+                            Button(
                                 onClick = {
                                     // v2.4.0 D4: Confirm when the expense is saved, Reject when the form is not ready, Tick when it
                                     // first asks for a category.
@@ -1884,14 +1911,22 @@ fun QuickExpenseScreen(
                                         }
                                     }
                                 },
-                                shape = QuickExpenseThemeTokens.RadiusKeySquircle,
-                                color = ctaContainerColor,
+                                // v2.4.0 rc3: official M3 Expressive Button with the shapes() press morph.
+                                shapes = ButtonDefaults.shapes(
+                                    shape = QuickExpenseThemeTokens.RadiusKeySquircle,
+                                    pressedShape = MaterialTheme.shapes.small
+                                ),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = ctaContainerColor,
+                                    contentColor = ctaContentColor
+                                ),
                                 // v2.4.0 rc2: flat like every other key (the only shadowed key read as a glitch).
-                                shadowElevation = 0.dp,
+                                elevation = null,
                                 border = BorderStroke(
                                     width = 1.5.dp,
                                     color = if (canCommitSplit) ctaEnabledContainer else QuickExpenseThemeTokens.AccentSage
                                 ),
+                                contentPadding = PaddingValues(0.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(116.dp)
@@ -1999,30 +2034,22 @@ fun TactileSquircleKey(
     textPrimary: Color = QuickExpenseThemeTokens.PrimaryDark,
     onClick: () -> Unit
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.94f else 1.0f,
-        animationSpec = SplitMateMotion.fastSpatial(),
-        label = "KeyScale"
-    )
-    val morphCorner by androidx.compose.animation.core.animateDpAsState(
-        // v2.4.0 D3: keys use the 16dp button corner (8dp while pressed).
-        targetValue = if (isPressed) 8.dp else 16.dp,
-        animationSpec = SplitMateMotion.fastSpatial(),
-        label = "GM3KeyCornerMorph"
-    )
-
-    Surface(
+    // v2.4.0 D3: keys use the 16dp button corner (8dp while pressed).
+    // v2.4.0 rc3: the official M3 Expressive OutlinedButton press morph (shapes) replaces the
+    // hand-built press scale and corner animation. What a key types is unchanged.
+    OutlinedButton(
         onClick = onClick,
-        interactionSource = interactionSource,
-        shape = RoundedCornerShape(morphCorner),
-        color = if (isPressed) keypadBorder else keypadBg,
-        shadowElevation = 0.dp,
+        shapes = ButtonDefaults.shapes(
+            shape = MaterialTheme.shapes.medium,
+            pressedShape = MaterialTheme.shapes.small
+        ),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = keypadBg,
+            contentColor = textPrimary
+        ),
         border = BorderStroke(1.dp, keypadBorder),
+        contentPadding = PaddingValues(0.dp),
         modifier = modifier
-            .scale(scale)
             .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
     ) {
         Box(
@@ -2377,30 +2404,35 @@ fun EditFriendUpiDialog(
                                                 // v2.3.5 (#7 RC2): ids are the stored AvatarGender ids (Male/Female/Neutral).
                                                 com.splitmate.app.MemberProfileEditRules.GENDER_PILLS.forEach { (fullStyle, shortCode) ->
                                                     val selected = com.splitmate.app.MemberProfileEditRules.isGenderSelected(draft.style, fullStyle)
-                                                    Surface(
-                                                        onClick = {
+                                                    // v2.4.0 rc3: official OutlinedIconToggleButton with the toggleable shapes morph.
+                                                    OutlinedIconToggleButton(
+                                                        checked = selected,
+                                                        onCheckedChange = {
                                                             // v2.3.5 (#7 RC3): keep host + dialog selection in sync.
                                                             activeMemberId = candidate.memberId
                                                             onSelectMember(candidate)
                                                             memberDrafts[candidate.memberId] = draft.copy(style = fullStyle)
                                                         },
-                                                        shape = CircleShape,
-                                                        color = if (selected) QuickExpenseThemeTokens.PrimaryDark else QuickExpenseThemeTokens.SurfaceWhite,
+                                                        shapes = IconButtonDefaults.toggleableShapes(),
+                                                        colors = IconButtonDefaults.outlinedIconToggleButtonColors(
+                                                            containerColor = QuickExpenseThemeTokens.SurfaceWhite,
+                                                            contentColor = QuickExpenseThemeTokens.TextSecondary,
+                                                            checkedContainerColor = QuickExpenseThemeTokens.PrimaryDark,
+                                                            checkedContentColor = QuickExpenseThemeTokens.ScreenBg
+                                                        ),
                                                         border = BorderStroke(
                                                             1.dp,
                                                             if (selected) QuickExpenseThemeTokens.PrimaryDark else QuickExpenseThemeTokens.BorderLight
                                                         ),
                                                         modifier = Modifier.size(28.dp)
                                                     ) {
-                                                        Box(contentAlignment = Alignment.Center) {
-                                                            Text(
-                                                                text = shortCode,
-                                                                fontFamily = SplitMateBrandFontFamily,
-                                                                fontSize = 11.sp,
-                                                                fontWeight = FontWeight.ExtraBold,
-                                                                color = if (selected) QuickExpenseThemeTokens.ScreenBg else QuickExpenseThemeTokens.TextSecondary
-                                                            )
-                                                        }
+                                                        Text(
+                                                            text = shortCode,
+                                                            fontFamily = SplitMateBrandFontFamily,
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.ExtraBold,
+                                                            color = if (selected) QuickExpenseThemeTokens.ScreenBg else QuickExpenseThemeTokens.TextSecondary
+                                                        )
                                                     }
                                                 }
                                             }
@@ -2421,41 +2453,44 @@ fun EditFriendUpiDialog(
                             color = QuickExpenseThemeTokens.PrimaryDark,
                             modifier = Modifier.padding(bottom = 6.dp)
                         )
-                        Surface(
-                            shape = QuickExpenseThemeTokens.RadiusPill,
-                            color = QuickExpenseThemeTokens.SurfaceKeypad,
-                            border = BorderStroke(1.dp, QuickExpenseThemeTokens.BorderLight),
-                            modifier = Modifier.fillMaxWidth()
+                        // v2.4.0 rc3: official M3 Expressive connected ToggleButton group (button-group
+                        // shapes, checked morph) instead of hand-built pills on a track.
+                        val genderSegments = com.splitmate.app.MemberProfileEditRules.GENDER_SEGMENTS
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(4.dp),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                // v2.3.5 (#7 RC2): stored ids (Male/Female/Neutral) with human labels.
-                                com.splitmate.app.MemberProfileEditRules.GENDER_SEGMENTS.forEach { (style, styleLabel) ->
-                                    val isSelected = com.splitmate.app.MemberProfileEditRules.isGenderSelected(activeDraft.style, style)
-                                    Surface(
-                                        onClick = {
-                                            memberDrafts[activeMember.memberId] = activeDraft.copy(style = style)
-                                        },
-                                        shape = QuickExpenseThemeTokens.RadiusPill,
-                                        color = if (isSelected) QuickExpenseThemeTokens.PrimaryDark else Color.Transparent,
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(36.dp)
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Text(
-                                                text = styleLabel,
-                                                fontFamily = SplitMateBrandFontFamily,
-                                                fontSize = 12.sp,
-                                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                                color = if (isSelected) QuickExpenseThemeTokens.ScreenBg else QuickExpenseThemeTokens.TextSecondary
-                                            )
-                                        }
-                                    }
+                            // v2.3.5 (#7 RC2): stored ids (Male/Female/Neutral) with human labels.
+                            genderSegments.forEachIndexed { segmentIndex, (style, styleLabel) ->
+                                val isSelected = com.splitmate.app.MemberProfileEditRules.isGenderSelected(activeDraft.style, style)
+                                ToggleButton(
+                                    checked = isSelected,
+                                    onCheckedChange = {
+                                        memberDrafts[activeMember.memberId] = activeDraft.copy(style = style)
+                                    },
+                                    shapes = when (segmentIndex) {
+                                        0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                                        genderSegments.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                                        else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+                                    },
+                                    colors = ToggleButtonDefaults.toggleButtonColors(
+                                        containerColor = QuickExpenseThemeTokens.SurfaceKeypad,
+                                        contentColor = QuickExpenseThemeTokens.TextSecondary,
+                                        checkedContainerColor = QuickExpenseThemeTokens.PrimaryDark,
+                                        checkedContentColor = QuickExpenseThemeTokens.ScreenBg
+                                    ),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 48.dp)
+                                        .semantics { role = Role.RadioButton }
+                                ) {
+                                    Text(
+                                        text = styleLabel,
+                                        fontFamily = SplitMateBrandFontFamily,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                        color = if (isSelected) QuickExpenseThemeTokens.ScreenBg else QuickExpenseThemeTokens.TextSecondary
+                                    )
                                 }
                             }
                         }
@@ -2565,7 +2600,7 @@ fun EditFriendUpiDialog(
                                 permissionLauncher.launch(Manifest.permission.READ_CONTACTS)
                             }
                         },
-                        shape = RoundedCornerShape(16.dp),
+                        shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(16.dp)),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = QuickExpenseThemeTokens.SageSurface,
                             contentColor = QuickExpenseThemeTokens.SageText
@@ -2594,6 +2629,7 @@ fun EditFriendUpiDialog(
             },
             confirmButton = {
                 Button(
+                    shapes = ButtonDefaults.shapes(),
                     onClick = {
                         if (onSaveAll != null) {
                             val batchUpdates = effectiveMembers.map { m ->
@@ -2640,7 +2676,7 @@ fun EditFriendUpiDialog(
                 }
             },
             dismissButton = {
-                TextButton(onClick = onDismiss) {
+                TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) {
                     Text(
                         "Cancel",
                         fontFamily = SplitMateBrandFontFamily,
