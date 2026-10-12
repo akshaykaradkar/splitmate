@@ -687,11 +687,13 @@ fun ButtonGroup(
             } else {
                 MaterialTheme.colorScheme.onSecondaryContainer
             }
+            // v2.4.0 rc3: official ButtonShapes (pill at rest, tighter corners while pressed) instead of
+            // a fixed CircleShape, so the M3 Expressive press morph runs alongside animateWidth.
             FilledTonalButton(
                 onClick = item.onClick,
+                shapes = ButtonDefaults.shapes(),
                 enabled = item.enabled,
                 interactionSource = interactionSource,
-                shape = CircleShape,
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                 colors = ButtonDefaults.filledTonalButtonColors(
                     containerColor = resolvedContainerColor,
@@ -766,10 +768,12 @@ fun <T> ConnectedButtonGroup(
                 index == options.lastIndex -> androidx.compose.material3.ButtonGroupDefaults.connectedTrailingButtonShapes()
                 else -> androidx.compose.material3.ButtonGroupDefaults.connectedMiddleButtonShapes()
             }
+            // v2.4.0 rc3: unchecked segments use onSurface (not onSurfaceVariant) and Medium weight so they
+            // read as available options rather than disabled ones. Checked styling is unchanged.
             val contentColor = if (checked) {
                 MaterialTheme.colorScheme.onPrimaryContainer
             } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
+                MaterialTheme.colorScheme.onSurface
             }
             androidx.compose.material3.ToggleButton(
                 checked = checked,
@@ -777,7 +781,7 @@ fun <T> ConnectedButtonGroup(
                 shapes = shapes,
                 colors = androidx.compose.material3.ToggleButtonDefaults.toggleButtonColors(
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
                     checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                     checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ),
@@ -805,7 +809,7 @@ fun <T> ConnectedButtonGroup(
                         MaterialTheme.typography.labelMedium
                     },
                     fontFamily = FigtreeFontFamily,
-                    fontWeight = if (checked) FontWeight.ExtraBold else FontWeight.SemiBold,
+                    fontWeight = if (checked) FontWeight.ExtraBold else FontWeight.Medium,
                     fontSize = 12.sp,
                     color = contentColor,
                     maxLines = 1,
