@@ -48,7 +48,9 @@ class SplitMateV240Rc2Test {
         assertTrue(settings.contains("context.packageManager.getPackageInfo(context.packageName, 0).versionName"))
         listOf("Expressive Theme Studio", "Curated tactile", "Dark Mode (Warm Espresso)", "Tactile Keypad Haptics", "Reset App Data")
             .forEach { assertFalse(Regex("\"[^\"\n]*" + Regex.escape(it)).containsMatchIn(settings), it) }
-        assertTrue(src("ui/SplitMateAppComposable.kt").contains("onClickLabel = \"Open settings\""))
+        // v2.4.0 rc3: the avatar is the official IconButton now; the "Open settings" click label rides on
+        // child semantics that merge into the button (verified at runtime by RC3H_01).
+        assertTrue(src("ui/SplitMateAppComposable.kt").contains("onClick(label = \"Open settings\", action = null)"))
         assertTrue(Regex("ConnectedButtonGroup\\(\\s*options = themeModes").find(settings) == null, "one theme picker, not two")
     }
 
