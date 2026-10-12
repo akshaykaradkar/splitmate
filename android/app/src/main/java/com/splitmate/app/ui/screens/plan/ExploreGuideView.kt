@@ -39,7 +39,7 @@ import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Hotel
-import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.Landscape
 import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.Place
@@ -47,11 +47,13 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.TravelExplore
 import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.ElevatedAssistChip
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -291,7 +293,7 @@ private fun LazyListScope.hydratedGuide(
             PlanInlineBanner(
                 message = "No curated guide yet. Showing nearby landmarks from Wikidata.",
                 tone = PlanBannerTone.NEUTRAL,
-                icon = Icons.Rounded.Info,
+                icon = Icons.Outlined.Info,
                 modifier = Modifier
                     .padding(horizontal = PlanGuideDefaults.ScreenGutter)
                     .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
@@ -345,6 +347,7 @@ private fun LazyListScope.hydratedGuide(
                 val motion = LocalMotionScheme.current
                 TextButton(
                     onClick = { expandedSections[section.kind] = !expanded },
+                    shapes = ButtonDefaults.shapes(),
                     modifier = Modifier
                         .padding(horizontal = 8.dp)
                         .heightIn(min = 48.dp)
@@ -638,11 +641,12 @@ private fun GuideHero(
                 ) {
                     IconButton(
                         onClick = { creditOpen = !creditOpen },
+                        shapes = IconButtonDefaults.shapes(),
                         modifier = Modifier.semantics { contentDescription = "Photo credit" }
                     ) {
                         Surface(shape = CircleShape, color = com.splitmate.app.ui.DesignSystemBindings.activePalette.scrim.copy(alpha = 0.45f), contentColor = com.splitmate.app.ui.theme.HubExtendedColors.OnImageScrim) {
                             Icon(
-                                imageVector = Icons.Rounded.Info,
+                                imageVector = Icons.Outlined.Info,
                                 contentDescription = null,
                                 modifier = Modifier
                                     .padding(6.dp)
@@ -738,7 +742,7 @@ private fun DestinationSearch(
                     .semantics { heading() }
             )
             if (onClose != null) {
-                IconButton(onClick = onClose) {
+                IconButton(onClick = onClose, shapes = IconButtonDefaults.shapes()) {
                     Icon(Icons.Rounded.Close, contentDescription = "Close search")
                 }
             }
@@ -750,7 +754,7 @@ private fun DestinationSearch(
             leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
             trailingIcon = {
                 if (state.destinationQuery.isNotEmpty()) {
-                    IconButton(onClick = { actions.updateDestinationQuery("") }) {
+                    IconButton(onClick = { actions.updateDestinationQuery("") }, shapes = IconButtonDefaults.shapes()) {
                         Icon(Icons.Rounded.Close, contentDescription = "Clear search")
                     }
                 }

@@ -29,7 +29,7 @@ import androidx.compose.material.icons.rounded.Autorenew
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.Hotel
-import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.LocationOff
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.Share
@@ -253,7 +253,7 @@ private fun LoopTotals(loop: LoopUi, stopCount: Int, modifier: Modifier = Modifi
                 verticalAlignment = Alignment.Top
             ) {
                 Icon(
-                    imageVector = Icons.Rounded.Info,
+                    imageVector = Icons.Outlined.Info,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
@@ -326,6 +326,7 @@ private fun StayStepCard(
                 if (onChange != null) {
                     TextButton(
                         onClick = onChange,
+                        shapes = ButtonDefaults.shapes(),
                         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onPrimaryContainer)
                     ) {
                         Text("Change", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
@@ -468,6 +469,7 @@ private fun LoopActions(actions: TripGuideActions, modifier: Modifier = Modifier
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(
             onClick = { actions.openWholeLoopInMaps() },
+            shapes = ButtonDefaults.shapes(),
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 52.dp)
@@ -484,12 +486,12 @@ private fun LoopActions(actions: TripGuideActions, modifier: Modifier = Modifier
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                 contentColor = MaterialTheme.colorScheme.onSurface
             )
-            FilledTonalButton(onClick = { actions.reoptimizeLoop() }, colors = tonal, modifier = Modifier.heightIn(min = 48.dp)) {
+            FilledTonalButton(onClick = { actions.reoptimizeLoop() }, shapes = ButtonDefaults.shapes(), colors = tonal, modifier = Modifier.heightIn(min = 48.dp)) {
                 Icon(Icons.Rounded.Autorenew, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("Reoptimise", style = MaterialTheme.typography.labelLarge)
             }
-            FilledTonalButton(onClick = { actions.shareLoop() }, colors = tonal, modifier = Modifier.heightIn(min = 48.dp)) {
+            FilledTonalButton(onClick = { actions.shareLoop() }, shapes = ButtonDefaults.shapes(), colors = tonal, modifier = Modifier.heightIn(min = 48.dp)) {
                 Icon(Icons.Rounded.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("Share loop", style = MaterialTheme.typography.labelLarge)
@@ -534,7 +536,7 @@ private fun NoStayCard(onSetStay: () -> Unit, modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Button(onClick = onSetStay, modifier = Modifier.heightIn(min = 48.dp)) {
+            Button(onClick = onSetStay, shapes = ButtonDefaults.shapes(), modifier = Modifier.heightIn(min = 48.dp)) {
                 Icon(Icons.Rounded.Hotel, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Set your stay", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
@@ -568,7 +570,7 @@ private fun EmptyLoopCard(building: Boolean, onExplore: () -> Unit, modifier: Mo
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            FilledTonalButton(onClick = onExplore, modifier = Modifier.heightIn(min = 48.dp)) {
+            FilledTonalButton(onClick = onExplore, shapes = ButtonDefaults.shapes(), modifier = Modifier.heightIn(min = 48.dp)) {
                 Icon(Icons.Rounded.Explore, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Go to Explore", style = MaterialTheme.typography.labelLarge)

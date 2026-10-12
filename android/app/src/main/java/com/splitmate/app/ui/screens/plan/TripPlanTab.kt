@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
@@ -108,6 +109,7 @@ fun TripPlanTab(
                 ) {
                     androidx.compose.material3.TextButton(
                         onClick = { actions.selectSubView(PlanSubView.BOOKINGS) },
+                        shapes = ButtonDefaults.shapes(),
                         modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                     ) {
                         androidx.compose.material3.Icon(

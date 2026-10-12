@@ -30,6 +30,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -100,7 +101,7 @@ fun PlaceDetailSheet(
                         .weight(1f)
                         .semantics { heading() }
                 )
-                IconButton(onClick = { currentOnDismiss() }) {
+                IconButton(onClick = { currentOnDismiss() }, shapes = IconButtonDefaults.shapes()) {
                     Icon(
                         imageVector = Icons.Rounded.Close,
                         contentDescription = "Close",
@@ -141,6 +142,7 @@ fun PlaceDetailSheet(
             ) {
                 AddToLoopToggle(pinned = card?.isPinned == true, onToggle = { actions.togglePin(place.id) })
                 TextButton(
+                    shapes = ButtonDefaults.shapes(),
                     onClick = {
                         actions.hidePlace(place.id)
                         onDismiss()

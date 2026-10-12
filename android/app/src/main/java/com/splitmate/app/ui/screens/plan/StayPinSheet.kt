@@ -39,6 +39,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -169,7 +170,7 @@ fun StayPinSheet(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                IconButton(onClick = { currentOnDismiss() }) {
+                IconButton(onClick = { currentOnDismiss() }, shapes = IconButtonDefaults.shapes()) {
                     Icon(
                         imageVector = Icons.Rounded.Close,
                         contentDescription = "Close",
@@ -292,6 +293,7 @@ private fun CurrentStay(state: TripGuideUiState, actions: TripGuideActions) {
             }
             TextButton(
                 onClick = { actions.clearStay() },
+                shapes = ButtonDefaults.shapes(),
                 colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onPrimaryContainer),
                 modifier = Modifier.heightIn(min = 48.dp)
             ) {
@@ -323,7 +325,7 @@ private fun PasteLinkTab(working: Boolean, onSubmit: (String) -> Unit) {
                 Text("Paste a Google Maps share link, or type your hotel or area name")
             },
             trailingIcon = {
-                IconButton(onClick = { clipboard.getText()?.text?.let { text = it.take(MAX_INPUT_CHARS) } }) {
+                IconButton(onClick = { clipboard.getText()?.text?.let { text = it.take(MAX_INPUT_CHARS) } }, shapes = IconButtonDefaults.shapes()) {
                     Icon(Icons.Rounded.ContentPaste, contentDescription = "Paste from clipboard")
                 }
             },
@@ -336,6 +338,7 @@ private fun PasteLinkTab(working: Boolean, onSubmit: (String) -> Unit) {
         )
         Button(
             onClick = submit,
+            shapes = ButtonDefaults.shapes(),
             enabled = text.isNotBlank() && !working,
             modifier = Modifier.heightIn(min = 48.dp)
         ) {
@@ -375,6 +378,7 @@ private fun CoordinatesTab(working: Boolean, onSubmit: (String) -> Unit) {
             modifier = Modifier.fillMaxWidth()
         )
         Button(
+            shapes = ButtonDefaults.shapes(),
             onClick = {
                 focusManager.clearFocus()
                 onSubmit(text.trim())
@@ -405,6 +409,7 @@ private fun SleepListingsTab(
                 val destStr = PlanGuideFormat.sanitizeDisplay(destinationName) ?: "Destination"
                 FilledTonalButton(
                     onClick = onUseDestinationCenter,
+                    shapes = ButtonDefaults.shapes(),
                     modifier = Modifier.heightIn(min = 48.dp)
                 ) {
                     Icon(Icons.Rounded.Place, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -521,7 +526,7 @@ private fun StayFeedbackPanel(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Button(onClick = onConfirm, modifier = Modifier.heightIn(min = 48.dp)) {
+                Button(onClick = onConfirm, shapes = ButtonDefaults.shapes(), modifier = Modifier.heightIn(min = 48.dp)) {
                     Text("Use this stay", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                 }
             }
@@ -559,6 +564,7 @@ private fun StayFeedbackPanel(
                     val destStr = PlanGuideFormat.sanitizeDisplay(destinationName) ?: "Destination"
                     FilledTonalButton(
                         onClick = onUseDestinationCenter,
+                        shapes = ButtonDefaults.shapes(),
                         colors = ButtonDefaults.filledTonalButtonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
                             contentColor = MaterialTheme.colorScheme.onSurface
@@ -573,10 +579,12 @@ private fun StayFeedbackPanel(
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     TextButton(
                         onClick = onUseSleep,
+                        shapes = ButtonDefaults.shapes(),
                         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSecondaryContainer)
                     ) { Text("Pick a Sleep listing") }
                     TextButton(
                         onClick = onUseCoordinates,
+                        shapes = ButtonDefaults.shapes(),
                         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSecondaryContainer)
                     ) { Text("Enter coordinates") }
                 }
@@ -602,6 +610,7 @@ private fun StayFeedbackPanel(
                     val destStr = PlanGuideFormat.sanitizeDisplay(destinationName) ?: "Destination"
                     FilledTonalButton(
                         onClick = onUseDestinationCenter,
+                        shapes = ButtonDefaults.shapes(),
                         modifier = Modifier.heightIn(min = 48.dp)
                     ) {
                         Icon(Icons.Rounded.Place, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -609,10 +618,10 @@ private fun StayFeedbackPanel(
                         Text("Use $destStr center", style = MaterialTheme.typography.labelLarge)
                     }
                 }
-                TextButton(onClick = onUseSleep, modifier = Modifier.heightIn(min = 48.dp)) {
+                TextButton(onClick = onUseSleep, shapes = ButtonDefaults.shapes(), modifier = Modifier.heightIn(min = 48.dp)) {
                     Text("Pick a Sleep listing")
                 }
-                TextButton(onClick = onUseCoordinates, modifier = Modifier.heightIn(min = 48.dp)) {
+                TextButton(onClick = onUseCoordinates, shapes = ButtonDefaults.shapes(), modifier = Modifier.heightIn(min = 48.dp)) {
                     Text("Enter coordinates")
                 }
             }
@@ -653,6 +662,7 @@ private fun InlineStayNameSearch(
         )
         FilledTonalButton(
             onClick = submitSearch,
+            shapes = ButtonDefaults.shapes(),
             enabled = nameQuery.isNotBlank(),
             colors = ButtonDefaults.filledTonalButtonColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,

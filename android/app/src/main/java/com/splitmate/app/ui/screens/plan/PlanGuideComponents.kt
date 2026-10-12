@@ -437,6 +437,7 @@ fun PlanInlineBanner(
             if (actionLabel != null && onAction != null) {
                 TextButton(
                     onClick = onAction,
+                    shapes = ButtonDefaults.shapes(),
                     colors = ButtonDefaults.textButtonColors(contentColor = content)
                 ) {
                     Text(actionLabel, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
@@ -546,6 +547,7 @@ fun AddToLoopToggle(pinned: Boolean, onToggle: () -> Unit, modifier: Modifier = 
     }
     FilledTonalButton(
         onClick = onToggle,
+        shapes = ButtonDefaults.shapes(),
         colors = colors,
         modifier = modifier
             .heightIn(min = 40.dp)
