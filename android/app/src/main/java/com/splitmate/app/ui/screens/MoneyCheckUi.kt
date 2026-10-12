@@ -33,6 +33,7 @@ import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
@@ -223,7 +224,7 @@ fun MoneyCheckFailureCard(
                 )
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                FilledTonalButton(onClick = onReview, shape = MaterialTheme.shapes.medium) {
+                FilledTonalButton(onClick = onReview, shapes = ButtonDefaults.shapes(shape = MaterialTheme.shapes.medium)) {
                     Text(text = if (canFix) "Review" else "View", style = MaterialTheme.typography.labelLarge)
                 }
             }
@@ -366,6 +367,7 @@ fun MoneyCheckSheet(
             CheckList(rows = main)
             TextButton(
                 onClick = { showDetails = !showDetails },
+                shapes = ButtonDefaults.shapes(),
                 modifier = Modifier.defaultMinSize(minHeight = 48.dp)
             ) {
                 Text(text = if (showDetails) "Hide details" else "Show details", style = MaterialTheme.typography.labelLarge)
@@ -505,11 +507,11 @@ fun ExpenseSharesCheckRow(
             if (canModify) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (canUseShares) {
-                        Button(onClick = onUseSharesTotal, shape = MaterialTheme.shapes.medium) {
+                        Button(onClick = onUseSharesTotal, shapes = ButtonDefaults.shapes(shape = MaterialTheme.shapes.medium)) {
                             Text(text = "Use shares total ${formatIndianRupeesFromCents(shares)}", style = MaterialTheme.typography.labelLarge)
                         }
                     }
-                    OutlinedButton(onClick = onEdit, shape = MaterialTheme.shapes.medium) {
+                    OutlinedButton(onClick = onEdit, shapes = ButtonDefaults.shapes(shape = MaterialTheme.shapes.medium)) {
                         Text(text = "Edit expense", style = MaterialTheme.typography.labelLarge)
                     }
                 }

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -44,6 +45,8 @@ import com.splitmate.app.ui.formatIndianRupeesFromCents
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.Button
 
 /**
  * v2.3.5 (#1) trip lifecycle UI for Trip Hub.
@@ -163,10 +166,15 @@ fun TripLifecycleCard(
                             Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = palette.primary, modifier = Modifier.size(18.dp))
                             Text("Everyone is settled", fontFamily = FigtreeFontFamily, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = palette.onPrimaryContainer, modifier = Modifier.weight(1f))
                         } else {
-                            Surface(
+                            // v2.4.0 rc3: official Button (dark action pill) with the shapes() press morph.
+                            Button(
                                 onClick = onSettleUp,
-                                shape = RoundedCornerShape(50),
-                                color = palette.onSurface,
+                                shapes = ButtonDefaults.shapes(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = palette.onSurface,
+                                    contentColor = palette.surfaceContainerLowest
+                                ),
+                                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
                                 modifier = Modifier.heightIn(min = 44.dp)
                             ) {
                                 Text(
@@ -174,14 +182,13 @@ fun TripLifecycleCard(
                                     fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 13.sp,
-                                    color = palette.surfaceContainerLowest,
-                                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)
+                                    color = palette.surfaceContainerLowest
                                 )
                             }
                             Spacer(Modifier.weight(1f))
                         }
                         if (TripLifecycleResolver.canToggle(isOrganizer)) {
-                            TextButton(onClick = { confirmReopen = true }) {
+                            TextButton(onClick = { confirmReopen = true }, shapes = ButtonDefaults.shapes()) {
                                 Icon(Icons.Rounded.Replay, contentDescription = null, modifier = Modifier.size(16.dp), tint = palette.onPrimaryContainer)
                                 Spacer(Modifier.width(4.dp))
                                 Text("Reopen", fontFamily = FigtreeFontFamily, fontWeight = FontWeight.Bold, color = palette.onPrimaryContainer)
@@ -218,10 +225,10 @@ fun TripLifecycleCard(
                         TextButton(onClick = {
                             suggestionDismissed = true
                             onDismissSuggestion?.invoke()
-                        }) {
+                        }, shapes = ButtonDefaults.shapes()) {
                             Text("Not yet", fontFamily = FigtreeFontFamily, color = palette.onTertiaryContainer)
                         }
-                        TextButton(onClick = { confirmWrapUp = true }) {
+                        TextButton(onClick = { confirmWrapUp = true }, shapes = ButtonDefaults.shapes()) {
                             Text("Wrap up", fontFamily = FigtreeFontFamily, fontWeight = FontWeight.ExtraBold, color = palette.onTertiaryContainer)
                         }
                     }
@@ -302,12 +309,12 @@ fun TripLifecycleCard(
                 )
             },
             confirmButton = {
-                TextButton(onClick = { confirmWrapUp = false; onWrapUp() }) {
+                TextButton(onClick = { confirmWrapUp = false; onWrapUp() }, shapes = ButtonDefaults.shapes()) {
                     Text("Wrap up", fontWeight = FontWeight.ExtraBold, color = palette.primary)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmWrapUp = false }) { Text("Cancel", color = palette.onSurface) }
+                TextButton(onClick = { confirmWrapUp = false }, shapes = ButtonDefaults.shapes()) { Text("Cancel", color = palette.onSurface) }
             },
             containerColor = palette.surfaceContainerLowest
         )
@@ -318,12 +325,12 @@ fun TripLifecycleCard(
             title = { Text("Reopen this trip?", fontFamily = FigtreeFontFamily, fontWeight = FontWeight.ExtraBold) },
             text = { Text("The trip goes back to active for everyone.", fontFamily = FigtreeFontFamily, fontSize = 14.sp) },
             confirmButton = {
-                TextButton(onClick = { confirmReopen = false; onReopen() }) {
+                TextButton(onClick = { confirmReopen = false; onReopen() }, shapes = ButtonDefaults.shapes()) {
                     Text("Reopen", fontWeight = FontWeight.ExtraBold, color = palette.primary)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmReopen = false }) { Text("Cancel", color = palette.onSurface) }
+                TextButton(onClick = { confirmReopen = false }, shapes = ButtonDefaults.shapes()) { Text("Cancel", color = palette.onSurface) }
             },
             containerColor = palette.surfaceContainerLowest
         )
@@ -372,10 +379,10 @@ fun LateExpenseConfirmDialog(
             )
         },
         confirmButton = {
-            TextButton(onClick = onAddAnyway) { Text("Add anyway", fontWeight = FontWeight.ExtraBold, color = palette.secondary) }
+            TextButton(onClick = onAddAnyway, shapes = ButtonDefaults.shapes()) { Text("Add anyway", fontWeight = FontWeight.ExtraBold, color = palette.secondary) }
         },
         dismissButton = {
-            TextButton(onClick = onCancel) { Text("Go back", color = palette.onSurface) }
+            TextButton(onClick = onCancel, shapes = ButtonDefaults.shapes()) { Text("Go back", color = palette.onSurface) }
         },
         containerColor = palette.surfaceContainerLowest
     )

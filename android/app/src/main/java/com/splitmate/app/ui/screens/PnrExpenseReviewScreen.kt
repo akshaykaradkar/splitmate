@@ -596,22 +596,24 @@ fun PnrExpenseReviewScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Surface(
+                // v2.4.0 rc3: official OutlinedIconButton with the shapes() press morph.
+                OutlinedIconButton(
                     onClick = onBackClick,
-                    shape = CircleShape,
-                    color = TactilePaperPassTokens.PaperSurface,
+                    shapes = IconButtonDefaults.shapes(),
+                    colors = IconButtonDefaults.outlinedIconButtonColors(
+                        containerColor = TactilePaperPassTokens.PaperSurface,
+                        contentColor = TactilePaperPassTokens.InkPrimary
+                    ),
                     border = androidx.compose.foundation.BorderStroke(1.dp, TactilePaperPassTokens.HairlineBorder),
                     modifier = Modifier
                         .minimumInteractiveComponentSize()
                         .size(42.dp)
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = "Back",
-                            tint = TactilePaperPassTokens.InkPrimary
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                        contentDescription = "Back",
+                        tint = TactilePaperPassTokens.InkPrimary
+                    )
                 }
 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -633,24 +635,25 @@ fun PnrExpenseReviewScreen(
 
                 var showGroupDropdown by remember { mutableStateOf(false) }
                 Box {
-                    Surface(
+                    // v2.4.0 rc3: official OutlinedIconButton with the shapes() press morph.
+                    OutlinedIconButton(
                         onClick = { showGroupDropdown = true },
-                        shape = CircleShape,
-                        color = TactilePaperPassTokens.PaperSurface,
+                        shapes = IconButtonDefaults.shapes(),
+                        colors = IconButtonDefaults.outlinedIconButtonColors(
+                            containerColor = TactilePaperPassTokens.PaperSurface
+                        ),
                         border = androidx.compose.foundation.BorderStroke(1.dp, TactilePaperPassTokens.HairlineBorder),
                         modifier = Modifier
                             .minimumInteractiveComponentSize()
                             .size(42.dp)
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Rounded.Groups,
-                                contentDescription = "Switch Group",
-                                // Dark: #D7E8B6 on #1F1D1A paper (ForestTop #264010 would be ~1.4:1). Light: unchanged.
-                                tint = if (SplitMateTheme.isDark) TactilePaperPassTokens.SageConfirmedText else TactilePaperPassTokens.ForestTop,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Rounded.Groups,
+                            contentDescription = "Switch Group",
+                            // Dark: #D7E8B6 on #1F1D1A paper (ForestTop #264010 would be ~1.4:1). Light: unchanged.
+                            tint = if (SplitMateTheme.isDark) TactilePaperPassTokens.SageConfirmedText else TactilePaperPassTokens.ForestTop,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                     DropdownMenu(
                         expanded = showGroupDropdown,
@@ -753,7 +756,7 @@ fun PnrExpenseReviewScreen(
                                 }
                             },
                             enabled = canConfirmExpense && !isSubmitting,
-                            shape = RoundedCornerShape(16.dp),
+                            shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(16.dp)),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = TactilePaperPassTokens.ForestTop,
                                 contentColor = TactilePaperPassTokens.OnForest,
@@ -963,7 +966,8 @@ fun PnrExpenseReviewScreen(
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(4.dp))
-                        Surface(
+                        // v2.4.0 rc3: official FilledTonalButton with the shapes() press morph.
+                        FilledTonalButton(
                             onClick = {
                                 val manualPnr = pnrInput.filter { it.isDigit() }.padEnd(10, '0').take(10)
                                 pnrInput = manualPnr
@@ -971,12 +975,15 @@ fun PnrExpenseReviewScreen(
                                     cleanPnr = manualPnr
                                 )
                             },
-                            shape = RoundedCornerShape(999.dp),
-                            color = TactilePaperPassTokens.AmberChartBg,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, TactilePaperPassTokens.AmberChartBorder)
+                            shapes = ButtonDefaults.shapes(),
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = TactilePaperPassTokens.AmberChartBg,
+                                contentColor = TactilePaperPassTokens.AmberChartText
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, TactilePaperPassTokens.AmberChartBorder),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
@@ -1230,13 +1237,17 @@ fun PnrSearchLookupCard(
                 }
             }
 
-            Surface(
+            // v2.4.0 rc3: official Button with the shapes() press morph.
+            Button(
                 onClick = onFetchClick,
-                shape = RoundedCornerShape(12.dp),
-                color = TactilePaperPassTokens.ForestTop
+                shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(12.dp)),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = TactilePaperPassTokens.ForestTop,
+                    contentColor = TactilePaperPassTokens.ForestAccent
+                ),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp)
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (isFetching) {
@@ -1906,20 +1917,26 @@ private fun MemberSplitSelectionCard(
                     )
                 }
 
-                Surface(
+                // v2.4.0 rc3: official extra-small FilledTonalButton with the shapes() press morph.
+                FilledTonalButton(
                     onClick = onSelectExactTicketCount,
-                    shape = RoundedCornerShape(999.dp),
-                    color = TactilePaperPassTokens.SageConfirmedBg,
+                    shapes = ButtonDefaults.shapes(),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = TactilePaperPassTokens.SageConfirmedBg,
+                        contentColor = TactilePaperPassTokens.SageConfirmedText
+                    ),
                     border = androidx.compose.foundation.BorderStroke(1.dp, TactilePaperPassTokens.SageConfirmedBorder),
-                    modifier = Modifier.minimumInteractiveComponentSize()
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp),
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .heightIn(min = ButtonDefaults.ExtraSmallContainerHeight)
                 ) {
                     Text(
                         text = "Select $ticketPassengerCount Pax",
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
-                        color = TactilePaperPassTokens.SageConfirmedText,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        color = TactilePaperPassTokens.SageConfirmedText
                     )
                 }
             }
@@ -1962,7 +1979,7 @@ private fun MemberSplitSelectionCard(
                                         quickAddName = ""
                                     }
                                 },
-                                shape = RoundedCornerShape(16.dp),
+                                shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(16.dp)),
                                 colors = ButtonDefaults.buttonColors(containerColor = TactilePaperPassTokens.ForestTop)
                             ) {
                                 Icon(Icons.Rounded.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))

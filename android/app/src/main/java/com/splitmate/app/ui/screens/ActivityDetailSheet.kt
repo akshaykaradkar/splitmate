@@ -100,6 +100,7 @@ fun ActivityDetailSheet(
             },
             confirmButton = {
                 TextButton(
+                    shapes = ButtonDefaults.shapes(),
                     onClick = {
                         showDeleteConfirm = false
                         val idToRollback = expense.expenseId
@@ -111,7 +112,7 @@ fun ActivityDetailSheet(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) {
+                TextButton(onClick = { showDeleteConfirm = false }, shapes = ButtonDefaults.shapes()) {
                     Text("Cancel", fontWeight = FontWeight.Bold, color = SplitMateTheme.TextSecondary)
                 }
             },
@@ -199,7 +200,7 @@ fun ActivityDetailSheet(
                         onDismiss()
                         onOpenBoardingPass(gId, pnrCode)
                     },
-                    shape = SplitMateTheme.RadiusButton,
+                    shapes = ButtonDefaults.shapes(shape = SplitMateTheme.RadiusButton),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = SplitMateTheme.PrimaryDark,
                         contentColor = SplitMateTheme.ScreenBg

@@ -882,6 +882,7 @@ fun FlightExpenseReviewScreen(
                     },
                     navigationIcon = {
                         IconButton(
+                            shapes = IconButtonDefaults.shapes(),
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                 onBackClick()
@@ -908,6 +909,7 @@ fun FlightExpenseReviewScreen(
                     actions = {
                         // Upload Another PDF Action Button
                         IconButton(
+                            shapes = IconButtonDefaults.shapes(),
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                 onPickAnotherPdfClick()
@@ -933,24 +935,26 @@ fun FlightExpenseReviewScreen(
 
                         // Switch Group Dropdown Button (48dp touch bounds, 40dp visual circle)
                         Box {
-                            Surface(
+                            // v2.4.0 rc3: official OutlinedIconButton with the shapes() press morph.
+                            OutlinedIconButton(
                                 onClick = { showGroupDropdown = true },
-                                shape = CircleShape,
-                                color = FlightPassTokens.AviationNavy,
+                                shapes = IconButtonDefaults.shapes(),
+                                colors = IconButtonDefaults.outlinedIconButtonColors(
+                                    containerColor = FlightPassTokens.AviationNavy,
+                                    contentColor = FlightPassTokens.AviationOnVariant
+                                ),
                                 border = BorderStroke(1.dp, FlightPassTokens.SkyBlueBorder),
                                 modifier = Modifier
                                     .padding(end = 8.dp)
                                     .minimumInteractiveComponentSize()
                                     .size(40.dp)
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Groups,
-                                        contentDescription = "Switch Group",
-                                        tint = FlightPassTokens.AviationOnVariant,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Rounded.Groups,
+                                    contentDescription = "Switch Group",
+                                    tint = FlightPassTokens.AviationOnVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
                             DropdownMenu(
                                 expanded = showGroupDropdown,
@@ -1041,7 +1045,7 @@ fun FlightExpenseReviewScreen(
                                 }
                             },
                             enabled = selectedMemberIds.isNotEmpty() && totalAirfarePaise > 0L && !isCommittingBoardingPass,
-                            shape = FlightPassTokens.RadiusPill,
+                            shapes = ButtonDefaults.shapes(),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = FlightPassTokens.CommitCtaContainer,
                                 contentColor = FlightPassTokens.AccentSageGlow,
@@ -1248,15 +1252,19 @@ fun FlightExpenseReviewScreen(
                                         }
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Surface(
+                                    // v2.4.0 rc3: official OutlinedButton with the shapes() press morph.
+                                    OutlinedButton(
                                         onClick = { showPayerDropdown = true },
-                                        shape = FlightPassTokens.RadiusPill,
-                                        color = FlightPassTokens.TicketPaperWhite,
+                                        shapes = ButtonDefaults.shapes(),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            containerColor = FlightPassTokens.TicketPaperWhite,
+                                            contentColor = FlightPassTokens.SkyBlueText
+                                        ),
                                         border = BorderStroke(1.dp, FlightPassTokens.SkyBlueBorder),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp),
                                         modifier = Modifier.minimumInteractiveComponentSize()
                                     ) {
                                         Row(
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(2.dp)
                                         ) {
@@ -1296,15 +1304,19 @@ fun FlightExpenseReviewScreen(
                             ) {
                                 // Payer Switcher Pill
                                 Box {
-                                    Surface(
+                                    // v2.4.0 rc3: official FilledTonalButton with the shapes() press morph.
+                                    FilledTonalButton(
                                         onClick = { showPayerDropdown = true },
-                                        shape = FlightPassTokens.RadiusPill,
-                                        color = FlightPassTokens.SkyBlue,
+                                        shapes = ButtonDefaults.shapes(),
+                                        colors = ButtonDefaults.filledTonalButtonColors(
+                                            containerColor = FlightPassTokens.SkyBlue,
+                                            contentColor = FlightPassTokens.SkyBlueText
+                                        ),
                                         border = BorderStroke(1.dp, FlightPassTokens.SkyBlueBorder),
+                                        contentPadding = PaddingValues(horizontal = 9.dp, vertical = 4.dp),
                                         modifier = Modifier.minimumInteractiveComponentSize()
                                     ) {
                                         Row(
-                                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(2.dp)
                                         ) {
@@ -1653,47 +1665,55 @@ fun PaperSensoryFeedbackBanner(
         )
         Spacer(modifier = Modifier.width(8.dp))
 
-        Surface(
+        // v2.4.0 rc3: official M3 Expressive FilterChip (selected = sound on, press morph).
+        FilterChip(
+            selected = isFeedbackEnabled,
             onClick = {
                 haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                 onToggleFeedback(!isFeedbackEnabled)
             },
-            shape = FlightPassTokens.RadiusPill,
-            color = if (isFeedbackEnabled) FlightPassTokens.StatusGreenSurface else FlightPassTokens.TicketPaperWhite,
-            border = BorderStroke(
-                1.dp,
-                if (isFeedbackEnabled) FlightPassTokens.StatusGreenBorder else FlightPassTokens.BorderSubtle
-            )
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.5.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            shapes = FilterChipDefaults.shapes(shape = FlightPassTokens.RadiusPill, selectedShape = FlightPassTokens.RadiusPill),
+            colors = FilterChipDefaults.filterChipColors(
+                containerColor = FlightPassTokens.TicketPaperWhite,
+                selectedContainerColor = FlightPassTokens.StatusGreenSurface
+            ),
+            border = FilterChipDefaults.filterChipBorder(
+                enabled = true,
+                selected = isFeedbackEnabled,
+                borderColor = FlightPassTokens.BorderSubtle,
+                selectedBorderColor = FlightPassTokens.StatusGreenBorder,
+                borderWidth = 1.dp,
+                selectedBorderWidth = 1.dp
+            ),
+            leadingIcon = {
                 Icon(
                     imageVector = if (isFeedbackEnabled) Icons.AutoMirrored.Rounded.VolumeUp else Icons.AutoMirrored.Rounded.VolumeOff,
                     contentDescription = null,
                     tint = if (isFeedbackEnabled) FlightPassTokens.StatusGreenText else FlightPassTokens.TextSecondary,
                     modifier = Modifier.size(13.dp)
                 )
-                Spacer(modifier = Modifier.width(5.dp))
-                Text(
-                    text = if (isFeedbackEnabled) "Sound: ON" else "Sound: OFF",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    color = if (isFeedbackEnabled) FlightPassTokens.StatusGreenText else FlightPassTokens.TextSecondary
-                )
-                if (isFeedbackEnabled) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Box(
-                        modifier = Modifier
-                            .size(5.dp)
-                            .clip(CircleShape)
-                            .background(FlightPassTokens.StatusGreenDot)
+            },
+            label = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = if (isFeedbackEnabled) "Sound: ON" else "Sound: OFF",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        color = if (isFeedbackEnabled) FlightPassTokens.StatusGreenText else FlightPassTokens.TextSecondary
                     )
+                    if (isFeedbackEnabled) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(5.dp)
+                                .clip(CircleShape)
+                                .background(FlightPassTokens.StatusGreenDot)
+                        )
+                    }
                 }
             }
-        }
+        )
     }
 }
 

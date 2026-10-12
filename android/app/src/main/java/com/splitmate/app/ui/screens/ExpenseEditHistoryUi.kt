@@ -13,6 +13,7 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -43,6 +44,7 @@ import com.splitmate.app.ui.formatIndianRupeesFromCents
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.material3.TextButton
 
 /**
  * v2.4.0 P4: what changed on an expense, in plain words. Pure (unit-tested); no money math.
@@ -142,7 +144,7 @@ fun ExpenseEditHistorySection(
                         color = MaterialTheme.colorScheme.onTertiaryContainer
                     )
                     if (canRestore) {
-                        FilledTonalButton(onClick = { onRestoreTotal(latest.oldTotalCents) }) {
+                        FilledTonalButton(onClick = { onRestoreTotal(latest.oldTotalCents) }, shapes = ButtonDefaults.shapes()) {
                             Text("Restore ${formatIndianRupeesFromCents(latest.oldTotalCents)}", style = amountStyle)
                         }
                     }
@@ -206,15 +208,19 @@ fun ExpenseEditHistorySection(
                         }
                     }
                     if (!showAll && changes.size > 5) {
-                        Text(
-                            text = "Show all ${changes.size}",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .padding(start = 30.dp)
-                                .clickable(role = Role.Button) { showAll = true }
-                                .padding(vertical = 12.dp)
-                        )
+                        // v2.4.0 rc3: official TextButton with the shapes() press morph.
+                        TextButton(
+                            onClick = { showAll = true },
+                            shapes = ButtonDefaults.shapes(),
+                            // 18dp + the button's 12dp text inset keeps the label on the 30dp column.
+                            modifier = Modifier.padding(start = 18.dp)
+                        ) {
+                            Text(
+                                text = "Show all ${changes.size}",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 }
             }

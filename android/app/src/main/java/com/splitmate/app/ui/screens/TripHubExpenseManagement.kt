@@ -1,6 +1,7 @@
 package com.splitmate.app.ui.screens
 
 import androidx.compose.material3.Surface
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -208,6 +209,7 @@ fun TripHubManageExpenseRow(
             if (actions != null && expense != null) {
                 TextButton(
                     onClick = { actions.openDetails(expense) },
+                    shapes = ButtonDefaults.shapes(),
                     enabled = canModify,
                     modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                 ) {
@@ -229,6 +231,7 @@ fun TripHubManageExpenseRow(
             }
             TextButton(
                 onClick = { showDeleteConfirm = true },
+                shapes = ButtonDefaults.shapes(),
                 enabled = canModify,
                 modifier = Modifier.defaultMinSize(minHeight = 48.dp)
             ) {
@@ -292,6 +295,7 @@ private fun TripHubDeleteExpenseDialog(
         confirmButton = {
             val deleteHaptic = androidx.compose.ui.platform.LocalHapticFeedback.current
             TextButton(
+                shapes = ButtonDefaults.shapes(),
                 onClick = {
                     // v2.4.0 D4: a destructive money action that succeeded feels like Confirm.
                     deleteHaptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm)
@@ -307,7 +311,7 @@ private fun TripHubDeleteExpenseDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) {
                 Text(
                     text = "Cancel",
                     fontFamily = FigtreeFontFamily,
@@ -366,12 +370,12 @@ fun TripHubMarkPaidConfirmDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onConfirm) {
+            TextButton(onClick = onConfirm, shapes = ButtonDefaults.shapes()) {
                 Text(text = "Mark paid", style = MaterialTheme.typography.labelLarge)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) {
                 Text(
                     text = "Cancel",
                     style = MaterialTheme.typography.labelLarge,
