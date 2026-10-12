@@ -1968,6 +1968,7 @@ fun SplitMateBottomNavigationBar(
 // ==============================================================================
 // TAB 1: LEDGERS (Dashboard Screen + Inside-Group Detail View)
 // ==============================================================================
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LedgersDashboardScreen(
     viewModel: SplitMateViewModel,
@@ -2210,24 +2211,29 @@ fun LedgersDashboardScreen(
                             val iconKey = option.id
                             val iconVector = option.icon
                             val isSelected = draftIconName.equals(iconKey, ignoreCase = true)
-                            Surface(
-                                onClick = { draftIconName = iconKey },
-                                shape = CircleShape,
-                                color = if (isSelected) SplitMateTheme.AccentSage else SplitMateTheme.SurfaceMuted,
+                            // v2.4.0 rc3: official icon toggle (checked + press shape morph).
+                            OutlinedIconToggleButton(
+                                checked = isSelected,
+                                onCheckedChange = { draftIconName = iconKey },
+                                shapes = IconButtonDefaults.toggleableShapes(),
+                                colors = IconButtonDefaults.outlinedIconToggleButtonColors(
+                                    containerColor = SplitMateTheme.SurfaceMuted,
+                                    contentColor = SplitMateTheme.TextSecondary,
+                                    checkedContainerColor = SplitMateTheme.AccentSage,
+                                    checkedContentColor = SplitMateTheme.Palette.onSurface
+                                ),
                                 border = BorderStroke(
                                     1.dp,
                                     if (isSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.BorderLight
                                 ),
-                                modifier = Modifier.size(40.dp)
+                                modifier = Modifier.size(IconButtonDefaults.smallContainerSize())
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = iconVector,
-                                        contentDescription = option.label,
-                                        tint = if (isSelected) SplitMateTheme.Palette.onSurface else SplitMateTheme.TextSecondary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
+                                Icon(
+                                    imageVector = iconVector,
+                                    contentDescription = option.label,
+                                    tint = if (isSelected) SplitMateTheme.Palette.onSurface else SplitMateTheme.TextSecondary,
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
                         }
                     }
@@ -4839,11 +4845,12 @@ fun LedgersDashboardScreen(
                 }
             )
         } else {
-            Dialog(onDismissRequest = { showNewGroupDialog = false }) {
+            // v2.4.0 rc3: the official BasicAlertDialog container (scrim, pane title, sizing) with the
+            // same bordered Buckwheat surface; no hand-set 18dp shadow.
+            BasicAlertDialog(onDismissRequest = { showNewGroupDialog = false }) {
             Surface(
                 shape = SplitMateTheme.RadiusDialog,
                 color = SplitMateTheme.SurfaceWhite,
-                shadowElevation = 18.dp,
                 modifier = Modifier
                     .fillMaxWidth()
                     .border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusDialog)
@@ -4916,25 +4923,26 @@ fun LedgersDashboardScreen(
                             ) {
                                 rowIcons.forEach { option ->
                                     val isSelected = selectedIconKey == option.key
-                                    val iconScale by animateFloatAsState(
-                                        targetValue = if (isSelected) 1.08f else 1.0f,
-                                        animationSpec = DesignSystemBindings.tactileSpring(),
-                                        label = "GroupIconBounce_${option.key}"
-                                    )
-                                    Surface(
-                                        onClick = { selectedIconKey = option.key },
-                                        shape = RoundedCornerShape(14.dp),
-                                        color = if (isSelected) SplitMateTheme.AccentSage else SplitMateTheme.SurfaceMuted,
+                                    // v2.4.0 rc3: official OutlinedToggleButton; the checked/pressed shape
+                                    // morph (ToggleButtonDefaults.shapes()) replaces the hand-built scale bounce.
+                                    OutlinedToggleButton(
+                                        checked = isSelected,
+                                        onCheckedChange = { selectedIconKey = option.key },
+                                        shapes = ToggleButtonDefaults.shapes(),
+                                        colors = ToggleButtonDefaults.outlinedToggleButtonColors(
+                                            containerColor = SplitMateTheme.SurfaceMuted,
+                                            contentColor = SplitMateTheme.PrimaryDark,
+                                            checkedContainerColor = SplitMateTheme.AccentSage,
+                                            checkedContentColor = SplitMateTheme.Palette.onSurface
+                                        ),
                                         border = BorderStroke(
                                             width = if (isSelected) 1.5.dp else 1.dp,
                                             color = if (isSelected) SplitMateTheme.Extended.sage.color else SplitMateTheme.BorderLight
                                         ),
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .scale(iconScale)
+                                        contentPadding = PaddingValues(vertical = 8.dp, horizontal = 4.dp),
+                                        modifier = Modifier.weight(1f)
                                     ) {
                                         Column(
-                                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
                                             horizontalAlignment = Alignment.CenterHorizontally
                                         ) {
                                             Icon(
