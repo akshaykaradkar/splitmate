@@ -184,6 +184,13 @@ class AnimatedTicketNotchShape(
 // 3. MASTER COMPONENT: AnimatedTransitDeckHeroCard
 //    (Self-contained component with stacked spring-physics shuffle + kinetic train & airplane graphics)
 // ==============================================================================
+/**
+ * v2.4.0 rc2: how far the back card sits above the front one. Its header row is ~36dp tall from
+ * the card top and the back card is scaled to 0.94 (its top moves down ~6dp), so 46dp keeps the
+ * whole header visible with a little breathing room.
+ */
+private val BackCardPeek = 46.dp
+
 @Composable
 fun AnimatedTransitDeckHeroCard(
     modifier: Modifier = Modifier,
@@ -225,7 +232,7 @@ fun AnimatedTransitDeckHeroCard(
         label = "TrainScale"
     )
     val baseTrainOffsetY by animateDpAsState(
-        targetValue = if (isTrainActive) 0.dp else (-34).dp,
+        targetValue = if (isTrainActive) 0.dp else -BackCardPeek,
         animationSpec = springSpecDp,
         label = "TrainOffsetY"
     )
@@ -247,7 +254,7 @@ fun AnimatedTransitDeckHeroCard(
         label = "FlightScale"
     )
     val baseFlightOffsetY by animateDpAsState(
-        targetValue = if (isFlightActive) 0.dp else (-34).dp,
+        targetValue = if (isFlightActive) 0.dp else -BackCardPeek,
         animationSpec = springSpecDp,
         label = "FlightOffsetY"
     )
@@ -266,12 +273,13 @@ fun AnimatedTransitDeckHeroCard(
     ProvideTextStyle(
         value = LocalTextStyle.current.copy(fontFamily = SplitMateTheme.FontRounded)
     ) {
-        // Master container: 242dp envelope with 34dp upper headroom to prevent overlap with top buttons
+        // Master container: card + headroom for the back card's peek (v2.4.0 rc2: 46dp so the back
+        // card's whole header row, "Flight ticket" + "Switch to flight", shows instead of being sliced).
         Box(
             modifier = modifier
                 .fillMaxWidth()
-                .height(242.dp)
-                .padding(top = 34.dp),
+                .height(204.dp + BackCardPeek + 4.dp)
+                .padding(top = BackCardPeek),
             contentAlignment = Alignment.BottomCenter
         ) {
             // ----------------------------------------------------------------------

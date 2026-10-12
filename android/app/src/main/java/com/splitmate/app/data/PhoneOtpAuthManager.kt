@@ -149,14 +149,14 @@ object PhoneOtpAuthManager {
                     val detail = e.localizedMessage.orEmpty()
                     onFailure(
                         if (detail.contains("16") || detail.contains("No phone number", ignoreCase = true)) {
-                            "No SIM card number detected by Google Play Services on this device. Use your 4-Digit Security PIN below."
+                            "No SIM card number detected by Google Play Services on this device. Use your 4-digit Security PIN below."
                         } else {
-                            "Google SIM verification unavailable on this device. Use your 4-Digit Security PIN below."
+                            "Google SIM verification unavailable on this device. Use your 4-digit Security PIN below."
                         }
                     )
                 }
         } catch (_: Throwable) {
-            onFailure("Google Play Services SIM verification unavailable. Use your 4-Digit Security PIN below.")
+            onFailure("Google Play Services SIM verification unavailable. Use your 4-digit Security PIN below.")
         }
     }
 
@@ -318,7 +318,7 @@ object PhoneOtpAuthManager {
                 expiresAt = expiresAt,
                 onDeliveryUpdate = onDeliveryUpdate
             )
-            val statusMsg = "Verify SIM with Google or enter your 4-Digit Account Security PIN for +91 $phone10"
+            val statusMsg = "Verify SIM with Google or enter your 4-digit Account Security PIN for +91 $phone10"
             onDeliveryUpdate(statusMsg)
             return OtpDispatchResult(
                 phone10 = phone10,

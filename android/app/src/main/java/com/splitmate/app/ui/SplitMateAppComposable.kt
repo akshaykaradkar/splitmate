@@ -1052,9 +1052,9 @@ fun SplitMateCloudOtpOnboardingScreen(
                                 )
                                 Text(
                                     text = if (hasExisting4DigitPin) {
-                                        "Welcome back, ${discoveredProfile?.name ?: "Explorer"}! Enter your 4-Digit PIN to unlock +91 $normalizedPhone10."
+                                        "Welcome back, ${discoveredProfile?.name ?: "Explorer"}! Enter your 4-digit PIN to unlock +91 $normalizedPhone10."
                                     } else {
-                                        "Ready to sync +91 $normalizedPhone10! Optional 4-Digit PIN below locks your account across devices."
+                                        "Ready to sync +91 $normalizedPhone10! Optional 4-digit PIN below locks your account across devices."
                                     },
                                     fontFamily = SplitMateTheme.FontRounded,
                                     fontSize = 12.sp,
@@ -1074,9 +1074,9 @@ fun SplitMateCloudOtpOnboardingScreen(
                         label = {
                             Text(
                                 text = if (hasExisting4DigitPin) {
-                                    "Enter 4-Digit Security PIN to Unlock Account"
+                                    "Enter 4-digit Security PIN to Unlock Account"
                                 } else {
-                                    "Optional 4-Digit Security PIN (Recommended for Multi-Device Lock)"
+                                    "Optional 4-digit Security PIN (Recommended for Multi-Device Lock)"
                                 },
                                 fontFamily = SplitMateTheme.FontRounded
                             )
@@ -1692,19 +1692,21 @@ fun SplitMateMainDashboardScaffold(
                 AnimatedVisibility(
                     visible = !isImmersiveTripHubOpen &&
                         currentTab != SplitMateTab.SPLIT,
+                    // v2.4.0 rc2: slide only. A fade renders the bar in an offscreen layer clipped to
+                    // its bounds, which cut the round shadow into a rectangle.
                     enter = slideInVertically(
                         animationSpec = SplitMateMotion.defaultSpatial(),
                         initialOffsetY = { it }
-                    ) + fadeIn(animationSpec = SplitMateMotion.defaultEffects()),
+                    ),
                     exit = slideOutVertically(
                         animationSpec = SplitMateMotion.defaultSpatial(),
                         targetOffsetY = { it }
-                    ) + fadeOut(animationSpec = SplitMateMotion.defaultEffects())
+                    )
                 ) {
+                    // v2.4.0 rc2: no size animation wrapper here (it clipped to bounds and flattened the shadow).
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
                             .testTag("HorizontalFloatingToolbar")
                     ) {
                         SplitMateBottomNavigationBar(
@@ -1870,7 +1872,7 @@ fun ExpressiveNavigationRail(
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SplitMateBottomNavigationBar(
     selectedTab: SplitMateTab,
@@ -1886,23 +1888,29 @@ fun SplitMateBottomNavigationBar(
             .padding(bottom = 16.dp),
         contentAlignment = Alignment.BottomCenter
     ) {
-        HorizontalFloatingToolbar(
+        // v2.4.0 rc2: the official M3 Expressive floating toolbar. It owns the pill shape, the
+        // shadow and the expand/collapse into the FAB, so no rectangular shadow appears mid-collapse.
+        androidx.compose.material3.HorizontalFloatingToolbar(
             expanded = expanded,
             floatingActionButton = {
-                FloatingToolbarDefaults.StandardFloatingActionButton(
+                androidx.compose.material3.FloatingToolbarDefaults.VibrantFloatingActionButton(
                     onClick = onQuickSplitClick,
                     containerColor = activePalette.primary,
-                    contentColor = activePalette.onPrimary,
-                    modifier = Modifier.minimumInteractiveComponentSize()
+                    contentColor = activePalette.onPrimary
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.ElectricBolt,
                         contentDescription = "Quick Split",
-                        tint = activePalette.onPrimary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(24.dp)
                     )
                 }
-            }
+            },
+            colors = androidx.compose.material3.FloatingToolbarDefaults.standardFloatingToolbarColors(
+                toolbarContainerColor = activePalette.surfaceContainerHigh,
+                toolbarContentColor = activePalette.onSurface,
+                fabContainerColor = activePalette.primary,
+                fabContentColor = activePalette.onPrimary
+            )
         ) {
             SplitMateTab.values().filter { it.showInPrimaryNav }.forEach { tab ->
                 val isSelected = selectedTab == tab
@@ -1922,10 +1930,10 @@ fun SplitMateBottomNavigationBar(
                     color = tabPillBg,
                     modifier = Modifier
                         .minimumInteractiveComponentSize()
-                        .sizeIn(minWidth = 64.dp, minHeight = 48.dp)
+                        .sizeIn(minWidth = 56.dp, minHeight = 48.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
@@ -3673,7 +3681,13 @@ fun LedgersDashboardScreen(
                     Box(
                         modifier = Modifier
                             .clip(CircleShape)
-                            .clickable(onClick = onAvatarSettingsClick)
+                            // v2.4.0 rc2: TalkBack said only "button"; now "Open settings".
+                            .clickable(
+                                onClickLabel = "Open settings",
+                                role = androidx.compose.ui.semantics.Role.Button,
+                                onClick = onAvatarSettingsClick
+                            )
+                            .semantics(mergeDescendants = true) { contentDescription = "Open settings" }
                     ) {
                         SplitMateCharacterAvatar(
                             name = uiState.avatarSeed.ifBlank { uiState.currentUserName.ifBlank { "You" } },
@@ -3737,9 +3751,9 @@ fun LedgersDashboardScreen(
                                     )
                                     Text(
                                         text = if (normalizedUserPhone10.length == 10) {
-                                            "Unlock +91 $normalizedUserPhone10 with your 4-Digit PIN to sync shared trips"
+                                            "Unlock +91 $normalizedUserPhone10 with your 4-digit PIN to sync shared trips"
                                         } else {
-                                            "Link your 10-digit mobile number & 4-Digit PIN to sync groups across phones"
+                                            "Link your 10-digit mobile number & 4-digit PIN to sync groups across phones"
                                         },
                                         fontFamily = SplitMateTheme.FontRounded,
                                         fontSize = 11.sp,
@@ -3788,7 +3802,7 @@ fun LedgersDashboardScreen(
                                 onValueChange = { rawPin ->
                                     upgradeOtpInput = rawPin.filter { it.isDigit() }.take(4)
                                 },
-                                label = { Text("4-Digit Security PIN") },
+                                label = { Text("4-digit Security PIN") },
                                 leadingIcon = {
                                     Icon(Icons.Rounded.Lock, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
                                 },
@@ -5813,7 +5827,8 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(top = 12.dp, bottom = 28.dp),
+        // v2.4.0 rc2: clear the floating toolbar + FAB, same as Home (was 28dp; last rows hid under it).
+        contentPadding = PaddingValues(top = 12.dp, bottom = 160.dp),
         verticalArrangement = Arrangement.spacedBy(DesignSystemBindings.PixelSectionSpacing)
     ) {
         item {
@@ -6727,20 +6742,9 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                         modifier = Modifier.weight(1f),
                                                         contentAlignment = Alignment.CenterStart
                                                     ) {
-                                                    SplitButtonLayout(
-                                                        leadingText = "Mark paid",
-                                                        leadingIcon = Icons.Rounded.Check,
-                                                        onLeadingClick = performMarkPaidIn,
-                                                        menuItems = listOf(
-                                                            ExpressiveMenuAction(
-                                                                label = "Mark as received",
-                                                                icon = Icons.Rounded.CheckCircle,
-                                                                onClick = performMarkPaidIn
-                                                            ),
-                                                            ExpressiveMenuAction(
-                                                                label = "Remind on WhatsApp",
-                                                                icon = Icons.AutoMirrored.Rounded.Chat,
-                                                                onClick = {
+                                                    com.splitmate.app.ui.components.MarkPaidButton(
+                                                        onClick = performMarkPaidIn,
+                                                        onRemind = {
                                                                     val waPhone = if (debtorPhone.startsWith("+")) {
                                                                         debtorPhone.removePrefix("+")
                                                                     } else if (debtorPhone.length >= 10) {
@@ -6761,10 +6765,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                                     }.onFailure {
                                                                         Toast.makeText(context, "WhatsApp is not installed on this device", Toast.LENGTH_SHORT).show()
                                                                     }
-                                                                }
-                                                            )
-                                                        ),
-                                                        
+                                                                },
                                                         containerColor = SplitMateTheme.PrimaryDark,
                                                         contentColor = SplitMateTheme.ScreenBg
                                                     )
@@ -7052,20 +7053,9 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                         modifier = Modifier.fillMaxWidth(),
                                                         contentAlignment = Alignment.Center
                                                     ) {
-                                                    SplitButtonLayout(
-                                                        leadingText = "Mark paid",
-                                                        leadingIcon = Icons.Rounded.Check,
-                                                        onLeadingClick = performMarkPaidOut,
-                                                        menuItems = listOf(
-                                                            ExpressiveMenuAction(
-                                                                label = "Mark as paid",
-                                                                icon = Icons.Rounded.CheckCircle,
-                                                                onClick = performMarkPaidOut
-                                                            ),
-                                                            ExpressiveMenuAction(
-                                                                label = "Remind on WhatsApp",
-                                                                icon = Icons.AutoMirrored.Rounded.Chat,
-                                                                onClick = {
+                                                    com.splitmate.app.ui.components.MarkPaidButton(
+                                                        onClick = performMarkPaidOut,
+                                                        onRemind = {
                                                                     val waPhone = if (creditorPhone.startsWith("+")) {
                                                                         creditorPhone.removePrefix("+")
                                                                     } else if (creditorPhone.length >= 10) {
@@ -7086,9 +7076,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                                     }.onFailure {
                                                                         Toast.makeText(context, "WhatsApp is not installed on this device", Toast.LENGTH_SHORT).show()
                                                                     }
-                                                                }
-                                                            )
-                                                        ),
+                                                                },
                                                         fillWidth = true,
                                                         containerColor = SplitMateTheme.PrimaryDark,
                                                         contentColor = SplitMateTheme.ScreenBg

@@ -1874,7 +1874,8 @@ fun QuickExpenseScreen(
                                 },
                                 shape = QuickExpenseThemeTokens.RadiusKeySquircle,
                                 color = ctaContainerColor,
-                                shadowElevation = if (canCommitSplit) 6.dp else 2.dp,
+                                // v2.4.0 rc2: flat like every other key (the only shadowed key read as a glitch).
+                                shadowElevation = 0.dp,
                                 border = BorderStroke(
                                     width = 1.5.dp,
                                     color = if (canCommitSplit) ctaEnabledContainer else QuickExpenseThemeTokens.AccentSage

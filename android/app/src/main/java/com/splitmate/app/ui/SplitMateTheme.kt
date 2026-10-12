@@ -88,7 +88,7 @@ enum class SplitMateThemeMode(
     SUNLIT_BUCKWHEAT(
         id = "SUNLIT_BUCKWHEAT",
         displayName = "Sunlit Buckwheat",
-        subtitle = "Warm Cream Expressive Daylight",
+        subtitle = "Warm cream and olive",
         isDark = false
     ),
     WARM_ESPRESSO_NIGHT(

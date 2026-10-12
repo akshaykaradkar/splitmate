@@ -356,7 +356,7 @@ fun OnboardingSetupScreen(
                     horizontalAlignment = Alignment.Start
                 ) {
                     Text(
-                        text = "Character Presentation",
+                        text = "Avatar type",
                         fontFamily = SplitMateBrandFontFamily,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
@@ -415,7 +415,7 @@ fun OnboardingSetupScreen(
                 OutlinedTextField(
                     value = phoneText,
                     onValueChange = { phoneText = it },
-                    label = { Text("10-Digit Mobile Number", fontFamily = SplitMateBrandFontFamily, fontWeight = FontWeight.SemiBold) },
+                    label = { Text("10-digit mobile number", fontFamily = SplitMateBrandFontFamily, fontWeight = FontWeight.SemiBold) },
                     placeholder = { Text("e.g. 9876543210", fontFamily = SplitMateBrandFontFamily) },
                     leadingIcon = {
                         Icon(
@@ -629,7 +629,7 @@ fun UserSettingsScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Settings & Preferences",
+                        text = "Settings",
                         fontFamily = SplitMateDisplayFontFamily,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 20.sp,
@@ -668,7 +668,7 @@ fun UserSettingsScreen(
             item {
                 Column {
                     Text(
-                        text = "Profile, Avatar & Mobile Number",
+                        text = "Profile",
                         fontFamily = SplitMateDisplayFontFamily,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.ExtraBold,
@@ -739,7 +739,7 @@ fun UserSettingsScreen(
                                 }
                             }
                             Text(
-                                text = "Tap avatar to shuffle look",
+                                text = "Tap the avatar to try another look",
                                 fontFamily = SplitMateBrandFontFamily,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium,
@@ -752,7 +752,7 @@ fun UserSettingsScreen(
                                 onValueChange = { editedName = it },
                                 label = {
                                     Text(
-                                        text = "Display Name",
+                                        text = "Name",
                                         fontFamily = SplitMateBrandFontFamily,
                                         fontWeight = FontWeight.SemiBold
                                     )
@@ -784,7 +784,7 @@ fun UserSettingsScreen(
                                 onValueChange = { editedPhone = it },
                                 label = {
                                     Text(
-                                        text = "10-Digit Mobile Number (Optional for Cloud Backup)",
+                                        text = "Mobile number (optional, for backup)",
                                         fontFamily = SplitMateBrandFontFamily,
                                         fontWeight = FontWeight.SemiBold
                                     )
@@ -818,7 +818,7 @@ fun UserSettingsScreen(
                             // A. Character Presentation (Male, Female, Neutral)
                             Column(modifier = Modifier.fillMaxWidth()) {
                                 Text(
-                                    text = "Character Presentation",
+                                    text = "Avatar type",
                                     fontFamily = SplitMateBrandFontFamily,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
@@ -843,7 +843,7 @@ fun UserSettingsScreen(
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Text(
-                                    text = "Character Art Style",
+                                    text = "Avatar style",
                                     fontFamily = SplitMateBrandFontFamily,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
@@ -907,7 +907,7 @@ fun UserSettingsScreen(
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Text(
-                                    text = "Backdrop Palette",
+                                    text = "Avatar background",
                                     fontFamily = SplitMateBrandFontFamily,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
@@ -981,7 +981,7 @@ fun UserSettingsScreen(
                                     .height(46.dp)
                             ) {
                                 Text(
-                                    text = "Save Profile",
+                                    text = "Save profile",
                                     fontFamily = SplitMateBrandFontFamily,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 14.sp
@@ -996,7 +996,7 @@ fun UserSettingsScreen(
             item {
                 Column {
                     Text(
-                        text = "Sharing & Trip Preferences",
+                        text = "Sharing",
                         fontFamily = SplitMateDisplayFontFamily,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.ExtraBold,
@@ -1016,8 +1016,8 @@ fun UserSettingsScreen(
                                 icon = Icons.Rounded.Share,
                                 iconBg = activePalette.tertiaryContainer,
                                 iconTint = activePalette.onTertiaryContainer,
-                                title = "Export & Share Trip Summary",
-                                subtitle = "Share a clean WhatsApp/Clipboard summary of all group balances & expenses ($activeGroupsCount active groups)",
+                                title = "Share a trip summary",
+                                subtitle = "Send balances and expenses to WhatsApp, or copy them ($activeGroupsCount active groups)",
                                 titleColor = textPrimary,
                                 subtitleColor = textSecondary,
                                 trailingContent = {
@@ -1060,7 +1060,7 @@ fun UserSettingsScreen(
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "Appearance & Haptics",
+                        text = "Appearance",
                         fontFamily = SplitMateDisplayFontFamily,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.ExtraBold,
@@ -1088,14 +1088,14 @@ fun UserSettingsScreen(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "Expressive Theme Studio",
+                                        text = "Theme",
                                         fontFamily = SplitMateBrandFontFamily,
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = textPrimary
                                     )
                                     Text(
-                                        text = "Curated tactile financial palettes with spring transitions",
+                                        text = "Pick the colours you like. Dark mode uses Obsidian Gold.",
                                         fontFamily = SplitMateBrandFontFamily,
                                         fontSize = 12.sp,
                                         color = textSecondary
@@ -1117,19 +1117,7 @@ fun UserSettingsScreen(
                                 }
                             }
 
-                            ConnectedButtonGroup(
-                                options = themeModes,
-                                selectedIndex = themeModes.indexOf(selectedThemeMode).coerceAtLeast(0),
-                                onSelect = { _, mode ->
-                                    selectedThemeMode = mode
-                                    isDarkTheme = mode.isDark
-                                    persistAndApplyExpressiveThemeMode(context, mode)
-                                    onSelectThemeMode(mode)
-                                    com.splitmate.app.ui.performCrispTactileHaptic(context, settingsLocalView, heavy = false)
-                                },
-                                labelProvider = { it.shortBadgeLabel },
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                            // v2.4.0 rc2: one way to pick a theme (the rows below); the duplicate button group is gone.
 
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 themeModes.forEachIndexed { idx, mode ->
@@ -1142,11 +1130,7 @@ fun UserSettingsScreen(
                                         outerCorner = 20.dp,
                                         innerCorner = 6.dp
                                     )
-                                    val paletteHexSummary = when (mode) {
-                                        SplitMateThemeMode.SUNLIT_BUCKWHEAT -> "#FAF6F0 · #365314 · #D9F99D · #FED8C8"
-                                        SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> "#15151A · #F5C451 · #2B2820 · #FF8AB0"
-                                        SplitMateThemeMode.KYOTO_MATCHA_YUZU -> "#FBF4EC · #5C53A5 · #E6DEFE · #AF2269"
-                                    }
+                                    // v2.4.0: colour swatches only; hex codes are not shown to people.
                                     Surface(
                                         onClick = {
                                             selectedThemeMode = mode
@@ -1205,13 +1189,6 @@ fun UserSettingsScreen(
                                                         fontSize = 11.sp,
                                                         color = textSecondary
                                                     )
-                                                    Text(
-                                                        text = paletteHexSummary,
-                                                        fontFamily = com.splitmate.app.ui.SplitMateTnumMonospace,
-                                                        fontSize = 11.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = if (isSelected) modePalette.primary else textSecondary.copy(alpha = 0.85f)
-                                                    )
                                                 }
                                             }
                                             if (isSelected) {
@@ -1241,8 +1218,8 @@ fun UserSettingsScreen(
                                 icon = if (isDarkTheme) Icons.Rounded.DarkMode else Icons.Rounded.LightMode,
                                 iconBg = activePalette.tertiaryContainer,
                                 iconTint = activePalette.onTertiaryContainer,
-                                title = "Dark Mode (Warm Espresso)",
-                                subtitle = "Switch between Daylight Expressive and Warm Espresso Night canvas",
+                                title = "Dark mode",
+                                subtitle = "Use the dark Obsidian Gold theme",
                                 titleColor = textPrimary,
                                 subtitleColor = textSecondary,
                                 trailingContent = {
@@ -1291,8 +1268,8 @@ fun UserSettingsScreen(
                                 icon = Icons.Rounded.Vibration,
                                 iconBg = SplitMateThemeTokens.AccentSage.copy(alpha = 0.45f),
                                 iconTint = SplitMateThemeTokens.SageText,
-                                title = "Tactile Keypad Haptics",
-                                subtitle = "Crisp hardware vibration feedback when typing amounts & splitting",
+                                title = "Vibration",
+                                subtitle = "A light tap when you type amounts and save",
                                 titleColor = textPrimary,
                                 subtitleColor = textSecondary,
                                 trailingContent = {
@@ -1330,7 +1307,7 @@ fun UserSettingsScreen(
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "Data Management",
+                        text = "Data",
                         fontFamily = SplitMateDisplayFontFamily,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.ExtraBold,
@@ -1349,7 +1326,7 @@ fun UserSettingsScreen(
                             icon = Icons.Rounded.DeleteForever,
                             iconBg = SplitMateThemeTokens.TerracottaSurface,
                             iconTint = SplitMateThemeTokens.TerracottaText,
-                            title = "Reset App Data",
+                            title = "Reset app data",
                             subtitle = "Permanently delete all groups, members, and expense history from this device.",
                             titleColor = SplitMateThemeTokens.TerracottaText,
                             subtitleColor = textSecondary,
@@ -1366,7 +1343,13 @@ fun UserSettingsScreen(
                     }
 
                     Text(
-                        text = "SplitMate v2.3.1 | Material 3 Expressive (Build 49)",
+                        // v2.4.0: the real installed version (it used to be a stale hard-coded string).
+                        text = remember(context) {
+                            val name = runCatching {
+                                context.packageManager.getPackageInfo(context.packageName, 0).versionName
+                            }.getOrNull()
+                            if (name.isNullOrBlank()) "SplitMate" else "SplitMate $name"
+                        },
                         fontFamily = SplitMateBrandFontFamily,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -1408,7 +1391,7 @@ fun UserSettingsScreen(
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "Reset App Data?",
+                            text = "Reset app data?",
                             fontFamily = SplitMateDisplayFontFamily,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.ExtraBold,

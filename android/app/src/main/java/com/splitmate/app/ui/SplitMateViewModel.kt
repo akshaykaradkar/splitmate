@@ -2001,7 +2001,7 @@ class SplitMateViewModel(
             val statusText = if (hasExisting4DigitPin) {
                 "Welcome back $resolvedName (+91 $phone10)"
             } else {
-                "Verified +91 $phone10 with 4-Digit Security PIN"
+                "Verified +91 $phone10 with 4-digit Security PIN"
             }
 
             val d = dao

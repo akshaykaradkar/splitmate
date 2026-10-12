@@ -931,14 +931,15 @@ fun TripHomeScreen(
     // Dynamic subtitle derived from actual travel ticket dates when available (fallback to logged dates)
     val dynamicTripSubtitle = remember(groupExpenses, groupMembers.size, isTravelGroup, context) {
         val memberNoun = when {
-            isTravelGroup && groupMembers.size == 1 -> "Traveler"
-            isTravelGroup -> "Travelers"
-            groupMembers.size == 1 -> "Member"
-            else -> "Members"
+            // v2.4.0 rc2: sentence case ("4 travelers").
+            isTravelGroup && groupMembers.size == 1 -> "traveler"
+            isTravelGroup -> "travelers"
+            groupMembers.size == 1 -> "member"
+            else -> "members"
         }
         val travelerLabel = "${groupMembers.size} $memberNoun"
         if (groupExpenses.isEmpty()) {
-            if (isTravelGroup) "$travelerLabel · Ready to log bookings" else "$travelerLabel · Ready to log expenses"
+            if (isTravelGroup) "$travelerLabel · Nothing booked yet" else "$travelerLabel · No expenses yet"
         } else {
             val schedules = groupExpenses.map { resolveExpenseSchedule(context, it) }
             val explicitTicketSchedules = schedules.filter { it.hasExplicitTicketDate }
@@ -4611,12 +4612,8 @@ private fun TripHubPlanTimelineView(
                 }
                 val payer = groupMembers.find { it.memberId == expense.payerId }
                 val timeLabel = schedule.timeLabel
-                val itemShape = segmentedIslandItemShape(
-                    index = itemIndex,
-                    totalCount = dayItems.size,
-                    outerCorner = 18.dp,
-                    innerCorner = 4.dp
-                )
+                // v2.4.0 rc2: items sit 12dp apart as separate cards, so every corner is rounded.
+                val itemShape = RoundedCornerShape(18.dp)
 
                 Surface(
                     shape = itemShape,
@@ -5431,12 +5428,9 @@ private fun TripHubMoneySettlementView(
                     val requestMarkPaid: () -> Unit = {
                         if (markPaidWarning != null) pendingMarkPaidConfirm = true else commitMarkPaid()
                     }
-                    val rowShape = segmentedIslandItemShape(
-                        index = index,
-                        totalCount = myTransfers.size,
-                        outerCorner = 20.dp,
-                        innerCorner = 4.dp
-                    )
+                    // v2.4.0 rc2: rows sit 12dp apart as separate cards, so every corner is rounded
+                    // (connected-list 4dp inner corners made them look half square).
+                    val rowShape = RoundedCornerShape(20.dp)
 
                     if (pendingMarkPaidConfirm) {
                         TripHubMarkPaidConfirmDialog(
@@ -5622,24 +5616,9 @@ private fun TripHubMoneySettlementView(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         com.splitmate.app.ui.feel.PaidMorph(isPaid = paidMorph.isPaid) {
-                                        SplitButtonLayout(
-                                            leadingText = "Mark paid",
-                                            leadingIcon = Icons.Rounded.CheckCircleOutline,
-                                            onLeadingClick = requestMarkPaid,
-                                            menuItems = listOf(
-                                                ExpressiveMenuAction(
-                                                    label = "Mark $formattedAmount as paid",
-                                                    icon = Icons.Rounded.CheckCircleOutline,
-                                                    subtitle = "${settlement.fromName} to ${settlement.toName}",
-                                                    onClick = requestMarkPaid
-                                                ),
-                                                ExpressiveMenuAction(
-                                                    label = "Open settle up",
-                                                    icon = Icons.Rounded.AccountBalanceWallet,
-                                                    subtitle = "See every balance and settle your way",
-                                                    onClick = onOpenSettleUpClick
-                                                )
-                                            ),
+                                        // v2.4.0 rc2: one pill (its menu only repeated this action and "Open settle up").
+                                        com.splitmate.app.ui.components.MarkPaidButton(
+                                            onClick = requestMarkPaid,
                                             containerColor = DesignSystemBindings.activePalette.primary,
                                             contentColor = DesignSystemBindings.activePalette.onPrimary
                                         )
@@ -5731,12 +5710,8 @@ private fun TripHubMoneySettlementView(
                         toMemberId = settlement.toMemberId,
                         state = uiState
                     )
-                    val rowShape = segmentedIslandItemShape(
-                        index = index,
-                        totalCount = otherTransfers.size,
-                        outerCorner = 18.dp,
-                        innerCorner = 4.dp
-                    )
+                    // v2.4.0 rc2: separate cards, every corner rounded.
+                    val rowShape = RoundedCornerShape(20.dp)
 
                     Surface(
                         shape = rowShape,
@@ -5880,7 +5855,8 @@ private fun TripHubMoneySettlementView(
                             }
                             if (canMarkPaid) {
                                 com.splitmate.app.ui.feel.PaidMorph(isPaid = otherPaidMorph.isPaid, modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                Button(
+                                // v2.4.0 rc2: same Mark paid control everywhere.
+                                com.splitmate.app.ui.components.MarkPaidButton(
                                     onClick = {
                                         if (markPaidWarning != null) {
                                             performCrispTactileHaptic(context, localView, heavy = false)
@@ -5889,31 +5865,10 @@ private fun TripHubMoneySettlementView(
                                             commitOtherPaid()
                                         }
                                     },
-                                    shape = CircleShape,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = DesignSystemBindings.activePalette.primary,
-                        contentColor = DesignSystemBindings.activePalette.onPrimary
-                                    ),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .minimumInteractiveComponentSize()
-                                        .defaultMinSize(minHeight = 40.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.CheckCircleOutline,
-                                        contentDescription = null,
-                                        tint = DesignSystemBindings.activePalette.onPrimary,
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "Mark paid",
-                                        fontWeight = FontWeight.ExtraBold,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
+                                    fillWidth = true,
+                                    containerColor = DesignSystemBindings.activePalette.primary,
+                                    contentColor = DesignSystemBindings.activePalette.onPrimary
+                                )
                                 }
                             }
                         }

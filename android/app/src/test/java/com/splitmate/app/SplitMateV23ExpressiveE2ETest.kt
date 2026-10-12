@@ -4143,8 +4143,9 @@ class SplitMateV23ExpressiveE2ETest {
             assertTrue(src.contains("morph = settledMorph"))
             // v2.3.6: settlement money data carries no wavy progress (v2.3.2 rule, wavy = in-flight network only).
             assertFalse(src.contains("amplitude = if (simplifiedTransfers.isEmpty()) 0f else 0.75f"))
-            assertTrue(src.contains("SplitButtonLayout("))
-            assertTrue(src.contains("leadingText = \"Mark paid\""))
+            // v2.4.0 rc2 (owner decision): Mark paid is one M3 Expressive pill, not a split button.
+            assertTrue(src.contains("com.splitmate.app.ui.components.MarkPaidButton("))
+            assertFalse(src.contains("leadingText = \"Mark paid\""))
 
             // 3. Runtime verification of Cookie9Sided -> Sunny MorphPolygonShape across [0f, 0.5f, 1f]
             val settledMorph = Morph(MaterialShapes.Cookie9Sided, MaterialShapes.Sunny)

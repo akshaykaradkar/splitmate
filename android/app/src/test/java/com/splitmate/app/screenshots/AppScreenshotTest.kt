@@ -307,4 +307,24 @@ class AppScreenshotTest {
     // Robolectric/Compose test-teardown deadlock (SeekableTransitionState vs snapshot apply). Logged as test debt.
 
     @Test fun s33_empty_trip_people() { launchEmptyTrip(); tap(text = "People"); shot("33_empty_trip_people") }
+
+    // v2.4.0 rc2: Settings had no screenshot coverage (hex codes and a stale version slipped through).
+    @Test fun s35_settings() { launch(); tap(desc = "Open settings"); shot("35_settings") }
+
+    /** v2.4.0 rc2: home floating toolbar collapsing into its FAB on scroll (was a square shadow mid-way). */
+    @Test fun s37_toolbar_collapse() {
+        launch()
+        compose.mainClock.autoAdvance = false
+        compose.onRoot().performTouchInput { swipeUp(startY = height * 0.7f, endY = height * 0.45f, durationMillis = 200) }
+        compose.mainClock.advanceTimeBy(80); frame("37a_toolbar_collapse_early")
+        compose.mainClock.advanceTimeBy(80); frame("37b_toolbar_collapse_mid")
+        compose.mainClock.advanceTimeBy(1200); frame("37c_toolbar_collapsed")
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test fun s36_settings_appearance() {
+        launch(); tap(desc = "Open settings")
+        compose.onRoot().performTouchInput { swipeUp(startY = height * 0.85f, endY = height * 0.15f) }
+        shot("36_settings_appearance")
+    }
 }
