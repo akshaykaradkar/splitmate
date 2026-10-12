@@ -158,6 +158,7 @@ fun OnboardingSetupScreen(
     onCompleteProfile: (name: String, phone: String, currency: CountryCurrency, avatarSeed: String) -> Unit = { _, _, _, _ -> }
 ) {
     val context = LocalContext.current
+    val onboardingView = androidx.compose.ui.platform.LocalView.current // v2.4.0 D4: haptics play on a view
     var nameText by remember { mutableStateOf("") }
     var phoneText by remember { mutableStateOf("") }
     var randomSeedSuffix by remember { mutableStateOf(101) }
@@ -366,7 +367,7 @@ fun OnboardingSetupScreen(
                         options = AvatarGender.entries,
                         selectedIndex = AvatarGender.entries.indexOf(selectedGender).coerceAtLeast(0),
                         onSelect = { _, genderOption ->
-                            com.splitmate.app.ui.performCrispTactileHaptic(context, heavy = false)
+                            com.splitmate.app.ui.performCrispTactileHaptic(context, onboardingView, heavy = false)
                             hasUserManuallySelectedGender = true
                             selectedGender = genderOption
                         },
@@ -452,7 +453,7 @@ fun OnboardingSetupScreen(
             ) {
                 Button(
                     onClick = {
-                        com.splitmate.app.ui.performCrispTactileHaptic(context, heavy = true)
+                        com.splitmate.app.ui.performCrispTactileHaptic(context, onboardingView, heavy = true)
                         val finalName = if (nameText.isBlank()) "Explorer" else nameText.trim()
                         val finalPhone = phoneText.trim()
                         val styledSeed = AvatarSeedCodec.encode(

@@ -263,14 +263,14 @@ fun SplitMateViewModel.recordSettlement(
     fromMemberId: String,
     toMemberId: String,
     amountCents: Long
-) {
+): Boolean {
     if (groupId.isNotBlank()) {
         selectActiveGroup(groupId)
     }
     val groupMembers = uiState.value.members.filter { it.groupId == groupId }
     val fromName = groupMembers.find { it.memberId == fromMemberId }?.name ?: fromMemberId
     val toName = groupMembers.find { it.memberId == toMemberId }?.name ?: toMemberId
-    markGreedyTransferSettled(
+    return markGreedyTransferSettled(
         SplitMateMathEngine.SimplifiedTransfer(
             fromMemberId = fromMemberId,
             fromName = fromName,
@@ -1084,6 +1084,7 @@ fun TripHomeScreen(
                 FloatingActionButtonMenu(
                     expanded = isFabMenuExpanded,
                     onToggle = {
+                        // v2.4.0 D4: one Tick per open/close and per item tap (items close the menu via onToggle).
                         performCrispTactileHaptic(context, localView, heavy = false)
                         isFabMenuExpanded = !isFabMenuExpanded
                     },
@@ -1095,7 +1096,6 @@ fun TripHomeScreen(
                             icon = Icons.Rounded.Train,
                             subtitle = "Add with your PNR",
                             onClick = {
-                                performCrispTactileHaptic(context, localView, heavy = false)
                                 onOpenTrainPnrReviewClick("")
                             }
                         ),
@@ -1104,7 +1104,6 @@ fun TripHomeScreen(
                             icon = Icons.Rounded.FlightTakeoff,
                             subtitle = "Upload your boarding pass",
                             onClick = {
-                                performCrispTactileHaptic(context, localView, heavy = false)
                                 onOpenFlightReviewClick("")
                             }
                         ),
@@ -1113,7 +1112,6 @@ fun TripHomeScreen(
                             icon = Icons.AutoMirrored.Rounded.ReceiptLong,
                             subtitle = "Equal, exact or by shares",
                             onClick = {
-                                performCrispTactileHaptic(context, localView, heavy = false)
                                 onLogQuickExpenseClick()
                             }
                         ),
@@ -1122,7 +1120,6 @@ fun TripHomeScreen(
                             icon = Icons.Rounded.ViewAgenda,
                             subtitle = "Stay, rental or cab",
                             onClick = {
-                                performCrispTactileHaptic(context, localView, heavy = false)
                                 showAddBookingBottomSheet = true
                             }
                         )
@@ -1461,7 +1458,7 @@ fun TripHomeScreen(
                                         onDeleteExpense = { expenseId -> viewModel.rollbackExpense(expenseId) },
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)
+                                            .animateItem(fadeInSpec = SplitMateMotion.fastEffects(), placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = SplitMateMotion.fastEffects())
                                     )
                                 }
                             }
@@ -2198,7 +2195,12 @@ private fun CompactPerspectiveNetBalanceStrip(
                         fontFamily = SplitMateTnumMonospace,
                         fontWeight = FontWeight.Black,
                         color = TripHubTokens.TextPrimary,
-                        modifier = Modifier.fillMaxWidth()
+                        // v2.4.0 D4: TalkBack always hears the exact final total, never a mid-roll value.
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clearAndSetSemantics {
+                                contentDescription = com.splitmate.app.ui.a11y.SpokenMoney.rupees(totalGroupSpendCents)
+                            }
                     )
                 }
 
@@ -2346,7 +2348,7 @@ private fun TripHubOverviewFeed(
                 onDeleteExpense = onDeleteExpense,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)
+                    .animateItem(fadeInSpec = SplitMateMotion.fastEffects(), placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = SplitMateMotion.fastEffects())
                     .staggeredEntrance(entranceIndexById[expense.expenseId] ?: Int.MAX_VALUE, feedEntranceStart)
                     .expressivePressScale()
             )
@@ -4702,7 +4704,7 @@ private fun TripHubPlanTimelineView(
                         onDeleteExpense = onDeleteExpense,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)
+                            .animateItem(fadeInSpec = SplitMateMotion.fastEffects(), placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = SplitMateMotion.fastEffects())
                     )
                     return@itemsIndexed
                 }
@@ -4721,7 +4723,7 @@ private fun TripHubPlanTimelineView(
                     border = BorderStroke(1.dp, TripHubTokens.CardBorder),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)
+                        .animateItem(fadeInSpec = SplitMateMotion.fastEffects(), placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = SplitMateMotion.fastEffects())
                 ) {
                     Row(
                         modifier = Modifier
@@ -5370,7 +5372,7 @@ private fun TripHubMoneySettlementView(
                         )
                         Column {
                             Text(
-                                text = "All Group Debts Settled (₹0.00)",
+                                text = "Everyone is settled up",
                                 style = MaterialTheme.typography.titleMedium.merge(
                                     TextStyle(
                                         fontFamily = SplitMateTnumMonospace,
@@ -5495,6 +5497,18 @@ private fun TripHubMoneySettlementView(
                     val recipientFirstName = settlement.toName.trim().substringBefore(" ").ifBlank { settlement.toName }
                     var showRestrictionHint by remember(settlement.fromMemberId, settlement.toMemberId) { mutableStateOf(false) }
                     var pendingMarkPaidConfirm by remember(settlement.fromMemberId, settlement.toMemberId) { mutableStateOf(false) }
+                    // v2.4.0 D4: saved at tap time; on success Mark paid morphs into a "Paid" chip (Confirm haptic).
+                    val paidMorph = com.splitmate.app.ui.feel.rememberPaidMorphController()
+                    val commitMarkPaid: () -> Unit = {
+                        paidMorph.trigger {
+                            viewModel.recordSettlement(
+                                groupId = groupId,
+                                fromMemberId = settlement.fromMemberId,
+                                toMemberId = settlement.toMemberId,
+                                amountCents = settlement.amountCents
+                            )
+                        }
+                    }
                     val rowShape = segmentedIslandItemShape(
                         index = index,
                         totalCount = myTransfers.size,
@@ -5510,13 +5524,7 @@ private fun TripHubMoneySettlementView(
                             warning = markPaidWarning,
                             onConfirm = {
                                 pendingMarkPaidConfirm = false
-                                performCrispTactileHaptic(context, localView, heavy = false)
-                                viewModel.recordSettlement(
-                                    groupId = groupId,
-                                    fromMemberId = settlement.fromMemberId,
-                                    toMemberId = settlement.toMemberId,
-                                    amountCents = settlement.amountCents
-                                )
+                                commitMarkPaid()
                             },
                             onDismiss = { pendingMarkPaidConfirm = false }
                         )
@@ -5524,7 +5532,8 @@ private fun TripHubMoneySettlementView(
                     ExpressiveSwipeActionsBox(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null),
+                            // v2.4.0 D4: a paid row fades out slowly (the "Paid" chip shows as it leaves).
+                            .animateItem(fadeInSpec = SplitMateMotion.fastEffects(), placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = SplitMateMotion.slowEffects()),
                         startAction = if (canMarkPaid) {
                             ExpressiveSwipeAction(
                                 label = "Mark paid",
@@ -5651,7 +5660,7 @@ private fun TripHubMoneySettlementView(
                                         if (!canMarkPaid && isCurrentUserPayer) {
                                             Surface(
                                                 onClick = {
-                                                    performCrispTactileHaptic(context, localView, heavy = false)
+                                                    performCrispTactileHaptic(context, localView, feel = com.splitmate.app.ui.feel.Feel.Reject) // v2.4.0 D4: blocked action
                                                     showRestrictionHint = !showRestrictionHint
                                                 },
                                                 shape = CircleShape,
@@ -5690,43 +5699,29 @@ private fun TripHubMoneySettlementView(
                                         horizontalArrangement = Arrangement.End,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
+                                        com.splitmate.app.ui.feel.PaidMorph(isPaid = paidMorph.isPaid) {
                                         SplitButtonLayout(
                                             leadingText = "Mark paid",
                                             leadingIcon = Icons.Rounded.CheckCircleOutline,
-                                            onLeadingClick = {
-                                                performCrispTactileHaptic(context, localView, heavy = false)
-                                                viewModel.recordSettlement(
-                                                    groupId = groupId,
-                                                    fromMemberId = settlement.fromMemberId,
-                                                    toMemberId = settlement.toMemberId,
-                                                    amountCents = settlement.amountCents
-                                                )
-                                            },
+                                            onLeadingClick = commitMarkPaid,
                                             menuItems = listOf(
                                                 ExpressiveMenuAction(
-                                                    label = "Confirm Full Settlement ($formattedAmount)",
+                                                    label = "Mark $formattedAmount as paid",
                                                     icon = Icons.Rounded.CheckCircleOutline,
                                                     subtitle = "${settlement.fromName} to ${settlement.toName}",
-                                                    onClick = {
-                                                        performCrispTactileHaptic(context, localView, heavy = false)
-                                                        viewModel.recordSettlement(
-                                                            groupId = groupId,
-                                                            fromMemberId = settlement.fromMemberId,
-                                                            toMemberId = settlement.toMemberId,
-                                                            amountCents = settlement.amountCents
-                                                        )
-                                                    }
+                                                    onClick = commitMarkPaid
                                                 ),
                                                 ExpressiveMenuAction(
-                                                    label = "Open Settle up Sheet",
+                                                    label = "Open settle up",
                                                     icon = Icons.Rounded.AccountBalanceWallet,
                                                     subtitle = "See every balance and settle your way",
                                                     onClick = onOpenSettleUpClick
                                                 )
                                             ),
                                             containerColor = DesignSystemBindings.activePalette.primary,
-                            contentColor = DesignSystemBindings.activePalette.onPrimary
+                                            contentColor = DesignSystemBindings.activePalette.onPrimary
                                         )
+                                        }
                                     }
                                 } else {
                                     AnimatedVisibility(visible = showRestrictionHint) {
@@ -5827,7 +5822,7 @@ private fun TripHubMoneySettlementView(
                         border = BorderStroke(1.dp, TripHubTokens.CardBorder),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)
+                            .animateItem(fadeInSpec = SplitMateMotion.fastEffects(), placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = SplitMateMotion.slowEffects())
                     ) {
                         Column(
                             modifier = Modifier
@@ -5901,6 +5896,7 @@ private fun TripHubMoneySettlementView(
                             }
 
                             var pendingOtherConfirm by remember(settlement.fromMemberId, settlement.toMemberId) { mutableStateOf(false) }
+                            val otherPaidMorph = com.splitmate.app.ui.feel.rememberPaidMorphController() // v2.4.0 D4
                             if (pendingOtherConfirm) {
                                 TripHubMarkPaidConfirmDialog(
                                     fromName = settlement.fromName,
@@ -5909,12 +5905,14 @@ private fun TripHubMoneySettlementView(
                                     warning = markPaidWarning,
                                     onConfirm = {
                                         pendingOtherConfirm = false
-                                        viewModel.recordSettlement(
-                                            groupId = groupId,
-                                            fromMemberId = settlement.fromMemberId,
-                                            toMemberId = settlement.toMemberId,
-                                            amountCents = settlement.amountCents
-                                        )
+                                        otherPaidMorph.trigger {
+                                            viewModel.recordSettlement(
+                                                groupId = groupId,
+                                                fromMemberId = settlement.fromMemberId,
+                                                toMemberId = settlement.toMemberId,
+                                                amountCents = settlement.amountCents
+                                            )
+                                        }
                                     },
                                     onDismiss = { pendingOtherConfirm = false }
                                 )
@@ -5948,6 +5946,7 @@ private fun TripHubMoneySettlementView(
                                 }
                             }
                             if (canMarkPaid) {
+                                com.splitmate.app.ui.feel.PaidMorph(isPaid = otherPaidMorph.isPaid, modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                                 Button(
                                     onClick = {
                                         performCrispTactileHaptic(context, localView, heavy = false)
@@ -5977,6 +5976,7 @@ private fun TripHubMoneySettlementView(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
+                                }
                                 }
                             }
                         }

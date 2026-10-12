@@ -424,7 +424,7 @@ fun UpiExpressPaymentSheet(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (isUpiActivityResultSuccess(result.data)) {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            haptic.performHapticFeedback(HapticFeedbackType.Confirm)
             persistCombinedIdentity()
             Toast.makeText(
                 context,
@@ -486,7 +486,7 @@ fun UpiExpressPaymentSheet(
         if (resolvedVpa.isNotBlank()) {
             persistCombinedIdentity(newVpa = if (resolvedVpa.contains("@")) resolvedVpa else cleanExactVpa)
         }
-        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        haptic.performHapticFeedback(HapticFeedbackType.Confirm)
 
         // Put the 10-digit phone number (preferred for Google Pay P2P search) or UPI ID on Android Keyboard Clipboard strip
         val copyTarget = clean10Phone.ifBlank { cleanExactVpa.ifBlank { resolvedVpa } }
@@ -804,7 +804,7 @@ fun UpiExpressPaymentSheet(
                         }
                         Button(
                             onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                                 persistCombinedIdentity()
                                 onMarkSettled()
                                 onDismiss()
@@ -1017,7 +1017,7 @@ fun UpiExpressPaymentSheet(
                         val isCurrentSuffix = exactVpaInput.endsWith(suffix, ignoreCase = true)
                         Surface(
                             onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                 val currentPrefix = exactVpaInput.substringBefore("@").trim()
                                 val basePrefix = when {
                                     currentPrefix.isNotBlank() && cleanIndianTenDigitPhone(currentPrefix).length != 10 -> currentPrefix
@@ -1190,7 +1190,7 @@ fun UpiExpressPaymentSheet(
             // 6. MANUAL MARK SETTLED BUTTON
             OutlinedButton(
                 onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                     persistCombinedIdentity()
                     onMarkSettled()
                     onDismiss()

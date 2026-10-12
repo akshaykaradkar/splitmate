@@ -290,8 +290,13 @@ private fun TripHubDeleteExpenseDialog(
             )
         },
         confirmButton = {
+            val deleteHaptic = androidx.compose.ui.platform.LocalHapticFeedback.current
             TextButton(
-                onClick = onConfirm
+                onClick = {
+                    // v2.4.0 D4: a destructive money action that succeeded feels like Confirm.
+                    deleteHaptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm)
+                    onConfirm()
+                }
             ) {
                 Text(
                     text = "Delete",

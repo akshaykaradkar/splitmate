@@ -4005,7 +4005,12 @@ class SplitMateViewModel(
         }
     }
 
-    fun markGreedyTransferSettled(transfer: SplitMateMathEngine.SimplifiedTransfer) {
+    /**
+     * Records [transfer] as paid in the active trip. Returns true when the payment was saved, false
+     * when it was refused (not allowed, or already recorded); the reason goes to the status banner.
+     * v2.4.0 D4: the result lets the UI show the "Paid" chip and Confirm haptic only on success.
+     */
+    fun markGreedyTransferSettled(transfer: SplitMateMathEngine.SimplifiedTransfer): Boolean {
         val state = _uiState.value
         if (!canCurrentUserMarkTransferPaid(state.activeGroupId, transfer.toMemberId, state)) {
             val restrictionMsg = getMarkPaidRestrictionLabel(
@@ -4017,7 +4022,7 @@ class SplitMateViewModel(
             _uiState.update { curr ->
                 curr.copy(statusBannerMessage = restrictionMsg)
             }
-            return
+            return false
         }
         // v2.3.6 (device bug): never record the same payment twice. A double tap, or a stale row that
         // is still on screen after the payment was recorded, used to add a second identical settlement.
@@ -4035,9 +4040,10 @@ class SplitMateViewModel(
             _uiState.update { curr ->
                 curr.copy(statusBannerMessage = "Already recorded: ${transfer.fromName} → ${transfer.toName}")
             }
-            return
+            return false
         }
         insertSettlementAndSync(state, transfer, "Settled ${transfer.fromName} → ${transfer.toName}")
+        return true
     }
 
     /**
@@ -4092,7 +4098,9 @@ class SplitMateViewModel(
     ) {
         com.splitmate.app.data.CloudGroupSyncRepository.setGroupPendingCloudPush(null, state.activeGroupId, true)
         val settlement = SettlementEntity(
-            settlementId = "settle_${System.currentTimeMillis()}",
+            // v2.4.0 D4 review B3: unique suffix so two payments saved in the same millisecond never
+            // share an id (Room insert and the cloud merge both key settlements by id).
+            settlementId = "settle_${System.currentTimeMillis()}_${java.util.UUID.randomUUID().toString().take(8)}",
             groupId = state.activeGroupId,
             fromMemberId = transfer.fromMemberId,
             fromMemberName = transfer.fromName,

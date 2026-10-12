@@ -2456,9 +2456,11 @@ fun SplitMateMaterial3ExpressiveTheme(
     SplitMateExpressiveTheme(
         darkTheme = darkTheme,
         themeMode = themeMode,
-        dynamicColor = dynamicColor,
-        content = content
-    )
+        dynamicColor = dynamicColor
+    ) {
+        // v2.4.0 D4: Compose haptics honour the in-app Haptics switch too.
+        com.splitmate.app.ui.feel.ProvideSplitMateHaptics(content)
+    }
 }
 
 @Composable
@@ -2768,45 +2770,28 @@ fun resolveExpenseCategoryBadgeColors(title: String, isDark: Boolean): Pair<Colo
 }
 
 // ==============================================================================
-// CRISP HARDWARE VIBRATOR & TACTILE KEYPAD HAPTIC ENGINE
+// HAPTICS (v2.4.0 D4): every call goes through the SplitMateHaptics vocabulary.
+// The old helper fired a view haptic AND a raw vibrator pulse (a double buzz) and ignored the
+// system "Touch feedback" setting; now it plays one platform haptic and respects both switches.
 // ==============================================================================
 fun performCrispTactileHaptic(
     context: Context,
     view: android.view.View? = null,
     heavy: Boolean = false
 ) {
-    val prefs = com.splitmate.app.data.EncryptedPrefsProvider.get(context)
-    if (!prefs.getBoolean("pref_haptics", true)) return
+    performCrispTactileHaptic(
+        context = context,
+        view = view,
+        feel = if (heavy) com.splitmate.app.ui.feel.Feel.Confirm else com.splitmate.app.ui.feel.Feel.Tick
+    )
+}
 
-    runCatching {
-        @Suppress("DEPRECATION")
-        view?.performHapticFeedback(
-            if (heavy) android.view.HapticFeedbackConstants.LONG_PRESS
-            else android.view.HapticFeedbackConstants.KEYBOARD_TAP,
-            android.view.HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING
-        )
-    }
-
-    runCatching {
-        val vibrator: android.os.Vibrator? = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
-            vm?.defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            context.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
-        }
-
-        if (vibrator != null && vibrator.hasVibrator()) {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                val durationMs = if (heavy) 28L else 16L
-                val amplitude = if (heavy) 245 else 195
-                vibrator.vibrate(android.os.VibrationEffect.createOneShot(durationMs, amplitude))
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(if (heavy) 28L else 16L)
-            }
-        }
-    }
+fun performCrispTactileHaptic(
+    context: Context,
+    view: android.view.View?,
+    feel: com.splitmate.app.ui.feel.Feel
+) {
+    com.splitmate.app.ui.feel.SplitMateHaptics.perform(context, view, feel)
 }
 
 @Composable

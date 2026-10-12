@@ -290,16 +290,16 @@ fun AnimatedTransitDeckHeroCard(
                 flightCountActive = flightCountActive,
                 onCardHeaderTap = {
                     if (!isFlightActive) {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                         activePass = ActiveTravelPassMode.FLIGHT
                     }
                 },
                 onPrimaryCtaClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                     onUploadFlightPdfClick()
                 },
                 onSwitchToTrainClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                     activePass = ActiveTravelPassMode.TRAIN
                 }
             )
@@ -320,16 +320,16 @@ fun AnimatedTransitDeckHeroCard(
                 trainCountLogged = trainCountLogged,
                 onCardHeaderTap = {
                     if (!isTrainActive) {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                         activePass = ActiveTravelPassMode.TRAIN
                     }
                 },
                 onPrimaryCtaClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                     onEnterTrainPnrClick()
                 },
                 onSwitchToFlightClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                     activePass = ActiveTravelPassMode.FLIGHT
                 }
             )

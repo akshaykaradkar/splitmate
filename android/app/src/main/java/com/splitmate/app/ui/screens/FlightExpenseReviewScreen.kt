@@ -883,7 +883,7 @@ fun FlightExpenseReviewScreen(
                     navigationIcon = {
                         IconButton(
                             onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                 onBackClick()
                             },
                             modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
@@ -909,7 +909,7 @@ fun FlightExpenseReviewScreen(
                         // Upload Another PDF Action Button
                         IconButton(
                             onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                 onPickAnotherPdfClick()
                             },
                             modifier = Modifier.minimumInteractiveComponentSize()
@@ -992,7 +992,7 @@ fun FlightExpenseReviewScreen(
                             onClick = {
                                 if (selectedMemberIds.isEmpty() || totalAirfarePaise <= 0L || isCommittingBoardingPass) return@Button
                                 isCommittingBoardingPass = true
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                 playBoardingPassTearAndStampOneShot(isAudioSensoryEnabled)
                                 val baseParsedTicket = extractedTicket.toParsedTravelTicket()
                                 val cabinLabel = extractedTicket.cabinClass.ifBlank { if (extractedTicket.isTrainPdfTicket) "3A" else "Economy" }
@@ -1014,7 +1014,7 @@ fun FlightExpenseReviewScreen(
                                 )
                                 commitScope.launch {
                                     commitTearProgress.animateTo(1f, SplitMateMotion.fastEffects())
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                                     launch { commitStampAlpha.animateTo(1f, SplitMateMotion.fastEffects()) }
                                     commitStampScale.animateTo(
                                         targetValue = 1f,
@@ -1396,7 +1396,7 @@ fun FlightExpenseReviewScreen(
                                     else -> -1
                                 },
                                 onSelect = { index, _ ->
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                     selectedMemberIds = if (index == 0) {
                                         groupMembers.map { it.memberId }.toSet()
                                     } else {
@@ -1429,7 +1429,7 @@ fun FlightExpenseReviewScreen(
                                 )
                                 Surface(
                                     onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                         selectedMemberIds = if (member.isSelected && selectedMemberIds.size > 1) {
                                             selectedMemberIds - member.id
                                         } else {
@@ -1546,7 +1546,7 @@ fun FlightExpenseReviewScreen(
                                                             fontWeight = FontWeight.ExtraBold,
                                                             color = FlightPassTokens.SkyBlueText,
                                                             modifier = Modifier.clickable {
-                                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                                haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                                                 selectedPayerId = member.id
                                                             }
                                                         )
@@ -1655,7 +1655,7 @@ fun PaperSensoryFeedbackBanner(
 
         Surface(
             onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                 onToggleFeedback(!isFeedbackEnabled)
             },
             shape = FlightPassTokens.RadiusPill,
@@ -2420,7 +2420,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
                     .fillMaxWidth()
                     .clickable {
                         haptic.performHapticFeedback(
-                            if (isFolded) HapticFeedbackType.TextHandleMove else HapticFeedbackType.LongPress
+                            HapticFeedbackType.SegmentTick
                         )
                         triggerBoardingPassTearAcoustics()
                         isFolded = !isFolded

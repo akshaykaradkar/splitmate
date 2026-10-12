@@ -90,7 +90,6 @@ import com.splitmate.app.ui.extractInitialsFromNameOrSeed
 import com.splitmate.app.ui.resolveGroupCategoryIcon
 import com.splitmate.app.ui.components.ActiveTravelPassMode
 import com.splitmate.app.ui.components.AnimatedTransitDeckHeroCard
-import com.splitmate.app.ui.components.CircularWavyProgressIndicator
 import com.splitmate.app.ui.components.ConnectedButtonGroup
 import com.splitmate.app.ui.components.ContainedLoadingIndicator
 import com.splitmate.app.ui.components.ExperimentalMaterial3ExpressiveApi
@@ -709,7 +708,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                             }
                             Surface(
                                 onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                     hasUserCustomizedAvatar = true
                                     val base = onboardingName.trim().ifBlank { "Explorer" }
                                     customSeedKey = "${base}_${(100..999).random()}"
@@ -759,7 +758,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                             ) {
                                 Surface(
                                     onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                         isStudioExpanded = !isStudioExpanded
                                     },
                                     shape = SplitMateTheme.RadiusBadge,
@@ -828,7 +827,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                                     selectedIndex = genderEntries.indexOf(selectedGender).coerceAtLeast(0),
                                     onSelect = { index, _ ->
                                         val genderOption = genderEntries.getOrElse(index) { AvatarGender.NEUTRAL }
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                         hasUserManuallySelectedGender = true
                                         hasUserCustomizedAvatar = true
                                         selectedGenderId = genderOption.id
@@ -856,7 +855,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                                         val staticChipSeed = "StylePreview_${styleSpec.id}|${selectedGender.id}|${styleSpec.id}|$selectedColorPresetId"
                                         Surface(
                                             onClick = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                                 hasUserCustomizedAvatar = true
                                                 selectedAvatarStyleId = styleSpec.id
                                             },
@@ -919,7 +918,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                                         val isSelected = selectedColorPresetId == preset.id
                                         Surface(
                                             onClick = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                                 hasUserCustomizedAvatar = true
                                                 selectedColorPresetId = preset.id
                                             },
@@ -2770,7 +2769,7 @@ fun LedgersDashboardScreen(
 
                 // Fire a crisp mechanical haptic tick right as the cardstock crosses the 90-degree perpendicular plane
                 LaunchedEffect(showingFlightFace) {
-                    travelPassHaptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    travelPassHaptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                 }
 
                 val cardBgColor = if (showingFlightFace) {
@@ -5595,7 +5594,7 @@ fun ExpressiveThemeModePill(
     }
     Surface(
         onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
             onCycleTheme()
         },
         shape = RoundedCornerShape(pillCorner),
@@ -6690,34 +6689,29 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                         }
                                                     }
 
-                                                    var isDrainingIn by remember { mutableStateOf(false) }
-                                                    val drainScopeIn = rememberCoroutineScope()
-                                                    val drainHapticIn = LocalHapticFeedback.current
+                                                    // v2.4.0 D4: saved at tap time; on success Mark paid morphs into a "Paid" chip
+                                                    // with one Confirm haptic (Reject if the save is refused).
+                                                    val paidMorphIn = com.splitmate.app.ui.feel.rememberPaidMorphController()
                                                     val performMarkPaidIn: () -> Unit = {
-                                                        if (!isDrainingIn) {
-                                                            isDrainingIn = true
-                                                            drainHapticIn.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                            drainScopeIn.launch {
-                                                                kotlinx.coroutines.delay(140L)
-                                                                drainHapticIn.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                                kotlinx.coroutines.delay(180L)
-                                                                viewModel.markGreedyTransferSettled(matchingTransfer.transfer)
-                                                                isDrainingIn = false
-                                                            }
-                                                        }
+                                                        paidMorphIn.trigger { viewModel.markGreedyTransferSettled(matchingTransfer.transfer) }
                                                     }
+                                                    com.splitmate.app.ui.feel.PaidMorph(
+                                                        isPaid = paidMorphIn.isPaid,
+                                                        modifier = Modifier.weight(1f),
+                                                        contentAlignment = Alignment.CenterStart
+                                                    ) {
                                                     SplitButtonLayout(
-                                                        leadingText = if (isDrainingIn) "₹0.00 · Settled" else "Mark paid",
+                                                        leadingText = "Mark paid",
                                                         leadingIcon = Icons.Rounded.Check,
                                                         onLeadingClick = performMarkPaidIn,
                                                         menuItems = listOf(
                                                             ExpressiveMenuAction(
-                                                                label = "Confirm Payment Received",
+                                                                label = "Mark as received",
                                                                 icon = Icons.Rounded.CheckCircle,
                                                                 onClick = performMarkPaidIn
                                                             ),
                                                             ExpressiveMenuAction(
-                                                                label = "Remind via WhatsApp",
+                                                                label = "Remind on WhatsApp",
                                                                 icon = Icons.AutoMirrored.Rounded.Chat,
                                                                 onClick = {
                                                                     val waPhone = if (debtorPhone.startsWith("+")) {
@@ -6743,10 +6737,11 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                                 }
                                                             )
                                                         ),
-                                                        modifier = Modifier.weight(1f),
-                                                        containerColor = if (isDrainingIn) SplitMateTheme.SageText else SplitMateTheme.PrimaryDark,
+                                                        
+                                                        containerColor = SplitMateTheme.PrimaryDark,
                                                         contentColor = SplitMateTheme.ScreenBg
                                                     )
+                                                    }
                                                 }
                                             }
                                         }
@@ -7007,38 +7002,33 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
 
                                                 if (matchingTransfer != null && canMarkPaidOut) {
                                                     Spacer(modifier = Modifier.height(8.dp))
-                                                    var isDrainingOut by remember { mutableStateOf(false) }
-                                                    val drainScopeOut = rememberCoroutineScope()
-                                                    val drainHapticOut = LocalHapticFeedback.current
                                                     val creditorPhone = com.splitmate.app.data.PhoneIdentityValidator.extractMemberPhone10(
                                                         userPhone = toRoomMember?.userPhone.orEmpty(),
                                                         upiId = toRoomMember?.upiId.orEmpty()
                                                     )
+                                                    // v2.4.0 D4: saved at tap time; on success Mark paid morphs into a "Paid" chip
+                                                    // with one Confirm haptic (Reject if the save is refused).
+                                                    val paidMorphOut = com.splitmate.app.ui.feel.rememberPaidMorphController()
                                                     val performMarkPaidOut: () -> Unit = {
-                                                        if (!isDrainingOut) {
-                                                            isDrainingOut = true
-                                                            drainHapticOut.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                            drainScopeOut.launch {
-                                                                kotlinx.coroutines.delay(140L)
-                                                                drainHapticOut.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                                kotlinx.coroutines.delay(180L)
-                                                                viewModel.markGreedyTransferSettled(matchingTransfer.transfer)
-                                                                isDrainingOut = false
-                                                            }
-                                                        }
+                                                        paidMorphOut.trigger { viewModel.markGreedyTransferSettled(matchingTransfer.transfer) }
                                                     }
+                                                    com.splitmate.app.ui.feel.PaidMorph(
+                                                        isPaid = paidMorphOut.isPaid,
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
                                                     SplitButtonLayout(
-                                                        leadingText = if (isDrainingOut) "₹0.00 · Settled" else "Mark paid",
+                                                        leadingText = "Mark paid",
                                                         leadingIcon = Icons.Rounded.Check,
                                                         onLeadingClick = performMarkPaidOut,
                                                         menuItems = listOf(
                                                             ExpressiveMenuAction(
-                                                                label = "Confirm Payment Received",
+                                                                label = "Mark as paid",
                                                                 icon = Icons.Rounded.CheckCircle,
                                                                 onClick = performMarkPaidOut
                                                             ),
                                                             ExpressiveMenuAction(
-                                                                label = "Remind via WhatsApp",
+                                                                label = "Remind on WhatsApp",
                                                                 icon = Icons.AutoMirrored.Rounded.Chat,
                                                                 onClick = {
                                                                     val waPhone = if (creditorPhone.startsWith("+")) {
@@ -7064,10 +7054,11 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                                 }
                                                             )
                                                         ),
-                                                        modifier = Modifier.fillMaxWidth(),
-                                                        containerColor = if (isDrainingOut) SplitMateTheme.SageText else SplitMateTheme.PrimaryDark,
+                                                        fillWidth = true,
+                                                        containerColor = SplitMateTheme.PrimaryDark,
                                                         contentColor = SplitMateTheme.ScreenBg
                                                     )
+                                                    }
                                                 }
                                             }
                                         }
@@ -7104,36 +7095,26 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
             }
         }
 
-        // 5. HERO MOMENT 1: "All Settled Up" Harmony Seal (Morph(Cookie9Sided, Sunny) + Wavy Progress + Spring Physics)
+        // 5. HERO MOMENT 1: "All settled" Harmony Seal (Morph(Cookie9Sided, Sunny), plays once with a spring)
         if (settlementPlan.isEmpty()) {
             item(key = "all_settled_harmony_seal_card") {
                 val harmonyMorph = remember {
                     Morph(MaterialShapes.Cookie9Sided, MaterialShapes.Sunny)
                 }
-                val reduceMotionForLoops = com.splitmate.app.ui.components.rememberReducedMotionEnabled() // v2.4.0 D2: loops hold still under "Remove animations"
-                val harmonyInfinite = rememberInfiniteTransition(label = "HarmonySealMorphTransition")
-                val harmonyMorphProgressAnimated by harmonyInfinite.animateFloat(
-                    initialValue = 0f,
-                    targetValue = 1f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(durationMillis = 3600, easing = FastOutSlowInEasing),
-                        repeatMode = RepeatMode.Reverse
-                    ),
-                    label = "HarmonySealMorphProgress"
-                )
-                val harmonyMorphProgress = if (reduceMotionForLoops) 0f else harmonyMorphProgressAnimated
-                val sealScale by animateFloatAsState(
-                    targetValue = 1f,
-                    animationSpec = SplitMateMotion.slowSpatial(),
-                    label = "HarmonySealScale"
-                )
+                // v2.4.0 D4: the seal plays once (Cookie9Sided -> Sunny) the first time the card appears,
+                // then rests. It no longer loops; under "Remove animations" the spring snaps to the end.
+                var harmonySealPlayed by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+                val harmonyMorphAnim = remember { androidx.compose.animation.core.Animatable(if (harmonySealPlayed) 1f else 0f) }
+                LaunchedEffect(Unit) {
+                    harmonyMorphAnim.animateTo(1f, SplitMateMotion.slowSpatial())
+                    harmonySealPlayed = true
+                }
+                val harmonyMorphProgress = harmonyMorphAnim.value
                 Surface(
                     shape = SplitMateTheme.RadiusCard,
                     color = SplitMateTheme.SageSurface,
                     border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .scale(sealScale)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
                         modifier = Modifier
@@ -7154,18 +7135,10 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                     modifier = Modifier.size(48.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    CircularWavyProgressIndicator(
-                                        progress = { 1f },
-                                        modifier = Modifier.fillMaxSize(),
-                                        color = SplitMateTheme.SageText,
-                                        trackColor = SplitMateTheme.SurfaceWhite.copy(alpha = 0.6f),
-                                        strokeWidth = 2.5.dp,
-                                        amplitude = 0.8f,
-                                        wavelength = 18.dp
-                                    )
+                                    // v2.4.0 D4: no wavy ring on static money data; the seal shape is the moment.
                                     Box(
                                         modifier = Modifier
-                                            .size(36.dp)
+                                            .size(44.dp)
                                             .clip(MorphPolygonShape(morph = harmonyMorph, percentage = harmonyMorphProgress))
                                             .background(SplitMateTheme.SurfaceWhite),
                                         contentAlignment = Alignment.Center
@@ -7949,7 +7922,7 @@ fun AuditVaultScreen(
                                         activeDragOffsetPx = nextOffset
                                         if (nextOffset <= swipeThresholdPx && !hasTriggeredThresholdHaptic) {
                                             hasTriggeredThresholdHaptic = true
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
                                         } else if (nextOffset > swipeThresholdPx && hasTriggeredThresholdHaptic) {
                                             hasTriggeredThresholdHaptic = false
                                         }

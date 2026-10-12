@@ -359,7 +359,7 @@ fun QuickExpenseScreen(
         @Suppress("UNUSED_VARIABLE") val triggerLivePnrLookup: (String) -> Unit = { targetPnr ->
             val clean10 = targetPnr.replace(Regex("[^0-9]"), "").take(10)
             if (clean10.length == 10 && !isCheckingLivePnr) {
-                com.splitmate.app.ui.performCrispTactileHaptic(context, dialogView, heavy = true)
+                com.splitmate.app.ui.performCrispTactileHaptic(context, dialogView, feel = com.splitmate.app.ui.feel.Feel.Tick)
                 isCheckingLivePnr = true
                 pnrScope.launch {
                     val snap = com.splitmate.app.ui.fetchLivePnrAndTrainStatus(
@@ -555,7 +555,7 @@ fun QuickExpenseScreen(
                     // Dedicated 1-Tap Launch for IRCTC Train PNR Direct Split
                     Surface(
                         onClick = {
-                            com.splitmate.app.ui.performCrispTactileHaptic(context, dialogView, heavy = true)
+                            com.splitmate.app.ui.performCrispTactileHaptic(context, dialogView, feel = com.splitmate.app.ui.feel.Feel.Tick)
                             showEditTitleDialog = false
                             onOpenPnrDirectSplit()
                         },
@@ -926,7 +926,7 @@ fun QuickExpenseScreen(
                             animationSpec = com.splitmate.app.ui.components.SplitMateMotion.defaultEffects()
                         )
                         isRemainderEquallySplit = true
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                         remainderCoinFlightProgress.snapTo(0f)
                         avatarCatchPulseScale.snapTo(1.16f)
                         avatarCatchPulseScale.animateTo(
@@ -978,7 +978,7 @@ fun QuickExpenseScreen(
                             )
                             Surface(
                                 onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                     if (fullCategory == "Train / PNR Ticket") {
                                         onOpenPnrDirectSplit()
                                     } else {
@@ -1021,7 +1021,7 @@ fun QuickExpenseScreen(
                             val selectedFg = if (isDark) activePalette.onPrimary else activePalette.surfaceContainerLowest
                             Surface(
                                 onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                     expenseCategoryTitle = cat.title
                                 },
                                 shape = RoundedCornerShape(if (isChosen) 10.dp else 20.dp),
@@ -1057,7 +1057,7 @@ fun QuickExpenseScreen(
                         item(key = "more_categories") {
                             com.splitmate.app.ui.category.MoreCategoriesChip(
                                 onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                     showCategorySheet = true
                                 },
                                 modifier = Modifier.minimumInteractiveComponentSize()
@@ -1141,7 +1141,7 @@ fun QuickExpenseScreen(
                                     }
                                     Surface(
                                         onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                             selectedPayerId = person.id
                                         },
                                         shape = QuickExpenseThemeTokens.RadiusPill,
@@ -1221,7 +1221,7 @@ fun QuickExpenseScreen(
 
                             Surface(
                                 onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                     selectedMemberIds = if (selectedMemberIds.size == participants.size) {
                                         setOf(participants.first().id)
                                     } else {
@@ -1270,7 +1270,7 @@ fun QuickExpenseScreen(
                                         .clip(QuickExpenseThemeTokens.RadiusCard)
                                         .combinedClickable(
                                             onClick = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                                 selectedMemberIds = if (isSelected) {
                                                     selectedMemberIds - person.id
                                                 } else {
@@ -1425,7 +1425,7 @@ fun QuickExpenseScreen(
                             options = QuickSplitMode.entries,
                             selectedIndex = QuickSplitMode.entries.indexOf(activeSplitMode),
                             onSelect = { _, mode ->
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                 activeSplitMode = mode
                             },
                             labelProvider = { it.label },
@@ -1475,7 +1475,7 @@ fun QuickExpenseScreen(
                                     // Real-time Exact Split / Per-Person Share Pill (tapping triggers 1.2s 0.00c Drift verification pulse)
                                     Surface(
                                         onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                             if (remainderPaise > 0L && !isRemainderEquallySplit) {
                                                 triggerRemainderCoinFlight()
                                             } else {
@@ -1567,7 +1567,7 @@ fun QuickExpenseScreen(
                                     Box(modifier = Modifier.fillMaxWidth()) {
                                         Surface(
                                             onClick = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                                                 triggerRemainderCoinFlight()
                                             },
                                             shape = RoundedCornerShape(12.dp),
@@ -1779,7 +1779,7 @@ fun QuickExpenseScreen(
                         ) {
                             Surface(
                                 onClick = {
-                                    com.splitmate.app.ui.performCrispTactileHaptic(context, rightColView, heavy = true)
+                                    com.splitmate.app.ui.performCrispTactileHaptic(context, rightColView, feel = com.splitmate.app.ui.feel.Feel.Tick)
                                     showEditTitleDialog = true
                                     onLogExpenseClick()
                                 },
@@ -1844,7 +1844,16 @@ fun QuickExpenseScreen(
                             }
                             Surface(
                                 onClick = {
-                                    com.splitmate.app.ui.performCrispTactileHaptic(context, rightColView, heavy = true)
+                                    // v2.4.0 D4: Confirm when the expense is saved, Reject when the form is not ready, Tick when it
+                                    // first asks for a category.
+                                    com.splitmate.app.ui.performCrispTactileHaptic(
+                                        context, rightColView,
+                                        feel = when {
+                                            !canCommitSplit -> com.splitmate.app.ui.feel.Feel.Reject
+                                            expenseCategoryTitle.isBlank() -> com.splitmate.app.ui.feel.Feel.Tick
+                                            else -> com.splitmate.app.ui.feel.Feel.Confirm
+                                        }
+                                    )
                                     if (canCommitSplit) {
                                         if (expenseCategoryTitle.isBlank()) {
                                             pendingCommitAfterCategorySelection = true

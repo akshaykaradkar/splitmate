@@ -4154,7 +4154,9 @@ class SplitMateV23ExpressiveE2ETest {
             }
 
             // 4. Verify LazyColumn item placements use SplitMateMotion.defaultSpatial()
-            val spatialPlacementCount = Regex("""\.animateItem\(\s*fadeInSpec = null,\s*placementSpec = SplitMateMotion\.defaultSpatial\(\),\s*fadeOutSpec = null\s*\)""")
+            // v2.4.0 D4: expense and settlement rows also fade in/out with fastEffects.
+            val spatialPlacementRegex = Regex("""\.animateItem\(\s*fadeInSpec = (null|SplitMateMotion\.fastEffects\(\)),\s*placementSpec = SplitMateMotion\.defaultSpatial\(\),\s*fadeOutSpec = (null|SplitMateMotion\.(fast|slow)Effects\(\))\s*\)""")
+            val spatialPlacementCount = spatialPlacementRegex
                 .findAll(src).count()
             assertTrue(spatialPlacementCount >= 14, "Expected >= 14 defaultSpatial item placements in TripHomeScreen.kt, found $spatialPlacementCount")
         }

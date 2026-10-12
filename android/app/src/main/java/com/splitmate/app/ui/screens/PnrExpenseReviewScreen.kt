@@ -702,7 +702,7 @@ fun PnrExpenseReviewScreen(
                             onClick = {
                                 if (!canConfirmExpense || isSubmitting) return@Button
                                 isSubmitting = true
-                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick)
                                 playBoardingPassTearAndStampOneShot(true)
                                 val fromCode = manualFromStationInput.ifBlank { snapshot.fromStation }.ifBlank { "ORG" }.uppercase(Locale.US)
                                 val toCode = manualToStationInput.ifBlank { snapshot.toStation }.ifBlank { "DST" }.uppercase(Locale.US)
@@ -726,7 +726,7 @@ fun PnrExpenseReviewScreen(
                                 )
                                 commitScope.launch {
                                     pnrTearProgress.animateTo(1f, SplitMateMotion.fastEffects())
-                                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm)
                                     launch { pnrStampAlpha.animateTo(1f, SplitMateMotion.fastEffects()) }
                                     pnrStampScale.animateTo(
                                         targetValue = 1f,
@@ -2004,7 +2004,7 @@ private fun MemberSplitSelectionCard(
                             shape = rowShape
                         )
                         .clickable {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                             onToggleMember(member.memberId)
                         }
                         .padding(horizontal = 12.dp, vertical = 12.dp)
