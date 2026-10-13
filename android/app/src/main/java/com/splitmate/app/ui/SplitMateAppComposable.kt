@@ -1,5 +1,6 @@
 package com.splitmate.app
 
+import com.splitmate.app.ui.components.SymbolIcon
 import com.splitmate.app.ui.components.sharedGroupElement
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -1713,7 +1714,7 @@ fun SplitMateMainDashboardScaffold(
                     },
                     expanded = isToolbarExpanded,
                     icon = {
-                        Icon(
+                        SymbolIcon(
                             imageVector = Icons.Rounded.ElectricBolt,
                             contentDescription = null,
                             tint = activeFabPalette.onPrimary
@@ -1803,6 +1804,11 @@ fun SplitMateMainDashboardScaffold(
                     .weight(1f)
                     .fillMaxHeight()
             ) {
+                // v2.4.0 rc8: Screen 1-3 labels are mostly Figtree Bold/ExtraBold, so their Material
+                // Symbols use the SemiBold (600) stroke. Text fonts are unchanged (Figtree).
+                CompositionLocalProvider(
+                    com.splitmate.app.ui.components.LocalSymbolTextWeight provides FontWeight.SemiBold
+                ) {
                 when (currentTab) {
                 SplitMateTab.LEDGERS -> LedgersDashboardScreen(
                     viewModel = viewModel,
@@ -1846,6 +1852,7 @@ fun SplitMateMainDashboardScaffold(
                         openPnrOrFlightTicket(pnr)
                     }
                 )
+            }
             }
             }
         }
@@ -1954,7 +1961,7 @@ fun SplitMateBottomNavigationBar(
                     containerColor = activePalette.primary,
                     contentColor = activePalette.onPrimary
                 ) {
-                    Icon(
+                    SymbolIcon(
                         imageVector = Icons.Rounded.ElectricBolt,
                         contentDescription = "Quick Split",
                         modifier = Modifier.size(24.dp)
@@ -1997,10 +2004,14 @@ fun SplitMateBottomNavigationBar(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
-                            Icon(
+                            SymbolIcon(
                                 imageVector = tab.icon,
                                 contentDescription = tab.label,
                                 tint = if (isSelected) activePalette.onPrimaryContainer else SplitMateTheme.TextSecondary,
+                                // v2.4.0 rc8: Material Symbols: the selected tab is filled and as heavy as its
+                                // ExtraBold label; unselected tabs are outlined at the body weight.
+                                filled = isSelected,
+                                textWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
                                 modifier = Modifier.size(20.dp)
                             )
                             AnimatedVisibility(visible = isSelected) {
@@ -2112,7 +2123,7 @@ fun LedgersDashboardScreen(
                     border = BorderStroke(1.dp, SplitMateTheme.TerracottaText),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                 ) {
-                    Icon(
+                    SymbolIcon(
                         imageVector = Icons.Rounded.DeleteOutline,
                         contentDescription = null,
                         tint = SplitMateTheme.TerracottaText,
@@ -2284,7 +2295,7 @@ fun LedgersDashboardScreen(
                                 ),
                                 modifier = Modifier.size(IconButtonDefaults.smallContainerSize())
                             ) {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = iconVector,
                                     contentDescription = option.label,
                                     tint = if (isSelected) SplitMateTheme.Palette.onSurface else SplitMateTheme.TextSecondary,
@@ -2386,7 +2397,7 @@ fun LedgersDashboardScreen(
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                             modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                         ) {
-                            Icon(
+                            SymbolIcon(
                                 imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                                 contentDescription = "Back to All Groups",
                                 tint = SplitMateTheme.PrimaryDark,
@@ -2429,7 +2440,7 @@ fun LedgersDashboardScreen(
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                                 modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                             ) {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = Icons.Rounded.PersonAdd,
                                     contentDescription = "Add Contact",
                                     tint = SplitMateTheme.SageText,
@@ -2456,7 +2467,7 @@ fun LedgersDashboardScreen(
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                                 modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                             ) {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = Icons.Rounded.SwapHoriz,
                                     contentDescription = "Settle up",
                                     tint = SplitMateTheme.ScreenBg,
@@ -2496,7 +2507,7 @@ fun LedgersDashboardScreen(
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                             modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                         ) {
-                            Icon(
+                            SymbolIcon(
                                 imageVector = Icons.Rounded.SpaceDashboard,
                                 contentDescription = "Switch to Trip Hub v2.0",
                                 tint = SplitMateTheme.PrimaryDark,
@@ -2621,7 +2632,7 @@ fun LedgersDashboardScreen(
                                         color = SplitMateTheme.SageText
                                     )
                                     Spacer(modifier = Modifier.width(3.dp))
-                                    Icon(
+                                    SymbolIcon(
                                         imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
                                         contentDescription = null,
                                         tint = SplitMateTheme.SageText,
@@ -2721,7 +2732,7 @@ fun LedgersDashboardScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(
+                            SymbolIcon(
                                 imageVector = Icons.Rounded.PersonOff,
                                 contentDescription = "Declined Member",
                                 tint = SplitMateTheme.TerracottaText,
@@ -2925,7 +2936,7 @@ fun LedgersDashboardScreen(
                                                 .background(SplitMateTheme.Extended.trainPass.color),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Icon(
+                                            SymbolIcon(
                                                 imageVector = Icons.Rounded.Train,
                                                 contentDescription = null,
                                                 tint = SplitMateTheme.Palette.primaryContainer,
@@ -2968,7 +2979,7 @@ fun LedgersDashboardScreen(
                                             border = BorderStroke(1.dp, SplitMateTheme.Extended.flightChip.outline),
                                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 7.dp)
                                         ) {
-                                            Icon(
+                                            SymbolIcon(
                                                 imageVector = Icons.Rounded.FlightTakeoff,
                                                 contentDescription = "Flip to Flight Pass",
                                                 tint = SplitMateTheme.Extended.flightPass.onColor,
@@ -2983,7 +2994,7 @@ fun LedgersDashboardScreen(
                                                 color = SplitMateTheme.Extended.flightPass.onColor
                                             )
                                             Spacer(modifier = Modifier.width(4.dp))
-                                            Icon(
+                                            SymbolIcon(
                                                 imageVector = Icons.Rounded.SwapHoriz,
                                                 contentDescription = null,
                                                 tint = SplitMateTheme.Extended.flightPass.onColor,
@@ -3032,7 +3043,7 @@ fun LedgersDashboardScreen(
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                                 ) {
-                                                    Icon(
+                                                    SymbolIcon(
                                                         imageVector = Icons.Rounded.Train,
                                                         contentDescription = null,
                                                         tint = SplitMateTheme.SageText,
@@ -3045,7 +3056,7 @@ fun LedgersDashboardScreen(
                                                         fontSize = 11.sp,
                                                         color = SplitMateTheme.PrimaryDark
                                                     )
-                                                    Icon(
+                                                    SymbolIcon(
                                                         imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
                                                         contentDescription = null,
                                                         tint = SplitMateTheme.SageText,
@@ -3081,7 +3092,7 @@ fun LedgersDashboardScreen(
                                                 .background(SplitMateTheme.Extended.flightPass.color),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Icon(
+                                            SymbolIcon(
                                                 imageVector = Icons.Rounded.FlightTakeoff,
                                                 contentDescription = null,
                                                 tint = SplitMateTheme.Extended.flightPass.onColor,
@@ -3124,7 +3135,7 @@ fun LedgersDashboardScreen(
                                             border = BorderStroke(1.dp, SplitMateTheme.Extended.trainPass.outline),
                                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 7.dp)
                                         ) {
-                                            Icon(
+                                            SymbolIcon(
                                                 imageVector = Icons.Rounded.Train,
                                                 contentDescription = "Flip to Train Pass",
                                                 tint = SplitMateTheme.SageText,
@@ -3139,7 +3150,7 @@ fun LedgersDashboardScreen(
                                                 color = SplitMateTheme.SageText
                                             )
                                             Spacer(modifier = Modifier.width(4.dp))
-                                            Icon(
+                                            SymbolIcon(
                                                 imageVector = Icons.Rounded.SwapHoriz,
                                                 contentDescription = null,
                                                 tint = SplitMateTheme.SageText,
@@ -3189,7 +3200,7 @@ fun LedgersDashboardScreen(
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                                 ) {
-                                                    Icon(
+                                                    SymbolIcon(
                                                         imageVector = Icons.Rounded.FlightTakeoff,
                                                         contentDescription = null,
                                                         tint = SplitMateTheme.Extended.flightChip.color,
@@ -3202,7 +3213,7 @@ fun LedgersDashboardScreen(
                                                         fontSize = 11.sp,
                                                         color = SplitMateTheme.Extended.flightPass.onContainer
                                                     )
-                                                    Icon(
+                                                    SymbolIcon(
                                                         imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
                                                         contentDescription = null,
                                                         tint = SplitMateTheme.Extended.flightChip.color,
@@ -3234,7 +3245,7 @@ fun LedgersDashboardScreen(
                                 .padding(24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Icon(
+                            SymbolIcon(
                                 imageVector = Icons.AutoMirrored.Rounded.ReceiptLong,
                                 contentDescription = null,
                                 tint = SplitMateTheme.SageText,
@@ -3315,7 +3326,7 @@ fun LedgersDashboardScreen(
                                             .background(catBadgeBg),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(
+                                        SymbolIcon(
                                             imageVector = resolveExpenseCategoryIcon(expense.title),
                                             contentDescription = null,
                                             tint = catBadgeTint
@@ -3368,7 +3379,7 @@ fun LedgersDashboardScreen(
                                             fontWeight = FontWeight.Bold,
                                             color = splitToggleTint
                                         )
-                                        Icon(
+                                        SymbolIcon(
                                             imageVector = if (isExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
                                             contentDescription = null,
                                             tint = splitToggleTint,
@@ -3498,7 +3509,7 @@ fun LedgersDashboardScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                                 ) {
-                                    Icon(
+                                    SymbolIcon(
                                         imageVector = when {
                                             isFlightCard -> Icons.Rounded.FlightTakeoff
                                             parsedTicketInGroup != null -> Icons.Rounded.Train
@@ -3557,7 +3568,7 @@ fun LedgersDashboardScreen(
                                         interactionSource = editInteraction,
                                         modifier = Modifier.animateWidth(editInteraction)
                                     ) {
-                                        Icon(
+                                        SymbolIcon(
                                             imageVector = Icons.Rounded.Edit,
                                             contentDescription = "Edit Expense",
                                             modifier = Modifier.size(13.dp),
@@ -3583,7 +3594,7 @@ fun LedgersDashboardScreen(
                                         interactionSource = deleteInteraction,
                                         modifier = Modifier.animateWidth(deleteInteraction)
                                     ) {
-                                        Icon(
+                                        SymbolIcon(
                                             imageVector = Icons.Rounded.DeleteOutline,
                                             contentDescription = "Delete Expense",
                                             modifier = Modifier.size(13.dp),
@@ -3721,7 +3732,7 @@ fun LedgersDashboardScreen(
                                         .background(SplitMateTheme.Extended.online.color)
                                 )
                             } else {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = Icons.Rounded.CloudDone,
                                     contentDescription = "Auto-Sync Status",
                                     tint = SplitMateTheme.Extended.sage.color,
@@ -3816,7 +3827,7 @@ fun LedgersDashboardScreen(
                                         .background(SplitMateTheme.Palette.primaryContainer),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(
+                                    SymbolIcon(
                                         imageVector = Icons.Rounded.Lock,
                                         contentDescription = null,
                                         tint = SplitMateTheme.Palette.primary,
@@ -3876,7 +3887,7 @@ fun LedgersDashboardScreen(
                                 onValueChange = { upgradePhoneInput = it },
                                 label = { Text("10-digit mobile number (+91)") },
                                 leadingIcon = {
-                                    Icon(Icons.Rounded.PhoneIphone, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
+                                    SymbolIcon(Icons.Rounded.PhoneIphone, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
                                 },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                                 singleLine = true,
@@ -3891,7 +3902,7 @@ fun LedgersDashboardScreen(
                                 },
                                 label = { Text("4-digit security PIN") },
                                 leadingIcon = {
-                                    Icon(Icons.Rounded.Lock, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
+                                    SymbolIcon(Icons.Rounded.Lock, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
                                 },
                                 visualTransformation = PasswordVisualTransformation(),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
@@ -3934,7 +3945,7 @@ fun LedgersDashboardScreen(
                                 ),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Icon(Icons.Rounded.CloudDone, contentDescription = null, modifier = Modifier.size(16.dp))
+                                SymbolIcon(Icons.Rounded.CloudDone, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = if (uiState.isCloudSyncing) "Syncing shared trips..." else "Save PIN and sync trips",
@@ -4011,7 +4022,7 @@ fun LedgersDashboardScreen(
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(
+                                    SymbolIcon(
                                         imageVector = when {
                                             isZeroBalance -> Icons.Rounded.CheckCircle
                                             isNegativeBalance -> Icons.AutoMirrored.Rounded.TrendingUp
@@ -4059,7 +4070,7 @@ fun LedgersDashboardScreen(
                                         indicatorColor = SplitMateTheme.SageText
                                     )
                                 } else {
-                                    Icon(
+                                    SymbolIcon(
                                         imageVector = Icons.Rounded.CloudDone,
                                         contentDescription = null,
                                         tint = SplitMateTheme.SageText,
@@ -4137,7 +4148,7 @@ fun LedgersDashboardScreen(
                                     .fillMaxWidth()
                                     .sizeIn(minHeight = 48.dp)
                             ) {
-                                Icon(Icons.Rounded.SwapHoriz, contentDescription = null, tint = SplitMateTheme.ScreenBg, modifier = Modifier.size(18.dp))
+                                SymbolIcon(Icons.Rounded.SwapHoriz, contentDescription = null, tint = SplitMateTheme.ScreenBg, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("Settle up", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.ScreenBg, fontWeight = FontWeight.Bold)
                             }
@@ -4153,7 +4164,7 @@ fun LedgersDashboardScreen(
                                     .fillMaxWidth()
                                     .sizeIn(minHeight = 46.dp)
                             ) {
-                                Icon(Icons.Rounded.TaskAlt, contentDescription = null, tint = SplitMateTheme.PrimaryDark, modifier = Modifier.size(18.dp))
+                                SymbolIcon(Icons.Rounded.TaskAlt, contentDescription = null, tint = SplitMateTheme.PrimaryDark, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("Settle up · all settled", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.PrimaryDark, fontWeight = FontWeight.Bold)
                             }
@@ -4305,7 +4316,7 @@ fun LedgersDashboardScreen(
                                 .background(SplitMateTheme.SageSurface),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(
+                            SymbolIcon(
                                 imageVector = Icons.Rounded.Explore,
                                 contentDescription = "No Active Trips Illustration",
                                 tint = SplitMateTheme.SageText,
@@ -4427,7 +4438,7 @@ fun LedgersDashboardScreen(
                                                     .background(if (groupCard.netBalanceCents == 0L) SplitMateTheme.SurfaceMuted else SplitMateTheme.SurfaceWhite),
                                                 contentAlignment = Alignment.Center
                                             ) {
-                                                Icon(
+                                                SymbolIcon(
                                                     imageVector = groupIcon,
                                                     contentDescription = null,
                                                     tint = if (groupCard.netBalanceCents == 0L) SplitMateTheme.PrimaryDark else badgeTextColor
@@ -4628,7 +4639,7 @@ fun LedgersDashboardScreen(
                                             .background(catBg),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(
+                                        SymbolIcon(
                                             imageVector = resolveExpenseCategoryIcon(expense.title),
                                             contentDescription = null,
                                             tint = catTint,
@@ -4699,7 +4710,7 @@ fun LedgersDashboardScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = Icons.Rounded.Archive,
                                     contentDescription = null,
                                     tint = SplitMateTheme.Palette.secondary,
@@ -4713,7 +4724,7 @@ fun LedgersDashboardScreen(
                                     color = SplitMateTheme.PrimaryDark
                                 )
                             }
-                            Icon(
+                            SymbolIcon(
                                 imageVector = if (isDeclinedDrawerExpanded) {
                                     Icons.Rounded.KeyboardArrowUp
                                 } else {
@@ -4767,7 +4778,7 @@ fun LedgersDashboardScreen(
                                             ),
                                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp)
                                         ) {
-                                            Icon(
+                                            SymbolIcon(
                                                 imageVector = Icons.Rounded.Restore,
                                                 contentDescription = null,
                                                 tint = SplitMateTheme.Palette.surfaceContainerLow,
@@ -5005,7 +5016,7 @@ fun LedgersDashboardScreen(
                                 .background(SplitMateTheme.AccentSage),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(
+                            SymbolIcon(
                                 imageVector = resolveGroupCategoryIcon(selectedIconKey, groupNameInput),
                                 contentDescription = null,
                                 tint = SplitMateTheme.Palette.onSurface
@@ -5081,7 +5092,7 @@ fun LedgersDashboardScreen(
                                         Column(
                                             horizontalAlignment = Alignment.CenterHorizontally
                                         ) {
-                                            Icon(
+                                            SymbolIcon(
                                                 imageVector = option.icon,
                                                 contentDescription = option.label,
                                                 tint = if (isSelected) SplitMateTheme.Palette.onSurface else SplitMateTheme.PrimaryDark,
@@ -5126,7 +5137,7 @@ fun LedgersDashboardScreen(
                             .fillMaxWidth()
                             .height(40.dp)
                     ) {
-                        Icon(
+                        SymbolIcon(
                             imageVector = Icons.Rounded.Contacts,
                             contentDescription = null,
                             tint = SplitMateTheme.Palette.onSurface,
@@ -5198,7 +5209,7 @@ fun LedgersDashboardScreen(
                                             shapes = IconButtonDefaults.shapes(),
                                             modifier = Modifier.size(20.dp)
                                         ) {
-                                            Icon(
+                                            SymbolIcon(
                                                 imageVector = Icons.Rounded.Close,
                                                 contentDescription = "Remove ${member.name}",
                                                 tint = SplitMateTheme.TextSecondary,
@@ -5233,7 +5244,7 @@ fun LedgersDashboardScreen(
                                     }
                                 },
                                 leadingIcon = {
-                                    Icon(
+                                    SymbolIcon(
                                         imageVector = Icons.Rounded.Search,
                                         contentDescription = null,
                                         tint = SplitMateTheme.TextSecondary,
@@ -5282,7 +5293,7 @@ fun LedgersDashboardScreen(
                                     ),
                                     modifier = Modifier.height(52.dp)
                                 ) {
-                                    Icon(Icons.Rounded.PersonAdd, contentDescription = "Add Member", modifier = Modifier.size(18.dp))
+                                    SymbolIcon(Icons.Rounded.PersonAdd, contentDescription = "Add Member", modifier = Modifier.size(18.dp))
                                 }
                             }
                         }
@@ -5797,7 +5808,7 @@ fun ExpressiveThemeModePill(
             // The theme name is spoken instead.
             .semantics { contentDescription = "Theme: $badgeLabel. Double tap to switch." }
     ) {
-        Icon(
+        SymbolIcon(
             imageVector = when (activeThemeMode) {
                 SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Icons.Rounded.LightMode
                 SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Icons.Rounded.DarkMode
@@ -6016,7 +6027,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                 )
                             },
                             leadingIcon = {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = if (isSelected) Icons.Rounded.CheckCircle else Icons.Rounded.Groups,
                                     contentDescription = null,
                                     modifier = Modifier.size(FilterChipDefaults.IconSize)
@@ -6129,7 +6140,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                         .background(SplitMateTheme.SageSurface),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(
+                                    SymbolIcon(
                                         imageVector = Icons.Rounded.Groups,
                                         contentDescription = null,
                                         tint = SplitMateTheme.SageText,
@@ -6163,7 +6174,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                         ),
                                         modifier = Modifier.size(32.dp)
                                     ) {
-                                        Icon(
+                                        SymbolIcon(
                                             imageVector = androidx.compose.material.icons.Icons.Outlined.Info, // v2.4.0 rc3: one info icon style
                                             contentDescription = "Why were debts simplified?",
                                             modifier = Modifier.size(16.dp)
@@ -6503,7 +6514,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                             color = SplitMateTheme.SageText
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Icon(
+                                        SymbolIcon(
                                             imageVector = if (isSummaryBoardExpanded) {
                                                 Icons.Rounded.KeyboardArrowUp
                                             } else {
@@ -6601,7 +6612,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Icon(
+                            SymbolIcon(
                                 imageVector = Icons.Rounded.CheckCircle,
                                 contentDescription = null,
                                 tint = SplitMateTheme.SageText,
@@ -6667,7 +6678,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                 )
                             },
                             leadingIcon = {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = Icons.Rounded.SwapVert,
                                     contentDescription = null,
                                     modifier = Modifier.size(FilterChipDefaults.IconSize)
@@ -6873,7 +6884,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                                 .height(40.dp),
                                                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                                                         ) {
-                                                            Icon(
+                                                            SymbolIcon(
                                                                 imageVector = Icons.AutoMirrored.Rounded.Chat,
                                                                 contentDescription = null,
                                                                 tint = SplitMateTheme.PrimaryDark,
@@ -7049,7 +7060,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                     }
                                 }
 
-                                Icon(
+                                SymbolIcon(
                                     imageVector = if (isPayerExpanded) {
                                         Icons.Rounded.KeyboardArrowUp
                                     } else {
@@ -7177,7 +7188,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                                     verticalAlignment = Alignment.CenterVertically,
                                                                     horizontalArrangement = Arrangement.spacedBy(3.dp)
                                                                 ) {
-                                                                    Icon(
+                                                                    SymbolIcon(
                                                                         imageVector = Icons.Rounded.Schedule,
                                                                         contentDescription = null,
                                                                         tint = SplitMateTheme.TerracottaText,
@@ -7336,7 +7347,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                             .background(SplitMateTheme.SurfaceWhite),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(
+                                        SymbolIcon(
                                             imageVector = Icons.Rounded.CheckCircle,
                                             contentDescription = null,
                                             tint = SplitMateTheme.SageText,
@@ -7420,7 +7431,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                     .background(SplitMateTheme.SurfaceMuted),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = Icons.Rounded.TaskAlt,
                                     contentDescription = null,
                                     tint = SplitMateTheme.PrimaryDark,
@@ -7472,7 +7483,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                 modifier = Modifier.padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = Icons.Rounded.History,
                                     contentDescription = null,
                                     tint = SplitMateTheme.TextSecondary,
@@ -7669,7 +7680,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                 .fillMaxWidth()
                                 .height(48.dp)
                         ) {
-                            Icon(
+                            SymbolIcon(
                                 imageVector = Icons.AutoMirrored.Rounded.Undo,
                                 contentDescription = "Undo Settlement",
                                 tint = SplitMateTheme.TerracottaText,

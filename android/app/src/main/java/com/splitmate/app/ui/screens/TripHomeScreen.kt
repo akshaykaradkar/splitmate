@@ -6,6 +6,7 @@
 
 package com.splitmate.app.ui.screens
 
+import com.splitmate.app.ui.components.SymbolIcon
 import com.splitmate.app.ui.components.expressivePressScale
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.liveRegion
@@ -1295,7 +1296,7 @@ fun TripHomeScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(
+                            SymbolIcon(
                                 imageVector = Icons.Rounded.PersonRemove,
                                 contentDescription = null,
                                 tint = DesignSystemBindings.activePalette.onSecondaryContainer,
@@ -1332,7 +1333,7 @@ fun TripHomeScreen(
                                 horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = Icons.Rounded.SwapHoriz,
                                     contentDescription = null,
                                     tint = DesignSystemBindings.activePalette.onSecondary,
@@ -1713,7 +1714,7 @@ private fun TripHubTopBar(
                         .minimumInteractiveComponentSize()
                         .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
                 ) {
-                    Icon(
+                    SymbolIcon(
                         imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                         contentDescription = "Back to Ledgers",
                         tint = TripHubTokens.TextPrimary,
@@ -1781,7 +1782,7 @@ private fun TripHubTopBar(
                                     color = TripHubTokens.TextPrimary
                                 )
                             } else {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = Icons.Rounded.PersonAdd,
                                     contentDescription = "Invite friends via link",
                                     tint = TripHubTokens.TextPrimary,
@@ -1812,7 +1813,7 @@ private fun TripHubTopBar(
                             indicatorColor = TripHubTokens.PositiveSageText
                         )
                     } else {
-                        Icon(
+                        SymbolIcon(
                             imageVector = Icons.Rounded.Sync,
                             contentDescription = "Sync trip expenses now",
                             tint = TripHubTokens.TextPrimary,
@@ -1828,7 +1829,7 @@ private fun TripHubTopBar(
                         .minimumInteractiveComponentSize()
                         .defaultMinSize(minWidth = 44.dp, minHeight = 48.dp)
                 ) {
-                    Icon(
+                    SymbolIcon(
                         imageVector = if (isSearchExpanded) Icons.Rounded.Close else Icons.Rounded.Search,
                         contentDescription = "Search bookings and expenses",
                         tint = TripHubTokens.TextPrimary,
@@ -1844,7 +1845,7 @@ private fun TripHubTopBar(
                             .minimumInteractiveComponentSize()
                             .defaultMinSize(minWidth = 44.dp, minHeight = 48.dp)
                     ) {
-                        Icon(
+                        SymbolIcon(
                             imageVector = Icons.Rounded.MoreVert,
                             contentDescription = "More trip options",
                             tint = TripHubTokens.TextPrimary,
@@ -1860,7 +1861,7 @@ private fun TripHubTopBar(
                         androidx.compose.material3.DropdownMenuItem(
                             text = { Text("Change theme", fontFamily = FigtreeFontFamily, fontWeight = FontWeight.SemiBold) },
                             leadingIcon = {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = Icons.Rounded.Palette,
                                     contentDescription = "Cycle expressive theme mode",
                                     modifier = Modifier.size(20.dp)
@@ -1874,7 +1875,7 @@ private fun TripHubTopBar(
                         androidx.compose.material3.DropdownMenuItem(
                             text = { Text("Classic ledger view", fontFamily = FigtreeFontFamily, fontWeight = FontWeight.SemiBold) },
                             leadingIcon = {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = Icons.Rounded.ViewAgenda,
                                     contentDescription = "Switch ticket view",
                                     modifier = Modifier.size(20.dp)
@@ -1928,7 +1929,7 @@ private fun TripHubTopBar(
                         )
                     },
                     leadingIcon = {
-                        Icon(
+                        SymbolIcon(
                             imageVector = Icons.Rounded.Search,
                             contentDescription = null,
                             tint = TripHubTokens.TextSecondary,
@@ -1938,7 +1939,7 @@ private fun TripHubTopBar(
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = { onSearchQueryChange("") }, shapes = IconButtonDefaults.shapes()) {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = Icons.Rounded.Close,
                                     contentDescription = "Clear search",
                                     tint = TripHubTokens.TextSecondary,
@@ -1992,7 +1993,7 @@ private fun TripHubSectionTabsRow(
                         }
                     }
                 ) {
-                    Icon(imageVector = tripHubSectionIcon(tab, selected), contentDescription = null)
+                    SymbolIcon(imageVector = tripHubSectionIcon(tab, selected), contentDescription = null)
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
@@ -2056,7 +2057,7 @@ private fun DynamicCategorySubFilterRow(
                 modifier = Modifier.minimumInteractiveComponentSize(),
                 leadingIcon = if (category != TripHubBookingCategory.ALL) {
                     {
-                        Icon(
+                        SymbolIcon(
                             imageVector = category.icon,
                             contentDescription = null,
                             tint = chipText,
@@ -2125,7 +2126,7 @@ private fun TripHubBalanceChip(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Icon(
+                SymbolIcon(
                     imageVector = when {
                         activeMemberNetCents > 0L -> Icons.Rounded.ArrowDownward
                         activeMemberNetCents < 0L -> Icons.Rounded.ArrowUpward
@@ -2139,7 +2140,7 @@ private fun TripHubBalanceChip(
                     style = MaterialTheme.typography.labelLarge.merge(TextStyle(fontFeatureSettings = "tnum")),
                     fontWeight = FontWeight.Bold
                 )
-                Icon(imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(18.dp))
+                SymbolIcon(imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -2274,7 +2275,7 @@ private fun CompactPerspectiveNetBalanceStrip(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Icon(
+                            SymbolIcon(
                                 imageVector = Icons.Rounded.CheckCircle,
                                 contentDescription = "All Settled",
                                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -2405,7 +2406,7 @@ private fun TripHubOverviewFeed(
                 ) {
                     Text(text = "See all $totalExpenseCount expenses", style = MaterialTheme.typography.labelLarge)
                     Spacer(modifier = Modifier.width(6.dp))
-                    Icon(imageVector = Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
+                    SymbolIcon(imageVector = Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -2970,7 +2971,7 @@ fun DeepGreenTrainTicketCard(
                                         .height(1.5.dp)
                                         .background(TripHubTokens.TrainAccentLime.copy(alpha = 0.65f))
                                 )
-                                Icon(
+                                SymbolIcon(
                                     imageVector = Icons.Rounded.Train,
                                     contentDescription = null,
                                     tint = DesignSystemBindings.activePalette.onPrimary,
@@ -3255,7 +3256,7 @@ fun DeepGreenTrainTicketCard(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Center
                             ) {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = Icons.Rounded.EventSeat,
                                     contentDescription = null,
                                     tint = TripHubTokens.TextPrimary,
@@ -3294,7 +3295,7 @@ fun DeepGreenTrainTicketCard(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Center
                             ) {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = Icons.Rounded.ConfirmationNumber,
                                     contentDescription = null,
                                     tint = TripHubTokens.TrainPrimaryCtaText,
@@ -3513,7 +3514,7 @@ fun PeriwinkleFlightBookingCard(
                                     .height(1.5.dp)
                                     .background(TripHubTokens.FlightAccentPeriwinkle.copy(alpha = 0.6f))
                             )
-                            Icon(
+                            SymbolIcon(
                                 imageVector = Icons.Rounded.FlightTakeoff,
                                 contentDescription = null,
                                 tint = DesignSystemBindings.activePalette.onPrimary,
@@ -3618,7 +3619,7 @@ fun PeriwinkleFlightBookingCard(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
-                            Icon(
+                            SymbolIcon(
                                 imageVector = Icons.Rounded.ConfirmationNumber,
                                 contentDescription = null,
                                 tint = TripHubTokens.PeriwinkleIconTint,
@@ -3696,7 +3697,7 @@ fun LodgingBookingCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Icon(
+                SymbolIcon(
                     imageVector = Icons.Rounded.CheckCircleOutline,
                     contentDescription = null,
                     tint = TripHubTokens.PositiveSageText,
@@ -3740,7 +3741,7 @@ fun LodgingBookingCard(
                                 .background(TripHubTokens.SunkenWell),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(
+                            SymbolIcon(
                                 imageVector = Icons.Rounded.Apartment,
                                 contentDescription = null,
                                 tint = TripHubTokens.TerracottaIconTint,
@@ -3947,7 +3948,7 @@ fun LodgingBookingCard(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
-                            Icon(
+                            SymbolIcon(
                                 imageVector = Icons.Rounded.Map,
                                 contentDescription = null,
                                 tint = TripHubTokens.TextPrimary,
@@ -3985,7 +3986,7 @@ fun LodgingBookingCard(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
-                            Icon(
+                            SymbolIcon(
                                 imageVector = Icons.AutoMirrored.Rounded.ReceiptLong,
                                 contentDescription = null,
                                 tint = TripHubTokens.TextPrimary,
@@ -4118,7 +4119,7 @@ fun GroundMobilityBookingCard(
                                 .background(boxBg),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(
+                            SymbolIcon(
                                 imageVector = leadIcon,
                                 contentDescription = null,
                                 tint = iconTint,
@@ -4311,7 +4312,7 @@ fun GeneralSharedExpenseCard(
                             .background(TripHubTokens.SunkenWell),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
+                        SymbolIcon(
                             imageVector = Icons.AutoMirrored.Rounded.ReceiptLong,
                             contentDescription = null,
                             tint = TripHubTokens.TextPrimary,
@@ -4378,7 +4379,7 @@ fun GeneralSharedExpenseCard(
                             },
                             modifier = Modifier.size(48.dp)
                         ) {
-                            Icon(
+                            SymbolIcon(
                                 imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
                                 contentDescription = if (expanded) "Hide split" else "Show split",
                                 tint = TripHubTokens.TextSecondary,
@@ -4459,7 +4460,7 @@ private fun ExpandableSplitBreakdownDrawer(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Icon(
+                    SymbolIcon(
                         imageVector = Icons.Outlined.Info,
                         contentDescription = null,
                         tint = TripHubTokens.TextSecondary,
@@ -4615,7 +4616,7 @@ private fun TripHubPlanTimelineView(
                                 .defaultMinSize(minHeight = 40.dp)
                                 .semantics { contentDescription = "Make a loop for day ${dayIndex + 1}" }
                         ) {
-                            Icon(imageVector = Icons.Rounded.Route, contentDescription = null, modifier = Modifier.size(16.dp))
+                            SymbolIcon(imageVector = Icons.Rounded.Route, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(text = "Make a loop", style = MaterialTheme.typography.labelLarge)
                         }
@@ -4690,7 +4691,7 @@ private fun TripHubPlanTimelineView(
                                     .background(TripHubTokens.SunkenWell),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = category.icon,
                                     contentDescription = null,
                                     tint = TripHubTokens.TextPrimary,
@@ -4702,7 +4703,7 @@ private fun TripHubPlanTimelineView(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Icon(
+                                    SymbolIcon(
                                         imageVector = Icons.Rounded.Schedule,
                                         contentDescription = null,
                                         tint = TripHubTokens.TextMuted,
@@ -5155,7 +5156,7 @@ private fun TripHubMoneySettlementView(
                                     .background(TripHubTokens.PositiveSagePillBg),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = Icons.Rounded.AccountBalanceWallet,
                                     contentDescription = null,
                                     tint = TripHubTokens.PositiveSageText,
@@ -5204,7 +5205,7 @@ private fun TripHubMoneySettlementView(
                                 .minimumInteractiveComponentSize()
                                 .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
                         ) {
-                            Icon(
+                            SymbolIcon(
                                 imageVector = Icons.Outlined.Info, // v2.4.0 rc3: one info icon style (was solid black)
                                 contentDescription = "How payments were simplified",
                                 tint = TripHubTokens.PositiveSageText,
@@ -5252,7 +5253,7 @@ private fun TripHubMoneySettlementView(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = Icons.Rounded.Verified,
                                     contentDescription = null,
                                     tint = TripHubTokens.PositiveSageText,
@@ -5580,7 +5581,7 @@ private fun TripHubMoneySettlementView(
                                                         modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                                                     ) {
                                                         // v2.4.0 D2: owe vs receive shown by icon + words, not colour alone
-                                                        Icon(
+                                                        SymbolIcon(
                                                             imageVector = if (isCurrentUserPayer) Icons.Rounded.ArrowUpward else Icons.Rounded.ArrowDownward,
                                                             contentDescription = null,
                                                             tint = if (isCurrentUserPayer) TripHubTokens.TerracottaIconTint else TripHubTokens.PositiveSageText,
@@ -5646,7 +5647,7 @@ private fun TripHubMoneySettlementView(
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                                                 ) {
-                                                    Icon(
+                                                    SymbolIcon(
                                                         imageVector = Icons.Rounded.Schedule,
                                                         contentDescription = null,
                                                         tint = TripHubTokens.TerracottaIconTint,
@@ -5693,7 +5694,7 @@ private fun TripHubMoneySettlementView(
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                                             ) {
-                                                Icon(
+                                                SymbolIcon(
                                                     imageVector = Icons.Outlined.Info,
                                                     contentDescription = null,
                                                     tint = TripHubTokens.TextSecondary,
@@ -5809,7 +5810,7 @@ private fun TripHubMoneySettlementView(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
-                                    Icon(
+                                    SymbolIcon(
                                         imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
                                         contentDescription = "pays",
                                         tint = TripHubTokens.TextMuted,
@@ -5892,7 +5893,7 @@ private fun TripHubMoneySettlementView(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
-                                        Icon(
+                                        SymbolIcon(
                                             imageVector = Icons.Rounded.Schedule,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -5951,7 +5952,7 @@ private fun TripHubMoneySettlementView(
                             .padding(top = 4.dp)
                             .defaultMinSize(minHeight = 48.dp)
                     ) {
-                        Icon(
+                        SymbolIcon(
                             imageVector = Icons.Rounded.Add,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp)
@@ -6554,7 +6555,7 @@ private fun TripHubPeoplePerspectiveView(
                             shapes = ListItemDefaults.segmentedShapes(index = idx, count = memberSheetActionCount),
                             colors = ListItemDefaults.segmentedColors(containerColor = TripHubTokens.CardSurface),
                             leadingContent = {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = if (isMissingPhone) Icons.Rounded.PhoneIphone else Icons.Rounded.Edit,
                                     contentDescription = null,
                                     tint = TripHubTokens.PositiveSageText,
@@ -6593,7 +6594,7 @@ private fun TripHubPeoplePerspectiveView(
                             shapes = ListItemDefaults.segmentedShapes(index = idx, count = memberSheetActionCount),
                             colors = ListItemDefaults.segmentedColors(containerColor = TripHubTokens.PositiveSagePillBg),
                             leadingContent = {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = Icons.AutoMirrored.Rounded.Send,
                                     contentDescription = null,
                                     tint = TripHubTokens.PositiveSageText,
@@ -6639,7 +6640,7 @@ private fun TripHubPeoplePerspectiveView(
                             shapes = ListItemDefaults.segmentedShapes(index = idx, count = memberSheetActionCount),
                             colors = ListItemDefaults.segmentedColors(containerColor = TripHubTokens.CardSurface),
                             leadingContent = {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = Icons.Rounded.Verified,
                                     contentDescription = null,
                                     tint = TripHubTokens.PositiveSageText,
@@ -6677,7 +6678,7 @@ private fun TripHubPeoplePerspectiveView(
                             shapes = ListItemDefaults.segmentedShapes(index = idx, count = memberSheetActionCount),
                             colors = ListItemDefaults.segmentedColors(containerColor = TripHubTokens.CardSurface),
                             leadingContent = {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = Icons.Rounded.PersonRemove,
                                     contentDescription = null,
                                     tint = TripHubTokens.TextSecondary,
@@ -6709,7 +6710,7 @@ private fun TripHubPeoplePerspectiveView(
                             shapes = ListItemDefaults.segmentedShapes(index = idx, count = memberSheetActionCount),
                             colors = ListItemDefaults.segmentedColors(containerColor = TripHubTokens.TerracottaPeachBg),
                             leadingContent = {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = Icons.Rounded.PersonRemove,
                                     contentDescription = null,
                                     tint = TripHubTokens.TerracottaIconTint,
@@ -6764,7 +6765,7 @@ private fun TripHubPeoplePerspectiveView(
                             .minimumInteractiveComponentSize()
                             .defaultMinSize(minHeight = 48.dp)
                     ) {
-                        Icon(
+                        SymbolIcon(
                             imageVector = Icons.Rounded.PersonAdd,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp)
@@ -6788,7 +6789,7 @@ private fun TripHubPeoplePerspectiveView(
                             .minimumInteractiveComponentSize()
                             .defaultMinSize(minHeight = 48.dp)
                     ) {
-                        Icon(
+                        SymbolIcon(
                             imageVector = Icons.Rounded.Share,
                             contentDescription = null,
                             tint = TripHubTokens.TextPrimary,
@@ -6826,7 +6827,7 @@ private fun TripHubPeoplePerspectiveView(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
+                            SymbolIcon(
                                 imageVector = if (isPeopleFeedbackError) Icons.Rounded.ErrorOutline else Icons.Rounded.CheckCircleOutline,
                                 contentDescription = null,
                                 tint = if (isPeopleFeedbackError) TripHubTokens.TerracottaIconTint else TripHubTokens.PositiveSageText,
@@ -6844,7 +6845,7 @@ private fun TripHubPeoplePerspectiveView(
                                 shapes = IconButtonDefaults.shapes(),
                                 modifier = Modifier // v2.4.0 D2: default 48dp target
                             ) {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = Icons.Rounded.Close,
                                     contentDescription = "Dismiss",
                                     tint = if (isPeopleFeedbackError) TripHubTokens.TerracottaIconTint else TripHubTokens.PositiveSageText,
@@ -6972,7 +6973,7 @@ private fun TripHubPeoplePerspectiveView(
                                         contentColor = TripHubTokens.PositiveSageText
                                     )
                                 ) {
-                                    Icon(
+                                    SymbolIcon(
                                         imageVector = if (isMissingPhone) Icons.Rounded.AddIcCall else Icons.AutoMirrored.Rounded.Send,
                                         contentDescription = if (isMissingPhone) "Add phone and invite" else "Share invite on WhatsApp",
                                         modifier = Modifier.size(18.dp)
@@ -6980,7 +6981,7 @@ private fun TripHubPeoplePerspectiveView(
                                 }
                             }
                             if (hasMemberActions) {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = Icons.Rounded.MoreVert,
                                     contentDescription = "Member options",
                                     tint = TripHubTokens.TextSecondary,
@@ -7038,7 +7039,7 @@ private fun TripHubPeoplePerspectiveView(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(3.dp)
                                 ) {
-                                    Icon(
+                                    SymbolIcon(
                                         imageVector = Icons.Rounded.PersonRemove,
                                         contentDescription = null,
                                         tint = TripHubTokens.TerracottaIconTint,
@@ -7064,7 +7065,7 @@ private fun TripHubPeoplePerspectiveView(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(3.dp)
                                 ) {
-                                    Icon(
+                                    SymbolIcon(
                                         imageVector = Icons.Rounded.Schedule,
                                         contentDescription = null,
                                         tint = TripHubTokens.PeriwinkleIconTint,
@@ -7127,7 +7128,7 @@ private fun TripHubPeoplePerspectiveView(
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                     modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                 ) {
-                    Icon(
+                    SymbolIcon(
                         imageVector = Icons.AutoMirrored.Rounded.ExitToApp,
                         contentDescription = null,
                         modifier = Modifier.size(ButtonDefaults.IconSize)
@@ -7220,7 +7221,7 @@ private fun AddBookingQuickSheet(
                                     .background(TripHubTokens.SunkenWell),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(
+                                SymbolIcon(
                                     imageVector = icon,
                                     contentDescription = null,
                                     tint = TripHubTokens.TextPrimary,
@@ -7229,7 +7230,7 @@ private fun AddBookingQuickSheet(
                             }
                         },
                         trailingContent = {
-                            Icon(
+                            SymbolIcon(
                                 imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
                                 contentDescription = null,
                                 tint = TripHubTokens.TextMuted,
@@ -7291,7 +7292,7 @@ private fun BerthChartInspectorDialog(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(
+                SymbolIcon(
                     imageVector = Icons.Rounded.EventSeat,
                     contentDescription = null,
                     tint = TripHubTokens.PositiveSageText,
