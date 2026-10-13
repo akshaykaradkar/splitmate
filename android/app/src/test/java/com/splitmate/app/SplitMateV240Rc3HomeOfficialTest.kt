@@ -119,4 +119,15 @@ class SplitMateV240Rc3HomeOfficialTest {
         assertFalse(idleBranch.contains("LoadingIndicator("), "idle state is a static icon")
         assertTrue(idleBranch.contains("Icons.Rounded.CloudDone"))
     }
+
+    @Test
+    fun `RC3H_05 Home Ledgers top bar, active groups and recent activity use official M3 Expressive components`() {
+        val app = src("ui/SplitMateAppComposable.kt")
+        assertTrue(app.contains("TopAppBar("))
+        assertTrue(app.contains("TopAppBarDefaults.pinnedScrollBehavior("))
+        assertTrue(app.contains("SegmentedListItem("))
+        assertTrue(app.contains("ListItemDefaults.segmentedShapes("))
+        assertTrue(app.contains("ListItemDefaults.SegmentedGap"))
+        assertTrue(app.contains("FloatingToolbarDefaults.ScreenOffset"))
+    }
 }

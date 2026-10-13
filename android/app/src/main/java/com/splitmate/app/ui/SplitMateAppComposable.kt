@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.platform.LocalConfiguration
@@ -95,6 +96,7 @@ import com.splitmate.app.ui.components.AnimatedTransitDeckHeroCard
 import com.splitmate.app.ui.components.ConnectedButtonGroup
 import com.splitmate.app.ui.components.ContainedLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import com.splitmate.app.ui.components.ExpressiveGapLinearProgressIndicator
 import com.splitmate.app.ui.components.ExpressiveMenuAction
 import com.splitmate.app.ui.components.LinearWavyProgressIndicator
 import com.splitmate.app.ui.components.MaterialShapes
@@ -645,7 +647,7 @@ fun SplitMateCloudOtpOnboardingScreen(
                         )
                     }
                 }
-                LinearWavyProgressIndicator(
+                ExpressiveGapLinearProgressIndicator(
                     progress = onboardingStepCount / 4f,
                     modifier = Modifier.fillMaxWidth(),
                     color = SplitMateTheme.SageText,
@@ -1666,7 +1668,7 @@ fun SplitMateMainDashboardScaffold(
                     icon = {
                         Icon(
                             imageVector = Icons.Rounded.ElectricBolt,
-                            contentDescription = "Log Expense",
+                            contentDescription = null,
                             tint = activeFabPalette.onPrimary
                         )
                     },
@@ -1892,7 +1894,7 @@ fun SplitMateBottomNavigationBar(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(bottom = 16.dp),
+            .padding(bottom = androidx.compose.material3.FloatingToolbarDefaults.ScreenOffset),
         contentAlignment = Alignment.BottomCenter
     ) {
         // v2.4.0 rc2: the official M3 Expressive floating toolbar. It owns the pill shape, the
@@ -3567,59 +3569,62 @@ fun LedgersDashboardScreen(
     var isDeclinedDrawerExpanded by rememberSaveable { mutableStateOf(false) }
 
     val renderMasterGroupListPane: @Composable () -> Unit = {
-    LazyColumn(
+    val homeScrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(top = 8.dp, bottom = 160.dp),
-        verticalArrangement = Arrangement.spacedBy(DesignSystemBindings.PixelSectionSpacing)
+            .nestedScroll(homeScrollBehavior.nestedScrollConnection)
     ) {
-        // 1. Custom Top Bar (Subtitle "Fun & Trip Expenses", Sync Cloud button, Clickable Avatar)
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
+        // 1. Official M3 Expressive TopAppBar (pinned scroll behavior, zero extra status-bar inset)
+        TopAppBar(
+            windowInsets = WindowInsets(0, 0, 0, 0),
+            scrollBehavior = homeScrollBehavior,
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = SplitMateTheme.ScreenBg,
+                scrolledContainerColor = SplitMateTheme.SurfaceMuted
+            ),
+            navigationIcon = {
+                Box(
+                    modifier = Modifier
+                        .padding(start = 16.dp, end = 6.dp)
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(SplitMateTheme.SurfaceWhite)
+                        .border(1.dp, SplitMateTheme.BorderLight, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                        contentDescription = "SplitMate Official App Logo",
                         modifier = Modifier
                             .size(42.dp)
-                            .clip(CircleShape)
-                            .background(SplitMateTheme.SurfaceWhite)
-                            .border(1.dp, SplitMateTheme.BorderLight, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.ic_launcher_foreground),
-                            contentDescription = "SplitMate Official App Logo",
-                            modifier = Modifier
-                                .size(42.dp)
-                                .scale(1.25f)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = "SplitMate",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = SplitMateTheme.PrimaryDark,
-                            fontFamily = SplitMateTheme.FontDisplay
-                        )
-                        Text(
-                            text = "Fun & Trip Expenses",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SplitMateTheme.TextSecondary,
-                            fontFamily = SplitMateTheme.FontRounded
-                        )
-                    }
+                            .scale(1.25f)
+                    )
                 }
-
+            },
+            title = {
+                Column {
+                    Text(
+                        text = "SplitMate",
+                        fontSize = 20.sp,
+                        lineHeight = 22.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = SplitMateTheme.PrimaryDark,
+                        fontFamily = SplitMateTheme.FontDisplay
+                    )
+                    Text(
+                        text = "Fun and trip expenses",
+                        fontSize = 12.sp,
+                        lineHeight = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SplitMateTheme.TextSecondary,
+                        fontFamily = SplitMateTheme.FontRounded
+                    )
+                }
+            },
+            actions = {
                 Row(
+                    modifier = Modifier.padding(end = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -3716,7 +3721,15 @@ fun LedgersDashboardScreen(
                     }
                 }
             }
-        }
+        )
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
+        contentPadding = PaddingValues(top = 6.dp, bottom = 160.dp),
+        verticalArrangement = Arrangement.spacedBy(DesignSystemBindings.PixelSectionSpacing)
+    ) {
 
         // 1.2. Option 1 User Phone + 4-Digit PIN Cloud Sync Banner
         val normalizedUserPhone10 = PhoneIdentityValidator.normalizeIndianPhone10(uiState.userPhone)
@@ -3769,7 +3782,7 @@ fun LedgersDashboardScreen(
                                         text = if (normalizedUserPhone10.length == 10) {
                                             "Unlock +91 $normalizedUserPhone10 with your 4-digit PIN to sync shared trips"
                                         } else {
-                                            "Link your 10-digit mobile number & 4-digit PIN to sync groups across phones"
+                                            "Link your 10-digit mobile number and 4-digit PIN to sync groups across phones"
                                         },
                                         fontFamily = SplitMateTheme.FontRounded,
                                         fontSize = 11.sp,
@@ -3791,7 +3804,7 @@ fun LedgersDashboardScreen(
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                             ) {
                                 Text(
-                                    text = "Link phone & PIN",
+                                    text = "Link phone and PIN",
                                     fontFamily = SplitMateTheme.FontRounded,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 11.sp,
@@ -3807,7 +3820,7 @@ fun LedgersDashboardScreen(
                             OutlinedTextField(
                                 value = upgradePhoneInput,
                                 onValueChange = { upgradePhoneInput = it },
-                                label = { Text("10-Digit Mobile (+91)") },
+                                label = { Text("10-digit mobile number (+91)") },
                                 leadingIcon = {
                                     Icon(Icons.Rounded.PhoneIphone, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
                                 },
@@ -3822,7 +3835,7 @@ fun LedgersDashboardScreen(
                                 onValueChange = { rawPin ->
                                     upgradeOtpInput = rawPin.filter { it.isDigit() }.take(4)
                                 },
-                                label = { Text("4-digit Security PIN") },
+                                label = { Text("4-digit security PIN") },
                                 leadingIcon = {
                                     Icon(Icons.Rounded.Lock, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
                                 },
@@ -3870,7 +3883,7 @@ fun LedgersDashboardScreen(
                                 Icon(Icons.Rounded.CloudDone, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = if (uiState.isCloudSyncing) "Syncing Shared Trips..." else "Save PIN & Sync Trips",
+                                    text = if (uiState.isCloudSyncing) "Syncing shared trips..." else "Save PIN and sync trips",
                                     fontWeight = FontWeight.ExtraBold
                                 )
                             }
@@ -4088,7 +4101,7 @@ fun LedgersDashboardScreen(
                             ) {
                                 Icon(Icons.Rounded.TaskAlt, contentDescription = null, tint = SplitMateTheme.PrimaryDark, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Settle up · all balanced", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.PrimaryDark, fontWeight = FontWeight.Bold)
+                                Text("Settle up · all settled", fontFamily = SplitMateTheme.FontRounded, color = SplitMateTheme.PrimaryDark, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -4247,7 +4260,7 @@ fun LedgersDashboardScreen(
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "No active trips yet. Tap + New Group or Join with code!",
+                            text = "No active trips yet. Tap New group or Join with code.",
                             fontFamily = SplitMateTheme.FontDisplay,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.ExtraBold,
@@ -4293,251 +4306,314 @@ fun LedgersDashboardScreen(
             }
         }
 
-        // 5. Dynamic Group Cards (24dp outer / 8dp inner Segmented Island radius, 8-Icon Category support, 14dp compact padding)
-        itemsIndexed(displayedActiveGroups, key = { _, it -> it.groupId }) { groupIdx, groupCard ->
-            val cardSurfaceColor = when {
-                groupCard.netBalanceCents > 0L -> SplitMateTheme.SageSurface
-                groupCard.netBalanceCents < 0L -> SplitMateTheme.TerracottaSurface
-                else -> SplitMateTheme.SurfaceWhite
-            }
-            // Restrict Forest Green (SageText) strictly to positive financial balances (> 0L)
-            val badgeTextColor = when {
-                groupCard.netBalanceCents > 0L -> SplitMateTheme.SageText
-                groupCard.netBalanceCents < 0L -> SplitMateTheme.TerracottaText
-                else -> SplitMateTheme.TextSecondary
-            }
-            val groupIcon = resolveGroupCategoryIcon(groupCard.iconName, groupCard.name)
-            val groupIslandShape = segmentedIslandItemShape(
-                index = groupIdx,
-                totalCount = displayedActiveGroups.size,
-                isSelected = false,
-                outerCorner = 20.dp,
-                innerCorner = 8.dp
-            )
+        // 5. Dynamic Group Cards — Official M3 Expressive Segmented List (20dp outer / 4dp inner corners, 2dp SegmentedGap)
+        if (displayedActiveGroups.isNotEmpty()) {
+            item(key = "active_groups_segmented_list") {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)
+                ) {
+                    displayedActiveGroups.forEachIndexed { groupIdx, groupCard ->
+                        key(groupCard.groupId) {
+                            val cardSurfaceColor = when {
+                                groupCard.netBalanceCents > 0L -> SplitMateTheme.SageSurface
+                                groupCard.netBalanceCents < 0L -> SplitMateTheme.TerracottaSurface
+                                else -> SplitMateTheme.SurfaceWhite
+                            }
+                            // Restrict Forest Green (SageText) strictly to positive financial balances (> 0L)
+                            val badgeTextColor = when {
+                                groupCard.netBalanceCents > 0L -> SplitMateTheme.SageText
+                                groupCard.netBalanceCents < 0L -> SplitMateTheme.TerracottaText
+                                else -> SplitMateTheme.TextSecondary
+                            }
+                            val groupIcon = resolveGroupCategoryIcon(groupCard.iconName, groupCard.name)
+                            val groupIslandShape = segmentedIslandItemShape(
+                                index = groupIdx,
+                                totalCount = displayedActiveGroups.size,
+                                isSelected = false,
+                                outerCorner = 20.dp,
+                                innerCorner = 4.dp
+                            )
 
-            Card(
-                onClick = {
-                    viewModel.openGroupDetail(groupCard.groupId)
-                },
-                shape = groupIslandShape,
-                colors = CardDefaults.cardColors(containerColor = cardSurfaceColor),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
-                    .then(
-                        when {
-                            groupCard.netBalanceCents == 0L ->
-                                Modifier.border(1.dp, SplitMateTheme.BorderLight, groupIslandShape)
-                            // v2.4.0 D6: dark fills are calm graphite / rose, so a 1dp accent
-                            // border carries the "gets back" (gold) vs "owes" (rose) signal.
-                            SplitMateTheme.isDark ->
-                                Modifier.border(1.dp, badgeTextColor.copy(alpha = 0.45f), groupIslandShape)
-                            else -> Modifier
-                        }
-                    )
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f).padding(end = 8.dp)
-                        ) {
-                            Box(
+                            Card(
+                                onClick = {
+                                    viewModel.openGroupDetail(groupCard.groupId)
+                                },
+                                shape = groupIslandShape,
+                                colors = CardDefaults.cardColors(containerColor = cardSurfaceColor),
                                 modifier = Modifier
-                                    .size(42.dp)
-                                    .clip(MaterialShapes.Cookie9Sided.toShape())
-                                    .background(if (groupCard.netBalanceCents == 0L) SplitMateTheme.SurfaceMuted else SplitMateTheme.SurfaceWhite),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = groupIcon,
-                                    contentDescription = null,
-                                    tint = if (groupCard.netBalanceCents == 0L) SplitMateTheme.PrimaryDark else badgeTextColor
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    text = groupCard.name.toSmartTitleCase(),
-                                    fontFamily = SplitMateTheme.FontDisplay,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 20.sp,
-                                    letterSpacing = (-0.4).sp,
-                                    lineHeight = 24.sp,
-                                    color = SplitMateTheme.PrimaryDark,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.sharedGroupElement(
-                                        com.splitmate.app.ui.components.SharedGroupKeys.title(groupCard.groupId)
+                                    .fillMaxWidth()
+                                    .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
+                                    .then(
+                                        when {
+                                            groupCard.netBalanceCents == 0L ->
+                                                Modifier.border(1.dp, SplitMateTheme.BorderLight, groupIslandShape)
+                                            // v2.4.0 D6: dark fills are calm graphite / rose, so a 1dp accent
+                                            // border carries the "gets back" (gold) vs "owes" (rose) signal.
+                                            SplitMateTheme.isDark ->
+                                                Modifier.border(1.dp, badgeTextColor.copy(alpha = 0.45f), groupIslandShape)
+                                            else -> Modifier
+                                        }
                                     )
-                                )
-                                Text(
-                                    text = "Tap to view expenses & balances",
-                                    fontFamily = SplitMateTheme.FontDisplay,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = SplitMateTheme.TextSecondary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-
-                        val statusLabel = when {
-                            groupCard.netBalanceCents > 0L -> "You get back"
-                            groupCard.netBalanceCents < 0L -> "You owe"
-                            else -> "All settled"
-                        }
-                        val numericBadgeAmount = if (groupCard.netBalanceCents == 0L) {
-                            "₹0.00"
-                        } else {
-                            formatIndianRupeesFromCents(
-                                cents = groupCard.netBalanceCents,
-                                includePlusSign = true,
-                                currencySymbol = "₹"
-                            )
-                        }
-
-                        Column(horizontalAlignment = Alignment.End) {
-                            Surface(
-                                shape = SplitMateTheme.RadiusBadge,
-                                color = if (groupCard.netBalanceCents == 0L) SplitMateTheme.SurfaceMuted else SplitMateTheme.SurfaceWhite.copy(alpha = 0.9f)
                             ) {
-                                Text(
-                                    text = statusLabel,
-                                    fontFamily = SplitMateTheme.FontRounded,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = 0.5.sp,
-                                    color = badgeTextColor,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = numericBadgeAmount,
-                                fontFamily = SplitMateTheme.FontDisplay,
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                letterSpacing = (-0.9).sp,
-                                color = if (groupCard.netBalanceCents == 0L) SplitMateTheme.PrimaryDark else badgeTextColor,
-                                maxLines = 1,
-                                softWrap = false,
-                                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
-                                modifier = Modifier.sharedGroupElement(
-                                    com.splitmate.app.ui.components.SharedGroupKeys.net(groupCard.groupId),
-                                    alignment = Alignment.CenterEnd
-                                )
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OverlappingAvatarStack(
-                            avatars = groupCard.memberSeeds,
-                            remainingCount = groupCard.remainingCount,
-                            onlineFlags = groupCard.memberOnlineFlags
-                        )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            if (groupCard.onlineFriendsCount > 0) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = SplitMateTheme.Extended.online.container
-                                ) {
+                                Column(modifier = Modifier.padding(14.dp)) {
                                     Row(
-                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.Top
                                     ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(6.dp)
-                                                .clip(CircleShape)
-                                                .background(SplitMateTheme.Extended.online.color)
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.weight(1f).padding(end = 8.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(42.dp)
+                                                    .clip(MaterialShapes.Cookie9Sided.toShape())
+                                                    .background(if (groupCard.netBalanceCents == 0L) SplitMateTheme.SurfaceMuted else SplitMateTheme.SurfaceWhite),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = groupIcon,
+                                                    contentDescription = null,
+                                                    tint = if (groupCard.netBalanceCents == 0L) SplitMateTheme.PrimaryDark else badgeTextColor
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column {
+                                                Text(
+                                                    text = groupCard.name.toSmartTitleCase(),
+                                                    fontFamily = SplitMateTheme.FontDisplay,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    fontSize = 20.sp,
+                                                    letterSpacing = (-0.4).sp,
+                                                    lineHeight = 24.sp,
+                                                    color = SplitMateTheme.PrimaryDark,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.sharedGroupElement(
+                                                        com.splitmate.app.ui.components.SharedGroupKeys.title(groupCard.groupId)
+                                                    )
+                                                )
+                                                Text(
+                                                    text = "Tap to view expenses and balances",
+                                                    fontFamily = SplitMateTheme.FontDisplay,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                    color = SplitMateTheme.TextSecondary,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+
+                                        val statusLabel = when {
+                                            groupCard.netBalanceCents > 0L -> "You get back"
+                                            groupCard.netBalanceCents < 0L -> "You owe"
+                                            else -> "All settled"
+                                        }
+                                        val numericBadgeAmount = if (groupCard.netBalanceCents == 0L) {
+                                            "₹0.00"
+                                        } else {
+                                            formatIndianRupeesFromCents(
+                                                cents = groupCard.netBalanceCents,
+                                                includePlusSign = true,
+                                                currencySymbol = "₹"
+                                            )
+                                        }
+
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            Surface(
+                                                shape = SplitMateTheme.RadiusBadge,
+                                                color = if (groupCard.netBalanceCents == 0L) SplitMateTheme.SurfaceMuted else SplitMateTheme.SurfaceWhite.copy(alpha = 0.9f)
+                                            ) {
+                                                Text(
+                                                    text = statusLabel,
+                                                    fontFamily = SplitMateTheme.FontRounded,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    letterSpacing = 0.5.sp,
+                                                    color = badgeTextColor,
+                                                    maxLines = 1,
+                                                    softWrap = false,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = numericBadgeAmount,
+                                                fontFamily = SplitMateTheme.FontDisplay,
+                                                fontSize = 24.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                letterSpacing = (-0.9).sp,
+                                                color = if (groupCard.netBalanceCents == 0L) SplitMateTheme.PrimaryDark else badgeTextColor,
+                                                maxLines = 1,
+                                                softWrap = false,
+                                                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+                                                modifier = Modifier.sharedGroupElement(
+                                                    com.splitmate.app.ui.components.SharedGroupKeys.net(groupCard.groupId),
+                                                    alignment = Alignment.CenterEnd
+                                                )
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(12.dp))
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        OverlappingAvatarStack(
+                                            avatars = groupCard.memberSeeds,
+                                            remainingCount = groupCard.remainingCount,
+                                            onlineFlags = groupCard.memberOnlineFlags
                                         )
-                                        Text(
-                                            text = "${groupCard.onlineFriendsCount} Online",
-                                            fontFamily = SplitMateTheme.FontRounded,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = SplitMateTheme.Extended.online.onContainer
-                                        )
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            if (groupCard.onlineFriendsCount > 0) {
+                                                Surface(
+                                                    shape = CircleShape,
+                                                    color = SplitMateTheme.Extended.online.container
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                    ) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .size(6.dp)
+                                                                .clip(CircleShape)
+                                                                .background(SplitMateTheme.Extended.online.color)
+                                                        )
+                                                        Text(
+                                                            text = "${groupCard.onlineFriendsCount} online",
+                                                            fontFamily = SplitMateTheme.FontRounded,
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.ExtraBold,
+                                                            color = SplitMateTheme.Extended.online.onContainer
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            Text(
+                                                text = groupCard.statusPillText,
+                                                fontFamily = SplitMateTheme.FontRounded,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = SplitMateTheme.TextSecondary,
+                                                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                                            )
+                                        }
                                     }
                                 }
                             }
-                            Text(
-                                text = groupCard.statusPillText,
-                                fontFamily = SplitMateTheme.FontRounded,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = SplitMateTheme.TextSecondary,
-                                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
-                            )
                         }
                     }
                 }
             }
         }
 
-        // 6. Recent Activity Preview
+        // 6. Recent Activity Preview — Official M3 Expressive SegmentedListItem Group
         if (uiState.expenses.isNotEmpty()) {
-            item {
+            item(key = "recent_activity_segmented_section") {
+                val recentExpenses = remember(uiState.expenses) { uiState.expenses.take(3) }
                 Column(
                     modifier = Modifier
                         .padding(top = 4.dp)
                         .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
                 ) {
                     Text(
-                        text = "Recent Activity",
-                        fontSize = 16.sp,
+                        text = "Recent activity",
+                        fontFamily = SplitMateTheme.FontDisplay,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = SplitMateTheme.PrimaryDark
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    uiState.expenses.take(3).forEach { expense ->
-                        val payer = uiState.members.find { it.memberId == expense.payerId }
-                        val isMePayer = payer?.isCurrentUser == true
-                        val sym = uiState.activeCurrency.symbol
-                        val signedCents = if (isMePayer) expense.totalAmountCents else -expense.totalAmountCents
-                        val formattedAmt = formatIndianRupeesFromCents(
-                            cents = signedCents,
-                            includePlusSign = true,
-                            currencySymbol = sym
-                        )
-                        val (catBg, catTint) = resolveExpenseCategoryBadgeColors(expense.title, SplitMateTheme.isDark)
-                        val parsedTravel = extractTravelTicketFromTitle(expense.title)
-                        val cleanTitle = cleanDisplayExpenseTitle(expense.title)
-                        val payerShortName = if (isMePayer) "you" else (payer?.name?.substringBefore(" ") ?: "Member")
-                        val subText = if (parsedTravel != null && parsedTravel.pnr.isNotBlank()) {
-                            "PNR ${parsedTravel.pnr} (${parsedTravel.bookingStatus}) · Paid by $payerShortName"
-                        } else {
-                            "Paid by $payerShortName · Tap group to view details"
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)
+                    ) {
+                        recentExpenses.forEachIndexed { idx, expense ->
+                            val payer = uiState.members.find { it.memberId == expense.payerId }
+                            val isMePayer = payer?.isCurrentUser == true
+                            val sym = uiState.activeCurrency.symbol
+                            val signedCents = if (isMePayer) expense.totalAmountCents else -expense.totalAmountCents
+                            val formattedAmt = formatIndianRupeesFromCents(
+                                cents = signedCents,
+                                includePlusSign = true,
+                                currencySymbol = sym
+                            )
+                            val (catBg, catTint) = resolveExpenseCategoryBadgeColors(expense.title, SplitMateTheme.isDark)
+                            val parsedTravel = extractTravelTicketFromTitle(expense.title)
+                            val cleanTitle = cleanDisplayExpenseTitle(expense.title)
+                            val payerShortName = if (isMePayer) "you" else (payer?.name?.substringBefore(" ") ?: "Member")
+                            val subText = if (parsedTravel != null && parsedTravel.pnr.isNotBlank()) {
+                                "PNR ${parsedTravel.pnr} (${parsedTravel.bookingStatus}) · paid by $payerShortName"
+                            } else {
+                                "Paid by $payerShortName · tap group to view details"
+                            }
+                            SegmentedListItem(
+                                onClick = {
+                                    if (expense.groupId.isNotBlank()) {
+                                        viewModel.openGroupDetail(expense.groupId)
+                                    }
+                                },
+                                shapes = ListItemDefaults.segmentedShapes(index = idx, count = recentExpenses.size),
+                                colors = ListItemDefaults.segmentedColors(containerColor = SplitMateTheme.SurfaceWhite),
+                                leadingContent = {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(CircleShape)
+                                            .background(catBg),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = resolveExpenseCategoryIcon(expense.title),
+                                            contentDescription = null,
+                                            tint = catTint,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                },
+                                supportingContent = {
+                                    Text(
+                                        text = subText,
+                                        fontFamily = SplitMateTheme.FontRounded,
+                                        fontSize = 12.sp,
+                                        color = SplitMateTheme.TextSecondary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                },
+                                trailingContent = {
+                                    Text(
+                                        text = formattedAmt,
+                                        fontFamily = SplitMateTheme.FontDisplay,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = if (isMePayer) SplitMateTheme.SageText else SplitMateTheme.PrimaryDark,
+                                        style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                                    )
+                                }
+                            ) {
+                                Text(
+                                    text = cleanTitle,
+                                    fontFamily = SplitMateTheme.FontDisplay,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = SplitMateTheme.PrimaryDark,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
-                        ActivityItemRow(
-                            icon = resolveExpenseCategoryIcon(expense.title),
-                            iconBg = catBg,
-                            iconTint = catTint,
-                            title = cleanTitle,
-                            subtitle = subText,
-                            amount = formattedAmt,
-                            isPositive = isMePayer
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
             }
@@ -4660,6 +4736,7 @@ fun LedgersDashboardScreen(
                 }
             }
         }
+    }
     }
     }
 
