@@ -130,4 +130,36 @@ class SplitMateV240Rc3HomeOfficialTest {
         assertTrue(app.contains("ListItemDefaults.SegmentedGap"))
         assertTrue(app.contains("FloatingToolbarDefaults.ScreenOffset"))
     }
+
+    @Test
+    fun `RC3H_06 Collapsed floating toolbar centers the circular Quick Split button and remains clickable`() {
+        val app = src("ui/SplitMateAppComposable.kt")
+        val bar = app.substringAfter("fun SplitMateBottomNavigationBar(").substringBefore("\n// ====")
+        assertTrue(bar.contains("shape = CircleShape"), "Quick Split FAB in floating toolbar must be circular")
+        assertTrue(bar.contains("wrapContentWidth(align = Alignment.Start, unbounded = true)"), "Toolbar tabs must not squash during collapse")
+        assertTrue(bar.contains("placeRelative(x = -shiftLeftToCenterPx, y = 0)"), "Collapsed single button must shift to horizontal center")
+
+        var quickSplitClicks = 0
+        compose.setContent {
+            Box(modifier = Modifier.size(width = 400.dp, height = 120.dp)) {
+                SplitMateBottomNavigationBar(
+                    selectedTab = SplitMateTab.LEDGERS,
+                    expanded = false,
+                    onTabSelected = {},
+                    onQuickSplitClick = { quickSplitClicks++ }
+                )
+            }
+        }
+        compose.waitForIdle()
+        val fabNode = compose.onNode(hasContentDescription("Quick Split"))
+        val bounds = fabNode.fetchSemanticsNode().boundsInRoot
+        val rootWidthPx = with(compose.density) { 400.dp.toPx() }
+        val expectedCenterPx = rootWidthPx / 2f
+        assertTrue(
+            kotlin.math.abs(bounds.center.x - expectedCenterPx) <= 2f,
+            "Collapsed Quick Split button should be centered at $expectedCenterPx px, but was at ${bounds.center.x} px (bounds=$bounds)"
+        )
+        fabNode.performClick()
+        assertEquals(1, quickSplitClicks)
+    }
 }

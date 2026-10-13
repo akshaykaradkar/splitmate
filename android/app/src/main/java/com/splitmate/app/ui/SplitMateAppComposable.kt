@@ -49,6 +49,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
+import kotlin.math.roundToInt
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -1631,13 +1633,58 @@ fun SplitMateMainDashboardScaffold(
     }
 
     val activeFabPalette = DesignSystemBindings.activePalette
+    val latestOpenedGroupDetailId by rememberUpdatedState(uiState.openedGroupDetailId)
+    val latestHasGroups by rememberUpdatedState(uiState.groups.isNotEmpty())
+    val latestOpenPnrOrFlightTicket by rememberUpdatedState(::openPnrOrFlightTicket)
+    val latestFlightPdfPickerLauncher by rememberUpdatedState(flightPdfPickerLauncher)
+    val stableOnNavigateToSplit = remember(viewModel) {
+        {
+            viewModel.navigateToSubFlow(
+                targetTabName = SplitMateTab.SPLIT.name,
+                originGroupDetailId = latestOpenedGroupDetailId
+            )
+        }
+    }
+    val stableOnNavigateToSettle = remember(viewModel) {
+        {
+            viewModel.navigateToSubFlow(
+                targetTabName = SplitMateTab.SETTLE.name,
+                originGroupDetailId = latestOpenedGroupDetailId
+            )
+        }
+    }
+    val stableOnNavigateToPnrSplit = remember {
+        {
+            if (latestHasGroups) {
+                activeReviewPnr = ""
+                showPnrReviewScreen = true
+            }
+        }
+    }
+    val stableOnUploadFlightPdf = remember {
+        {
+            if (latestHasGroups) {
+                latestFlightPdfPickerLauncher.launch("application/pdf")
+            }
+        }
+    }
+    val stableOnOpenPnrWithTicket = remember {
+        { pnr: String ->
+            if (latestHasGroups) {
+                latestOpenPnrOrFlightTicket(pnr)
+            }
+        }
+    }
+    val stableOnToggleTripHubView = remember {
+        { enabled: Boolean -> useTripHubV2View = enabled }
+    }
     Scaffold(
         modifier = Modifier
             .fillMaxSize()
             .floatingToolbarVerticalNestedScroll(
                 expanded = isToolbarExpanded,
-                onExpand = { isToolbarExpanded = true },
-                onCollapse = { isToolbarExpanded = false }
+                onExpand = { if (!isToolbarExpanded) isToolbarExpanded = true },
+                onCollapse = { if (isToolbarExpanded) isToolbarExpanded = false }
             ),
         containerColor = animatedScreenBg,
         floatingActionButton = {
@@ -1759,37 +1806,14 @@ fun SplitMateMainDashboardScaffold(
                 when (currentTab) {
                 SplitMateTab.LEDGERS -> LedgersDashboardScreen(
                     viewModel = viewModel,
-                    onNavigateToSplit = {
-                        viewModel.navigateToSubFlow(
-                            targetTabName = SplitMateTab.SPLIT.name,
-                            originGroupDetailId = uiState.openedGroupDetailId
-                        )
-                    },
-                    onNavigateToSettle = {
-                        viewModel.navigateToSubFlow(
-                            targetTabName = SplitMateTab.SETTLE.name,
-                            originGroupDetailId = uiState.openedGroupDetailId
-                        )
-                    },
-                    onNavigateToPnrSplit = {
-                        if (uiState.groups.isNotEmpty()) {
-                            activeReviewPnr = ""
-                            showPnrReviewScreen = true
-                        }
-                    },
-                    onUploadFlightPdf = {
-                        if (uiState.groups.isNotEmpty()) {
-                            flightPdfPickerLauncher.launch("application/pdf")
-                        }
-                    },
-                    onOpenPnrWithTicket = { pnr ->
-                        if (uiState.groups.isNotEmpty()) {
-                            openPnrOrFlightTicket(pnr)
-                        }
-                    },
+                    onNavigateToSplit = stableOnNavigateToSplit,
+                    onNavigateToSettle = stableOnNavigateToSettle,
+                    onNavigateToPnrSplit = stableOnNavigateToPnrSplit,
+                    onUploadFlightPdf = stableOnUploadFlightPdf,
+                    onOpenPnrWithTicket = stableOnOpenPnrWithTicket,
                     onAvatarSettingsClick = onOpenSettings,
                     useTripHubV2View = useTripHubV2View,
-                    onToggleTripHubView = { useTripHubV2View = it }
+                    onToggleTripHubView = stableOnToggleTripHubView
                 )
                 SplitMateTab.SPLIT -> QuickExpenseScreen(
                     viewModel = viewModel,
@@ -1890,6 +1914,16 @@ fun SplitMateBottomNavigationBar(
     onQuickSplitClick: () -> Unit = {}
 ) {
     val activePalette = DesignSystemBindings.activePalette
+    val primaryNavTabs = remember { SplitMateTab.values().filter { it.showInPrimaryNav } }
+    val toolbarAnimationSpec = androidx.compose.material3.FloatingToolbarDefaults.animationSpec<Float>()
+    val expandTransition = updateTransition(
+        targetState = if (expanded) 1f else 0f,
+        label = "FloatingToolbarCenterTransition"
+    )
+    val expandedProgressState = expandTransition.animateFloat(
+        transitionSpec = { toolbarAnimationSpec },
+        label = "FloatingToolbarCenterProgress"
+    ) { it }
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1897,13 +1931,26 @@ fun SplitMateBottomNavigationBar(
             .padding(bottom = androidx.compose.material3.FloatingToolbarDefaults.ScreenOffset),
         contentAlignment = Alignment.BottomCenter
     ) {
-        // v2.4.0 rc2: the official M3 Expressive floating toolbar. It owns the pill shape, the
-        // shadow and the expand/collapse into the FAB, so no rectangular shadow appears mid-collapse.
+        // v2.4.0 rc2/rc6: the official M3 Expressive floating toolbar. It owns the pill shape, the
+        // shadow and the expand/collapse into the circular FAB; when collapsed (expanded = false),
+        // the placement phase smoothly shifts the single circular button to the horizontal center
+        // instead of leaving it stuck on the right edge of the full-width layout box.
         androidx.compose.material3.HorizontalFloatingToolbar(
             expanded = expanded,
+            animationSpec = toolbarAnimationSpec,
+            modifier = Modifier.layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                val collapsedFabWidthPx = 64.dp.roundToPx()
+                val maxCenterShiftPx = (placeable.width - collapsedFabWidthPx).coerceAtLeast(0) / 2f
+                layout(placeable.width, placeable.height) {
+                    val shiftLeftToCenterPx = (maxCenterShiftPx * (1f - expandedProgressState.value)).roundToInt()
+                    placeable.placeRelative(x = -shiftLeftToCenterPx, y = 0)
+                }
+            },
             floatingActionButton = {
                 androidx.compose.material3.FloatingToolbarDefaults.VibrantFloatingActionButton(
                     onClick = onQuickSplitClick,
+                    shape = CircleShape,
                     containerColor = activePalette.primary,
                     contentColor = activePalette.onPrimary
                 ) {
@@ -1921,45 +1968,52 @@ fun SplitMateBottomNavigationBar(
                 fabContentColor = activePalette.onPrimary
             )
         ) {
-            SplitMateTab.values().filter { it.showInPrimaryNav }.forEach { tab ->
-                val isSelected = selectedTab == tab
-                val tabCornerRadius by animateDpAsState(
-                    targetValue = if (isSelected) 16.dp else 28.dp,
-                    animationSpec = SplitMateMotion.fastSpatial(),
-                    label = "navTabCornerMorph"
-                )
-                val tabPillBg by animateColorAsState(
-                    targetValue = if (isSelected) SplitMateTheme.AccentSage else Color.Transparent,
-                    animationSpec = SplitMateMotion.fastEffects(),
-                    label = "navTabPillBg"
-                )
-                Surface(
-                    onClick = { onTabSelected(tab) },
-                    shape = RoundedCornerShape(tabCornerRadius),
-                    color = tabPillBg,
-                    modifier = Modifier
-                        .minimumInteractiveComponentSize()
-                        .sizeIn(minWidth = 56.dp, minHeight = 48.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
+            Row(
+                modifier = Modifier.wrapContentWidth(align = Alignment.Start, unbounded = true),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                primaryNavTabs.forEach { tab ->
+                    val isSelected = selectedTab == tab
+                    val tabCornerRadius by animateDpAsState(
+                        targetValue = if (isSelected) 16.dp else 28.dp,
+                        animationSpec = SplitMateMotion.fastSpatial(),
+                        label = "navTabCornerMorph"
+                    )
+                    val tabPillBg by animateColorAsState(
+                        targetValue = if (isSelected) SplitMateTheme.AccentSage else Color.Transparent,
+                        animationSpec = SplitMateMotion.fastEffects(),
+                        label = "navTabPillBg"
+                    )
+                    Surface(
+                        onClick = { onTabSelected(tab) },
+                        shape = RoundedCornerShape(tabCornerRadius),
+                        color = tabPillBg,
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .sizeIn(minWidth = 56.dp, minHeight = 48.dp)
                     ) {
-                        Icon(
-                            imageVector = tab.icon,
-                            contentDescription = tab.label,
-                            tint = if (isSelected) activePalette.onPrimaryContainer else SplitMateTheme.TextSecondary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        AnimatedVisibility(visible = isSelected) {
-                            Text(
-                                text = "  ${tab.label}",
-                                color = activePalette.onPrimaryContainer,
-                                fontFamily = SplitMateTheme.FontRounded,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 13.sp
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = tab.icon,
+                                contentDescription = tab.label,
+                                tint = if (isSelected) activePalette.onPrimaryContainer else SplitMateTheme.TextSecondary,
+                                modifier = Modifier.size(20.dp)
                             )
+                            AnimatedVisibility(visible = isSelected) {
+                                Text(
+                                    text = "  ${tab.label}",
+                                    color = activePalette.onPrimaryContainer,
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 13.sp,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
                         }
                     }
                 }
@@ -3569,7 +3623,7 @@ fun LedgersDashboardScreen(
     var isDeclinedDrawerExpanded by rememberSaveable { mutableStateOf(false) }
 
     val renderMasterGroupListPane: @Composable () -> Unit = {
-    val homeScrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    val homeScrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(canScroll = { false })
     Column(
         modifier = Modifier
             .fillMaxSize()

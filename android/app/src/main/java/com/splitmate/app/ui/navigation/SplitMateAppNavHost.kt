@@ -742,6 +742,7 @@ fun SplitMateGlobalBottomBar(
                 // v2.4.0 rc3: official M3 Expressive toolbar FAB (owns its shape, size and elevation).
                 androidx.compose.material3.FloatingToolbarDefaults.VibrantFloatingActionButton(
                     onClick = onQuickSplitClick,
+                    shape = CircleShape,
                     containerColor = activePalette.primary,
                     contentColor = activePalette.onPrimary
                 ) {
