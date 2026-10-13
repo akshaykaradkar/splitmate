@@ -86,4 +86,24 @@ class SplitMateV240Rc3Test {
         val stay = src("ui/screens/plan/StayPinSheet.kt")
         assertTrue(stay.contains("PrimaryTabRow("))
     }
+
+    @Test
+    fun `RC3_09 Settle Up uses official FilterChips, tonal toggle and segmented settlement legs`() {
+        val app = src("ui/SplitMateAppComposable.kt")
+        val settle = app.substringAfter("fun GreedySettlementScreen(").substringBefore("fun AuditVaultScreen(")
+        assertTrue(Regex("FilterChip\\(").findAll(settle).count() >= 2, "group selector and sort toggle are FilterChips")
+        assertTrue(settle.contains("FilledTonalIconToggleButton("))
+        assertTrue(settle.contains("shapes = IconButtonDefaults.toggleableShapes()"))
+        assertTrue(Regex("ListItemDefaults\\.segmentedShapes\\(").findAll(settle).count() >= 2, "incoming and outgoing legs")
+        assertTrue(settle.contains("Arrangement.spacedBy(ListItemDefaults.SegmentedGap)"))
+        assertFalse(settle.contains("segmentedIslandItemShape("), "no hand-built segment shapes")
+        assertFalse(settle.contains("MaxHeapInspectorPillCorner"), "no hand-animated info pill")
+        assertFalse(settle.contains("color = peachBoxBorder,\n"), "legs are segments, not divider-separated")
+        // Motion: Screen 3 uses motion-scheme tokens, not hand-tuned springs or default fades.
+        assertFalse(Regex("spring\\(dampingRatio = 0\\.7[58]f, stiffness = 380f\\)").containsMatchIn(settle), "no hand-tuned springs")
+        assertTrue(settle.contains(".animateContentSize(animationSpec = SplitMateMotion.defaultSpatial())"))
+        assertTrue(settle.contains("expandVertically(animationSpec = SplitMateMotion.defaultSpatial())"))
+        assertTrue(settle.contains("fadeIn(animationSpec = SplitMateMotion.defaultEffects())"))
+        assertTrue(settle.contains("fadeOut(animationSpec = SplitMateMotion.defaultEffects())"))
+    }
 }

@@ -6002,32 +6002,41 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(uiState.groups, key = { it.groupId }) { grp ->
                         val isSelected = grp.groupId == resolvedActiveGroupId
-                        Surface(
+                        // v2.4.0 rc7 (Screen 3): official M3 FilterChip group selector (single select).
+                        FilterChip(
+                            selected = isSelected,
                             onClick = { viewModel.selectActiveGroup(grp.groupId) },
-                            shape = SplitMateTheme.RadiusBadge,
-                            color = if (isSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.SurfaceWhite,
-                            border = BorderStroke(1.dp, if (isSelected) SplitMateTheme.PrimaryDark else SplitMateTheme.BorderLight)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = if (isSelected) Icons.Rounded.CheckCircle else Icons.Rounded.Groups,
-                                    contentDescription = null,
-                                    tint = if (isSelected) SplitMateTheme.ScreenBg else SplitMateTheme.PrimaryDark,
-                                    modifier = Modifier.size(13.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
+                            label = {
                                 Text(
                                     text = grp.name,
                                     fontFamily = SplitMateTheme.FontRounded,
-                                    fontSize = 11.sp,
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isSelected) SplitMateTheme.ScreenBg else SplitMateTheme.PrimaryDark
+                                    maxLines = 1
                                 )
-                            }
-                        }
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = if (isSelected) Icons.Rounded.CheckCircle else Icons.Rounded.Groups,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(FilterChipDefaults.IconSize)
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = SplitMateTheme.SurfaceWhite,
+                                labelColor = SplitMateTheme.PrimaryDark,
+                                iconColor = SplitMateTheme.PrimaryDark,
+                                selectedContainerColor = SplitMateTheme.PrimaryDark,
+                                selectedLabelColor = SplitMateTheme.ScreenBg,
+                                selectedLeadingIconColor = SplitMateTheme.ScreenBg
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = isSelected,
+                                borderColor = SplitMateTheme.BorderLight,
+                                selectedBorderColor = SplitMateTheme.PrimaryDark
+                            )
+                        )
                     }
                 }
 
@@ -6085,7 +6094,8 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .border(1.dp, summaryBorderColor, RoundedCornerShape(24.dp))
-                        .animateContentSize(animationSpec = spring(dampingRatio = 0.78f, stiffness = 380f))
+                        // v2.4.0 rc7: motion-scheme token (was a hand-tuned 0.78 / 380 spring).
+                        .animateContentSize(animationSpec = SplitMateMotion.defaultSpatial())
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         var showMaxHeapGraphInspector by remember { mutableStateOf(false) }
@@ -6093,11 +6103,6 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                             (uiState.expenses.size * 2 + 1).coerceAtLeast(settlementPlan.size + 2)
                         }
                         val simplifiedTransferCount = settlementPlan.size
-                        val inspectorCornerRadius by animateDpAsState(
-                            targetValue = if (showMaxHeapGraphInspector) 10.dp else 20.dp,
-                            animationSpec = spring(dampingRatio = 0.65f, stiffness = 480f),
-                            label = "MaxHeapInspectorPillCorner"
-                        )
 
                         val headerMorph = remember {
                             Morph(MaterialShapes.Cookie9Sided, MaterialShapes.Sunny)
@@ -6142,25 +6147,27 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                         fontWeight = FontWeight.ExtraBold,
                                         color = SplitMateTheme.PrimaryDark
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    // Info icon next to Settle up — toggles the payment simplification diagram
-                                    Surface(
-                                        onClick = { showMaxHeapGraphInspector = !showMaxHeapGraphInspector },
-                                        shape = RoundedCornerShape(inspectorCornerRadius),
-                                        color = if (showMaxHeapGraphInspector) SplitMateTheme.SageText else SplitMateTheme.SageSurface,
-                                        border = BorderStroke(1.dp, SplitMateTheme.SageText.copy(alpha = 0.45f)),
-                                        modifier = Modifier
-                                            .minimumInteractiveComponentSize()
-                                            .size(22.dp)
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    // Info icon next to Settle up — toggles the payment simplification diagram.
+                                    // v2.4.0 rc7 (Screen 3): official FilledTonalIconToggleButton with the M3
+                                    // Expressive toggle shape morph (round -> square when checked), 48dp target.
+                                    FilledTonalIconToggleButton(
+                                        checked = showMaxHeapGraphInspector,
+                                        onCheckedChange = { showMaxHeapGraphInspector = it },
+                                        shapes = IconButtonDefaults.toggleableShapes(),
+                                        colors = IconButtonDefaults.filledTonalIconToggleButtonColors(
+                                            containerColor = SplitMateTheme.SageSurface,
+                                            contentColor = SplitMateTheme.SageText,
+                                            checkedContainerColor = SplitMateTheme.SageText,
+                                            checkedContentColor = SplitMateTheme.SageSurface
+                                        ),
+                                        modifier = Modifier.size(32.dp)
                                     ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                imageVector = androidx.compose.material.icons.Icons.Outlined.Info, // v2.4.0 rc3: one info icon style
-                                                contentDescription = "Why were debts simplified?",
-                                                tint = if (showMaxHeapGraphInspector) SplitMateTheme.SageSurface else SplitMateTheme.SageText,
-                                                modifier = Modifier.size(13.dp)
-                                            )
-                                        }
+                                        Icon(
+                                            imageVector = androidx.compose.material.icons.Icons.Outlined.Info, // v2.4.0 rc3: one info icon style
+                                            contentDescription = "Why were debts simplified?",
+                                            modifier = Modifier.size(16.dp)
+                                        )
                                     }
                                 }
                                 Text(
@@ -6173,12 +6180,18 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
 
                         // v2.4.0 D3: no wavy progress on static money data (wavy is only for network work).
 
+                        // v2.4.0 rc7: motion-scheme tokens: spatial spring for the size change, effects
+                        // spring for the fade (was a hand-tuned 0.75 / 380 spring + default fades).
                         AnimatedVisibility(
                             visible = showMaxHeapGraphInspector,
-                            enter = expandVertically(animationSpec = spring(dampingRatio = 0.75f, stiffness = 380f)) + fadeIn(),
-                            exit = shrinkVertically() + fadeOut()
+                            enter = expandVertically(animationSpec = SplitMateMotion.defaultSpatial()) +
+                                fadeIn(animationSpec = SplitMateMotion.defaultEffects()),
+                            exit = shrinkVertically(animationSpec = SplitMateMotion.defaultSpatial()) +
+                                fadeOut(animationSpec = SplitMateMotion.defaultEffects())
                         ) {
                             val reduceMotionForLoops = com.splitmate.app.ui.components.rememberReducedMotionEnabled() // v2.4.0 D2: loops hold still under "Remove animations"
+                            // Deliberate exception to the motion scheme: an endless linear loop (springs settle,
+                            // they do not repeat). It freezes under reduced motion (see reduceMotionForLoops).
                             val graphPulseTransition = rememberInfiniteTransition(label = "MaxHeapGraphFlow")
                             val flowProgressAnimated by graphPulseTransition.animateFloat(
                                 initialValue = 0f,
@@ -6473,13 +6486,11 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
 
                                 if (maxSummaryRows > 3) {
                                     HorizontalDivider(color = SplitMateTheme.BorderLight)
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { isSummaryBoardExpanded = !isSummaryBoardExpanded }
-                                            .padding(vertical = 7.dp),
-                                        horizontalArrangement = Arrangement.Center,
-                                        verticalAlignment = Alignment.CenterVertically
+                                    // v2.4.0 rc7 (Screen 3): official TextButton with the press morph.
+                                    TextButton(
+                                        onClick = { isSummaryBoardExpanded = !isSummaryBoardExpanded },
+                                        shapes = ButtonDefaults.shapes(),
+                                        modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Text(
                                             text = if (isSummaryBoardExpanded) {
@@ -6643,30 +6654,40 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                 color = SplitMateTheme.TextSecondary
                             )
                         }
-                        Surface(
+                        // v2.4.0 rc7 (Screen 3): official FilterChip toggle (was a transparent tap target).
+                        FilterChip(
+                            selected = sortByBalanceMagnitude,
                             onClick = { sortByBalanceMagnitude = !sortByBalanceMagnitude },
-                            shape = SplitMateTheme.RadiusBadge,
-                            color = Color.Transparent
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
-                            ) {
+                            label = {
                                 Text(
-                                    text = if (sortByBalanceMagnitude) "Sorted by amount" else "Sort by balance",
+                                    text = if (sortByBalanceMagnitude) "Sorted by amount" else "Sort by amount",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = SplitMateTheme.TextSecondary
+                                    maxLines = 1
                                 )
-                                Spacer(modifier = Modifier.width(3.dp))
+                            },
+                            leadingIcon = {
                                 Icon(
                                     imageVector = Icons.Rounded.SwapVert,
-                                    contentDescription = "Sort by balance",
-                                    tint = SplitMateTheme.TextSecondary,
-                                    modifier = Modifier.size(15.dp)
+                                    contentDescription = null,
+                                    modifier = Modifier.size(FilterChipDefaults.IconSize)
                                 )
-                            }
-                        }
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = SplitMateTheme.SurfaceWhite,
+                                labelColor = SplitMateTheme.TextSecondary,
+                                iconColor = SplitMateTheme.TextSecondary,
+                                selectedContainerColor = SplitMateTheme.SageSurface,
+                                selectedLabelColor = SplitMateTheme.SageText,
+                                selectedLeadingIconColor = SplitMateTheme.SageText
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = sortByBalanceMagnitude,
+                                borderColor = SplitMateTheme.BorderLight,
+                                selectedBorderColor = SplitMateTheme.SageText.copy(alpha = 0.45f)
+                            )
+                        )
                     }
                 }
 
@@ -6750,7 +6771,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
 
                             Spacer(modifier = Modifier.height(12.dp))
 
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
                                 summary.incomingPayments.forEachIndexed { legIdx, leg ->
                                     val matchingTransfer = settlementPlan.find {
                                         it.fromMemberId == leg.counterpartyMemberId && it.toMemberId == summary.memberId
@@ -6765,12 +6786,11 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                         toMemberId = matchingTransfer.transfer.toMemberId,
                                         state = uiState
                                     )
-                                    val incomingLegShape = segmentedIslandItemShape(
+                                    // v2.4.0 rc7 (Screen 3): official M3 Expressive segmented list shapes.
+                                    val incomingLegShape = ListItemDefaults.segmentedShapes(
                                         index = legIdx,
-                                        totalCount = summary.incomingPayments.size,
-                                        outerCorner = 16.dp,
-                                        innerCorner = 4.dp
-                                    )
+                                        count = summary.incomingPayments.size
+                                    ).shape
 
                                     Surface(
                                         shape = incomingLegShape,
@@ -7051,17 +7071,20 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                     border = BorderStroke(1.dp, peachBoxBorder),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                                    Column(modifier = Modifier.padding(8.dp)) {
                                         if (summary.hasMultipleOutgoing) {
                                             Text(
                                                 text = "Pays to (${summary.outgoingPayments.size} people)",
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.SemiBold,
-                                                color = SplitMateTheme.TextSecondary
+                                                color = SplitMateTheme.TextSecondary,
+                                                modifier = Modifier.padding(start = 4.dp, top = 2.dp, bottom = 8.dp)
                                             )
-                                            Spacer(modifier = Modifier.height(8.dp))
                                         }
 
+                                        // v2.4.0 rc7 (Screen 3): official M3 Expressive segmented list
+                                        // (ListItemDefaults.segmentedShapes + SegmentedGap) instead of dividers.
+                                        Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
                                         summary.outgoingPayments.forEachIndexed { legIdx, leg ->
                                             val matchingTransfer = settlementPlan.find {
                                                 it.fromMemberId == summary.memberId && it.toMemberId == leg.counterpartyMemberId
@@ -7074,14 +7097,19 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                             )
                                             val counterpartyFirstName = leg.counterpartyName.trim().substringBefore(" ").ifBlank { leg.counterpartyName }
 
-                                            if (legIdx > 0) {
-                                                HorizontalDivider(
-                                                    color = peachBoxBorder,
-                                                    modifier = Modifier.padding(vertical = 8.dp)
-                                                )
-                                            }
-
-                                            Column(modifier = Modifier.fillMaxWidth()) {
+                                            Surface(
+                                                shape = ListItemDefaults.segmentedShapes(
+                                                    index = legIdx,
+                                                    count = summary.outgoingPayments.size
+                                                ).shape,
+                                                color = SplitMateTheme.SurfaceWhite,
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                                            ) {
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth(),
                                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -7224,6 +7252,8 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                     }
                                                 }
                                             }
+                                            }
+                                        }
                                         }
                                     }
                                 }
@@ -7481,13 +7511,11 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                 )
                             }
 
-                            val historyRowShape = segmentedIslandItemShape(
+                            // v2.4.0 rc7 (Screen 3): official segmented shape clips the row's press ripple.
+                            val historyRowShape = ListItemDefaults.segmentedShapes(
                                 index = idx,
-                                totalCount = recordedSettlements.size,
-                                isSelected = false,
-                                outerCorner = 16.dp,
-                                innerCorner = 4.dp
-                            )
+                                count = recordedSettlements.size
+                            ).shape
                             Surface(
                                 onClick = { selectedSettlementForSheet = settlement },
                                 shape = historyRowShape,
