@@ -181,7 +181,7 @@ fun StayPinSheet(
 
             CurrentStay(state = state, actions = actions)
 
-            TabRow(
+            androidx.compose.material3.PrimaryTabRow(
                 selectedTabIndex = tab,
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                 contentColor = MaterialTheme.colorScheme.primary

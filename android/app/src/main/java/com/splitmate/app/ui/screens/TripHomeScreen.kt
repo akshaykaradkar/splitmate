@@ -146,6 +146,9 @@ import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.SearchBarDefaults
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.runtime.Composable
@@ -1337,7 +1340,7 @@ fun TripHomeScreen(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Reassign ${declinedMember.name}'s Share Equally",
+                                    text = "Reassign ${declinedMember.name}'s share equally",
                                     fontWeight = FontWeight.ExtraBold,
                                     style = MaterialTheme.typography.labelMedium,
                                     color = DesignSystemBindings.activePalette.onSecondary
@@ -1772,7 +1775,7 @@ private fun TripHubTopBar(
                                         .background(HubExtendedColors.presence().color)
                                 )
                                 Text(
-                                    text = "$onlineFriendsCount Online",
+                                    text = "$onlineFriendsCount online",
                                     fontWeight = FontWeight.ExtraBold,
                                     style = MaterialTheme.typography.labelMedium,
                                     color = TripHubTokens.TextPrimary
@@ -1780,7 +1783,7 @@ private fun TripHubTopBar(
                             } else {
                                 Icon(
                                     imageVector = Icons.Rounded.PersonAdd,
-                                    contentDescription = "Invite Friends via Link",
+                                    contentDescription = "Invite friends via link",
                                     tint = TripHubTokens.TextPrimary,
                                     modifier = Modifier.size(14.dp)
                                 )
@@ -1811,7 +1814,7 @@ private fun TripHubTopBar(
                     } else {
                         Icon(
                             imageVector = Icons.Rounded.Sync,
-                            contentDescription = "Sync Trip Expenses Now",
+                            contentDescription = "Sync trip expenses now",
                             tint = TripHubTokens.TextPrimary,
                             modifier = Modifier.size(20.dp)
                         )
@@ -1827,7 +1830,7 @@ private fun TripHubTopBar(
                 ) {
                     Icon(
                         imageVector = if (isSearchExpanded) Icons.Rounded.Close else Icons.Rounded.Search,
-                        contentDescription = "Search Bookings and Expenses",
+                        contentDescription = "Search bookings and expenses",
                         tint = TripHubTokens.TextPrimary,
                         modifier = Modifier.size(21.dp)
                     )
@@ -1859,7 +1862,7 @@ private fun TripHubTopBar(
                             leadingIcon = {
                                 Icon(
                                     imageVector = Icons.Rounded.Palette,
-                                    contentDescription = "Cycle Expressive Theme Mode",
+                                    contentDescription = "Cycle expressive theme mode",
                                     modifier = Modifier.size(20.dp)
                                 )
                             },
@@ -1885,11 +1888,12 @@ private fun TripHubTopBar(
                     }
                 }
             },
-            colors = TopAppBarDefaults.largeTopAppBarColors(
+            colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = TripHubTokens.CanvasBg,
                 scrolledContainerColor = TripHubTokens.CardSurface,
                 navigationIconContentColor = TripHubTokens.TextPrimary,
                 titleContentColor = TripHubTokens.TextPrimary,
+                subtitleContentColor = TripHubTokens.TextSecondary,
                 actionIconContentColor = TripHubTokens.TextPrimary
             ),
             scrollBehavior = scrollBehavior
@@ -1902,50 +1906,50 @@ private fun TripHubTopBar(
         )
 
         AnimatedVisibility(visible = isSearchExpanded) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = onSearchQueryChange,
-                placeholder = {
-                    Text(
-                        text = "Search PNR, train, flight, hotel, or payer...",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TripHubTokens.TextSecondary
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Rounded.Search,
-                        contentDescription = null,
-                        tint = TripHubTokens.TextSecondary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { onSearchQueryChange("") }, shapes = IconButtonDefaults.shapes()) {
-                            Icon(
-                                imageVector = Icons.Rounded.Close,
-                                contentDescription = "Clear search",
-                                tint = TripHubTokens.TextSecondary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(16.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = TripHubTokens.TextPrimary,
-                    unfocusedTextColor = TripHubTokens.TextPrimary,
-                    focusedContainerColor = TripHubTokens.CardSurface,
-                    unfocusedContainerColor = TripHubTokens.CardSurface,
-                    focusedBorderColor = BuckwheatOlivePrimary,
-                    unfocusedBorderColor = TripHubTokens.CardBorder
-                ),
+            Surface(
+                shape = SearchBarDefaults.inputFieldShape,
+                color = TripHubTokens.CardSurface,
+                border = BorderStroke(1.dp, TripHubTokens.CardBorder),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp)
-            )
+            ) {
+                SearchBarDefaults.InputField(
+                    query = searchQuery,
+                    onQueryChange = onSearchQueryChange,
+                    onSearch = {},
+                    expanded = false,
+                    onExpandedChange = {},
+                    placeholder = {
+                        Text(
+                            text = "Search PNR, train, flight, hotel, or payer...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TripHubTokens.TextSecondary
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Rounded.Search,
+                            contentDescription = null,
+                            tint = TripHubTokens.TextSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { onSearchQueryChange("") }, shapes = IconButtonDefaults.shapes()) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Close,
+                                    contentDescription = "Clear search",
+                                    tint = TripHubTokens.TextSecondary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }
@@ -6028,7 +6032,7 @@ private fun TripHubPeoplePerspectiveView(
             containerColor = TripHubTokens.CanvasBg,
             title = {
                 Text(
-                    text = "Update Mobile & Send Invite",
+                    text = "Update mobile and send invite",
                     fontFamily = FigtreeFontFamily,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 18.sp,
@@ -6048,7 +6052,7 @@ private fun TripHubPeoplePerspectiveView(
                             editedMemberName = it
                             editPhoneDialogStatus = null
                         },
-                        label = { Text("Member Name", fontFamily = FigtreeFontFamily, fontSize = 12.sp) },
+                        label = { Text("Member name", fontFamily = FigtreeFontFamily, fontSize = 12.sp) },
                         singleLine = true,
                         shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -6059,7 +6063,7 @@ private fun TripHubPeoplePerspectiveView(
                             editedMemberPhone = raw.filter { it.isDigit() || it == '+' || it == ' ' }.take(15)
                             editPhoneDialogStatus = null
                         },
-                        label = { Text("10-Digit Mobile Number", fontFamily = FigtreeFontFamily, fontSize = 12.sp) },
+                        label = { Text("10-digit mobile number", fontFamily = FigtreeFontFamily, fontSize = 12.sp) },
                         prefix = {
                             Text(
                                 text = "+91 ",
@@ -6106,14 +6110,14 @@ private fun TripHubPeoplePerspectiveView(
                         }
                     },
                     enabled = cleanTypedPhone10.length == 10 && editedMemberName.trim().isNotBlank(),
-                    shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(16.dp)),
+                    shapes = ButtonDefaults.shapes(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = DesignSystemBindings.activePalette.primary,
                         contentColor = DesignSystemBindings.activePalette.onPrimary
                     )
                 ) {
                     Text(
-                        text = "Save & Send Invite",
+                        text = "Save and send invite",
                         fontWeight = FontWeight.ExtraBold,
                         style = MaterialTheme.typography.labelMedium)
                 }
@@ -6154,7 +6158,7 @@ private fun TripHubPeoplePerspectiveView(
             containerColor = TripHubTokens.CanvasBg,
             title = {
                 Text(
-                    text = if (isSettled) "Remove ${memberToRemove.name}?" else "Remove & Rebalance ${memberToRemove.name}?",
+                    text = if (isSettled) "Remove ${memberToRemove.name}?" else "Remove and rebalance ${memberToRemove.name}?",
                     fontFamily = FigtreeFontFamily,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 18.sp,
@@ -6190,7 +6194,7 @@ private fun TripHubPeoplePerspectiveView(
                                 removeMemberStatusMsg = null
                                 onOpenSettleUpClick()
                             },
-                            shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(16.dp)),
+                            shapes = ButtonDefaults.shapes(),
                             border = BorderStroke(1.dp, TripHubTokens.PositiveSageText.copy(alpha = 0.45f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -6230,14 +6234,14 @@ private fun TripHubPeoplePerspectiveView(
                             }
                         }
                     },
-                    shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(16.dp)),
+                    shapes = ButtonDefaults.shapes(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = DesignSystemBindings.activePalette.secondary,
                             contentColor = DesignSystemBindings.activePalette.onSecondary
                     )
                 ) {
                     Text(
-                        text = if (isSettled) "Remove member" else "Remove & Rebalance",
+                        text = if (isSettled) "Remove member" else "Remove and rebalance",
                         fontWeight = FontWeight.ExtraBold,
                         style = MaterialTheme.typography.labelMedium)
                 }
@@ -6327,7 +6331,7 @@ private fun TripHubPeoplePerspectiveView(
                             leaveTripStatusMsg = null
                             onOpenSettleUpClick()
                         },
-                        shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(16.dp)),
+                        shapes = ButtonDefaults.shapes(),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = DesignSystemBindings.activePalette.primary,
                         contentColor = DesignSystemBindings.activePalette.onPrimary
@@ -6351,14 +6355,14 @@ private fun TripHubPeoplePerspectiveView(
                                 }
                             }
                         },
-                        shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(16.dp)),
+                        shapes = ButtonDefaults.shapes(),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = DesignSystemBindings.activePalette.secondary,
                             contentColor = DesignSystemBindings.activePalette.onSecondary
                         )
                     ) {
                         Text(
-                            text = "Confirm Leave trip",
+                            text = "Confirm leave trip",
                             fontWeight = FontWeight.ExtraBold,
                             style = MaterialTheme.typography.labelMedium)
                     }
@@ -6522,37 +6526,45 @@ private fun TripHubPeoplePerspectiveView(
 
                 HorizontalDivider(color = TripHubTokens.CardBorder)
 
-                if (canEditPhoneOrInvite) {
-                    val isMissingPhone = targetCleanPhone10.isEmpty()
-                    Surface(
-                        onClick = {
-                            performCrispTactileHaptic(context, localView, heavy = false)
-                            selectedMemberForActions = null
-                            editedMemberName = targetMember.name
-                            editedMemberPhone = targetCleanPhone10
-                            editPhoneDialogStatus = null
-                            editingMemberForPhoneInvite = targetMember
-                        },
-                        shape = RoundedCornerShape(16.dp),
-                        color = TripHubTokens.CardSurface,
-                        border = BorderStroke(1.dp, TripHubTokens.CardBorder),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .defaultMinSize(minHeight = 48.dp)
-                    ) {
-                        Row(
+                val memberSheetActionCount = listOf(
+                    canEditPhoneOrInvite,
+                    canShareWhatsAppInvite,
+                    canPromoteToOrganizer,
+                    canDismissOrganizer,
+                    canRemoveTargetMember
+                ).count { it }.coerceAtLeast(1)
+                var memberActionIndex = 0
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)
+                ) {
+                    if (canEditPhoneOrInvite) {
+                        val idx = memberActionIndex++
+                        val isMissingPhone = targetCleanPhone10.isEmpty()
+                        SegmentedListItem(
+                            onClick = {
+                                performCrispTactileHaptic(context, localView, heavy = false)
+                                selectedMemberForActions = null
+                                editedMemberName = targetMember.name
+                                editedMemberPhone = targetCleanPhone10
+                                editPhoneDialogStatus = null
+                                editingMemberForPhoneInvite = targetMember
+                            },
+                            shapes = ListItemDefaults.segmentedShapes(index = idx, count = memberSheetActionCount),
+                            colors = ListItemDefaults.segmentedColors(containerColor = TripHubTokens.CardSurface),
+                            leadingContent = {
+                                Icon(
+                                    imageVector = if (isMissingPhone) Icons.Rounded.PhoneIphone else Icons.Rounded.Edit,
+                                    contentDescription = null,
+                                    tint = TripHubTokens.PositiveSageText,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                .defaultMinSize(minHeight = 48.dp)
                         ) {
-                            Icon(
-                                imageVector = if (isMissingPhone) Icons.Rounded.PhoneIphone else Icons.Rounded.Edit,
-                                contentDescription = null,
-                                tint = TripHubTokens.PositiveSageText,
-                                modifier = Modifier.size(18.dp)
-                            )
                             Text(
                                 text = if (isMissingPhone) "Add phone and invite" else "Edit name & phone",
                                 fontWeight = FontWeight.Bold,
@@ -6561,95 +6573,83 @@ private fun TripHubPeoplePerspectiveView(
                             )
                         }
                     }
-                }
 
-                if (canShareWhatsAppInvite) {
-                    Surface(
-                        onClick = {
-                            performCrispTactileHaptic(context, localView, heavy = false)
-                            selectedMemberForActions = null
-                            viewModel.sendOrResendDirectMemberInvite(
-                                context = context,
-                                groupId = groupId,
-                                memberId = targetMember.memberId,
-                                launchWhatsAppShare = true
-                            ) { ok, msg ->
-                                isPeopleFeedbackError = !ok
-                                peopleFeedbackBanner = msg
-                            }
-                        },
-                        shape = RoundedCornerShape(16.dp),
-                        color = TripHubTokens.PositiveSagePillBg,
-                        border = BorderStroke(1.dp, TripHubTokens.PositiveSageText.copy(alpha = 0.35f)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .defaultMinSize(minHeight = 48.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Rounded.Send,
-                                contentDescription = null,
-                                tint = TripHubTokens.PositiveSageText,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Column {
-                                Text(
-                                    text = "Share invite on WhatsApp",
-                                    fontWeight = FontWeight.ExtraBold,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = TripHubTokens.PositiveSageText
+                    if (canShareWhatsAppInvite) {
+                        val idx = memberActionIndex++
+                        SegmentedListItem(
+                            onClick = {
+                                performCrispTactileHaptic(context, localView, heavy = false)
+                                selectedMemberForActions = null
+                                viewModel.sendOrResendDirectMemberInvite(
+                                    context = context,
+                                    groupId = groupId,
+                                    memberId = targetMember.memberId,
+                                    launchWhatsAppShare = true
+                                ) { ok, msg ->
+                                    isPeopleFeedbackError = !ok
+                                    peopleFeedbackBanner = msg
+                                }
+                            },
+                            shapes = ListItemDefaults.segmentedShapes(index = idx, count = memberSheetActionCount),
+                            colors = ListItemDefaults.segmentedColors(containerColor = TripHubTokens.PositiveSagePillBg),
+                            leadingContent = {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Rounded.Send,
+                                    contentDescription = null,
+                                    tint = TripHubTokens.PositiveSageText,
+                                    modifier = Modifier.size(18.dp)
                                 )
+                            },
+                            supportingContent = {
                                 Text(
                                     text = "Send trip code $formattedJoinCode & join link",
                                     fontWeight = FontWeight.Medium,
                                     style = MaterialTheme.typography.labelSmall,
                                     color = TripHubTokens.PositiveSageText.copy(alpha = 0.85f)
                                 )
-                            }
-                        }
-                    }
-                }
-
-                if (canPromoteToOrganizer) {
-                    Surface(
-                        onClick = {
-                            performCrispTactileHaptic(context, localView, heavy = false)
-                            selectedMemberForActions = null
-                            viewModel.promoteMemberToOrganizer(
-                                context = context,
-                                groupId = groupId,
-                                targetMemberId = targetMember.memberId
-                            ) { ok, msg ->
-                                isPeopleFeedbackError = !ok
-                                peopleFeedbackBanner = msg
-                            }
-                        },
-                        shape = RoundedCornerShape(16.dp),
-                        color = TripHubTokens.CardSurface,
-                        border = BorderStroke(1.dp, TripHubTokens.CardBorder),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .defaultMinSize(minHeight = 48.dp)
-                    ) {
-                        Row(
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                .defaultMinSize(minHeight = 48.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Verified,
-                                contentDescription = null,
-                                tint = TripHubTokens.PositiveSageText,
-                                modifier = Modifier.size(18.dp)
+                            Text(
+                                text = "Share invite on WhatsApp",
+                                fontWeight = FontWeight.ExtraBold,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = TripHubTokens.PositiveSageText
                             )
+                        }
+                    }
+
+                    if (canPromoteToOrganizer) {
+                        val idx = memberActionIndex++
+                        SegmentedListItem(
+                            onClick = {
+                                performCrispTactileHaptic(context, localView, heavy = false)
+                                selectedMemberForActions = null
+                                viewModel.promoteMemberToOrganizer(
+                                    context = context,
+                                    groupId = groupId,
+                                    targetMemberId = targetMember.memberId
+                                ) { ok, msg ->
+                                    isPeopleFeedbackError = !ok
+                                    peopleFeedbackBanner = msg
+                                }
+                            },
+                            shapes = ListItemDefaults.segmentedShapes(index = idx, count = memberSheetActionCount),
+                            colors = ListItemDefaults.segmentedColors(containerColor = TripHubTokens.CardSurface),
+                            leadingContent = {
+                                Icon(
+                                    imageVector = Icons.Rounded.Verified,
+                                    contentDescription = null,
+                                    tint = TripHubTokens.PositiveSageText,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .defaultMinSize(minHeight = 48.dp)
+                        ) {
                             Text(
                                 text = "Make Organizer",
                                 fontWeight = FontWeight.Bold,
@@ -6658,42 +6658,36 @@ private fun TripHubPeoplePerspectiveView(
                             )
                         }
                     }
-                }
 
-                if (canDismissOrganizer) {
-                    Surface(
-                        onClick = {
-                            performCrispTactileHaptic(context, localView, heavy = false)
-                            selectedMemberForActions = null
-                            viewModel.dismissMemberAsOrganizer(
-                                context = context,
-                                groupId = groupId,
-                                targetMemberId = targetMember.memberId
-                            ) { ok, msg ->
-                                isPeopleFeedbackError = !ok
-                                peopleFeedbackBanner = msg
-                            }
-                        },
-                        shape = RoundedCornerShape(16.dp),
-                        color = TripHubTokens.CardSurface,
-                        border = BorderStroke(1.dp, TripHubTokens.CardBorder),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .defaultMinSize(minHeight = 48.dp)
-                    ) {
-                        Row(
+                    if (canDismissOrganizer) {
+                        val idx = memberActionIndex++
+                        SegmentedListItem(
+                            onClick = {
+                                performCrispTactileHaptic(context, localView, heavy = false)
+                                selectedMemberForActions = null
+                                viewModel.dismissMemberAsOrganizer(
+                                    context = context,
+                                    groupId = groupId,
+                                    targetMemberId = targetMember.memberId
+                                ) { ok, msg ->
+                                    isPeopleFeedbackError = !ok
+                                    peopleFeedbackBanner = msg
+                                }
+                            },
+                            shapes = ListItemDefaults.segmentedShapes(index = idx, count = memberSheetActionCount),
+                            colors = ListItemDefaults.segmentedColors(containerColor = TripHubTokens.CardSurface),
+                            leadingContent = {
+                                Icon(
+                                    imageVector = Icons.Rounded.PersonRemove,
+                                    contentDescription = null,
+                                    tint = TripHubTokens.TextSecondary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                .defaultMinSize(minHeight = 48.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Rounded.PersonRemove,
-                                contentDescription = null,
-                                tint = TripHubTokens.TextSecondary,
-                                modifier = Modifier.size(18.dp)
-                            )
                             Text(
                                 text = "Dismiss as Organizer",
                                 fontWeight = FontWeight.Bold,
@@ -6702,36 +6696,30 @@ private fun TripHubPeoplePerspectiveView(
                             )
                         }
                     }
-                }
 
-                if (canRemoveTargetMember) {
-                    Surface(
-                        onClick = {
-                            performCrispTactileHaptic(context, localView, heavy = false)
-                            selectedMemberForActions = null
-                            removeMemberStatusMsg = null
-                            confirmingRemoveMember = targetMember
-                        },
-                        shape = RoundedCornerShape(16.dp),
-                        color = TripHubTokens.TerracottaPeachBg,
-                        border = BorderStroke(1.dp, DesignSystemBindings.activePalette.secondary.copy(alpha = 0.4f)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .defaultMinSize(minHeight = 48.dp)
-                    ) {
-                        Row(
+                    if (canRemoveTargetMember) {
+                        val idx = memberActionIndex++
+                        SegmentedListItem(
+                            onClick = {
+                                performCrispTactileHaptic(context, localView, heavy = false)
+                                selectedMemberForActions = null
+                                removeMemberStatusMsg = null
+                                confirmingRemoveMember = targetMember
+                            },
+                            shapes = ListItemDefaults.segmentedShapes(index = idx, count = memberSheetActionCount),
+                            colors = ListItemDefaults.segmentedColors(containerColor = TripHubTokens.TerracottaPeachBg),
+                            leadingContent = {
+                                Icon(
+                                    imageVector = Icons.Rounded.PersonRemove,
+                                    contentDescription = null,
+                                    tint = TripHubTokens.TerracottaIconTint,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                .defaultMinSize(minHeight = 48.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Rounded.PersonRemove,
-                                contentDescription = null,
-                                tint = TripHubTokens.TerracottaIconTint,
-                                modifier = Modifier.size(18.dp)
-                            )
                             Text(
                                 text = "Remove member",
                                 fontWeight = FontWeight.ExtraBold,
@@ -6748,7 +6736,7 @@ private fun TripHubPeoplePerspectiveView(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 160.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp)
+        verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)
     ) {
         item(key = "people_actions_row") {
             Column(
@@ -6869,7 +6857,7 @@ private fun TripHubPeoplePerspectiveView(
             }
         }
 
-        // M3 Expressive Segmented Contained List (slim ~58dp rows, 20dp outer corners, 4dp inner corners, 2dp gap)
+        // M3 Expressive Segmented Contained List (official SegmentedListItem + ListItemDefaults.segmentedShapes)
         itemsIndexed(
             items = groupMembers,
             key = { _, it -> it.memberId }
@@ -6890,233 +6878,220 @@ private fun TripHubPeoplePerspectiveView(
             }
             val showQuickInviteAction = !isMe && (cleanPhone10.isEmpty() || member.inviteStatus.equals("PENDING", ignoreCase = true))
             val hasMemberActions = !isMe && (showQuickInviteAction || isCurrentUserOrganizer)
-            val segmentedShape = rememberAnimatedSegmentedIslandItemShape(
-                index = index,
-                totalCount = groupMembers.size,
-                isSelected = selectedMemberForActions?.memberId == member.memberId,
-                outerCorner = 20.dp,
-                innerCorner = 4.dp
-            )
+            val memberStanding = remember(uiState.expenses, uiState.splits, uiState.settlements, member.memberId, member.groupId) {
+                val groupExpenses = uiState.expenses.filter { it.groupId == member.groupId }
+                val ids = groupExpenses.map { it.expenseId }.toSet()
+                com.splitmate.app.MoneyTrustRules.standings(
+                    memberIds = listOf(member.memberId),
+                    expenses = groupExpenses,
+                    splits = uiState.splits.filter { it.expenseId in ids },
+                    settlements = uiState.settlements.filter { it.groupId == member.groupId }
+                ).getValue(member.memberId)
+            }
 
-            Surface(
+            SegmentedListItem(
                 onClick = {
-                    if (!hasMemberActions) return@Surface
+                    if (!hasMemberActions) return@SegmentedListItem
                     performCrispTactileHaptic(context, localView, heavy = false)
                     selectedMemberForActions = member
                 },
                 enabled = hasMemberActions,
-                shape = segmentedShape,
-                color = TripHubTokens.CardSurface,
-                // v2.4.0 D3: same 1px border for everyone; "(You)" and the role chip mark the current user.
-                border = BorderStroke(1.dp, TripHubTokens.CardBorder),
+                shapes = ListItemDefaults.segmentedShapes(index = index, count = groupMembers.size),
+                colors = ListItemDefaults.segmentedColors(
+                    containerColor = TripHubTokens.CardSurface,
+                    disabledContainerColor = TripHubTokens.CardSurface
+                ),
+                leadingContent = {
+                    TripHubMemberAvatar(
+                        seedOrName = member.avatarSeed.ifBlank { member.name },
+                        fallbackName = member.name,
+                        size = 38.dp,
+                        backgroundColor = if (isMe) TripHubTokens.PositiveSagePillBg else TripHubTokens.SunkenWell,
+                        textColor = if (isMe) TripHubTokens.PositiveSageText else TripHubTokens.TextPrimary,
+                        fontSize = 13.sp,
+                        isOnline = isOnline
+                    )
+                },
+                supportingContent = {
+                    Column {
+                        Text(
+                            text = phoneSubtitle,
+                            style = MaterialTheme.typography.labelSmall.merge(
+                                TextStyle(
+                                    fontFamily = SplitMateTnumMonospace,
+                                    fontWeight = FontWeight.Medium,
+                                    fontFeatureSettings = "tnum"
+                                )
+                            ),
+                            color = TripHubTokens.TextSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        // v2.4.0 D5: what this traveler paid vs their share, with a thin M3 bar.
+                        if (memberStanding.paidCents > 0L || memberStanding.shareCents > 0L) {
+                            com.splitmate.app.ui.components.TravelerStandingLine(
+                                standing = memberStanding,
+                                modifier = Modifier.padding(top = 6.dp)
+                            )
+                        }
+                    }
+                },
+                trailingContent = if (showQuickInviteAction || hasMemberActions) {
+                    {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            if (showQuickInviteAction) {
+                                val isMissingPhone = cleanPhone10.isEmpty()
+                                // v2.4.0 rc3: official M3 Expressive tonal icon button. A phone icon means "add phone
+                                // and invite" (the person-plus icon read as "add someone who is already here").
+                                FilledTonalIconButton(
+                                    onClick = {
+                                        performCrispTactileHaptic(context, localView, heavy = false)
+                                        if (isMissingPhone) {
+                                            editedMemberName = member.name
+                                            editedMemberPhone = cleanPhone10
+                                            editPhoneDialogStatus = null
+                                            editingMemberForPhoneInvite = member
+                                        } else {
+                                            viewModel.sendOrResendDirectMemberInvite(
+                                                context = context,
+                                                groupId = groupId,
+                                                memberId = member.memberId,
+                                                launchWhatsAppShare = true
+                                            ) { ok, msg ->
+                                                isPeopleFeedbackError = !ok
+                                                peopleFeedbackBanner = msg
+                                            }
+                                        }
+                                    },
+                                    shapes = IconButtonDefaults.shapes(),
+                                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                        containerColor = TripHubTokens.PositiveSagePillBg,
+                                        contentColor = TripHubTokens.PositiveSageText
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = if (isMissingPhone) Icons.Rounded.AddIcCall else Icons.AutoMirrored.Rounded.Send,
+                                        contentDescription = if (isMissingPhone) "Add phone and invite" else "Share invite on WhatsApp",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                            if (hasMemberActions) {
+                                Icon(
+                                    imageVector = Icons.Rounded.MoreVert,
+                                    contentDescription = "Member options",
+                                    tint = TripHubTokens.TextSecondary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                } else null,
                 modifier = Modifier
                     .fillMaxWidth()
                     .animateItem(fadeInSpec = null, placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = null)
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        TripHubMemberAvatar(
-                            seedOrName = member.avatarSeed.ifBlank { member.name },
-                            fallbackName = member.name,
-                            size = 38.dp,
-                            backgroundColor = if (isMe) TripHubTokens.PositiveSagePillBg else TripHubTokens.SunkenWell,
-                            textColor = if (isMe) TripHubTokens.PositiveSageText else TripHubTokens.TextPrimary,
-                            fontSize = 13.sp,
-                            isOnline = isOnline
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text(
-                                    text = buildAnnotatedString {
-                                        withStyle(
-                                            SpanStyle(
-                                                fontWeight = FontWeight.ExtraBold,
-                                                fontFamily = FigtreeFontFamily, fontSize = 16.sp,
-                                                color = TripHubTokens.TextPrimary
-                                            )
-                                        ) {
-                                            append(member.name)
-                                        }
-                                        if (isMe) {
-                                            withStyle(
-                                                SpanStyle(
-                                                    fontFamily = FigtreeFontFamily,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    fontSize = 12.sp,
-                                                    color = TripHubTokens.TextSecondary
-                                                )
-                                            ) {
-                                                append(" (You)")
-                                            }
-                                        }
-                                    },
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f, fill = false)
+                    Text(
+                        text = buildAnnotatedString {
+                            withStyle(
+                                SpanStyle(
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontFamily = FigtreeFontFamily, fontSize = 16.sp,
+                                    color = TripHubTokens.TextPrimary
                                 )
-                                // Single-Badge Rule: at most 1 mutually-exclusive status pill per member row
-                                when {
-                                    !isMe && member.inviteStatus.equals("DECLINED", ignoreCase = true) -> {
-                                        Surface(
-                                            shape = CircleShape,
-                                            color = TripHubTokens.TerracottaPeachBg
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(3.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.PersonRemove,
-                                                    contentDescription = null,
-                                                    tint = TripHubTokens.TerracottaIconTint,
-                                                    modifier = Modifier.size(10.dp)
-                                                )
-                                                Text(
-                                                    text = "Declined",
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = TripHubTokens.TerracottaIconTint
-                                                )
-                                            }
-                                        }
-                                    }
-                                    !isMe && member.inviteStatus.equals("PENDING", ignoreCase = true) -> {
-                                        Surface(
-                                            shape = CircleShape,
-                                            color = TripHubTokens.PeriwinkleBoxBg,
-                                            border = BorderStroke(1.dp, TripHubTokens.PeriwinkleIconTint.copy(alpha = 0.25f))
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(3.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.Schedule,
-                                                    contentDescription = null,
-                                                    tint = TripHubTokens.PeriwinkleIconTint,
-                                                    modifier = Modifier.size(10.dp)
-                                                )
-                                                Text(
-                                                    text = "Invite pending",
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = TripHubTokens.PeriwinkleIconTint
-                                                )
-                                            }
-                                        }
-                                    }
-                                    isMemberOrganizer -> {
-                                        Surface(
-                                            shape = CircleShape,
-                                            color = TripHubTokens.PositiveSagePillBg
-                                        ) {
-                                            Text(
-                                                text = "Organizer",
-                                                fontWeight = FontWeight.ExtraBold,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = TripHubTokens.PositiveSageText,
-                                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
-                                            )
-                                        }
-                                    }
+                            ) {
+                                append(member.name)
+                            }
+                            if (isMe) {
+                                withStyle(
+                                    SpanStyle(
+                                        fontFamily = FigtreeFontFamily,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 12.sp,
+                                        color = TripHubTokens.TextSecondary
+                                    )
+                                ) {
+                                    append(" (You)")
                                 }
                             }
-                            Text(
-                                text = phoneSubtitle,
-                                style = MaterialTheme.typography.labelSmall.merge(
-                                    TextStyle(
-                                        fontFamily = SplitMateTnumMonospace,
-                                        fontWeight = FontWeight.Medium,
-                                        fontFeatureSettings = "tnum"
-                                    )
-                                ),
-                                color = TripHubTokens.TextSecondary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            // v2.4.0 D5: what this traveler paid vs their share, with a thin M3 bar.
-                            val memberStanding = remember(uiState.expenses, uiState.splits, uiState.settlements, member.memberId, member.groupId) {
-                                val groupExpenses = uiState.expenses.filter { it.groupId == member.groupId }
-                                val ids = groupExpenses.map { it.expenseId }.toSet()
-                                com.splitmate.app.MoneyTrustRules.standings(
-                                    memberIds = listOf(member.memberId),
-                                    expenses = groupExpenses,
-                                    splits = uiState.splits.filter { it.expenseId in ids },
-                                    settlements = uiState.settlements.filter { it.groupId == member.groupId }
-                                ).getValue(member.memberId)
-                            }
-                            if (memberStanding.paidCents > 0L || memberStanding.shareCents > 0L) {
-                                com.splitmate.app.ui.components.TravelerStandingLine(
-                                    standing = memberStanding,
-                                    modifier = Modifier.padding(top = 6.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        if (showQuickInviteAction) {
-                            val isMissingPhone = cleanPhone10.isEmpty()
-                            // v2.4.0 rc3: official M3 Expressive tonal icon button. A phone icon means "add phone
-                            // and invite" (the person-plus icon read as "add someone who is already here").
-                            FilledTonalIconButton(
-                                onClick = {
-                                    performCrispTactileHaptic(context, localView, heavy = false)
-                                    if (isMissingPhone) {
-                                        editedMemberName = member.name
-                                        editedMemberPhone = cleanPhone10
-                                        editPhoneDialogStatus = null
-                                        editingMemberForPhoneInvite = member
-                                    } else {
-                                        viewModel.sendOrResendDirectMemberInvite(
-                                            context = context,
-                                            groupId = groupId,
-                                            memberId = member.memberId,
-                                            launchWhatsAppShare = true
-                                        ) { ok, msg ->
-                                            isPeopleFeedbackError = !ok
-                                            peopleFeedbackBanner = msg
-                                        }
-                                    }
-                                },
-                                shapes = IconButtonDefaults.shapes(),
-                                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                    containerColor = TripHubTokens.PositiveSagePillBg,
-                                    contentColor = TripHubTokens.PositiveSageText
-                                )
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    // Single-Badge Rule: at most 1 mutually-exclusive status pill per member row
+                    when {
+                        !isMe && member.inviteStatus.equals("DECLINED", ignoreCase = true) -> {
+                            Surface(
+                                shape = CircleShape,
+                                color = TripHubTokens.TerracottaPeachBg
                             ) {
-                                Icon(
-                                    imageVector = if (isMissingPhone) Icons.Rounded.AddIcCall else Icons.AutoMirrored.Rounded.Send,
-                                    contentDescription = if (isMissingPhone) "Add phone and invite" else "Share invite on WhatsApp",
-                                    modifier = Modifier.size(18.dp)
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.PersonRemove,
+                                        contentDescription = null,
+                                        tint = TripHubTokens.TerracottaIconTint,
+                                        modifier = Modifier.size(10.dp)
+                                    )
+                                    Text(
+                                        text = "Declined",
+                                        fontWeight = FontWeight.ExtraBold,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = TripHubTokens.TerracottaIconTint
+                                    )
+                                }
                             }
                         }
-                        if (hasMemberActions) {
-                            Icon(
-                                imageVector = Icons.Rounded.MoreVert,
-                                contentDescription = "Member options",
-                                tint = TripHubTokens.TextSecondary,
-                                modifier = Modifier.size(18.dp)
-                            )
+                        !isMe && member.inviteStatus.equals("PENDING", ignoreCase = true) -> {
+                            Surface(
+                                shape = CircleShape,
+                                color = TripHubTokens.PeriwinkleBoxBg,
+                                border = BorderStroke(1.dp, TripHubTokens.PeriwinkleIconTint.copy(alpha = 0.25f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Schedule,
+                                        contentDescription = null,
+                                        tint = TripHubTokens.PeriwinkleIconTint,
+                                        modifier = Modifier.size(10.dp)
+                                    )
+                                    Text(
+                                        text = "Invite pending",
+                                        fontWeight = FontWeight.ExtraBold,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = TripHubTokens.PeriwinkleIconTint
+                                    )
+                                }
+                            }
+                        }
+                        isMemberOrganizer -> {
+                            Surface(
+                                shape = CircleShape,
+                                color = TripHubTokens.PositiveSagePillBg
+                            ) {
+                                Text(
+                                    text = "Organizer",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TripHubTokens.PositiveSageText,
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -7223,31 +7198,21 @@ private fun AddBookingQuickSheet(
                 Triple("Invite friends with the trip code", Icons.Rounded.PersonAdd, onSelectSyncAndPerspective)
             )
 
-            actions.forEach { (label, icon, callback) ->
-                Surface(
-                    onClick = {
-                        performCrispTactileHaptic(context, localView, heavy = false)
-                        callback()
-                    },
-                    shape = RoundedCornerShape(16.dp),
-                    color = TripHubTokens.CardSurface,
-                    border = BorderStroke(1.dp, TripHubTokens.CardBorder),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .minimumInteractiveComponentSize()
-                        .defaultMinSize(minHeight = 52.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)
+            ) {
+                actions.forEachIndexed { idx, (label, icon, callback) ->
+                    SegmentedListItem(
+                        onClick = {
+                            performCrispTactileHaptic(context, localView, heavy = false)
+                            callback()
+                        },
+                        shapes = ListItemDefaults.segmentedShapes(index = idx, count = actions.size),
+                        colors = ListItemDefaults.segmentedColors(
+                            containerColor = TripHubTokens.CardSurface
+                        ),
+                        leadingContent = {
                             Box(
                                 modifier = Modifier
                                     .size(38.dp)
@@ -7262,18 +7227,25 @@ private fun AddBookingQuickSheet(
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
-                            Text(
-                                text = label,
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.titleSmall,
-                                color = TripHubTokens.TextPrimary
+                        },
+                        trailingContent = {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                                contentDescription = null,
+                                tint = TripHubTokens.TextMuted,
+                                modifier = Modifier.size(18.dp)
                             )
-                        }
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
-                            contentDescription = null,
-                            tint = TripHubTokens.TextMuted,
-                            modifier = Modifier.size(18.dp)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .minimumInteractiveComponentSize()
+                            .defaultMinSize(minHeight = 52.dp)
+                    ) {
+                        Text(
+                            text = label,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = TripHubTokens.TextPrimary
                         )
                     }
                 }
@@ -7326,7 +7298,7 @@ private fun BerthChartInspectorDialog(
                     modifier = Modifier.size(22.dp)
                 )
                 Text(
-                    text = "Coach & Berth Allocation",
+                    text = "Coach and berth allocation",
                     fontFamily = FigtreeFontFamily,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 18.sp,
@@ -7358,42 +7330,41 @@ private fun BerthChartInspectorDialog(
                         color = TripHubTokens.PositiveSageText
                     )
                 }
-                berthCells.forEach { cell ->
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = TripHubTokens.SunkenWell,
-                        border = BorderStroke(
-                            1.dp,
-                            if (cell.isCurrentUser) BuckwheatOlivePrimary else TripHubTokens.CardBorder
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 9.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)
+                ) {
+                    berthCells.forEachIndexed { idx, cell ->
+                        SegmentedListItem(
+                            onClick = {},
+                            enabled = false,
+                            shapes = ListItemDefaults.segmentedShapes(index = idx, count = berthCells.size),
+                            colors = ListItemDefaults.segmentedColors(
+                                containerColor = TripHubTokens.SunkenWell,
+                                disabledContainerColor = TripHubTokens.SunkenWell
+                            ),
+                            trailingContent = {
+                                Text(
+                                    text = "${cell.berthCode} ${cell.statusCode}",
+                                    style = MaterialTheme.typography.labelMedium.merge(
+                                        TextStyle(
+                                            fontFamily = SplitMateTnumMonospace,
+                                            fontWeight = FontWeight.Bold,
+                                            fontFeatureSettings = "tnum"
+                                        )
+                                    ),
+                                    color = TripHubTokens.PositiveSageText
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = if (cell.isCurrentUser) "${cell.travelerName} (YOU)" else cell.travelerName,
+                                text = if (cell.isCurrentUser) "${cell.travelerName} (You)" else cell.travelerName,
                                 fontWeight = FontWeight.ExtraBold,
                                 style = MaterialTheme.typography.labelLarge,
                                 color = TripHubTokens.TextPrimary,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                text = "${cell.berthCode} ${cell.statusCode}",
-                                style = MaterialTheme.typography.labelMedium.merge(
-                                    TextStyle(
-                                        fontFamily = SplitMateTnumMonospace,
-                                        fontWeight = FontWeight.Bold,
-                                        fontFeatureSettings = "tnum"
-                                    )
-                                ),
-                                color = TripHubTokens.PositiveSageText
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -7413,7 +7384,7 @@ private fun BerthChartInspectorDialog(
                     .defaultMinSize(minHeight = 48.dp)
             ) {
                 Text(
-                    text = "Open Full E-Ticket",
+                    text = "Open full e-ticket",
                     fontFamily = FigtreeFontFamily,
                     fontWeight = FontWeight.Bold
                 )

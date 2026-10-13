@@ -73,4 +73,17 @@ class SplitMateV240Rc3Test {
         assertTrue(form.contains("private fun Modifier.bleedHorizontally("))
         assertTrue(Regex("bleedHorizontally\\(").findAll(form).count() >= 3)
     }
+
+    @Test
+    fun `RC3_08 Trip Hub and StayPinSheet use official SegmentedListItem, SearchBarDefaults InputField and PrimaryTabRow`() {
+        val trip = src("ui/screens/TripHomeScreen.kt")
+        assertTrue(trip.contains("SegmentedListItem("))
+        assertTrue(trip.contains("ListItemDefaults.segmentedShapes("))
+        assertTrue(trip.contains("ListItemDefaults.SegmentedGap"))
+        assertTrue(trip.contains("SearchBarDefaults.InputField("))
+        assertTrue(trip.contains("TopAppBarDefaults.topAppBarColors("))
+        assertFalse(trip.contains("largeTopAppBarColors("))
+        val stay = src("ui/screens/plan/StayPinSheet.kt")
+        assertTrue(stay.contains("PrimaryTabRow("))
+    }
 }
