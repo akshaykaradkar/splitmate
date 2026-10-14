@@ -2346,7 +2346,7 @@ object CloudGroupSyncRepository {
                     }
                 }
                 else -> {
-                    val newMemberId = "m_${nowMs}_${normPhone.takeLast(4).ifBlank { "join" }}"
+                    val newMemberId = "${SplitMateIds.newId("m", nowMs)}_${normPhone.takeLast(4).ifBlank { "join" }}"
                     remoteDoc.members.map { it.copy(isCurrentUser = false) } + GroupMemberEntity(
                         memberId = newMemberId,
                         groupId = targetGroupId,

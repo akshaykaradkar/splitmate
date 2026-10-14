@@ -298,4 +298,84 @@ object HubExtendedColors {
         SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> FlightEspresso
         SplitMateThemeMode.KYOTO_MATCHA_YUZU -> FlightKyoto
     }
+
+    // --------------------------------------------------------------------------
+    // v2.4.0 rc10: Money tab category cards (Stitch "category-specific expense cards")
+    // --------------------------------------------------------------------------
+    // Light values are the Stitch tokens (Royal Amethyst, Coastal Navy, Roast Terracotta,
+    // Forest Canopy, Crimson Plum). Dark values keep the same hue family as tonal containers with
+    // pastel ink, so the cards stay readable in Warm Espresso Night. Kyoto uses the light set.
+
+    private val StayLight = ExpenseCategoryCardColors(
+        accent = Color(0xFF4C1D82), onAccent = Color(0xFFFFFFFF),
+        headerContainer = Color(0xFFF4EDFD), headerContainerEnd = Color(0xFFFAF6FE), outline = Color(0xFFDCC8F7)
+    )
+    private val StayDark = ExpenseCategoryCardColors(
+        accent = Color(0xFFCDB4F5), onAccent = Color(0xFF2A0E4D),
+        headerContainer = Color(0xFF2A2236), headerContainerEnd = Color(0xFF221D2B), outline = Color(0xFF4A3A63)
+    )
+    private val TransitLight = ExpenseCategoryCardColors(
+        accent = Color(0xFF144A8C), onAccent = Color(0xFFFFFFFF),
+        headerContainer = Color(0xFFE8F1FC), headerContainerEnd = Color(0xFFF3F8FE), outline = Color(0xFFBED6F7)
+    )
+    private val TransitDark = ExpenseCategoryCardColors(
+        accent = Color(0xFFA9C8F2), onAccent = Color(0xFF0B2747),
+        headerContainer = Color(0xFF1C2633), headerContainerEnd = Color(0xFF191F29), outline = Color(0xFF33465E)
+    )
+    private val FoodLight = ExpenseCategoryCardColors(
+        accent = Color(0xFF8A3814), onAccent = Color(0xFFFFFFFF),
+        headerContainer = Color(0xFFFDF0DE), headerContainerEnd = Color(0xFFFFF9F3), outline = Color(0xFFF7D5BA)
+    )
+    private val FoodDark = ExpenseCategoryCardColors(
+        accent = Color(0xFFF2B48E), onAccent = Color(0xFF4A1C08),
+        headerContainer = Color(0xFF33241B), headerContainerEnd = Color(0xFF2A1F18), outline = Color(0xFF5C3F2E)
+    )
+    private val ActivityLight = ExpenseCategoryCardColors(
+        accent = Color(0xFF235414), onAccent = Color(0xFFFFFFFF),
+        headerContainer = Color(0xFFEAF5DC), headerContainerEnd = Color(0xFFF7FDF3), outline = Color(0xFFC3E29C)
+    )
+    private val ActivityDark = ExpenseCategoryCardColors(
+        accent = Color(0xFFB5DC8E), onAccent = Color(0xFF10280A),
+        headerContainer = Color(0xFF1F2A1A), headerContainerEnd = Color(0xFF1B2317), outline = Color(0xFF3B5230)
+    )
+    private val SundriesLight = ExpenseCategoryCardColors(
+        accent = Color(0xFF8A1A44), onAccent = Color(0xFFFFFFFF),
+        headerContainer = Color(0xFFFFE8F0), headerContainerEnd = Color(0xFFFFF5F8), outline = Color(0xFFF7BFD4)
+    )
+    private val SundriesDark = ExpenseCategoryCardColors(
+        accent = Color(0xFFF5A9C6), onAccent = Color(0xFF4A0B24),
+        headerContainer = Color(0xFF33202A), headerContainerEnd = Color(0xFF2A1B23), outline = Color(0xFF5C3346)
+    )
+
+    fun expenseCategoryCard(
+        kind: ExpenseCardKind,
+        mode: SplitMateThemeMode = activeMode
+    ): ExpenseCategoryCardColors {
+        val dark = mode.isDark
+        return when (kind) {
+            ExpenseCardKind.STAY -> if (dark) StayDark else StayLight
+            ExpenseCardKind.TRANSIT -> if (dark) TransitDark else TransitLight
+            ExpenseCardKind.FOOD -> if (dark) FoodDark else FoodLight
+            ExpenseCardKind.ACTIVITY -> if (dark) ActivityDark else ActivityLight
+            ExpenseCardKind.SUNDRIES -> if (dark) SundriesDark else SundriesLight
+        }
+    }
 }
+
+/** The five Money-tab expense card families. */
+enum class ExpenseCardKind { STAY, TRANSIT, FOOD, ACTIVITY, SUNDRIES }
+
+/**
+ * Colours for one Money-tab category card. [accent] is the category ink (header label, icons,
+ * badge fill); [onAccent] is the glyph on an [accent]-filled badge; [headerContainer] →
+ * [headerContainerEnd] is the header band gradient; [outline] is the card's 1dp border.
+ * Body text uses the theme's onSurface roles. Every accent/header pair is >= 4.5:1.
+ */
+@Immutable
+data class ExpenseCategoryCardColors(
+    val accent: Color,
+    val onAccent: Color,
+    val headerContainer: Color,
+    val headerContainerEnd: Color,
+    val outline: Color
+)

@@ -52,8 +52,10 @@ class SplitMateV236LayoutAndMotionTest {
             from = i + 10
         }
         assertTrue(found >= 3 && checked == found, "every card payer row must cap lines (capped $checked of $found)")
-        val dialog = block(home, "\"\${cell.travelerName} (YOU)\" else cell.travelerName,", 700)
-        assertTrue(dialog.contains("modifier = Modifier.weight(1f)"))
+        val dialog = block(home, "\"\${cell.travelerName} (You)\" else cell.travelerName,", 700)
+        // v2.4.0 rc5: the berth row is an official SegmentedListItem; its headline slot already takes
+        // the space left by the trailing berth code, so the name only needs to cap its lines.
+        assertTrue(dialog.contains("maxLines = 1") && dialog.contains("overflow = TextOverflow.Ellipsis"))
     }
 
     @Test

@@ -2883,12 +2883,20 @@ fun CompactLedgerTicketStub(
     ticket: ParsedTravelTicket,
     @Suppress("UNUSED_PARAMETER") totalAmountDisplay: String = "",
     perPersonShareDisplay: String = "",
-    onInspectTactilePass: (() -> Unit)? = null
+    onInspectTactilePass: (() -> Unit)? = null,
+    /** v2.4.0 rc10: set when the category is already known (Money tab), instead of guessing from the title. */
+    isFlightOverride: Boolean? = null,
+    /**
+     * v2.4.0 rc10: Money tab mode. When set, the trailing slot shows this total amount instead of the
+     * "Paper Pass" chip (the whole row still opens the pass), so the row stands on its own in a list.
+     */
+    trailingTotalDisplay: String? = null,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val localView = androidx.compose.ui.platform.LocalView.current
     val isDark = SplitMateTheme.isDark
-    val isFlight = isFlightTicketExpense(ticket.cleanTitle, ticket)
+    val isFlight = isFlightOverride ?: isFlightTicketExpense(ticket.cleanTitle, ticket)
     val stubBg = when {
         isFlight && isDark -> Color(0xFF1B1936)
         isFlight -> Color(0xFFF3F5FF)
@@ -2917,6 +2925,9 @@ fun CompactLedgerTicketStub(
     val fromCode = ticket.fromStation.ifBlank { "—" }.uppercase(java.util.Locale.US)
     val toCode = ticket.toStation.ifBlank { "—" }.uppercase(java.util.Locale.US)
     val statusBadge = ticket.bookingStatus.ifBlank { "CNF" }
+    // v2.4.0 rc10: no stations stored -> show the carrier / title instead of a blank "— → —" route.
+    val hasRoute = ticket.fromStation.isNotBlank() || ticket.toStation.isNotBlank()
+    val routeFallback = ticket.trainOrCarrierName.ifBlank { ticket.cleanTitle }.ifBlank { if (isFlight) "Flight" else "Train" }
 
     Surface(
         onClick = {
@@ -2927,7 +2938,7 @@ fun CompactLedgerTicketStub(
         shape = RoundedCornerShape(14.dp),
         color = stubBg,
         border = androidx.compose.foundation.BorderStroke(1.dp, stubBorder),
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
@@ -2960,7 +2971,17 @@ fun CompactLedgerTicketStub(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Row(
+                        if (!hasRoute) {
+                            Text(
+                                text = routeFallback,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = SplitMateTheme.PrimaryDark,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                        } else Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
@@ -3006,11 +3027,13 @@ fun CompactLedgerTicketStub(
                     }
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = buildString {
-                            if (ticket.trainOrFlightNo.isNotBlank()) append(ticket.trainOrFlightNo).append(" · ")
-                            append(statusBadge)
-                            if (perPersonShareDisplay.isNotBlank()) append(" · ").append(perPersonShareDisplay).append(" each")
-                        },
+                        // v2.4.0 rc10: the status shows only when it came from a real source; the model's
+                        // "CNF" default is a placeholder and must not be presented as a confirmed booking.
+                        text = listOfNotNull(
+                            ticket.trainOrFlightNo.ifBlank { null },
+                            statusBadge.takeIf { ticket.statusExplicit },
+                            perPersonShareDisplay.ifBlank { null }?.let { "$it each" }
+                        ).joinToString(" · "),
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Medium,
                         fontSize = 11.sp,
@@ -3020,7 +3043,21 @@ fun CompactLedgerTicketStub(
                 }
             }
 
-            if (onInspectTactilePass != null) {
+            if (trailingTotalDisplay != null) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = trailingTotalDisplay,
+                    style = MaterialTheme.typography.titleMedium.merge(
+                        TextStyle(
+                            fontFamily = SplitMateTnumMonospace,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontFeatureSettings = "tnum"
+                        )
+                    ),
+                    color = SplitMateTheme.PrimaryDark,
+                    maxLines = 1
+                )
+            } else if (onInspectTactilePass != null) {
                 Surface(
                     shape = RoundedCornerShape(999.dp),
                     color = badgeBg

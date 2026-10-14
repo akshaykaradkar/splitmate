@@ -61,8 +61,8 @@ object TripHubLayoutRules {
         phase: TripPhase = TripPhase.BEFORE,
         zone: java.time.ZoneId = java.time.ZoneId.systemDefault()
     ): List<Pair<ExpenseEntity, TripHubBookingCategory>> {
-        val newestFirst = compareByDescending<Pair<ExpenseEntity, TripHubBookingCategory>> { it.first.createdAt }
-            .thenBy { it.first.expenseId }
+        val newestFirst = com.splitmate.app.ui.components.ExpenseOrdering
+            .newestFirst<Pair<ExpenseEntity, TripHubBookingCategory>>({ it.first }, { it.first.createdAt })
         if (phase == TripPhase.AFTER) return all.sortedWith(newestFirst).take(maxRecent)
 
         val tickets = all.filter { isTicket(it.second) }
@@ -73,7 +73,10 @@ object TripHubLayoutRules {
         val today = if (phase == TripPhase.DURING) {
             val day = dayOf(nowMs, zone)
             all.filter { dayOf(scheduleMsOf(it.first), zone) == day }
-                .sortedWith(compareBy<Pair<ExpenseEntity, TripHubBookingCategory>> { if (isTicket(it.second)) 0 else 1 }.thenBy { scheduleMsOf(it.first) })
+                .sortedWith(
+                    compareBy<Pair<ExpenseEntity, TripHubBookingCategory>> { if (isTicket(it.second)) 0 else 1 }
+                        .then(com.splitmate.app.ui.components.ExpenseOrdering.chronological({ it.first }, { scheduleMsOf(it.first) }))
+                )
                 .take(3)
         } else {
             emptyList()

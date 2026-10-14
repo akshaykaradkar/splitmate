@@ -230,6 +230,51 @@ class DarkModeSweepTest(private val themeName: String) {
         shot("f06_trip_overview_train")
     }
 
+    /** A realistic busy trip: tickets + stay + cab + rental + food + shopping, as people log them. */
+    private fun seedBusyTrip(vm: SplitMateViewModel) {
+        seedFlightBooking(vm)
+        seedTrainBooking(vm)
+        val memberIds = vm.uiState.value.members.filter { it.groupId == "g_tahoe" }.map { it.memberId }
+        listOf(
+            Triple("Zostel Goa Anjuna (3 nights)", 1_860_000L, "STAY"),
+            Triple("Uber BOM airport to Andheri", 64_000L, "CAB"),
+            Triple("Scooty rental Anjuna 3 days", 210_000L, "RENTAL"),
+            Triple("Dinner at Thalassa", 486_000L, "FOOD"),
+            Triple("Breakfast Artjuna", 132_000L, "FOOD"),
+            Triple("Flea market shopping", 95_000L, "SHOPPING"),
+            Triple("Parasailing Calangute", 360_000L, "ACTIVITIES")
+        ).forEach { (title, cents, cat) ->
+            vm.logExpense(title = title, totalAmountCents = cents, selectedMemberIds = memberIds, expenseCategory = cat)
+        }
+        settle()
+    }
+
+    /** Overview of a busy trip, captured top to bottom. */
+    @Test fun t01_overview_busy_trip() {
+        val vm = launch(); tap(text = "Lake Tahoe Cabin"); seedBusyTrip(vm)
+        tap(text = "Overview", exact = true)
+        for (i in 1..6) {
+            shotNoAudit("t01_overview_busy_$i")
+            scrollDown(0.55f)
+        }
+    }
+
+    /** Money -> All expenses of the same busy trip. */
+    @Test fun t02_money_all_expenses_busy_trip() {
+        val vm = launch(); tap(text = "Lake Tahoe Cabin"); seedBusyTrip(vm)
+        tap(text = "Money")
+        runCatching { compose.onAllNodes(hasText("All expenses", substring = true))[0].performScrollTo() }
+        for (i in 1..8) {
+            shotNoAudit("t02_money_all_expenses_busy_$i")
+            scrollDown(0.55f)
+        }
+    }
+
+    private fun shotNoAudit(name: String) {
+        settle()
+        compose.onRoot().captureRoboImage("$outDir/$name.png")
+    }
+
     @Test fun f01_trip_overview_flight() {
         val vm = launch(); tap(text = "Lake Tahoe Cabin"); seedFlightBooking(vm)
         val card = compose.onAllNodes(hasText("6E 2134", substring = true), useUnmergedTree = false)[0]

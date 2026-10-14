@@ -36,6 +36,7 @@ import androidx.compose.animation.togetherWith
 import com.splitmate.app.ui.theme.HubExtendedColors
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import com.splitmate.app.ui.screens.plan.PlanSubView
 import com.splitmate.app.ui.screens.plan.TripPlanTabHost
 import androidx.compose.animation.AnimatedVisibility
@@ -778,7 +779,9 @@ fun TripHomeScreen(
     val groupExpenses: List<ExpenseEntity> = remember(uiState.expenses, resolvedGroupId, context) {
         uiState.expenses
             .filter { it.groupId == resolvedGroupId }
-            .sortedBy { resolveExpenseSchedule(context, it).effectiveEpochMs }
+            .map { it to resolveExpenseSchedule(context, it).effectiveEpochMs }
+            .sortedWith(com.splitmate.app.ui.components.ExpenseOrdering.chronological({ it.first }, { it.second }))
+            .map { it.first }
     }
     val groupExpenseIds = remember(groupExpenses) {
         groupExpenses.map { it.expenseId }.toSet()
@@ -1478,25 +1481,24 @@ fun TripHomeScreen(
                                             .semantics { heading() }
                                     )
                                 }
-                                val moneyLegNumbers = classifiedExpenses
-                                    .filter { it.second == TripHubBookingCategory.TRAIN }
-                                    .mapIndexed { idx, (exp, _) -> exp.expenseId to (idx + 1) }
-                                    .toMap()
-                                items(items = classifiedExpenses, key = { "money_exp_" + it.first.expenseId }) { (expense, category) ->
-                                    TripHubFeedCard(
-                                        expense = expense,
-                                        category = category,
-                                        legNumber = moneyLegNumbers[expense.expenseId] ?: 1,
-                                        groupMembers = groupMembers,
-                                        allSplits = groupSplits,
-                                        activePerspectiveMember = activePerspectiveMember,
+                                // v2.4.0 rc10: category cards (Stays / Cabs & rides batch / Food / Activities /
+                                // Shopping & other) instead of the old card sandwich. Read-only mapping: split
+                                // math and amounts come from the ViewModel helpers, nothing is written.
+                                val moneyItems = com.splitmate.app.ui.components.ExpenseUiMappers.buildMoneyExpenseItems(
+                                    classified = classifiedExpenses,
+                                    members = groupMembers,
+                                    splits = groupSplits
+                                )
+                                items(items = moneyItems, key = { "money_" + it.key }) { item ->
+                                    val itemModifier = Modifier
+                                        .fillMaxWidth()
+                                        .animateItem(fadeInSpec = SplitMateMotion.fastEffects(), placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = SplitMateMotion.fastEffects())
+                                    MoneyCategoryExpenseItem(
+                                        item = item,
                                         onOpenTrainPnrReviewClick = onOpenTrainPnrReviewClick,
                                         onOpenFlightReviewClick = onOpenFlightReviewClick,
-                                        onInspectBerthChart = { exp, snap -> inspectedBerthChartSnapshot = exp to snap },
                                         onDeleteExpense = { expenseId -> viewModel.rollbackExpense(expenseId) },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .animateItem(fadeInSpec = SplitMateMotion.fastEffects(), placementSpec = SplitMateMotion.defaultSpatial(), fadeOutSpec = SplitMateMotion.fastEffects())
+                                        modifier = itemModifier
                                     )
                                 }
                             }
@@ -2568,6 +2570,130 @@ private fun TripHubFeedCard(
                     modifier = Modifier.fillMaxWidth()
                 )
             }
+        }
+    }
+}
+
+/**
+ * v2.4.0 rc10: one Money-tab "All expenses" entry. Category cards replace the card sandwich;
+ * train / flight tickets keep their existing ticket card (own design + container transform).
+ *
+ * Actions:
+ *  - Card tap, "Split details" and each ride in the transit batch open the shared expense sheet
+ *    ([LocalTripHubExpenseActions] -> ActivityDetailSheet: split breakdown, edit, undo, history).
+ *  - "Maps" opens the maps app searching the stay's name (same intent as the old stay card).
+ *  - Swipe right = edit, swipe left = delete (with confirmation) on single-expense cards, via the
+ *    existing [TripHubSwipeToManage]. In the batch, each ride is managed from its own sheet.
+ */
+@Composable
+private fun MoneyCategoryExpenseItem(
+    item: com.splitmate.app.ui.components.MoneyExpenseItem,
+    onOpenTrainPnrReviewClick: (String) -> Unit,
+    onOpenFlightReviewClick: (String) -> Unit,
+    onDeleteExpense: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val actions = LocalTripHubExpenseActions.current
+    val openDetails: (ExpenseEntity) -> Unit = { exp -> actions?.openDetails?.invoke(exp) }
+    when (item) {
+        // v2.4.0 rc10: tickets are a compact row in Money (the same CompactLedgerTicketStub the Groups feed
+        // uses), with the total on the right. Tapping opens the same review screen as the full ticket card
+        // (train: PNR, flight: EXPENSE:<id>) with the same container transform; swipe still manages it.
+        is com.splitmate.app.ui.components.MoneyExpenseItem.Ticket -> {
+            val ticketTransform = com.splitmate.app.ui.components.LocalTicketContainerTransform.current
+            val row = item.data
+            TripHubSwipeToManage(
+                expense = item.expense,
+                onDeleteExpense = { onDeleteExpense(item.expense.expenseId) },
+                modifier = modifier
+            ) {
+                com.splitmate.app.ui.components.TicketContainerSource(
+                    sourceKey = item.expense.expenseId,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    com.splitmate.app.ui.CompactLedgerTicketStub(
+                        ticket = row.ticket,
+                        totalAmountDisplay = row.totalFormatted,
+                        perPersonShareDisplay = row.perPersonShare,
+                        isFlightOverride = row.isFlight,
+                        trailingTotalDisplay = row.totalFormatted,
+                        onInspectTactilePass = {
+                            if (row.openKey.isNotBlank()) ticketTransform?.controller?.markSource(item.expense.expenseId)
+                            when {
+                                row.isFlight -> onOpenFlightReviewClick(row.openKey)
+                                row.openKey.isNotBlank() -> onOpenTrainPnrReviewClick(row.openKey)
+                                else -> openDetails(item.expense)
+                            }
+                        }
+                    )
+                }
+            }
+        }
+
+        is com.splitmate.app.ui.components.MoneyExpenseItem.Stay -> TripHubSwipeToManage(
+            expense = item.expense,
+            onDeleteExpense = { onDeleteExpense(item.expense.expenseId) },
+            modifier = modifier
+        ) {
+            com.splitmate.app.ui.components.StaysLodgingCard(
+                stay = item.data,
+                onOpenDetails = { openDetails(item.expense) },
+                onViewLocationClick = {
+                    val query = listOfNotNull(item.data.resortName, item.data.locationTag).joinToString(" ")
+                    runCatching {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(query)}"))
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    }.onFailure {
+                        Toast.makeText(context, "No maps app found", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                onSplitDetailsClick = { openDetails(item.expense) }
+            )
+        }
+
+        is com.splitmate.app.ui.components.MoneyExpenseItem.Transit -> com.splitmate.app.ui.components.CabsTransitBatchCard(
+            batch = item.data,
+            modifier = modifier,
+            onHopClick = { hop -> item.expenses.firstOrNull { it.expenseId == hop.expenseId }?.let(openDetails) }
+        )
+
+        is com.splitmate.app.ui.components.MoneyExpenseItem.Food -> TripHubSwipeToManage(
+            expense = item.expense,
+            onDeleteExpense = { onDeleteExpense(item.expense.expenseId) },
+            modifier = modifier
+        ) {
+            com.splitmate.app.ui.components.FoodDiningCard(
+                food = item.data,
+                onOpenDetails = { openDetails(item.expense) },
+                onSplitReceiptClick = { openDetails(item.expense) }
+            )
+        }
+
+        is com.splitmate.app.ui.components.MoneyExpenseItem.Activity -> TripHubSwipeToManage(
+            expense = item.expense,
+            onDeleteExpense = { onDeleteExpense(item.expense.expenseId) },
+            modifier = modifier
+        ) {
+            com.splitmate.app.ui.components.ActivityTourCard(
+                activity = item.data,
+                onOpenDetails = { openDetails(item.expense) },
+                onSplitDetailsClick = { openDetails(item.expense) }
+            )
+        }
+
+        is com.splitmate.app.ui.components.MoneyExpenseItem.Sundries -> TripHubSwipeToManage(
+            expense = item.expense,
+            onDeleteExpense = { onDeleteExpense(item.expense.expenseId) },
+            modifier = modifier
+        ) {
+            com.splitmate.app.ui.components.SundriesExpenseCard(
+                item = item.data,
+                onOpenDetails = { openDetails(item.expense) },
+                onSplitDetailsClick = { openDetails(item.expense) }
+            )
         }
     }
 }
@@ -4554,7 +4680,7 @@ private fun TripHubPlanTimelineView(
     val groupedByDay = remember(classifiedExpenses, context) {
         classifiedExpenses
             .map { (exp, cat) -> Triple(exp, cat, resolveExpenseSchedule(context, exp)) }
-            .sortedBy { it.third.effectiveEpochMs }
+            .sortedWith(com.splitmate.app.ui.components.ExpenseOrdering.chronological({ it.first }, { it.third.effectiveEpochMs }))
             .groupBy { it.third.fullDateLabel }
     }
 

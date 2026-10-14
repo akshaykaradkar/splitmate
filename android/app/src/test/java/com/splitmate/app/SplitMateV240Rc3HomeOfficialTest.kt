@@ -132,6 +132,9 @@ class SplitMateV240Rc3HomeOfficialTest {
     }
 
     @Test
+    // Robolectric's default screen is 320dp wide, which silently clamps the 400dp box below; give the
+    // test a phone-width window so the 400dp bar is real and its centre is 200dp.
+    @Config(sdk = [34], qualifiers = "w411dp-h891dp")
     fun `RC3H_06 Collapsed floating toolbar centers the circular Quick Split button and remains clickable`() {
         val app = src("ui/SplitMateAppComposable.kt")
         val bar = app.substringAfter("fun SplitMateBottomNavigationBar(").substringBefore("\n// ====")

@@ -51,6 +51,9 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import kotlin.math.roundToInt
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.platform.LocalConfiguration
@@ -1931,11 +1934,18 @@ fun SplitMateBottomNavigationBar(
         transitionSpec = { toolbarAnimationSpec },
         label = "FloatingToolbarCenterProgress"
     ) { it }
+    // v2.4.0 rc10: the collapse shift is MEASURED, not guessed. The official toolbar keeps its full
+    // width when collapsed and places the (growing) FAB at a library-internal spot, so we record the
+    // FAB's real centre and the bar's centre, and shift by exactly that gap (scaled by progress).
+    var barCenterX by remember { mutableFloatStateOf(Float.NaN) }
+    var fabCenterOffsetPx by remember { mutableFloatStateOf(0f) }
+    val appliedShift = remember { floatArrayOf(0f) }
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(bottom = androidx.compose.material3.FloatingToolbarDefaults.ScreenOffset),
+            .padding(bottom = androidx.compose.material3.FloatingToolbarDefaults.ScreenOffset)
+            .onGloballyPositioned { c -> barCenterX = c.positionInRoot().x + c.size.width / 2f },
         contentAlignment = Alignment.BottomCenter
     ) {
         // v2.4.0 rc2/rc6: the official M3 Expressive floating toolbar. It owns the pill shape, the
@@ -1947,10 +1957,9 @@ fun SplitMateBottomNavigationBar(
             animationSpec = toolbarAnimationSpec,
             modifier = Modifier.layout { measurable, constraints ->
                 val placeable = measurable.measure(constraints)
-                val collapsedFabWidthPx = 64.dp.roundToPx()
-                val maxCenterShiftPx = (placeable.width - collapsedFabWidthPx).coerceAtLeast(0) / 2f
                 layout(placeable.width, placeable.height) {
-                    val shiftLeftToCenterPx = (maxCenterShiftPx * (1f - expandedProgressState.value)).roundToInt()
+                    val shiftLeftToCenterPx = (fabCenterOffsetPx.coerceAtLeast(0f) * (1f - expandedProgressState.value)).roundToInt()
+                    appliedShift[0] = shiftLeftToCenterPx.toFloat()
                     placeable.placeRelative(x = -shiftLeftToCenterPx, y = 0)
                 }
             },
@@ -1959,7 +1968,15 @@ fun SplitMateBottomNavigationBar(
                     onClick = onQuickSplitClick,
                     shape = CircleShape,
                     containerColor = activePalette.primary,
-                    contentColor = activePalette.onPrimary
+                    contentColor = activePalette.onPrimary,
+                    modifier = Modifier.onGloballyPositioned { c ->
+                        if (!barCenterX.isNaN()) {
+                            // Where the FAB centre would be without our shift, relative to the bar centre.
+                            val unshiftedCenter = c.boundsInRoot().center.x + appliedShift[0]
+                            val offset = unshiftedCenter - barCenterX
+                            if (kotlin.math.abs(offset - fabCenterOffsetPx) > 0.5f) fabCenterOffsetPx = offset
+                        }
+                    }
                 ) {
                     SymbolIcon(
                         imageVector = Icons.Rounded.ElectricBolt,
@@ -6022,8 +6039,8 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                             label = {
                                 Text(
                                     text = grp.name,
+                                    style = MaterialTheme.typography.labelMedium,
                                     fontFamily = SplitMateTheme.FontRounded,
-                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1
                                 )

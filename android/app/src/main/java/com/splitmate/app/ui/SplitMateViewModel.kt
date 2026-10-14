@@ -1499,7 +1499,7 @@ class SplitMateViewModel(
 
         val lockedRate = state.activeCurrency.rateFromBase
         val syncStatus = if (dao != null || state.isOfflineMode) "PENDING" else "SYNCED"
-        val expenseId = "exp_${System.currentTimeMillis()}"
+        val expenseId = com.splitmate.app.data.SplitMateIds.newId("exp")
         com.splitmate.app.data.CloudGroupSyncRepository.setGroupPendingCloudPush(null, state.activeGroupId, true)
 
         val equalAllocations = SplitMateMathEngine.splitEquallyZeroDrift(
@@ -2768,7 +2768,7 @@ class SplitMateViewModel(
 
         val cleanGroup = name.toSmartTitleCase().ifEmpty { "New Group" }
         val cleanIcon = iconName.trim().ifEmpty { "Flight" }
-        val baseSeedId = "g_$nowMs"
+        val baseSeedId = com.splitmate.app.data.SplitMateIds.newId("g", nowMs)
         val joinCode6 = com.splitmate.app.data.CloudGroupSyncRepository.deriveGroupJoinCode6(baseSeedId)
         val groupId = "${baseSeedId}_$joinCode6"
         val newGroup = ExpenseGroupEntity(
@@ -2940,7 +2940,7 @@ class SplitMateViewModel(
         }
 
         val newMember = GroupMemberEntity(
-            memberId = "m_${System.currentTimeMillis()}",
+            memberId = com.splitmate.app.data.SplitMateIds.newId("m"),
             groupId = groupId,
             name = clean,
             avatarSeed = "$clean|Neutral",
@@ -3961,7 +3961,7 @@ class SplitMateViewModel(
                 }
                 else -> {
                     val newMember = GroupMemberEntity(
-                        memberId = "m_${System.currentTimeMillis()}_${myPhone10.takeLast(4).ifBlank { "join" }}",
+                        memberId = "${com.splitmate.app.data.SplitMateIds.newId("m")}_${myPhone10.takeLast(4).ifBlank { "join" }}",
                         groupId = targetGid,
                         name = myName,
                         avatarSeed = mySeed,
@@ -4137,7 +4137,7 @@ class SplitMateViewModel(
         val settlement = SettlementEntity(
             // v2.4.0 D4 review B3: unique suffix so two payments saved in the same millisecond never
             // share an id (Room insert and the cloud merge both key settlements by id).
-            settlementId = "settle_${System.currentTimeMillis()}_${java.util.UUID.randomUUID().toString().take(8)}",
+            settlementId = com.splitmate.app.data.SplitMateIds.newId("settle"),
             groupId = state.activeGroupId,
             fromMemberId = transfer.fromMemberId,
             fromMemberName = transfer.fromName,

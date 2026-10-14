@@ -116,6 +116,6 @@ class SplitMateV240FeelTest {
         assertFalse(morph.contains("pending"), "no held save")
         val vm = src("ui/SplitMateViewModel.kt")
         assertTrue(vm.contains("fun markGreedyTransferSettled(transfer: SplitMateMathEngine.SimplifiedTransfer): Boolean"))
-        assertTrue(vm.contains("settlementId = \"settle_\${System.currentTimeMillis()}_\${java.util.UUID.randomUUID().toString().take(8)}\""))
+        assertTrue(vm.contains("settlementId = com.splitmate.app.data.SplitMateIds.newId(\"settle\")"))
     }
 }

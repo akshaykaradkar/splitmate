@@ -23,6 +23,7 @@ internal val MaterialSymbolCodepoints: Map<String, Int> = hashMapOf(
     "BakeryDining" to 0xea53, // bakery_dining
     "BeachAccess" to 0xeb3e, // beach_access
     "Bed" to 0xefdf, // bed
+    "Bedtime" to 0xf159, // bedtime
     "Bolt" to 0xea0b, // bolt
     "Cabin" to 0xe589, // cabin
     "CarRental" to 0xea55, // car_rental
