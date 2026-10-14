@@ -4083,7 +4083,9 @@ fun LedgersDashboardScreen(
                                     fontFamily = SplitMateTheme.FontRounded,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (uiState.isOfflineMode) SplitMateTheme.BrandCoral else SplitMateTheme.SageText
+                                    // v2.4.0 rc9: coral stays on the status dot (a graphic); the label uses the
+                                    // terracotta TEXT role (coral text on cream was 2.99:1).
+                                    color = if (uiState.isOfflineMode) SplitMateTheme.TerracottaText else SplitMateTheme.SageText
                                 )
                             }
                         }

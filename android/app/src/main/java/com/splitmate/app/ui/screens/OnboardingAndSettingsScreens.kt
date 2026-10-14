@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -938,6 +939,14 @@ fun UserSettingsScreen(
                                 ) {
                                     items(SplitMateAvatarColorPresets, key = { it.id }) { preset ->
                                         val isSelected = selectedColorPresetId == preset.id
+                                        // v2.4.0 rc9: the selected chip is filled with the preset's own (fixed,
+                                        // usually pastel) colour, so its label ink is picked against THAT colour,
+                                        // not the theme surface (the theme's light ink vanished on pastel in dark).
+                                        val selectedLabelInk = when {
+                                            preset.primaryBgColor.alpha < 0.5f -> textPrimary
+                                            preset.primaryBgColor.luminance() > 0.4f -> com.splitmate.app.ui.SunlitBuckwheatPalette.onSurface
+                                            else -> com.splitmate.app.ui.WarmEspressoNightPalette.onSurface
+                                        }
                                         // v2.4.0 rc3: official M3 Expressive FilterChip for the backdrop palette.
                                         FilterChip(
                                             selected = isSelected,
@@ -975,7 +984,7 @@ fun UserSettingsScreen(
                                                     fontFamily = SplitMateBrandFontFamily,
                                                     fontSize = 12.sp,
                                                     fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                                    color = if (isSelected) com.splitmate.app.ui.DesignSystemBindings.activePalette.onSurface else textPrimary
+                                                    color = if (isSelected) selectedLabelInk else textPrimary
                                                 )
                                             }
                                         )

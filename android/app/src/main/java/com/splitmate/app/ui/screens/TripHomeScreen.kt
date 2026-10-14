@@ -2911,7 +2911,7 @@ fun DeepGreenTrainTicketCard(
                                 text = fromCode,
                                 fontWeight = FontWeight.ExtraBold,
                                 style = MaterialTheme.typography.headlineMedium,
-                                color = DesignSystemBindings.activePalette.onPrimary
+                                color = TripHubTokens.TrainOnPass
                             )
                             Text(
                                 text = fromFullName,
@@ -2974,7 +2974,7 @@ fun DeepGreenTrainTicketCard(
                                 SymbolIcon(
                                     imageVector = Icons.Rounded.Train,
                                     contentDescription = null,
-                                    tint = DesignSystemBindings.activePalette.onPrimary,
+                                    tint = TripHubTokens.TrainOnPass,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Box(
@@ -3007,7 +3007,7 @@ fun DeepGreenTrainTicketCard(
                                 text = toCode,
                                 fontWeight = FontWeight.ExtraBold,
                                 style = MaterialTheme.typography.headlineMedium,
-                                color = DesignSystemBindings.activePalette.onPrimary
+                                color = TripHubTokens.TrainOnPass
                             )
                             Text(
                                 text = toFullName,
@@ -3094,7 +3094,7 @@ fun DeepGreenTrainTicketCard(
                                                 text = cell.travelerName,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 style = MaterialTheme.typography.labelLarge,
-                                                color = DesignSystemBindings.activePalette.onPrimary,
+                                                color = TripHubTokens.TrainOnPass,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
@@ -3464,7 +3464,7 @@ fun PeriwinkleFlightBookingCard(
                                         fontFeatureSettings = "tnum"
                                     )
                                 ),
-                                color = DesignSystemBindings.activePalette.onPrimary,
+                                color = TripHubTokens.FlightOnPass,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                             )
                         }
@@ -3494,7 +3494,7 @@ fun PeriwinkleFlightBookingCard(
                                 text = originIata.uppercase(Locale.US),
                                 fontWeight = FontWeight.ExtraBold,
                                 style = MaterialTheme.typography.headlineMedium,
-                                color = DesignSystemBindings.activePalette.onPrimary
+                                color = TripHubTokens.FlightOnPass
                             )
                             Text(
                                 text = originCity,
@@ -3517,7 +3517,7 @@ fun PeriwinkleFlightBookingCard(
                             SymbolIcon(
                                 imageVector = Icons.Rounded.FlightTakeoff,
                                 contentDescription = null,
-                                tint = DesignSystemBindings.activePalette.onPrimary,
+                                tint = TripHubTokens.FlightOnPass,
                                 modifier = Modifier.size(18.dp)
                             )
                             Box(
@@ -3536,7 +3536,7 @@ fun PeriwinkleFlightBookingCard(
                                 text = destIata.uppercase(Locale.US),
                                 fontWeight = FontWeight.ExtraBold,
                                 style = MaterialTheme.typography.headlineMedium,
-                                color = DesignSystemBindings.activePalette.onPrimary
+                                color = TripHubTokens.FlightOnPass
                             )
                             Text(
                                 text = destCity,
