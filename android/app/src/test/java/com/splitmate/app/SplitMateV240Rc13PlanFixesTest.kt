@@ -49,8 +49,8 @@ class SplitMateV240Rc13PlanFixesTest {
         val tab = src("ui/screens/plan/TripPlanTab.kt")
         assertTrue(tab.contains("current == PlanSubView.EXPLORE && exploreOpenedFromLoop -> actions.selectSubView(PlanSubView.LOOP)"))
         val trip = src("ui/screens/TripHomeScreen.kt")
-        val empty = trip.substringAfter("if (classifiedExpenses.isEmpty()) {").substringBefore("return")
-        assertTrue(empty.contains("onClick = onMakeLoop"), "empty Days still offers Make a loop")
+        val empty = trip.substringAfter("if (classifiedExpenses.isEmpty() && tripDays == null) {").substringBefore("return")
+        assertTrue(empty.contains("onClick = { onMakeLoop(null) }"), "empty Days still offers Make a loop")
     }
 
     @Test

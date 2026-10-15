@@ -2,6 +2,7 @@
 
 package com.splitmate.app.ui.screens.plan
 
+import androidx.compose.animation.togetherWith
 import com.splitmate.app.ui.components.SymbolIcon
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -65,7 +66,7 @@ import com.splitmate.app.data.guide.StayPin
 import com.splitmate.app.ui.components.LocalMotionScheme
 
 /**
- * Loop sub-view (audit 5.2 D): "Today's loop from your stay" as a vertical stepper
+ * Loop sub-view (audit 5.2 D; rc14 per day): "Day N loop from your stay" as a vertical stepper
  * Stay -> 1 -> 2 -> ... -> back to Stay, with straight-line leg distances, totals, caveats and the
  * hand-offs (whole loop in Google Maps, share). The route is recomputed on every device and is
  * never synced; this view only renders [LoopUi].
@@ -75,7 +76,11 @@ fun DayLoopView(
     state: TripGuideUiState,
     actions: TripGuideActions,
     onSetStay: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** rc14: the trip's days (null until there are bookings or trip dates). */
+    tripDays: com.splitmate.app.data.guide.TripDayRange? = null,
+    /** rc14: put a place on a day (null = "Not planned yet"); the host also freezes the trip dates. */
+    onMovePlaceToDay: (placeId: String, day: Int?) -> Unit = { id, d -> actions.movePlaceToDay(id, d) }
 ) {
     val loop = state.loop
     val stay = state.stay.stay
@@ -106,15 +111,38 @@ fun DayLoopView(
             }
         }
         item(key = "title") {
-            Text(
-                text = "Today's loop from your stay",
-                style = MaterialTheme.typography.headlineLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier
-                    .padding(bottom = 12.dp)
-                    .semantics { heading() }
-                    .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
-            )
+            // rc14: the title cross-fades on the effects spring when the day changes.
+            androidx.compose.animation.AnimatedContent(
+                targetState = loopTitle(if (tripDays != null) state.loopDay else null),
+                transitionSpec = {
+                    androidx.compose.animation.fadeIn(motion.defaultEffectsSpec()) togetherWith
+                        androidx.compose.animation.fadeOut(motion.fastEffectsSpec())
+                },
+                label = "LoopDayTitle",
+                modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
+            ) { title ->
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .padding(bottom = 12.dp)
+                        .semantics { heading() }
+                )
+            }
+        }
+        if (tripDays != null) {
+            // rc14: plan one day at a time; "All days" is the whole-trip view.
+            item(key = "day_picker") {
+                LoopDayPicker(
+                    range = tripDays,
+                    selectedDay = state.loopDay,
+                    onSelect = { actions.selectLoopDay(it) },
+                    modifier = Modifier
+                        .padding(bottom = 12.dp)
+                        .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
+                )
+            }
         }
 
         when {
@@ -137,7 +165,7 @@ fun DayLoopView(
                 item(key = "no_stops") {
                     EmptyLoopCard(
                         building = state.networkInFlight,
-                        onExplore = { actions.selectSubView(PlanSubView.EXPLORE) },
+                        onExplore = { actions.openExploreForDay(if (tripDays != null) state.loopDay else null) },
                         modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                     )
                 }
@@ -164,9 +192,11 @@ fun DayLoopView(
                 }
                 stops.forEachIndexed { index, place ->
                     item(key = "leg_${place.id}") {
+                        // rc14: switching days swaps stops: they fade on the effects spring and
+                        // re-order on the spatial spring.
                         LegConnector(
                             km = route.legStraightKm.getOrNull(index),
-                            modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
+                            modifier = Modifier.animateItem(fadeInSpec = motion.fastEffectsSpec(), placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = motion.fastEffectsSpec())
                         )
                     }
                     item(key = "stop_${place.id}") {
@@ -176,7 +206,10 @@ fun DayLoopView(
                             place = place,
                             legKm = route.legStraightKm.getOrNull(index),
                             onOpen = { actions.openPlace(place) },
-                            modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
+                            moveTo = tripDays?.let { range ->
+                                { MoveToDayButton(placeName = place.name, range = range, currentDay = loop.day) { d -> onMovePlaceToDay(place.id, d) } }
+                            },
+                            modifier = Modifier.animateItem(fadeInSpec = motion.fastEffectsSpec(), placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = motion.fastEffectsSpec())
                         )
                     }
                 }
@@ -204,6 +237,21 @@ fun DayLoopView(
                             .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                     )
                 }
+            }
+        }
+
+        val trayDay = loop.day
+        if (tripDays != null && loop.perDay && trayDay != null && loop.unplanned.isNotEmpty()) {
+            item(key = "unplanned") {
+                UnplannedTray(
+                    places = loop.unplanned,
+                    day = trayDay,
+                    onAddToDay = { onMovePlaceToDay(it.id, trayDay) },
+                    onOpen = { actions.openPlace(it) },
+                    modifier = Modifier
+                        .padding(top = 20.dp)
+                        .animateItem(fadeInSpec = motion.fastEffectsSpec(), placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = motion.fastEffectsSpec())
+                )
             }
         }
 
@@ -349,7 +397,9 @@ private fun LoopStopCard(
     place: Place,
     legKm: Double?,
     onOpen: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** rc14: trailing "Move to day…" control (null when the trip has no days yet). */
+    moveTo: (@Composable () -> Unit)? = null
 ) {
     val name = PlanGuideFormat.sanitizeDisplay(place.name) ?: place.name
     val a11y = PlanGuideFormat.stepA11yLabel(index, total, name, place.kind, legKm)
@@ -402,6 +452,7 @@ private fun LoopStopCard(
                     PlaceKindChip(kind = place.kind)
                 }
                 place.image?.let { PlaceThumbnail(image = it, size = 56.dp) }
+                moveTo?.invoke()
             }
         }
     }

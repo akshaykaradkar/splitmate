@@ -592,8 +592,11 @@ object TripHubTokens {
         get() = DesignSystemBindings.activePalette.onSurface
     val TextSecondary: Color
         get() = DesignSystemBindings.activePalette.onSurfaceVariant
+    // rc14: 0.92 (was 0.78) so small muted text ("5:55 PM · Other") meets WCAG AA 4.5:1 on every
+    // surface in Sunlit, Espresso and Kyoto, while still reading a step lighter than TextSecondary.
     val TextMuted: Color
-        get() = DesignSystemBindings.activePalette.onSurfaceVariant.copy(alpha = 0.78f)
+        get() = DesignSystemBindings.activePalette.onSurfaceVariant.copy(alpha = TEXT_MUTED_ALPHA)
+    const val TEXT_MUTED_ALPHA = 0.92f
 
     val ActiveTabPillBg: Color
         get() = if (SplitMateTheme.isDark) DesignSystemBindings.activePalette.primary else DesignSystemBindings.activePalette.onSurface
@@ -1424,8 +1427,28 @@ fun TripHomeScreen(
                 TripHubSectionTab.PLAN -> {
                     // v2.4.0 Trip Hub step 2: Days | Explore. Tickets sit on their day (signature ticket
                     // card); Loop opens from a "Make a loop" button on each day.
+                    // rc14: trip days = trip dates someone set (synced), else first..last booking.
+                    val tripDayRange = remember(classifiedExpenses, tripLifecycleRecord, context) {
+                        com.splitmate.app.data.guide.TripDays.resolve(
+                            startEpochMs = tripLifecycleRecord?.startDateEpochMs,
+                            endEpochMs = tripLifecycleRecord?.endDateEpochMs,
+                            bookingEpochMs = classifiedExpenses.map { resolveExpenseSchedule(context, it.first).effectiveEpochMs }
+                        )
+                    }
+                    val setTripDates: (Long, Long) -> Unit = { start, end -> viewModel.setTripDates(resolvedGroupId, start, end) }
                     TripPlanTabHost(
                         groupId = resolvedGroupId,
+                        tripDays = tripDayRange,
+                        // The first time a place goes on a day, save the derived range so "Day 2" can't shift.
+                        onFreezeTripDates = {
+                            val r = tripDayRange
+                            if (r != null && !r.explicit) {
+                                setTripDates(
+                                    com.splitmate.app.data.guide.TripDays.startOfDayMs(r.startEpochDay),
+                                    com.splitmate.app.data.guide.TripDays.startOfDayMs(r.endEpochDay + 1) - 1
+                                )
+                            }
+                        },
                         bookingsContent = { onMakeLoop ->
                             TripHubPlanTimelineView(
                                 classifiedExpenses = classifiedExpenses,
@@ -1437,7 +1460,9 @@ fun TripHomeScreen(
                                 activePerspectiveMember = activePerspectiveMember,
                                 onInspectBerthChart = { exp, snap -> inspectedBerthChartSnapshot = exp to snap },
                                 onDeleteExpense = { expenseId -> viewModel.rollbackExpense(expenseId) },
-                                onMakeLoop = onMakeLoop
+                                onMakeLoop = onMakeLoop,
+                                tripDays = tripDayRange,
+                                onSetTripDates = setTripDates
                             )
                         },
                         onSubViewChanged = { planSubView = it }
@@ -4664,14 +4689,34 @@ private fun TripHubPlanTimelineView(
     activePerspectiveMember: GroupMemberEntity? = null,
     onInspectBerthChart: (ExpenseEntity, LivePnrStatusSnapshot?) -> Unit = { _, _ -> },
     onDeleteExpense: (String) -> Unit = {},
-    /** v2.4.0: opens the day loop (null when the guide is off). */
-    onMakeLoop: (() -> Unit)? = null
+    /** v2.4.0: opens a day's loop (day number, or null for the whole trip); null when the guide is off. */
+    onMakeLoop: ((day: Int?) -> Unit)? = null,
+    /** rc14: the trip's days (explicit trip dates, else first..last booking). */
+    tripDays: com.splitmate.app.data.guide.TripDayRange? = null,
+    /** rc14: saves new trip dates (start of first day, end of last day); null hides the dates chip. */
+    onSetTripDates: ((startMs: Long, endMs: Long) -> Unit)? = null
 ) {
-    if (classifiedExpenses.isEmpty()) {
+    var showTripDates by remember { mutableStateOf(false) }
+    if (showTripDates && onSetTripDates != null) {
+        com.splitmate.app.ui.screens.plan.TripDatesPickerDialog(
+            range = tripDays,
+            onConfirm = { start, end ->
+                showTripDates = false
+                onSetTripDates(start, end)
+            },
+            onDismiss = { showTripDates = false }
+        )
+    }
+    if (classifiedExpenses.isEmpty() && tripDays == null) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp)
         ) {
+            if (onSetTripDates != null) {
+                item(key = "trip_dates") {
+                    com.splitmate.app.ui.screens.plan.TripDatesChip(range = null, onClick = { showTripDates = true })
+                }
+            }
             item(key = "empty_plan") {
                 // v2.4.0 D7: calm empty state; tickets land on their day once added.
                 com.splitmate.app.ui.components.CalmEmptyState(
@@ -4684,7 +4729,7 @@ private fun TripHubPlanTimelineView(
                 item(key = "empty_plan_loop") {
                     Box(modifier = Modifier.fillMaxWidth().padding(top = 12.dp), contentAlignment = Alignment.Center) {
                         androidx.compose.material3.FilledTonalButton(
-                            onClick = onMakeLoop,
+                            onClick = { onMakeLoop(null) },
                             shapes = ButtonDefaults.shapes(),
                             modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                         ) {
@@ -4700,11 +4745,15 @@ private fun TripHubPlanTimelineView(
     }
 
     val context = LocalContext.current
+    // rc14: grouped by calendar day; every trip day is listed, including days with nothing booked.
     val groupedByDay = remember(classifiedExpenses, context) {
         classifiedExpenses
             .map { (exp, cat) -> Triple(exp, cat, resolveExpenseSchedule(context, exp)) }
             .sortedWith(com.splitmate.app.ui.components.ExpenseOrdering.chronological({ it.first }, { it.third.effectiveEpochMs }))
-            .groupBy { it.third.fullDateLabel }
+            .groupBy { com.splitmate.app.data.guide.TripDays.epochDayOf(it.third.effectiveEpochMs) }
+    }
+    val allDays = remember(groupedByDay, tripDays) {
+        (groupedByDay.keys + tripDays?.days?.map { it.epochDay }.orEmpty()).distinct().sorted()
     }
 
     LazyColumn(
@@ -4712,8 +4761,26 @@ private fun TripHubPlanTimelineView(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 160.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        groupedByDay.entries.forEachIndexed { dayIndex, (dateHeader, dayItems) ->
-            item(key = "day_header_$dateHeader") {
+        if (onSetTripDates != null) {
+            item(key = "trip_dates") {
+                val motion = com.splitmate.app.ui.components.LocalMotionScheme.current
+                com.splitmate.app.ui.screens.plan.TripDatesChip(
+                    range = tripDays,
+                    onClick = { showTripDates = true },
+                    modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
+                )
+            }
+        }
+        allDays.forEachIndexed { dayIndex, epochDay ->
+            val dayItems = groupedByDay[epochDay].orEmpty()
+            val dateHeader = com.splitmate.app.data.guide.TripDays.fullLabel(epochDay)
+            val dayNumber = tripDays?.numberOf(epochDay)
+            val dayPill = when {
+                tripDays == null -> "Day ${dayIndex + 1}"
+                dayNumber != null -> "Day $dayNumber"
+                else -> "Outside trip dates"
+            }
+            item(key = "day_header_$epochDay") {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -4731,7 +4798,7 @@ private fun TripHubPlanTimelineView(
                             color = TripHubTokens.ActiveTabPillBg
                         ) {
                             Text(
-                                text = "Day ${dayIndex + 1}",
+                                text = dayPill,
                                 style = MaterialTheme.typography.labelSmall.merge(
                                     TextStyle(
                                         fontFamily = SplitMateTnumMonospace,
@@ -4755,21 +4822,21 @@ private fun TripHubPlanTimelineView(
                             color = TripHubTokens.TextPrimary
                         )
                     }
-                    if (onMakeLoop != null) {
-                        // v2.4.0 Trip Hub step 2: Loop plans one day's route, so it lives on the day.
+                    if (onMakeLoop != null && (tripDays == null || dayNumber != null)) {
+                        // v2.4.0 Trip Hub step 2 / rc14: each day's button opens THAT day's loop.
                         androidx.compose.material3.FilledTonalButton(
-                            onClick = onMakeLoop,
+                            onClick = { onMakeLoop(dayNumber) },
                             shapes = ButtonDefaults.shapes(),
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                             modifier = Modifier
                                 .defaultMinSize(minHeight = 40.dp)
-                                .semantics { contentDescription = "Make a loop for day ${dayIndex + 1}" }
+                                .semantics { contentDescription = "Make a loop for ${dayPill.lowercase()}" }
                         ) {
                             SymbolIcon(imageVector = Icons.Rounded.Route, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(text = "Make a loop", style = MaterialTheme.typography.labelLarge)
                         }
-                    } else {
+                    } else if (dayItems.isNotEmpty()) {
                         Text(
                             text = "${dayItems.size} ${if (dayItems.size == 1) "item" else "items"}",
                             style = MaterialTheme.typography.labelSmall.merge(
@@ -4785,6 +4852,20 @@ private fun TripHubPlanTimelineView(
                 }
             }
 
+            if (dayItems.isEmpty()) {
+                item(key = "day_empty_$epochDay") {
+                    // rc14: reduced-motion aware tokens (LocalMotionScheme snaps under "Remove animations").
+                    val motion = com.splitmate.app.ui.components.LocalMotionScheme.current
+                    Text(
+                        text = "Nothing booked yet",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TripHubTokens.TextMuted,
+                        modifier = Modifier
+                            .padding(start = 4.dp)
+                            .animateItem(fadeInSpec = motion.fastEffectsSpec(), placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = motion.fastEffectsSpec())
+                    )
+                }
+            }
             itemsIndexed(
                 items = dayItems,
                 key = { _, it -> "plan_${it.first.expenseId}" }

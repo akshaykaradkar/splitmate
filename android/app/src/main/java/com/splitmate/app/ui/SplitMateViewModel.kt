@@ -1627,6 +1627,27 @@ class SplitMateViewModel(
         syncActiveGroupNow(groupId = groupId)
     }
 
+    /**
+     * v2.4.0 rc14: trip dates for per-day loops. Anyone in the trip can set them (last change wins,
+     * like other trip edits). Stored in the synced trip lifecycle record, which already had
+     * start/end fields; wrap-up state and the reopen stamp are kept as they are.
+     */
+    fun setTripDates(groupId: String, startEpochMs: Long, endEpochMs: Long) {
+        if (groupId.isBlank() || startEpochMs <= 0L) return
+        val existing = com.splitmate.app.data.GroupLedgerExtrasStore.tripLifecycle(groupId)
+        val end = endEpochMs.coerceAtLeast(startEpochMs)
+        if (existing?.startDateEpochMs == startEpochMs && existing.endDateEpochMs == end) return
+        val now = System.currentTimeMillis()
+        val base = existing ?: com.splitmate.app.data.TripLifecycleRecord()
+        val record = base.copy(
+            startDateEpochMs = startEpochMs,
+            endDateEpochMs = end,
+            updatedAtEpochMs = maxOf(now, base.updatedAtEpochMs + 1)
+        )
+        com.splitmate.app.data.GroupLedgerExtrasStore.setTripLifecycle(null, groupId, record)
+        syncActiveGroupNow(groupId = groupId)
+    }
+
     fun setOfflineMode(offline: Boolean) {
         _uiState.update { it.copy(isOfflineMode = offline) }
     }

@@ -27,9 +27,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 @Composable
 fun TripPlanTabHost(
     groupId: String,
-    bookingsContent: @Composable (onMakeLoop: (() -> Unit)?) -> Unit,
+    bookingsContent: @Composable (onMakeLoop: ((day: Int?) -> Unit)?) -> Unit,
     onSubViewChanged: (PlanSubView) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** rc14: the trip's days (explicit trip dates, else first..last booking). */
+    tripDays: com.splitmate.app.data.guide.TripDayRange? = null,
+    /** rc14: saves the derived day range as the trip dates so day numbers can't shift later. */
+    onFreezeTripDates: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val factory = remember(groupId) { TripGuideViewModel.factory(context, groupId) }
@@ -61,6 +65,8 @@ fun TripPlanTabHost(
         actions = vm,
         effects = vm.effects,
         bookingsContent = bookingsContent,
-        modifier = modifier
+        modifier = modifier,
+        tripDays = tripDays,
+        onFreezeTripDates = onFreezeTripDates
     )
 }

@@ -127,8 +127,9 @@ class SplitMateV234PlanUiComplianceTest {
             assertTrue(
                 Regex(
                     """fun TripPlanTab\(\s*state: TripGuideUiState,\s*actions: TripGuideActions,\s*""" +
-                        """effects: Flow<TripGuideEffect>,\s*bookingsContent: @Composable \(onMakeLoop: \(\(\) -> Unit\)\?\) -> Unit,\s*""" +
-                        """modifier: Modifier = Modifier\s*\)"""
+                        """effects: Flow<TripGuideEffect>,\s*bookingsContent: @Composable \(onMakeLoop: \(\(day: Int\?\) -> Unit\)\?\) -> Unit,\s*""" +
+                        // rc14: the day-aware loop callback; trip days follow modifier as optional params.
+                        """modifier: Modifier = Modifier"""
                 ).containsMatchIn(s),
                 "TripPlanTab signature changed"
             )
@@ -233,7 +234,9 @@ class SplitMateV234PlanUiComplianceTest {
             assertTrue(functionBody(components, "PlanSectionHeader").contains("MaterialTheme.typography.headlineLarge"))
             assertTrue(explore.contains("PlanSectionHeader("))
             assertTrue(explore.contains("\"Where is this trip headed?\""))
-            assertTrue(loop.contains("\"Today's loop from your stay\""))
+            // rc14: the title is per day ("Day 2 loop from your stay" / "Your loop from your stay").
+            assertTrue(loop.contains("targetState = loopTitle("))
+            assertTrue(stripComments(plan("TripDaysUi.kt")).contains("\"Day \$day loop from your stay\""))
             assertTrue(loop.contains("MaterialTheme.typography.headlineLarge"))
         }
 
@@ -413,8 +416,8 @@ class SplitMateV234PlanUiComplianceTest {
             val s = plan("TripPlanTabHost.kt")
             assertTrue(
                 Regex(
-                    """fun TripPlanTabHost\(\s*groupId: String,\s*bookingsContent: @Composable \(onMakeLoop: \(\(\) -> Unit\)\?\) -> Unit,\s*""" +
-                        """onSubViewChanged: \(PlanSubView\) -> Unit,\s*modifier: Modifier = Modifier\s*\)"""
+                    """fun TripPlanTabHost\(\s*groupId: String,\s*bookingsContent: @Composable \(onMakeLoop: \(\(day: Int\?\) -> Unit\)\?\) -> Unit,\s*""" +
+                        """onSubViewChanged: \(PlanSubView\) -> Unit,\s*modifier: Modifier = Modifier"""
                 ).containsMatchIn(s)
             )
         }

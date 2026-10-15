@@ -350,6 +350,18 @@ class TripGuideRepository(
         }
     }
 
+    /**
+     * v2.4.0 rc14: puts a place on [day] (1..30), or back to "Not planned yet" with null. Pins it if
+     * it wasn't pinned. Day assignment is LWW by pin time in [PlanManifestMerger], so this re-pins
+     * with a fresh timestamp; it runs through the atomic [editManifest]. Keeps the header.
+     */
+    suspend fun setPlaceDay(groupId: String, placeId: String, day: Int?, memberKey: String?): PlanManifest? {
+        if (!PlanManifestCodec.isValidPlaceId(placeId) || placeId == PlanManifestCodec.STAY_ID) return null
+        if (day != null && day !in 1..PlanManifestCodec.MAX_DAY) return null
+        val now = clock()
+        return editManifest(groupId) { m -> PlanManifestMerger.pin(m, placeId, memberKey, now, day).withHeaderOf(m) }
+    }
+
     /** Hides a place for the whole group (always strictly newer than any pin). Keeps the header. */
     suspend fun hide(groupId: String, placeId: String, memberKey: String?): PlanManifest? {
         if (!PlanManifestCodec.isValidPlaceId(placeId) || placeId == PlanManifestCodec.STAY_ID) return null

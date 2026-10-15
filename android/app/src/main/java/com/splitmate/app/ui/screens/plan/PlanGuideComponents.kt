@@ -531,9 +531,18 @@ private fun DirectionsMenuItem(label: String, icon: ImageVector, onClick: () -> 
     )
 }
 
-/** Tonal secondary action: "Add to loop" / "In loop" (pinned). */
+/** rc14: the day Explore is adding places to (set when Explore was opened from a day's loop). */
+val LocalExploreTargetDay = androidx.compose.runtime.compositionLocalOf<Int?> { null }
+
+/** Tonal secondary action: "Add to loop" / "Add to Day N" / "In loop" (pinned). */
 @Composable
 fun AddToLoopToggle(pinned: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+    val targetDay = LocalExploreTargetDay.current
+    AddToLoopToggleContent(pinned = pinned, targetDay = targetDay, onToggle = onToggle, modifier = modifier)
+}
+
+@Composable
+private fun AddToLoopToggleContent(pinned: Boolean, targetDay: Int?, onToggle: () -> Unit, modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
     val colors = if (pinned) {
         ButtonDefaults.filledTonalButtonColors(
@@ -561,7 +570,11 @@ fun AddToLoopToggle(pinned: Boolean, onToggle: () -> Unit, modifier: Modifier = 
         )
         Spacer(modifier = Modifier.width(6.dp))
         Text(
-            text = if (pinned) "In loop" else "Add to loop",
+            text = when {
+                pinned -> "In loop"
+                targetDay != null -> "Add to Day $targetDay"
+                else -> "Add to loop"
+            },
             style = MaterialTheme.typography.labelLarge,
             maxLines = 1
         )

@@ -67,8 +67,20 @@ object SplitMateMotion {
     /** The official Material 3 Expressive motion scheme (plain object, no composition needed). */
     private val expressive: MotionScheme = MotionScheme.expressive()
 
+    /**
+     * v2.4.0 rc14: "Remove animations" (ANIMATOR_DURATION_SCALE == 0) for code that reads these
+     * tokens directly instead of [LocalMotionScheme] (Trip Hub, sheets, cards). The theme sets it
+     * on every composition; when true every token settles instantly, matching the reduced scheme.
+     */
+    @Volatile
+    var reducedMotion: Boolean = false
+
+    /** Critically damped and so stiff it settles within a frame: the SpringSpec form of `snap()`. */
+    const val INSTANT_STIFFNESS = 100_000f
+
     private fun <T> springFrom(spec: FiniteAnimationSpec<T>, damping: Float, stiffness: Float): SpringSpec<T> =
-        (spec as? SpringSpec<T>) ?: spring(dampingRatio = damping, stiffness = stiffness)
+        if (reducedMotion) spring(dampingRatio = 1f, stiffness = INSTANT_STIFFNESS)
+        else (spec as? SpringSpec<T>) ?: spring(dampingRatio = damping, stiffness = stiffness)
 
     fun <T> fastSpatial(): SpringSpec<T> =
         springFrom(expressive.fastSpatialSpec(), FAST_SPATIAL_DAMPING, FAST_SPATIAL_STIFFNESS)

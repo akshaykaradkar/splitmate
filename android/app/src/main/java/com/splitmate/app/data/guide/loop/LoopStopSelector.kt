@@ -14,7 +14,11 @@ data class LoopStopSelection(
     /** Pinned places that could not be routed because they have no coordinates (UI may explain). */
     val pinnedWithoutCoordinates: List<Place>,
     /** True when more than [LoopStopSelector.MAX_LOOP_STOPS] pinned stops were truncated. */
-    val truncated: Boolean
+    val truncated: Boolean,
+    /** rc14: pinned places with no day yet ("Not planned yet"); filled only in per-day mode. */
+    val unplanned: List<Place> = emptyList(),
+    /** rc14: true once any pinned place has a day, so each day routes only its own places. */
+    val perDay: Boolean = false
 )
 
 /**
@@ -41,7 +45,11 @@ object LoopStopSelector {
         pinned: Map<String, Long>,
         hidden: Map<String, Long>,
         stay: LatLng? = null,
-        autoLimit: Int = AUTO_SUGGEST_LIMIT
+        autoLimit: Int = AUTO_SUGGEST_LIMIT,
+        /** rc14: placeId -> day number (PlanManifest.days). */
+        days: Map<String, Int> = emptyMap(),
+        /** rc14: the day being planned; null = the whole trip (legacy single loop). */
+        day: Int? = null
     ): LoopStopSelection {
         val unique = dedupe(candidates)
 
@@ -52,13 +60,30 @@ object LoopStopSelector {
             .distinctBy { it.id }
             .filter { isPinned(it.id, pinned, hidden) }
         if (pinnedPlaces.isNotEmpty()) {
+            // rc14: per-day mode starts once any pinned place has a day. Until then (existing trips)
+            // every day shows every pinned place, exactly as before.
+            val perDay = pinnedPlaces.any { days[it.id] != null }
+            if (perDay && day != null) {
+                val onDay = pinnedPlaces.filter { days[it.id] == day }
+                val (dayCoords, dayNoCoords) = onDay.partition { it.location != null }
+                val ranked = dayCoords.sortedWith(rankComparator(stay))
+                return LoopStopSelection(
+                    stops = ranked.take(MAX_LOOP_STOPS),
+                    autoSuggested = false,
+                    pinnedWithoutCoordinates = dayNoCoords.sortedBy { it.id },
+                    truncated = ranked.size > MAX_LOOP_STOPS,
+                    unplanned = pinnedPlaces.filter { days[it.id] == null }.sortedWith(rankComparator(stay)),
+                    perDay = true
+                )
+            }
             val (withCoords, withoutCoords) = pinnedPlaces.partition { it.location != null }
             val ranked = withCoords.sortedWith(rankComparator(stay))
             return LoopStopSelection(
                 stops = ranked.take(MAX_LOOP_STOPS),
                 autoSuggested = false,
                 pinnedWithoutCoordinates = withoutCoords.sortedBy { it.id },
-                truncated = ranked.size > MAX_LOOP_STOPS
+                truncated = ranked.size > MAX_LOOP_STOPS,
+                perDay = perDay
             )
         }
 

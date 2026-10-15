@@ -2657,6 +2657,9 @@ fun SplitMateExpressiveTheme(
 
     // v2.3.4: MotionScheme shim + reduced-motion flag (ANIMATOR_DURATION_SCALE == 0 => snap).
     val reducedMotion = rememberReducedMotionEnabled()
+    // rc14: direct SplitMateMotion.* tokens follow the same flag (set during composition so even
+    // the first frame of children reads it; idempotent).
+    com.splitmate.app.ui.components.SplitMateMotion.reducedMotion = reducedMotion
     val motionScheme = if (reducedMotion) SplitMateMotionScheme.reduced() else SplitMateMotionScheme.expressive()
 
     CompositionLocalProvider(

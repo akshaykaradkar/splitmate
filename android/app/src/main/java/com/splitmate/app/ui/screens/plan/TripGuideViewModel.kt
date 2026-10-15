@@ -186,7 +186,35 @@ class TripGuideViewModel(
 
     override fun selectSubView(view: PlanSubView) {
         if (!flags.guideEnabled && view != PlanSubView.BOOKINGS) return
-        _uiState.update { it.copy(subView = view) }
+        _uiState.update { s ->
+            // rc14: Explore picked from the Days | Explore switch (or going back to Days) is not "for a day".
+            val keepTarget = view == PlanSubView.LOOP || (view == PlanSubView.EXPLORE && s.subView == PlanSubView.LOOP)
+            s.copy(subView = view, exploreTargetDay = if (keepTarget) s.exploreTargetDay else null)
+        }
+    }
+
+    override fun selectLoopDay(day: Int?) {
+        _uiState.update { it.copy(loopDay = day) }
+        render()
+    }
+
+    override fun openExploreForDay(day: Int?) {
+        if (!flags.guideEnabled) return
+        _uiState.update { it.copy(subView = PlanSubView.EXPLORE, exploreTargetDay = day) }
+    }
+
+    override fun movePlaceToDay(placeId: String, day: Int?) {
+        if (!flags.guideEnabled) return
+        viewModelScope.launch {
+            val updated = repository.setPlaceDay(groupId, placeId, day, memberKey())
+            if (updated == null) {
+                emit(TripGuideEffect.Snackbar(MSG_PLAN_EDIT_FAILED))
+                return@launch
+            }
+            manifest = updated
+            render()
+            schedulePublish()
+        }
     }
 
     override fun updateDestinationQuery(query: String) {
@@ -260,6 +288,12 @@ class TripGuideViewModel(
 
     override fun togglePin(placeId: String) {
         if (!flags.guideEnabled) return
+        // rc14: from a day's loop, "Add to loop" places the stop straight onto that day.
+        val targetDay = _uiState.value.exploreTargetDay
+        if (targetDay != null && !LoopStopSelector.isPinned(placeId, manifest.pinned, manifest.hidden)) {
+            movePlaceToDay(placeId, targetDay)
+            return
+        }
         viewModelScope.launch {
             val updated = repository.togglePin(groupId, placeId, memberKey())
             if (updated == null) {
@@ -786,9 +820,10 @@ class TripGuideViewModel(
 
     private fun loopFor(pack: GuidePack?, stay: LatLng?): LoopUi {
         if (pack == null) return EMPTY_LOOP
-        val key = listOf(pack, manifest.pinned, manifest.hidden, stay)
+        val day = _uiState.value.loopDay
+        val key = listOf(pack, manifest.pinned, manifest.hidden, manifest.days, stay, day)
         if (key == loopCacheKey) return loopCache
-        val loop = TripGuidePresenter.buildLoop(pack, manifest, stay, repository.optimizer)
+        val loop = TripGuidePresenter.buildLoop(pack, manifest, stay, repository.optimizer, day)
         loopCacheKey = key
         loopCache = loop
         return loop
@@ -1050,8 +1085,10 @@ internal object TripGuidePresenter {
         if (pack.nearby.any { it.source == PlaceSource.WIKIDATA }) pack.attribution + WIKIDATA_NEARBY_ATTRIBUTION
         else pack.attribution
 
-    fun buildLoop(pack: GuidePack, manifest: PlanManifest, stay: LatLng?, optimizer: LoopOptimizer): LoopUi {
-        val selection = LoopStopSelector.select(pack.places + pack.nearby, manifest.pinned, manifest.hidden, stay)
+    fun buildLoop(pack: GuidePack, manifest: PlanManifest, stay: LatLng?, optimizer: LoopOptimizer, day: Int? = null): LoopUi {
+        val selection = LoopStopSelector.select(
+            pack.places + pack.nearby, manifest.pinned, manifest.hidden, stay, days = manifest.days, day = day
+        )
         val route = stay?.let { optimizer.optimize(it, selection.stops) }
         val hasStops = route != null && route.orderedStops.isNotEmpty()
         return LoopUi(
@@ -1060,7 +1097,10 @@ internal object TripGuidePresenter {
             stopsWithoutCoordinates = selection.pinnedWithoutCoordinates,
             truncated = selection.truncated,
             totalLabel = if (hasStops) totalLabel(route!!) else null,
-            caveats = if (hasStops) LOOP_CAVEATS else emptyList()
+            caveats = if (hasStops) LOOP_CAVEATS else emptyList(),
+            day = day,
+            unplanned = selection.unplanned,
+            perDay = selection.perDay
         )
     }
 

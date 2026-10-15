@@ -1,5 +1,8 @@
 package com.splitmate.app.screenshots
 
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
@@ -335,6 +338,44 @@ class DarkModeSweepTest(private val themeName: String) {
     @Test fun p01_plan_loop() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Plan", exact = true); tap(text = "Make a loop"); shot("p01_plan_loop") }
     /** rc13: Plan › Explore (offline in tests: the destination / guide entry state). */
     @Test fun p02_plan_explore() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Plan", exact = true); tap(text = "Explore", exact = true); shot("p02_plan_explore") }
+
+    /** rc14: the per-day Loop components (day toggle buttons, expressive Move-to-day menu, segmented tray). */
+    @OptIn(com.github.takahirom.roborazzi.ExperimentalRoborazziApi::class)
+    @Test fun p03_per_day_components() {
+        val vm = SplitMateViewModel()
+        vm.setExpressiveThemeMode(mode, compose.activity)
+        val start = java.time.LocalDate.of(2026, 10, 15).toEpochDay()
+        val range = com.splitmate.app.data.guide.TripDayRange(start, start + 3, explicit = true)
+        fun place(id: String, name: String) = com.splitmate.app.data.guide.Place(
+            id = id, kind = com.splitmate.app.data.guide.PlaceKind.SEE, name = name,
+            location = com.splitmate.app.data.guide.LatLng(15.5, 73.8), source = com.splitmate.app.data.guide.PlaceSource.WIKIDATA
+        )
+        compose.setContent {
+            val ui by vm.uiState.collectAsStateWithLifecycle()
+            SplitMateMaterial3ExpressiveTheme(themeMode = ui.activeThemeMode, darkTheme = ui.isDarkTheme) {
+                androidx.compose.material3.Surface(color = androidx.compose.material3.MaterialTheme.colorScheme.surface) {
+                    androidx.compose.foundation.layout.Column(
+                        modifier = androidx.compose.ui.Modifier.fillMaxSize().padding(16.dp),
+                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)
+                    ) {
+                        androidx.compose.material3.Text("Day 2 loop from your stay", style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
+                        com.splitmate.app.ui.screens.plan.LoopDayPicker(range = range, selectedDay = 2, onSelect = {})
+                        androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            androidx.compose.material3.Text("Fort Aguada", modifier = androidx.compose.ui.Modifier.weight(1f))
+                            com.splitmate.app.ui.screens.plan.MoveToDayButton(placeName = "Fort Aguada", range = range, currentDay = 2, onMove = {})
+                        }
+                        com.splitmate.app.ui.screens.plan.UnplannedTray(
+                            places = listOf(place("wd:Q1", "Chapora Fort"), place("wd:Q2", "Anjuna Flea Market"), place("wd:Q3", "Baga Beach")),
+                            day = 2, onAddToDay = {}, onOpen = {}
+                        )
+                    }
+                }
+            }
+        }
+        settle()
+        tap(desc = "Move Fort Aguada to another day")
+        com.github.takahirom.roborazzi.captureScreenRoboImage("$outDir/p03_per_day_components.png")
+    }
     @Test fun s05_trip_money() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Money"); shot("s05_trip_money") }
     @Test fun s06_trip_money_scrolled() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Money"); scrollDown(0.65f); shot("s06_trip_money_scrolled") }
     @Test fun s07_trip_people() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "People"); shot("s07_trip_people") }

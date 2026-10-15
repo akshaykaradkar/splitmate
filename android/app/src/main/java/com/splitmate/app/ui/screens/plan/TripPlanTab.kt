@@ -62,11 +62,26 @@ fun TripPlanTab(
     state: TripGuideUiState,
     actions: TripGuideActions,
     effects: Flow<TripGuideEffect>,
-    bookingsContent: @Composable (onMakeLoop: (() -> Unit)?) -> Unit,
-    modifier: Modifier = Modifier
+    bookingsContent: @Composable (onMakeLoop: ((day: Int?) -> Unit)?) -> Unit,
+    modifier: Modifier = Modifier,
+    /** rc14: the trip's days; null until there are bookings or trip dates. */
+    tripDays: com.splitmate.app.data.guide.TripDayRange? = null,
+    onFreezeTripDates: () -> Unit = {}
 ) {
     val motion = LocalMotionScheme.current
     val snackbarHostState = remember { SnackbarHostState() }
+    // rc14: "Add to loop" in Explore/the place sheet puts the stop on a day when Explore was opened
+    // from a day's loop; that first day assignment also freezes the trip dates.
+    val latestFreeze by rememberUpdatedState(onFreezeTripDates)
+    val targetDay = state.exploreTargetDay
+    val dayAwareActions: TripGuideActions = remember(actions, targetDay) {
+        if (targetDay == null) actions else object : TripGuideActions by actions {
+            override fun togglePin(placeId: String) {
+                latestFreeze()
+                actions.togglePin(placeId)
+            }
+        }
+    }
     PlanEffectsCollector(effects = effects, snackbarHostState = snackbarHostState)
 
     // Remote kill-switch: without the guide only Bookings remains, so the switch disappears.
@@ -164,17 +179,28 @@ fun TripPlanTab(
             ) { view ->
                 when (view) {
                     PlanSubView.BOOKINGS -> bookingsContent(
-                        if (state.guideEnabled) ({ actions.selectSubView(PlanSubView.LOOP) }) else null
+                        // rc14: each day's "Make a loop" opens that day's loop.
+                        if (state.guideEnabled) ({ day ->
+                            actions.selectLoopDay(day)
+                            actions.selectSubView(PlanSubView.LOOP)
+                        }) else null
                     )
-                    PlanSubView.EXPLORE -> ExploreGuideView(
-                        state = state,
-                        actions = actions,
-                        onOpenStaySheet = openStaySheet
-                    )
+                    PlanSubView.EXPLORE -> androidx.compose.runtime.CompositionLocalProvider(LocalExploreTargetDay provides targetDay) {
+                        ExploreGuideView(
+                            state = state,
+                            actions = dayAwareActions,
+                            onOpenStaySheet = openStaySheet
+                        )
+                    }
                     PlanSubView.LOOP -> DayLoopView(
                         state = state,
                         actions = actions,
-                        onSetStay = openStaySheet
+                        onSetStay = openStaySheet,
+                        tripDays = tripDays,
+                        onMovePlaceToDay = { placeId, day ->
+                            if (day != null) onFreezeTripDates()
+                            actions.movePlaceToDay(placeId, day)
+                        }
                     )
                 }
             }
@@ -192,12 +218,14 @@ fun TripPlanTab(
         val card = remember(selected, state.sections) {
             state.sections.asSequence().flatMap { it.places.asSequence() }.firstOrNull { it.place.id == selected.id }
         }
-        PlaceDetailSheet(
-            place = selected,
-            card = card,
-            actions = actions,
-            onDismiss = { actions.dismissPlace() }
-        )
+        androidx.compose.runtime.CompositionLocalProvider(LocalExploreTargetDay provides targetDay) {
+            PlaceDetailSheet(
+                place = selected,
+                card = card,
+                actions = dayAwareActions,
+                onDismiss = { actions.dismissPlace() }
+            )
+        }
     }
 
     if (staySheetVisible) {

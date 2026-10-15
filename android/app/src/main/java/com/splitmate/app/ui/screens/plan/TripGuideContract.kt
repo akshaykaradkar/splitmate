@@ -80,13 +80,23 @@ data class LoopUi(
     val stopsWithoutCoordinates: List<Place>,
     val truncated: Boolean,
     val totalLabel: String?,                // e.g. "6 stops · ≈ 14.2 km"
-    val caveats: List<String>               // straight-line / ferry / sunset copy
+    val caveats: List<String>,              // straight-line / ferry / sunset copy
+    /** rc14: the day this loop plans (null = whole trip). */
+    val day: Int? = null,
+    /** rc14: pinned places with no day yet, shown in the "Not planned yet" tray. */
+    val unplanned: List<Place> = emptyList(),
+    /** rc14: true once any place has a day (each day then routes only its own places). */
+    val perDay: Boolean = false
 )
 
 data class TripGuideUiState(
     val subView: PlanSubView = PlanSubView.BOOKINGS,
     /** rc13: non-empty while the "Open in Google Maps" part picker is showing (loops over 9 stops). */
     val loopMapsParts: List<com.splitmate.app.data.guide.nav.MapsHandoff.LoopMapsPart> = emptyList(),
+    /** rc14: the day the Loop is planning (null = whole trip / no trip days yet). */
+    val loopDay: Int? = null,
+    /** rc14: set when Explore was opened from a day's loop; "Add to loop" then places on that day. */
+    val exploreTargetDay: Int? = null,
     val guideEnabled: Boolean = true,       // remote kill-switch
     val phase: GuidePhase = GuidePhase.Empty,
     /** True ONLY while a network job is in flight (drives InFlightWavyProgressIndicator). */
@@ -160,5 +170,12 @@ interface TripGuideActions {
     /** rc13: open one part of a long loop (the picker shown when it has more than 9 stops). */
     fun openLoopMapsPart(index: Int) = Unit
     fun dismissLoopMapsParts() = Unit
+
+    /** rc14: plan [day] (1-based) in the Loop; null = whole trip. */
+    fun selectLoopDay(day: Int?) = Unit
+    /** rc14: put a place on [day], or back to "Not planned yet" with null. */
+    fun movePlaceToDay(placeId: String, day: Int?) = Unit
+    /** rc14: open Explore so places added there go onto [day]. */
+    fun openExploreForDay(day: Int?) = Unit
     fun shareLoop()
 }

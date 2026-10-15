@@ -26,6 +26,7 @@ internal val MaterialSymbolCodepoints: Map<String, Int> = hashMapOf(
     "Bedtime" to 0xf159, // bedtime
     "Bolt" to 0xea0b, // bolt
     "Cabin" to 0xe589, // cabin
+    "CalendarMonth" to 0xebcc, // calendar_month
     "CarRental" to 0xea55, // car_rental
     "CardGiftcard" to 0xe8f6, // card_giftcard
     "Casino" to 0xeb40, // casino
@@ -57,6 +58,7 @@ internal val MaterialSymbolCodepoints: Map<String, Int> = hashMapOf(
     "DirectionsWalk" to 0xe536, // directions_walk
     "DownloadForOffline" to 0xf000, // download_for_offline
     "Edit" to 0xf097, // edit
+    "EditCalendar" to 0xe742, // edit_calendar
     "EditLocationAlt" to 0xe1c5, // edit_location_alt
     "ElectricBolt" to 0xec1c, // electric_bolt
     "ElectricRickshaw" to 0xeb1e, // electric_rickshaw
@@ -83,6 +85,7 @@ internal val MaterialSymbolCodepoints: Map<String, Int> = hashMapOf(
     "House" to 0xea44, // house
     "Icecream" to 0xea69, // icecream
     "Info" to 0xe88e, // info
+    "Inventory2" to 0xe1a1, // inventory_2
     "Kayaking" to 0xe50c, // kayaking
     "KeyboardArrowDown" to 0xe313, // keyboard_arrow_down
     "KeyboardArrowRight" to 0xe315, // keyboard_arrow_right
