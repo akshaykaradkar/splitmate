@@ -23,6 +23,10 @@ import kotlin.math.abs
  * - n ≤ [exactMaxStops] (default 12): Held-Karp exact DP, O(n²·2ⁿ).
  * - otherwise: nearest-neighbour from the stay, then first-improvement 2-opt in fixed scan order
  *   until no improving move remains. 2-opt assumes a symmetric matrix (true for Haversine).
+ *   v2.4.0 rc13: then Or-opt (move a run of 1-3 consecutive stops, either direction, to a cheaper
+ *   spot), alternating with 2-opt until neither improves. Still deterministic, never worse than
+ *   2-opt alone. It narrows the gap to the exact optimum but can't guarantee it, so the UI says
+ *   "a short round trip", not "the shortest".
  *
  * The route starts and ends at [start] (the stay). [LoopRoute.legStraightKm] has
  * `orderedStops.size + 1` entries (the last one is the return leg), and
@@ -49,7 +53,7 @@ class DeterministicLoopOptimizer(
         val raw: IntArray = when {
             n == 0 -> IntArray(0)
             n <= exactMaxStops -> heldKarp(d, n)
-            else -> twoOpt(nearestNeighbour(d, n), d)
+            else -> improve(nearestNeighbour(d, n), d)
         }
         val order = orient(raw, d)
 
@@ -78,6 +82,9 @@ class DeterministicLoopOptimizer(
         private const val IMPROVEMENT_EPS = 1e-9
         private const val TIE_EPS = 1e-12
         private const val MAX_TWO_OPT_PASSES = 1_000
+        private const val MAX_OR_OPT_MOVES = 10_000
+        private const val MAX_IMPROVE_ROUNDS = 100
+        private const val OR_OPT_MAX_SEGMENT = 3
 
         private val CANONICAL_ORDER: Comparator<Place> = compareBy<Place>(
             { it.id }, { it.name }, { it.location?.lat }, { it.location?.lng }
@@ -192,6 +199,72 @@ class DeterministicLoopOptimizer(
                 }
             }
             return r.copyOfRange(1, n + 1)
+        }
+
+        /** 2-opt, then alternate Or-opt and 2-opt until neither improves the closed tour. */
+        internal fun improve(order: IntArray, d: Array<DoubleArray>): IntArray {
+            var best = twoOpt(order, d)
+            var bestCost = tourCost(best, d)
+            var rounds = 0
+            while (rounds++ < MAX_IMPROVE_ROUNDS) {
+                val moved = orOpt(best, d)
+                val candidate = twoOpt(moved, d)
+                val cost = tourCost(candidate, d)
+                if (cost < bestCost - IMPROVEMENT_EPS) {
+                    best = candidate
+                    bestCost = cost
+                } else {
+                    break
+                }
+            }
+            return best
+        }
+
+        /**
+         * First-improvement Or-opt on the closed tour `0 → order… → 0`: takes a run of 1..3
+         * consecutive stops and re-inserts it (as is or reversed) between two other neighbours when
+         * that shortens the tour. Fixed scan order (segment length, then position, then slot), so
+         * it is deterministic. Never returns a costlier tour than the input.
+         */
+        internal fun orOpt(order: IntArray, d: Array<DoubleArray>): IntArray {
+            val n = order.size
+            if (n < 3) return order.copyOf()
+            var tour = order.toMutableList()
+            var moves = 0
+            var improved = true
+            while (improved && moves < MAX_OR_OPT_MOVES) {
+                improved = false
+                search@ for (len in 1..minOf(OR_OPT_MAX_SEGMENT, n - 1)) {
+                    for (i in 0..n - len) {
+                        val s0 = tour[i]
+                        val sLast = tour[i + len - 1]
+                        val prev = if (i == 0) 0 else tour[i - 1]
+                        val next = if (i + len == n) 0 else tour[i + len]
+                        val removeGain = d[prev][s0] + d[sLast][next] - d[prev][next]
+                        val rest = ArrayList<Int>(n - len).apply {
+                            addAll(tour.subList(0, i)); addAll(tour.subList(i + len, n))
+                        }
+                        for (p in 0..rest.size) {
+                            if (p == i) continue // same place
+                            val a = if (p == 0) 0 else rest[p - 1]
+                            val b = if (p == rest.size) 0 else rest[p]
+                            val forward = d[a][s0] + d[sLast][b] - d[a][b]
+                            val reversed = d[a][sLast] + d[s0][b] - d[a][b]
+                            val useReversed = reversed < forward - TIE_EPS
+                            val add = if (useReversed) reversed else forward
+                            if (add - removeGain < -IMPROVEMENT_EPS) {
+                                val seg = tour.subList(i, i + len).toList().let { if (useReversed) it.reversed() else it }
+                                rest.addAll(p, seg)
+                                tour = rest
+                                improved = true
+                                moves++
+                                break@search
+                            }
+                        }
+                    }
+                }
+            }
+            return tour.toIntArray()
         }
 
         /** Cost of the closed tour `0 → order… → 0`. */

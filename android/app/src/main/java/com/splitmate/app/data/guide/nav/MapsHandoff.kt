@@ -97,6 +97,31 @@ object MapsHandoff {
         return loopDirectionsUrls(route.start, stopPoints, mode, maxWaypoints)
     }
 
+    /** One Google Maps link of a long loop, with a human label ("Part 2 · Stop 9 → your stay"). */
+    data class LoopMapsPart(val label: String, val url: String)
+
+    /**
+     * v2.4.0 rc13 (audit M-1): the same segments as [loopDirectionsUrls], each labelled with where
+     * it starts and ends, so a loop with more than [maxWaypoints] stops can be opened part by part
+     * instead of only ever opening part 1.
+     */
+    fun loopDirectionsParts(
+        route: LoopRoute,
+        mode: TravelMode? = null,
+        maxWaypoints: Int = MAX_WAYPOINTS_PER_URL
+    ): List<LoopMapsPart> {
+        val urls = loopDirectionsUrls(route, mode, maxWaypoints)
+        val last = route.orderedStops.count { it.location != null } + 1
+        var s = 0
+        return urls.mapIndexed { i, url ->
+            val e = minOf(s + maxWaypoints + 1, last)
+            val from = if (s == 0) "your stay" else "Stop $s"
+            val to = if (e == last) "your stay" else "Stop $e"
+            s = e
+            LoopMapsPart(label = "Part ${i + 1} · $from → $to", url = url)
+        }
+    }
+
     /** Same as the [LoopRoute] overload, from raw points. */
     fun loopDirectionsUrls(
         stay: LatLng,

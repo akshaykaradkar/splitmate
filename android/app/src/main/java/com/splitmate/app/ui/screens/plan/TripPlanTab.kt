@@ -2,6 +2,10 @@
 
 package com.splitmate.app.ui.screens.plan
 
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Map
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -92,10 +96,23 @@ fun TripPlanTab(
         actions.dismissStayFeedback()
     }
 
+    // rc13 (audit H-2): Explore opened from the Loop ("Go to Explore") goes Back to the Loop, not Days.
+    var exploreOpenedFromLoop by rememberSaveable { mutableStateOf(false) }
+    var lastView by remember { mutableStateOf(current) }
+    LaunchedEffect(current) {
+        when (current) {
+            PlanSubView.EXPLORE -> if (lastView == PlanSubView.LOOP) exploreOpenedFromLoop = true
+            PlanSubView.BOOKINGS -> exploreOpenedFromLoop = false
+            PlanSubView.LOOP -> exploreOpenedFromLoop = false
+        }
+        lastView = current
+    }
+
     BackHandler(enabled = staySheetVisible || state.selectedPlace != null || current != PlanSubView.BOOKINGS) {
         when {
             staySheetVisible -> dismissStaySheet()
             state.selectedPlace != null -> actions.dismissPlace()
+            current == PlanSubView.EXPLORE && exploreOpenedFromLoop -> actions.selectSubView(PlanSubView.LOOP)
             current != PlanSubView.BOOKINGS -> actions.selectSubView(PlanSubView.BOOKINGS)
         }
     }
@@ -112,7 +129,7 @@ fun TripPlanTab(
                         shapes = ButtonDefaults.shapes(),
                         modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                     ) {
-                        androidx.compose.material3.Icon(
+                        com.splitmate.app.ui.components.SymbolIcon(
                             imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Rounded.ArrowBack,
                             contentDescription = null
                         )
@@ -189,6 +206,75 @@ fun TripPlanTab(
             actions = actions,
             onDismiss = dismissStaySheet
         )
+    }
+
+    if (state.loopMapsParts.isNotEmpty()) {
+        LoopMapsPartsSheet(
+            parts = state.loopMapsParts,
+            onOpen = { actions.openLoopMapsPart(it) },
+            onDismiss = { actions.dismissLoopMapsParts() }
+        )
+    }
+}
+
+/**
+ * rc13 (audit M-1): Google Maps accepts 9 stops per link, so a longer loop is opened part by part.
+ * Each part starts where the previous one ended; the sheet stays open so the next part is one tap away.
+ */
+@Composable
+private fun LoopMapsPartsSheet(
+    parts: List<com.splitmate.app.data.guide.nav.MapsHandoff.LoopMapsPart>,
+    onOpen: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val opened = remember(parts) { androidx.compose.runtime.mutableStateListOf<Int>() }
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 20.dp, bottom = 28.dp),
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)
+        ) {
+            androidx.compose.material3.Text(
+                text = "Open in Google Maps",
+                style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
+                modifier = Modifier.semantics { heading() }
+            )
+            androidx.compose.material3.Text(
+                text = "Google Maps takes up to 9 stops at a time, so your loop opens in ${parts.size} parts. Open them in order.",
+                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            parts.forEachIndexed { index, part ->
+                androidx.compose.material3.FilledTonalButton(
+                    onClick = {
+                        if (index !in opened) opened += index
+                        onOpen(index)
+                    },
+                    shapes = ButtonDefaults.shapes(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 56.dp)
+                ) {
+                    com.splitmate.app.ui.components.SymbolIcon(
+                        imageVector = if (index in opened) androidx.compose.material.icons.Icons.Rounded.CheckCircle
+                        else androidx.compose.material.icons.Icons.Rounded.Map,
+                        contentDescription = null
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    androidx.compose.material3.Text(
+                        text = part.label,
+                        style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
     }
 }
 

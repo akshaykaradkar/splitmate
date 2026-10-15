@@ -331,6 +331,10 @@ class DarkModeSweepTest(private val themeName: String) {
     @Test fun s02_home_scrolled() { launch(); scrollDown(); shot("s02_home_scrolled") }
     @Test fun s03_trip_overview() { launch(); tap(text = "Lake Tahoe Cabin"); shot("s03_trip_overview") }
     @Test fun s04_trip_plan() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Plan", exact = true); shot("s04_trip_plan") }
+    /** rc13: Days -> "Make a loop" opens the Loop (no stay yet on the demo trip). */
+    @Test fun p01_plan_loop() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Plan", exact = true); tap(text = "Make a loop"); shot("p01_plan_loop") }
+    /** rc13: Plan › Explore (offline in tests: the destination / guide entry state). */
+    @Test fun p02_plan_explore() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Plan", exact = true); tap(text = "Explore", exact = true); shot("p02_plan_explore") }
     @Test fun s05_trip_money() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Money"); shot("s05_trip_money") }
     @Test fun s06_trip_money_scrolled() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Money"); scrollDown(0.65f); shot("s06_trip_money_scrolled") }
     @Test fun s07_trip_people() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "People"); shot("s07_trip_people") }

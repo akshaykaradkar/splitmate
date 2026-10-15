@@ -85,6 +85,8 @@ data class LoopUi(
 
 data class TripGuideUiState(
     val subView: PlanSubView = PlanSubView.BOOKINGS,
+    /** rc13: non-empty while the "Open in Google Maps" part picker is showing (loops over 9 stops). */
+    val loopMapsParts: List<com.splitmate.app.data.guide.nav.MapsHandoff.LoopMapsPart> = emptyList(),
     val guideEnabled: Boolean = true,       // remote kill-switch
     val phase: GuidePhase = GuidePhase.Empty,
     /** True ONLY while a network job is in flight (drives InFlightWavyProgressIndicator). */
@@ -155,5 +157,8 @@ interface TripGuideActions {
 
     fun reoptimizeLoop()
     fun openWholeLoopInMaps()
+    /** rc13: open one part of a long loop (the picker shown when it has more than 9 stops). */
+    fun openLoopMapsPart(index: Int) = Unit
+    fun dismissLoopMapsParts() = Unit
     fun shareLoop()
 }

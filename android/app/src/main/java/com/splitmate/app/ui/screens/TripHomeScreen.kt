@@ -4679,6 +4679,22 @@ private fun TripHubPlanTimelineView(
                     line = "Your days fill in as you add tickets and bookings."
                 )
             }
+            if (onMakeLoop != null) {
+                // rc13 (audit H-2): with no bookings there is no day yet, so the Loop gets its own entry.
+                item(key = "empty_plan_loop") {
+                    Box(modifier = Modifier.fillMaxWidth().padding(top = 12.dp), contentAlignment = Alignment.Center) {
+                        androidx.compose.material3.FilledTonalButton(
+                            onClick = onMakeLoop,
+                            shapes = ButtonDefaults.shapes(),
+                            modifier = Modifier.defaultMinSize(minHeight = 48.dp)
+                        ) {
+                            SymbolIcon(imageVector = Icons.Rounded.Route, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(text = "Make a loop", style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                }
+            }
         }
         return
     }

@@ -2,6 +2,7 @@
 
 package com.splitmate.app.ui.screens.plan
 
+import com.splitmate.app.ui.components.SymbolIcon
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.InteractionSource
@@ -425,7 +426,7 @@ fun PlanInlineBanner(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            SymbolIcon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp))
             Text(
                 text = message,
                 style = MaterialTheme.typography.bodyMedium,
@@ -468,7 +469,7 @@ fun DirectionsSplitButton(
                 height = height,
                 modifier = Modifier.semantics { contentDescription = "Directions to ${place.name}" }
             ) {
-                Icon(imageVector = Icons.Rounded.NearMe, contentDescription = null, modifier = Modifier.size(18.dp))
+                SymbolIcon(imageVector = Icons.Rounded.NearMe, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "Directions",
@@ -524,7 +525,7 @@ fun DirectionsSplitButton(
 private fun DirectionsMenuItem(label: String, icon: ImageVector, onClick: () -> Unit) {
     DropdownMenuItem(
         text = { Text(label, style = MaterialTheme.typography.bodyLarge) },
-        leadingIcon = { Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
+        leadingIcon = { SymbolIcon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
         onClick = onClick,
         modifier = Modifier.heightIn(min = 48.dp)
     )
@@ -553,7 +554,7 @@ fun AddToLoopToggle(pinned: Boolean, onToggle: () -> Unit, modifier: Modifier = 
             .heightIn(min = 40.dp)
             .semantics { stateDescription = if (pinned) "In loop" else "Not in loop" }
     ) {
-        Icon(
+        SymbolIcon(
             imageVector = if (pinned) Icons.Rounded.Check else Icons.Rounded.Add,
             contentDescription = null,
             modifier = Modifier.size(18.dp)
@@ -596,7 +597,7 @@ fun OfflineStatusChip(label: String, icon: ImageVector, modifier: Modifier = Mod
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(16.dp))
+            SymbolIcon(imageVector = icon, contentDescription = null, modifier = Modifier.size(16.dp))
             Text(text = label, style = MaterialTheme.typography.labelLarge)
         }
     }
@@ -711,7 +712,7 @@ fun PlanDetailRow(icon: ImageVector, label: String, value: String, modifier: Mod
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.Top
     ) {
-        Icon(
+        SymbolIcon(
             imageVector = icon,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,

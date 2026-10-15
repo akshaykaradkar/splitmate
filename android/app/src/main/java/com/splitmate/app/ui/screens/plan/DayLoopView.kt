@@ -2,6 +2,7 @@
 
 package com.splitmate.app.ui.screens.plan
 
+import com.splitmate.app.ui.components.SymbolIcon
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -252,7 +253,7 @@ private fun LoopTotals(loop: LoopUi, stopCount: Int, modifier: Modifier = Modifi
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.Top
             ) {
-                Icon(
+                SymbolIcon(
                     imageVector = Icons.Outlined.Info,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -288,13 +289,16 @@ private fun StayStepCard(
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         StepBadge(icon = Icons.Rounded.Hotel)
-        Card(
+        // rc13 (audit L-3): Loop cards are borderless ElevatedCards (GEMINI.md v2.3.4 addendum).
+        ElevatedCard(
             modifier = Modifier.weight(1f),
             shape = PlanGuideDefaults.CardShape,
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-            )
+            // White card role like every guide card; the hotel badge beside it marks the stay.
+            colors = CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = PlanGuideDefaults.CardElevation)
         ) {
             Row(
                 modifier = Modifier
@@ -327,7 +331,7 @@ private fun StayStepCard(
                     TextButton(
                         onClick = onChange,
                         shapes = ButtonDefaults.shapes(),
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onPrimaryContainer)
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                     ) {
                         Text("Change", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                     }
@@ -357,7 +361,7 @@ private fun LoopStopCard(
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         StepBadge(number = index)
-        Card(
+        ElevatedCard(
             onClick = onOpen,
             modifier = Modifier
                 .weight(1f)
@@ -366,7 +370,11 @@ private fun LoopStopCard(
                     scaleY = scale
                 },
             shape = PlanGuideDefaults.CardShape,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+            elevation = CardDefaults.elevatedCardElevation(
+                defaultElevation = PlanGuideDefaults.CardElevation,
+                pressedElevation = PlanGuideDefaults.CardPressedElevation
+            ),
             interactionSource = interaction
         ) {
             Row(
@@ -419,7 +427,7 @@ private fun LegConnector(km: Double?, modifier: Modifier = Modifier) {
         }
         if (km != null) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Icon(
+                SymbolIcon(
                     imageVector = Icons.AutoMirrored.Rounded.DirectionsWalk,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -451,7 +459,7 @@ private fun StepBadge(number: Int? = null, icon: ImageVector? = null) {
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(6.dp)) {
             if (icon != null) {
-                Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp))
+                SymbolIcon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp))
             } else {
                 Text(
                     text = number?.toString().orEmpty(),
@@ -474,7 +482,7 @@ private fun LoopActions(actions: TripGuideActions, modifier: Modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 52.dp)
         ) {
-            Icon(Icons.Rounded.Map, contentDescription = null, modifier = Modifier.size(20.dp))
+            SymbolIcon(Icons.Rounded.Map, contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
             Text("Open whole loop in Google Maps", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
         }
@@ -487,12 +495,12 @@ private fun LoopActions(actions: TripGuideActions, modifier: Modifier = Modifier
                 contentColor = MaterialTheme.colorScheme.onSurface
             )
             FilledTonalButton(onClick = { actions.reoptimizeLoop() }, shapes = ButtonDefaults.shapes(), colors = tonal, modifier = Modifier.heightIn(min = 48.dp)) {
-                Icon(Icons.Rounded.Autorenew, contentDescription = null, modifier = Modifier.size(18.dp))
+                SymbolIcon(Icons.Rounded.Autorenew, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("Reoptimise", style = MaterialTheme.typography.labelLarge)
             }
             FilledTonalButton(onClick = { actions.shareLoop() }, shapes = ButtonDefaults.shapes(), colors = tonal, modifier = Modifier.heightIn(min = 48.dp)) {
-                Icon(Icons.Rounded.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                SymbolIcon(Icons.Rounded.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("Share loop", style = MaterialTheme.typography.labelLarge)
             }
@@ -515,7 +523,7 @@ private fun NoStayCard(onSetStay: () -> Unit, modifier: Modifier = Modifier) {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer) {
-                Icon(
+                SymbolIcon(
                     imageVector = Icons.Rounded.Hotel,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -537,7 +545,7 @@ private fun NoStayCard(onSetStay: () -> Unit, modifier: Modifier = Modifier) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Button(onClick = onSetStay, shapes = ButtonDefaults.shapes(), modifier = Modifier.heightIn(min = 48.dp)) {
-                Icon(Icons.Rounded.Hotel, contentDescription = null, modifier = Modifier.size(18.dp))
+                SymbolIcon(Icons.Rounded.Hotel, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Set your stay", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
             }
@@ -566,12 +574,12 @@ private fun EmptyLoopCard(building: Boolean, onExplore: () -> Unit, modifier: Mo
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = "Tap 'Add to loop' on places in Explore. We'll order them into the shortest round trip from your stay.",
+                text = "Tap 'Add to loop' on places in Explore. We'll order them into a short round trip from your stay.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             FilledTonalButton(onClick = onExplore, shapes = ButtonDefaults.shapes(), modifier = Modifier.heightIn(min = 48.dp)) {
-                Icon(Icons.Rounded.Explore, contentDescription = null, modifier = Modifier.size(18.dp))
+                SymbolIcon(Icons.Rounded.Explore, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Go to Explore", style = MaterialTheme.typography.labelLarge)
             }

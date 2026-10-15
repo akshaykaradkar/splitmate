@@ -2,6 +2,7 @@
 
 package com.splitmate.app.ui.screens.plan
 
+import com.splitmate.app.ui.components.SymbolIcon
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
@@ -171,7 +172,7 @@ fun StayPinSheet(
                     )
                 }
                 IconButton(onClick = { currentOnDismiss() }, shapes = IconButtonDefaults.shapes()) {
-                    Icon(
+                    SymbolIcon(
                         imageVector = Icons.Rounded.Close,
                         contentDescription = "Close",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -277,7 +278,7 @@ private fun CurrentStay(state: TripGuideUiState, actions: TripGuideActions) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(Icons.Rounded.Hotel, contentDescription = null, modifier = Modifier.size(22.dp))
+            SymbolIcon(Icons.Rounded.Hotel, contentDescription = null, modifier = Modifier.size(22.dp))
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(
@@ -326,7 +327,7 @@ private fun PasteLinkTab(working: Boolean, onSubmit: (String) -> Unit) {
             },
             trailingIcon = {
                 IconButton(onClick = { clipboard.getText()?.text?.let { text = it.take(MAX_INPUT_CHARS) } }, shapes = IconButtonDefaults.shapes()) {
-                    Icon(Icons.Rounded.ContentPaste, contentDescription = "Paste from clipboard")
+                    SymbolIcon(Icons.Rounded.ContentPaste, contentDescription = "Paste from clipboard")
                 }
             },
             maxLines = 3,
@@ -412,7 +413,7 @@ private fun SleepListingsTab(
                     shapes = ButtonDefaults.shapes(),
                     modifier = Modifier.heightIn(min = 48.dp)
                 ) {
-                    Icon(Icons.Rounded.Place, contentDescription = null, modifier = Modifier.size(18.dp))
+                    SymbolIcon(Icons.Rounded.Place, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Use $destStr center", style = MaterialTheme.typography.labelLarge)
                 }
@@ -440,7 +441,7 @@ private fun SleepListingsTab(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Icon(
+                    SymbolIcon(
                         imageVector = Icons.Rounded.Hotel,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -457,7 +458,7 @@ private fun SleepListingsTab(
                         )
                     }
                     if (usable) {
-                        Icon(
+                        SymbolIcon(
                             imageVector = Icons.Rounded.ChevronRight,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -499,7 +500,7 @@ private fun StayFeedbackPanel(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(
+                    SymbolIcon(
                         imageVector = Icons.Rounded.CheckCircle,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
@@ -542,7 +543,7 @@ private fun StayFeedbackPanel(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Rounded.LinkOff, contentDescription = null, modifier = Modifier.size(20.dp))
+                    SymbolIcon(Icons.Rounded.LinkOff, contentDescription = null, modifier = Modifier.size(20.dp))
                     Text(
                         text = if (feedback.placeNameHint != null) {
                             "Google didn't share a map pin for this place."
@@ -571,7 +572,7 @@ private fun StayFeedbackPanel(
                         ),
                         modifier = Modifier.heightIn(min = 48.dp)
                     ) {
-                        Icon(Icons.Rounded.Place, contentDescription = null, modifier = Modifier.size(18.dp))
+                        SymbolIcon(Icons.Rounded.Place, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("Use $destStr center", style = MaterialTheme.typography.labelLarge)
                     }
@@ -613,7 +614,7 @@ private fun StayFeedbackPanel(
                         shapes = ButtonDefaults.shapes(),
                         modifier = Modifier.heightIn(min = 48.dp)
                     ) {
-                        Icon(Icons.Rounded.Place, contentDescription = null, modifier = Modifier.size(18.dp))
+                        SymbolIcon(Icons.Rounded.Place, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("Use $destStr center", style = MaterialTheme.typography.labelLarge)
                     }
@@ -670,7 +671,7 @@ private fun InlineStayNameSearch(
             ),
             modifier = Modifier.heightIn(min = 48.dp)
         ) {
-            Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+            SymbolIcon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
             Text(
                 text = if (nameQuery.isNotBlank()) {

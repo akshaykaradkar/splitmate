@@ -466,13 +466,22 @@ class TripGuideViewModel(
             emit(TripGuideEffect.Snackbar(MSG_SET_STAY_FIRST))
             return
         }
-        val urls = MapsHandoff.loopDirectionsUrls(route)
-        if (urls.isEmpty()) {
-            emit(TripGuideEffect.Snackbar(MSG_LOOP_EMPTY))
-            return
+        val parts = MapsHandoff.loopDirectionsParts(route)
+        when {
+            parts.isEmpty() -> emit(TripGuideEffect.Snackbar(MSG_LOOP_EMPTY))
+            parts.size == 1 -> emit(TripGuideEffect.OpenUrl(parts[0].url))
+            // rc13 (audit M-1): Google Maps takes 9 stops per link, so let the user open each part.
+            else -> _uiState.update { it.copy(loopMapsParts = parts) }
         }
-        emit(TripGuideEffect.OpenUrl(urls[0]))
-        if (urls.size > 1) emit(TripGuideEffect.Snackbar(loopPartsMessage(urls.size)))
+    }
+
+    override fun openLoopMapsPart(index: Int) {
+        val part = _uiState.value.loopMapsParts.getOrNull(index) ?: return
+        emit(TripGuideEffect.OpenUrl(part.url))
+    }
+
+    override fun dismissLoopMapsParts() {
+        _uiState.update { it.copy(loopMapsParts = emptyList()) }
     }
 
     override fun shareLoop() {

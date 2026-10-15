@@ -2,6 +2,7 @@
 
 package com.splitmate.app.ui.screens.plan
 
+import com.splitmate.app.ui.components.SymbolIcon
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -102,7 +103,7 @@ fun PlaceDetailSheet(
                         .semantics { heading() }
                 )
                 IconButton(onClick = { currentOnDismiss() }, shapes = IconButtonDefaults.shapes()) {
-                    Icon(
+                    SymbolIcon(
                         imageVector = Icons.Rounded.Close,
                         contentDescription = "Close",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -150,7 +151,7 @@ fun PlaceDetailSheet(
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
                     modifier = Modifier.heightIn(min = 48.dp)
                 ) {
-                    Icon(Icons.Rounded.VisibilityOff, contentDescription = null, modifier = Modifier.size(18.dp))
+                    SymbolIcon(Icons.Rounded.VisibilityOff, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Hide from guide", style = MaterialTheme.typography.labelLarge)
                 }

@@ -2,6 +2,7 @@
 
 package com.splitmate.app.ui.screens.plan
 
+import com.splitmate.app.ui.components.SymbolIcon
 import com.splitmate.app.ui.theme.HubExtendedColors
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -43,6 +44,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.Landscape
 import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.Place
+import androidx.compose.material.icons.rounded.Route
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.TravelExplore
 import androidx.compose.material.icons.rounded.WarningAmber
@@ -358,7 +360,7 @@ private fun LazyListScope.hydratedGuide(
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold
                     )
-                    Icon(
+                    SymbolIcon(
                         imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp)
@@ -456,6 +458,9 @@ private fun PlaceCard(
     }
 }
 
+/** rc13: flip to true once "Save offline" really saves the guide and images for offline use. */
+internal const val SAVE_OFFLINE_READY = false
+
 @Composable
 private fun GuideChipsRow(
     state: TripGuideUiState,
@@ -479,13 +484,24 @@ private fun GuideChipsRow(
         ElevatedAssistChip(
             onClick = onOpenStaySheet,
             label = { ChipText(if (stayLabel != null) "Stay: $stayLabel" else "Stay: not set") },
-            leadingIcon = { Icon(Icons.Rounded.Hotel, contentDescription = null, modifier = Modifier.size(18.dp)) },
-            trailingIcon = { Icon(Icons.Rounded.ChevronRight, contentDescription = null, modifier = Modifier.size(18.dp)) },
+            leadingIcon = { SymbolIcon(Icons.Rounded.Hotel, contentDescription = null, modifier = Modifier.size(18.dp)) },
+            trailingIcon = { SymbolIcon(Icons.Rounded.ChevronRight, contentDescription = null, modifier = Modifier.size(18.dp)) },
+            colors = chipColors,
+            elevation = AssistChipDefaults.elevatedAssistChipElevation(elevation = 1.dp)
+        )
+        // rc13 (audit H-2): the Loop is always one tap away from Explore, even on a trip with no
+        // expenses (Days has no day to hang "Make a loop" on yet).
+        val loopStops = state.loop.route?.orderedStops?.size ?: 0
+        ElevatedAssistChip(
+            onClick = { actions.selectSubView(PlanSubView.LOOP) },
+            label = { ChipText(if (loopStops > 0) "View loop ($loopStops)" else "View loop") },
+            leadingIcon = { SymbolIcon(Icons.Rounded.Route, contentDescription = null, modifier = Modifier.size(18.dp)) },
             colors = chipColors,
             elevation = AssistChipDefaults.elevatedAssistChipElevation(elevation = 1.dp)
         )
         val size = state.saveOfflineSizeLabel
-        if (state.saveOfflineEnabled || size != null) {
+        // rc13 (audit M-2): "Save offline" is hidden until offline saving is actually wired.
+        if (SAVE_OFFLINE_READY && (state.saveOfflineEnabled || size != null)) {
             ElevatedAssistChip(
                 onClick = { actions.setSaveOffline(!state.saveOfflineEnabled) },
                 label = {
@@ -498,7 +514,7 @@ private fun GuideChipsRow(
                     )
                 },
                 leadingIcon = {
-                    Icon(
+                    SymbolIcon(
                         imageVector = if (state.saveOfflineEnabled) Icons.Rounded.CheckCircle else Icons.Rounded.DownloadForOffline,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp)
@@ -511,7 +527,7 @@ private fun GuideChipsRow(
         ElevatedAssistChip(
             onClick = onChangeDestination,
             label = { ChipText("Change place") },
-            leadingIcon = { Icon(Icons.Rounded.EditLocationAlt, contentDescription = null, modifier = Modifier.size(18.dp)) },
+            leadingIcon = { SymbolIcon(Icons.Rounded.EditLocationAlt, contentDescription = null, modifier = Modifier.size(18.dp)) },
             colors = chipColors,
             elevation = AssistChipDefaults.elevatedAssistChipElevation(elevation = 1.dp)
         )
@@ -578,7 +594,7 @@ private fun GuideHero(
                     modifier = Modifier.matchParentSize()
                 )
             } else if (showPlaceholderIcon) {
-                Icon(
+                SymbolIcon(
                     imageVector = Icons.Rounded.Landscape,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
@@ -645,7 +661,7 @@ private fun GuideHero(
                         modifier = Modifier.semantics { contentDescription = "Photo credit" }
                     ) {
                         Surface(shape = CircleShape, color = com.splitmate.app.ui.DesignSystemBindings.activePalette.scrim.copy(alpha = 0.45f), contentColor = com.splitmate.app.ui.theme.HubExtendedColors.OnImageScrim) {
-                            Icon(
+                            SymbolIcon(
                                 imageVector = Icons.Outlined.Info,
                                 contentDescription = null,
                                 modifier = Modifier
@@ -743,7 +759,7 @@ private fun DestinationSearch(
             )
             if (onClose != null) {
                 IconButton(onClick = onClose, shapes = IconButtonDefaults.shapes()) {
-                    Icon(Icons.Rounded.Close, contentDescription = "Close search")
+                    SymbolIcon(Icons.Rounded.Close, contentDescription = "Close search")
                 }
             }
         }
@@ -751,11 +767,11 @@ private fun DestinationSearch(
             value = state.destinationQuery,
             onValueChange = { actions.updateDestinationQuery(it) },
             placeholder = { Text("Search a city, town or region") },
-            leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
+            leadingIcon = { SymbolIcon(Icons.Rounded.Search, contentDescription = null) },
             trailingIcon = {
                 if (state.destinationQuery.isNotEmpty()) {
                     IconButton(onClick = { actions.updateDestinationQuery("") }, shapes = IconButtonDefaults.shapes()) {
-                        Icon(Icons.Rounded.Close, contentDescription = "Clear search")
+                        SymbolIcon(Icons.Rounded.Close, contentDescription = "Clear search")
                     }
                 }
             },
@@ -796,7 +812,7 @@ private fun DestinationSearch(
                             onSubmitted()
                         },
                         label = { ChipText(text) },
-                        icon = { Icon(Icons.Rounded.Place, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        icon = { SymbolIcon(Icons.Rounded.Place, contentDescription = null, modifier = Modifier.size(18.dp)) }
                     )
                 }
             }
@@ -840,7 +856,7 @@ private fun DisambiguationChips(
                             overflow = TextOverflow.Ellipsis
                         )
                     },
-                    icon = { Icon(Icons.Rounded.TravelExplore, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                    icon = { SymbolIcon(Icons.Rounded.TravelExplore, contentDescription = null, modifier = Modifier.size(18.dp)) }
                 )
             }
         }

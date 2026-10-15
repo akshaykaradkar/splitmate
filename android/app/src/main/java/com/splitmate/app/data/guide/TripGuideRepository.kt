@@ -381,11 +381,8 @@ class TripGuideRepository(
     )
 
     private suspend fun editManifest(groupId: String, edit: (PlanManifest) -> PlanManifest?): PlanManifest? =
-        safely(null) {
-            val current = manifest(groupId)
-            val next = edit(current) ?: return@safely current
-            if (store.upsertManifest(groupId, next)) next else null
-        }
+        // rc13: read + edit + write under one lock (no lost pins on double tap / concurrent sync).
+        safely(null) { store.editManifest(groupId, edit) }
 
     // ---- stay -----------------------------------------------------------------------------------
 

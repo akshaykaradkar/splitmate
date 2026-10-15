@@ -97,6 +97,31 @@ class TripGuideStore(
 
     fun observeManifestEntity(groupId: String): Flow<TripPlanManifestEntity?> = local.observeManifest(groupId)
 
+    /**
+     * v2.4.0 rc13: atomic read-modify-write for a LOCAL edit (pin, hide, destination).
+     *
+     * The read, [edit] and write all happen under the store mutex, so a fast double tap or a sync
+     * merge ([applyRemoteManifest]) landing in between can't be overwritten by a stale copy (the
+     * old repository code read outside the lock and then replaced the whole manifest, dropping pins).
+     * @return the edited manifest (marked pending push); the current one when [edit] returns null
+     *   (no-op, nothing written); null if the write failed.
+     */
+    suspend fun editManifest(groupId: String, edit: (PlanManifest) -> PlanManifest?): PlanManifest? =
+        try {
+            mutex.withLock {
+                val existing = local.getManifest(groupId)
+                val current = existing?.let { PlanManifestCodec.decode(it.manifestJson) } ?: emptyManifest()
+                val next = edit(current) ?: return@withLock current
+                val row = existing ?: newRow(groupId)
+                local.upsertManifest(row.withManifest(next).copy(groupId = groupId, updatedAtEpochMs = clock(), pendingPush = true))
+                next
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+
     /** Replaces the group's manifest after a LOCAL edit; marks it pending push. */
     suspend fun upsertManifest(groupId: String, manifest: PlanManifest, pendingPush: Boolean = true): Boolean =
         mutate(groupId) { row -> row.withManifest(manifest).copy(pendingPush = pendingPush) }
