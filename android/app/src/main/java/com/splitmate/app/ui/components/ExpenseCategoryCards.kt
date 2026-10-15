@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.DirectionsCar
@@ -32,20 +34,25 @@ import androidx.compose.material.icons.rounded.LocalMall
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Restaurant
 import androidx.compose.material.icons.rounded.TwoWheeler
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -396,6 +403,7 @@ fun CabsTransitBatchCard(
         payerName = batch.payerName,
         payerSummary = batch.payerSummary,
         multiplePayers = batch.multiplePayers,
+        payers = batch.payers,
         totalAmountFormatted = batch.totalAmountFormatted,
         count = batch.totalRidesCount,
         unitSingular = "ride",
@@ -429,6 +437,7 @@ fun CategoryBatchCard(
         payerName = batch.payerName,
         payerSummary = batch.payerSummary,
         multiplePayers = batch.multiplePayers,
+        payers = batch.payers,
         totalAmountFormatted = batch.totalAmountFormatted,
         count = batch.count,
         unitSingular = batch.unitSingular,
@@ -455,6 +464,7 @@ private fun BatchCard(
     payerName: String,
     payerSummary: String,
     multiplePayers: Boolean,
+    payers: List<PayerShare>,
     totalAmountFormatted: String,
     count: Int,
     unitSingular: String,
@@ -485,7 +495,44 @@ private fun BatchCard(
             }
         }
     ) { colors ->
-        PayerLine(text = payerSummary, payerName = payerName, multiplePayers = multiplePayers)
+        if (multiplePayers && payers.isNotEmpty()) {
+            // v2.4.0 rc11: several payers -> the summary is a button that opens "Who paid".
+            var showPayers by rememberSaveable(stateKey) { mutableStateOf(false) }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(MaterialTheme.shapes.small)
+                    .heightIn(min = 48.dp)
+                    .clickable(onClickLabel = "See who paid what") {
+                        haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                        showPayers = true
+                    }
+                    .semantics(mergeDescendants = true) {},
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                PayerLine(text = payerSummary, payerName = payerName, multiplePayers = true, modifier = Modifier.weight(1f))
+                Spacer(modifier = Modifier.width(4.dp))
+                SymbolIcon(imageVector = Icons.Rounded.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+            }
+            if (showPayers) {
+                WhoPaidSheet(
+                    title = title,
+                    totalAmountFormatted = totalAmountFormatted,
+                    unitSingular = unitSingular,
+                    unitPlural = unitPlural,
+                    payers = payers,
+                    rows = rows,
+                    accent = colors.accent,
+                    onDismiss = { showPayers = false },
+                    onRowClick = { row ->
+                        showPayers = false
+                        onRowClick(row)
+                    }
+                )
+            }
+        } else {
+            PayerLine(text = payerSummary, payerName = payerName, multiplePayers = multiplePayers)
+        }
         Spacer(modifier = Modifier.padding(top = 6.dp))
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         visibleRows.forEachIndexed { index, row ->
@@ -532,8 +579,112 @@ private fun BatchCard(
     }
 }
 
+/**
+ * v2.4.0 rc11: "Who paid" for a batch with several payers: each person's subtotal and their entries.
+ * Display only (balances still come from the splits). Tapping an entry opens its expense sheet.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TransitHopRow(hop: TransitHopItem, colors: ExpenseCategoryCardColors, onClick: () -> Unit) {
+private fun WhoPaidSheet(
+    title: String,
+    totalAmountFormatted: String,
+    unitSingular: String,
+    unitPlural: String,
+    payers: List<PayerShare>,
+    rows: List<TransitHopItem>,
+    accent: androidx.compose.ui.graphics.Color,
+    onDismiss: () -> Unit,
+    onRowClick: (TransitHopItem) -> Unit
+) {
+    val rowById = remember(rows) { rows.associateBy { it.expenseId } }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 28.dp)
+        ) {
+            item(key = "who_paid_header") {
+                Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                    Text(
+                        text = "Who paid",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.semantics { heading() }
+                    )
+                    Text(
+                        text = "$title · $totalAmountFormatted",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            payers.forEachIndexed { index, payer ->
+                item(key = "payer_$index") {
+                    Surface(
+                        shape = MaterialTheme.shapes.large,
+                        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier.size(32.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = extractInitialsFromNameOrSeed(payer.name).take(1),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = payer.name,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "Paid for ${if (payer.count == 1) "1 $unitSingular" else "${payer.count} $unitPlural"}",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Text(text = payer.totalFormatted, style = MoneyAmountStyle, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
+                            }
+                            payer.expenseIds.mapNotNull { rowById[it] }.forEach { row ->
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), modifier = Modifier.padding(top = 4.dp))
+                                // The payer is the section header, so the row doesn't repeat "Paid by".
+                                TransitHopRow(hop = row.copy(payerName = null), colors = null, accent = accent, onClick = { onRowClick(row) })
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TransitHopRow(
+    hop: TransitHopItem,
+    colors: ExpenseCategoryCardColors?,
+    onClick: () -> Unit,
+    accent: androidx.compose.ui.graphics.Color = colors?.accent ?: MaterialTheme.colorScheme.primary
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -543,7 +694,7 @@ private fun TransitHopRow(hop: TransitHopItem, colors: ExpenseCategoryCardColors
             .semantics(mergeDescendants = true) {},
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(colors.accent))
+        Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(accent))
         Spacer(modifier = Modifier.width(10.dp))
         Text(
             text = hop.timeLabel,

@@ -1,5 +1,6 @@
 package com.splitmate.app.data
 
+import com.splitmate.app.ui.withDisplayNames
 import android.content.Context
 import com.splitmate.app.SplitMateMathEngine
 import kotlinx.coroutines.Dispatchers
@@ -809,7 +810,7 @@ object CloudGroupSyncRepository {
                     GroupMemberEntity(
                         memberId = m.optString("memberId", ""),
                         groupId = m.optString("groupId", groupId),
-                        name = m.optString("name", ""),
+                        name = com.splitmate.app.ui.PersonNames.display(m.optString("name", "")),
                         avatarSeed = m.optString("avatarSeed", ""),
                         isCurrentUser = m.optBoolean("isCurrentUser", false),
                         upiId = rawUpi,
@@ -2350,7 +2351,7 @@ object CloudGroupSyncRepository {
                     remoteDoc.members.map { it.copy(isCurrentUser = false) } + GroupMemberEntity(
                         memberId = newMemberId,
                         groupId = targetGroupId,
-                        name = cleanName,
+                        name = com.splitmate.app.ui.PersonNames.display(cleanName),
                         avatarSeed = cleanSeed,
                         isCurrentUser = true,
                         upiId = "",
@@ -2486,7 +2487,7 @@ object CloudGroupSyncRepository {
         var hasPendingLocalEntities = false
 
         if (localGroup != null) {
-            val loadedMembers = dao.getMembersForGroup(groupId)
+            val loadedMembers = dao.getMembersForGroup(groupId).withDisplayNames()
             rawGroupMembers = loadedMembers
             val groupAlreadyHasLocalPhone = normLocalPhone.length == 10 && loadedMembers.any {
                 PhoneIdentityValidator.extractMemberPhone10(it.userPhone, it.upiId) == normLocalPhone
@@ -3007,7 +3008,7 @@ object CloudGroupSyncRepository {
                 }
             }
 
-            val members = dao.getMembersForGroup(entry.groupId)
+            val members = dao.getMembersForGroup(entry.groupId).withDisplayNames()
             val myMember = members.find {
                 normPhone.length == 10 && PhoneIdentityValidator.extractMemberPhone10(it.userPhone, it.upiId) == normPhone
             } ?: members.find { it.isCurrentUser }

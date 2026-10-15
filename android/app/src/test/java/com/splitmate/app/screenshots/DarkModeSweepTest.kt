@@ -272,6 +272,24 @@ class DarkModeSweepTest(private val themeName: String) {
         }
     }
 
+    /** rc11: the mixed-payer food card's payer line opens the "Who paid" sheet (captured with the sheet window). */
+    @OptIn(com.github.takahirom.roborazzi.ExperimentalRoborazziApi::class)
+    @Test fun t03_money_who_paid_sheet() {
+        val vm = launch(); tap(text = "Lake Tahoe Cabin"); seedBusyTrip(vm)
+        tap(text = "Money")
+        val whoPaid = SemanticsMatcher("opens Who paid") {
+            it.config.getOrNull(androidx.compose.ui.semantics.SemanticsActions.OnClick)?.label == "See who paid what"
+        }
+        // The food card is further down the lazy list: scroll until it is composed.
+        var tries = 0
+        while (compose.onAllNodes(whoPaid).fetchSemanticsNodes().isEmpty() && tries++ < 10) scrollDown(0.5f)
+        val node = compose.onAllNodes(whoPaid)[0]
+        runCatching { node.performScrollTo() }
+        node.performTouchInput { click(androidx.compose.ui.geometry.Offset(width / 2f, height / 2f)) }
+        settle()
+        com.github.takahirom.roborazzi.captureScreenRoboImage("$outDir/t03_money_who_paid_sheet.png")
+    }
+
     private fun shotNoAudit(name: String) {
         settle()
         compose.onRoot().captureRoboImage("$outDir/$name.png")

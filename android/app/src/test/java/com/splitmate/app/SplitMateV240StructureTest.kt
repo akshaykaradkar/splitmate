@@ -138,7 +138,7 @@ class SplitMateV240StructureTest {
 
         val vm = src("ui/SplitMateViewModel.kt")
         // Review J1/J2: one serialized source (Room members stream); its first emission is the baseline.
-        val collector = vm.substringAfter("roomDao.observeAllMembers().collect { members ->").substringBefore("\n            }\n")
+        val collector = vm.substringAfter("roomDao.observeAllMembers()\n").substringAfter(".collect { members ->").substringBefore("\n            }\n")
         assertTrue(collector.contains("lastMembers?.let { previous -> announceMemberArrivals(previous, members) }"))
         assertTrue(collector.contains("lastMembers = members"))
         assertFalse(vm.contains("memberArrivalBaselineReady"), "no racy diff in refreshStateFromDaoSnapshot")

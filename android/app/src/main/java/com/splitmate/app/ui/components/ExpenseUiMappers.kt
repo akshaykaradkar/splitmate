@@ -66,6 +66,8 @@ data class TransitBatchData(
     /** "Paid by Akshay", or per-payer totals when several people paid ("Sam ₹4,860.00 · Akshay ₹1,320.00"). */
     val payerSummary: String = "Paid by $payerName",
     val multiplePayers: Boolean = false,
+    /** Every payer with subtotal and entries, biggest first (filled when [multiplePayers]). */
+    val payers: List<PayerShare> = emptyList(),
     /** Every ride, newest first; the card shows the first [TransitBatchDefaults.COLLAPSED_HOPS]. */
     val hops: List<TransitHopItem>
 )
@@ -139,11 +141,22 @@ data class CategoryBatchData(
     /** "Paid by Akshay", or per-payer totals when several people paid ("Sam ₹4,860.00 · Akshay ₹1,320.00"). */
     val payerSummary: String = "Paid by $payerName",
     val multiplePayers: Boolean = false,
+    /** Every payer with subtotal and entries, biggest first (filled when [multiplePayers]). */
+    val payers: List<PayerShare> = emptyList(),
     /** "meal" / "activity" / "item" (used for "View all 6 meals"). */
     val unitSingular: String,
     val unitPlural: String,
     /** Every entry, newest first; the card shows the first [TransitBatchDefaults.COLLAPSED_HOPS]. */
     val rows: List<TransitHopItem>
+)
+
+/** v2.4.0 rc11: one payer inside a batch, for the "Who paid" sheet. */
+data class PayerShare(
+    val name: String,
+    val totalFormatted: String,
+    val count: Int,
+    /** This payer's entries, newest first (same order as the batch rows). */
+    val expenseIds: List<String>
 )
 
 object TransitBatchDefaults {
@@ -184,7 +197,14 @@ object ExpenseUiMappers {
     fun effectiveMs(expense: ExpenseEntity): Long = expense.scheduledAtEpochMs ?: expense.createdAt
 
     private fun payerNameOf(expense: ExpenseEntity, members: List<GroupMemberEntity>): String =
-        members.find { it.memberId == expense.payerId }?.name?.trim()?.ifBlank { null } ?: "Member"
+        members.find { it.memberId == expense.payerId }?.name?.let(::displayPersonName)?.ifBlank { null } ?: "Member"
+
+    /**
+     * v2.4.0 rc11: names as people expect to read them, whatever case they were typed in
+     * ("sam" -> "Sam", "PRIYA SHAH" -> "Priya Shah"). A word typed in mixed case keeps its casing
+     * ("McKenzie"), so a real name is never broken.
+     */
+    fun displayPersonName(raw: String): String = com.splitmate.app.ui.PersonNames.display(raw)
 
     private fun breakdownOf(
         expense: ExpenseEntity,
@@ -264,6 +284,7 @@ object ExpenseUiMappers {
             totalRidesCount = rides,
             payerSummary = payerSummaryOf(expenses, members),
             multiplePayers = mixedPayers,
+            payers = if (mixedPayers) payerSharesOf(newestFirst, members) else emptyList(),
             hops = hops
         )
     }
@@ -274,14 +295,18 @@ object ExpenseUiMappers {
      * Display only: balances still come from the splits / settle-up engine.
      */
     fun payerSummaryOf(expenses: List<ExpenseEntity>, members: List<GroupMemberEntity>): String {
-        val byPayer = expenses.groupBy { it.payerId }
-        if (byPayer.size <= 1) return "Paid by ${expenses.firstOrNull()?.let { payerNameOf(it, members) } ?: "Member"}"
-        val ranked = byPayer.entries
-            .map { (_, list) -> payerNameOf(list.first(), members) to list.sumOf { it.totalAmountCents } }
-            .sortedWith(compareByDescending<Pair<String, Long>> { it.second }.thenBy { it.first })
-        val shown = ranked.take(3).joinToString(" · ") { (name, cents) -> "$name ${formatIndianRupeesFromCents(cents)}" }
-        return if (ranked.size > 3) "$shown · +${ranked.size - 3} more" else shown
+        val shares = payerSharesOf(expenses, members)
+        if (shares.size <= 1) return "Paid by ${shares.firstOrNull()?.name ?: "Member"}"
+        val shown = shares.take(3).joinToString(" · ") { "${it.name} ${it.totalFormatted}" }
+        return if (shares.size > 3) "$shown · +${shares.size - 3} more" else shown
     }
+
+    /** Every payer of [expenses] with subtotal and entries, biggest subtotal first (ties by name). */
+    fun payerSharesOf(expenses: List<ExpenseEntity>, members: List<GroupMemberEntity>): List<PayerShare> =
+        expenses.groupBy { it.payerId }.values
+            .map { list -> Triple(payerNameOf(list.first(), members), list.sumOf { it.totalAmountCents }, list) }
+            .sortedWith(compareByDescending<Triple<String, Long, List<ExpenseEntity>>> { it.second }.thenBy { it.first })
+            .map { (name, cents, list) -> PayerShare(name, formatIndianRupeesFromCents(cents), list.size, list.map { it.expenseId }) }
 
     /** Which batch a category belongs to (null = never batched: stays, tickets; cabs use the transit batch). */
     fun batchKindOf(category: TripHubBookingCategory): com.splitmate.app.ui.theme.ExpenseCardKind? = when (category) {
@@ -340,6 +365,7 @@ object ExpenseUiMappers {
             count = n,
             payerSummary = payerSummaryOf(expenses, members),
             multiplePayers = mixedPayers,
+            payers = if (mixedPayers) payerSharesOf(newestFirst, members) else emptyList(),
             unitSingular = singular,
             unitPlural = plural,
             rows = rows
