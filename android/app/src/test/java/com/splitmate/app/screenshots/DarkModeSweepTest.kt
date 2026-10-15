@@ -244,7 +244,9 @@ class DarkModeSweepTest(private val themeName: String) {
             Triple("Flea market shopping", 95_000L, "SHOPPING"),
             Triple("Parasailing Calangute", 360_000L, "ACTIVITIES")
         ).forEach { (title, cents, cat) ->
-            vm.logExpense(title = title, totalAmountCents = cents, selectedMemberIds = memberIds, expenseCategory = cat)
+            // rc11: the dinner is paid by someone else so the mixed-payer batch is covered.
+            val payer = if (title.startsWith("Dinner")) memberIds.getOrNull(1) else null
+            vm.logExpense(title = title, totalAmountCents = cents, selectedMemberIds = memberIds, expenseCategory = cat, payerMemberId = payer)
         }
         settle()
     }

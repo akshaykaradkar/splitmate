@@ -120,6 +120,7 @@ class SplitMateV240Rc10MoneyCardsTest {
                 is MoneyExpenseItem.Activity -> listOf(item.expense.expenseId)
                 is MoneyExpenseItem.Sundries -> listOf(item.expense.expenseId)
                 is MoneyExpenseItem.Ticket -> listOf(item.expense.expenseId)
+                is MoneyExpenseItem.Batch -> item.expenses.map { it.expenseId }
             }
         }
         assertEquals(all.map { it.expenseId }.sorted(), ids.sorted())
@@ -147,10 +148,11 @@ class SplitMateV240Rc10MoneyCardsTest {
 
     @Test
     fun `RC10_04 list keys stay unique when expense ids collide`() {
-        val a = expense("dup", "Breakfast A", 10_000, "FOOD")
-        val b = expense("dup", "Breakfast B", 20_000, "FOOD")
+        // Stays are never batched, so two colliding stay ids still give two cards with distinct keys.
+        val a = expense("dup", "Homestay A", 10_000, "STAY")
+        val b = expense("dup", "Homestay B", 20_000, "STAY")
         val items = ExpenseUiMappers.buildMoneyExpenseItems(
-            listOf(a to TripHubBookingCategory.FOOD, b to TripHubBookingCategory.FOOD), members, emptyList()
+            listOf(a to TripHubBookingCategory.STAY, b to TripHubBookingCategory.STAY), members, emptyList()
         )
         assertEquals(2, items.map { it.key }.toSet().size)
     }

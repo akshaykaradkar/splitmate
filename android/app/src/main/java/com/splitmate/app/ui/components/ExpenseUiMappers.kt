@@ -50,7 +50,9 @@ data class TransitHopItem(
     val destination: String,
     val amountFormatted: String,
     val riderCount: Int,
-    val isRental: Boolean
+    val isRental: Boolean,
+    /** v2.4.0 rc11: who paid this row, set only when the batch has more than one payer. */
+    val payerName: String? = null
 )
 
 data class TransitBatchData(
@@ -61,6 +63,9 @@ data class TransitBatchData(
     val payerName: String,
     val totalAmountFormatted: String,
     val totalRidesCount: Int,
+    /** "Paid by Akshay", or per-payer totals when several people paid ("Sam ₹4,860.00 · Akshay ₹1,320.00"). */
+    val payerSummary: String = "Paid by $payerName",
+    val multiplePayers: Boolean = false,
     /** Every ride, newest first; the card shows the first [TransitBatchDefaults.COLLAPSED_HOPS]. */
     val hops: List<TransitHopItem>
 )
@@ -117,6 +122,30 @@ data class TicketRowData(
     val openKey: String
 )
 
+/**
+ * v2.4.0 rc11: one card for every expense of a category that has 2+ entries (Food & dining,
+ * Activities, Shopping & other), same pattern as the cabs batch, so ten meals are one card with
+ * ten short rows instead of ten full cards. A category with a single expense keeps its rich card.
+ */
+data class CategoryBatchData(
+    val id: String,
+    val kind: com.splitmate.app.ui.theme.ExpenseCardKind,
+    val title: String,
+    val subtitle: String,
+    /** One name when a single person paid everything, otherwise "N people". */
+    val payerName: String,
+    val totalAmountFormatted: String,
+    val count: Int,
+    /** "Paid by Akshay", or per-payer totals when several people paid ("Sam ₹4,860.00 · Akshay ₹1,320.00"). */
+    val payerSummary: String = "Paid by $payerName",
+    val multiplePayers: Boolean = false,
+    /** "meal" / "activity" / "item" (used for "View all 6 meals"). */
+    val unitSingular: String,
+    val unitPlural: String,
+    /** Every entry, newest first; the card shows the first [TransitBatchDefaults.COLLAPSED_HOPS]. */
+    val rows: List<TransitHopItem>
+)
+
 object TransitBatchDefaults {
     /** Rides visible before "View all" is tapped. */
     const val COLLAPSED_HOPS = 3
@@ -131,6 +160,8 @@ sealed interface MoneyExpenseItem {
     data class Food(override val key: String, val data: FoodDiningData, val expense: ExpenseEntity) : MoneyExpenseItem
     data class Activity(override val key: String, val data: ActivityTourData, val expense: ExpenseEntity) : MoneyExpenseItem
     data class Sundries(override val key: String, val data: SundriesExpenseData, val expense: ExpenseEntity) : MoneyExpenseItem
+    /** 2+ expenses of one category (food / activities / shopping & other) in one card. */
+    data class Batch(override val key: String, val data: CategoryBatchData, val expenses: List<ExpenseEntity>) : MoneyExpenseItem
     /** Train / flight: the compact ticket row (the full ticket card lives in Overview and Plan). */
     data class Ticket(
         override val key: String,
@@ -199,6 +230,7 @@ object ExpenseUiMappers {
         val newestFirst = expenses.sortedWith(ExpenseOrdering.newestFirst({ it }, { effectiveMs(it) }))
         val days = newestFirst.map { dayFormat().format(Date(effectiveMs(it))) }.distinct()
         val multiDay = days.size > 1
+        val mixedPayers = expenses.map { it.payerId }.distinct().size > 1
         val hops = newestFirst.map { exp ->
             val ms = effectiveMs(exp)
             TransitHopItem(
@@ -207,7 +239,8 @@ object ExpenseUiMappers {
                 destination = cleanDisplayExpenseTitle(exp.title),
                 amountFormatted = formatIndianRupeesFromCents(exp.totalAmountCents),
                 riderCount = breakdownOf(exp, members, splits).splittingMembersCount,
-                isRental = exp.expenseCategory.equals("RENTAL", ignoreCase = true)
+                isRental = exp.expenseCategory.equals("RENTAL", ignoreCase = true),
+                payerName = if (mixedPayers) payerNameOf(exp, members) else null
             )
         }
         val payers = expenses.map { it.payerId }.distinct()
@@ -229,7 +262,87 @@ object ExpenseUiMappers {
             payerName = if (payers.size == 1) payerNameOf(expenses.first(), members) else "${payers.size} people",
             totalAmountFormatted = formatIndianRupeesFromCents(expenses.sumOf { it.totalAmountCents }),
             totalRidesCount = rides,
+            payerSummary = payerSummaryOf(expenses, members),
+            multiplePayers = mixedPayers,
             hops = hops
+        )
+    }
+
+    /**
+     * v2.4.0 rc11: who paid what inside a batch. One payer -> "Paid by Akshay". Several -> each payer's
+     * subtotal, biggest first ("Sam ₹4,860.00 · Akshay ₹1,320.00"), at most 3 names then "+N more".
+     * Display only: balances still come from the splits / settle-up engine.
+     */
+    fun payerSummaryOf(expenses: List<ExpenseEntity>, members: List<GroupMemberEntity>): String {
+        val byPayer = expenses.groupBy { it.payerId }
+        if (byPayer.size <= 1) return "Paid by ${expenses.firstOrNull()?.let { payerNameOf(it, members) } ?: "Member"}"
+        val ranked = byPayer.entries
+            .map { (_, list) -> payerNameOf(list.first(), members) to list.sumOf { it.totalAmountCents } }
+            .sortedWith(compareByDescending<Pair<String, Long>> { it.second }.thenBy { it.first })
+        val shown = ranked.take(3).joinToString(" · ") { (name, cents) -> "$name ${formatIndianRupeesFromCents(cents)}" }
+        return if (ranked.size > 3) "$shown · +${ranked.size - 3} more" else shown
+    }
+
+    /** Which batch a category belongs to (null = never batched: stays, tickets; cabs use the transit batch). */
+    fun batchKindOf(category: TripHubBookingCategory): com.splitmate.app.ui.theme.ExpenseCardKind? = when (category) {
+        TripHubBookingCategory.FOOD -> com.splitmate.app.ui.theme.ExpenseCardKind.FOOD
+        TripHubBookingCategory.ACTIVITIES -> com.splitmate.app.ui.theme.ExpenseCardKind.ACTIVITY
+        TripHubBookingCategory.SHOPPING, TripHubBookingCategory.GENERAL, TripHubBookingCategory.ALL ->
+            com.splitmate.app.ui.theme.ExpenseCardKind.SUNDRIES
+        else -> null
+    }
+
+    fun toCategoryBatch(
+        kind: com.splitmate.app.ui.theme.ExpenseCardKind,
+        expenses: List<ExpenseEntity>,
+        categories: Map<String, TripHubBookingCategory>,
+        members: List<GroupMemberEntity>,
+        splits: List<ExpenseSplitEntity>
+    ): CategoryBatchData {
+        val newestFirst = expenses.sortedWith(ExpenseOrdering.newestFirst({ it }, { effectiveMs(it) }))
+        val days = newestFirst.map { dayFormat().format(Date(effectiveMs(it))) }.distinct()
+        val multiDay = days.size > 1
+        val mixedPayers = expenses.map { it.payerId }.distinct().size > 1
+        val rows = newestFirst.map { exp ->
+            val ms = effectiveMs(exp)
+            val name = cleanDisplayExpenseTitle(exp.title)
+            val meal = if (kind == com.splitmate.app.ui.theme.ExpenseCardKind.FOOD) {
+                MEAL.find(exp.title)?.value?.lowercase(Locale.US)?.replaceFirstChar { it.titlecase(Locale.US) }
+            } else null
+            TransitHopItem(
+                expenseId = exp.expenseId,
+                timeLabel = if (multiDay) dayFormat().format(Date(ms)) else timeFormat().format(Date(ms)),
+                // Meal type leads only when the title doesn't already start with it ("Dinner · Thalassa").
+                destination = if (meal != null && !name.startsWith(meal, ignoreCase = true)) "$meal · $name" else name,
+                amountFormatted = formatIndianRupeesFromCents(exp.totalAmountCents),
+                riderCount = breakdownOf(exp, members, splits).splittingMembersCount,
+                isRental = false,
+                payerName = if (mixedPayers) payerNameOf(exp, members) else null
+            )
+        }
+        val (title, singular, plural) = when (kind) {
+            com.splitmate.app.ui.theme.ExpenseCardKind.FOOD -> Triple("Food & dining", "meal", "meals")
+            com.splitmate.app.ui.theme.ExpenseCardKind.ACTIVITY -> Triple("Activities", "activity", "activities")
+            else -> Triple(
+                if (expenses.all { categories[it.expenseId] == TripHubBookingCategory.SHOPPING }) "Shopping" else "Shopping & other",
+                "item", "items"
+            )
+        }
+        val payers = expenses.map { it.payerId }.distinct()
+        val n = expenses.size
+        return CategoryBatchData(
+            id = "batch_${kind.name.lowercase(Locale.US)}",
+            kind = kind,
+            title = title,
+            subtitle = "${if (n == 1) "1 $singular" else "$n $plural"} · ${if (days.size == 1) days.first() else "${days.size} days"}",
+            payerName = if (payers.size == 1) payerNameOf(expenses.first(), members) else "${payers.size} people",
+            totalAmountFormatted = formatIndianRupeesFromCents(expenses.sumOf { it.totalAmountCents }),
+            count = n,
+            payerSummary = payerSummaryOf(expenses, members),
+            multiplePayers = mixedPayers,
+            unitSingular = singular,
+            unitPlural = plural,
+            rows = rows
         )
     }
 
@@ -331,9 +444,26 @@ object ExpenseUiMappers {
             while (!usedKeys.add(k)) k = "${base}_${n++}"
             return k
         }
+        // v2.4.0 rc11: categories with 2+ expenses collapse into one batch card, placed where the first one sits.
+        val categoryById = classified.associate { it.first.expenseId to it.second }
+        val batchMembers = classified.groupBy({ batchKindOf(it.second) }, { it.first }).filterKeys { it != null }
+        val batchedKinds = batchMembers.filterValues { it.size >= 2 }.keys
+        val placedBatches = HashSet<com.splitmate.app.ui.theme.ExpenseCardKind>()
         val out = ArrayList<MoneyExpenseItem>()
         var transitPlaced = false
         for ((exp, cat) in classified) {
+            val batchKind = batchKindOf(cat)
+            if (batchKind != null && batchKind in batchedKinds) {
+                if (placedBatches.add(batchKind)) {
+                    val group = batchMembers.getValue(batchKind)
+                    out += MoneyExpenseItem.Batch(
+                        uniqueKey("batch_${batchKind.name.lowercase(Locale.US)}"),
+                        toCategoryBatch(batchKind, group, categoryById, members, splits),
+                        group
+                    )
+                }
+                continue
+            }
             when (cat) {
                 TripHubBookingCategory.CAB, TripHubBookingCategory.RENTAL -> if (!transitPlaced) {
                     transitPlaced = true

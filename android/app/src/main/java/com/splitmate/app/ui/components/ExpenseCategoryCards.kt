@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.DirectionsCar
+import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.Hotel
 import androidx.compose.material.icons.rounded.LocalActivity
 import androidx.compose.material.icons.rounded.LocalMall
@@ -226,7 +227,7 @@ private fun TitleAndAmountRow(
 
 /** Payer avatar + "Paid by …" line. */
 @Composable
-private fun PayerLine(text: String, payerName: String, modifier: Modifier = Modifier) {
+private fun PayerLine(text: String, payerName: String, modifier: Modifier = Modifier, multiplePayers: Boolean = false) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         Box(
             modifier = Modifier
@@ -235,12 +236,17 @@ private fun PayerLine(text: String, payerName: String, modifier: Modifier = Modi
                 .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = extractInitialsFromNameOrSeed(payerName).take(1),
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
+            if (multiplePayers) {
+                // Several people paid: a group glyph, the names and amounts follow in the text.
+                SymbolIcon(imageVector = Icons.Rounded.Group, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(14.dp))
+            } else {
+                Text(
+                    text = extractInitialsFromNameOrSeed(payerName).take(1),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
         }
         Spacer(modifier = Modifier.width(8.dp))
         Text(
@@ -374,59 +380,135 @@ private fun StayDateColumn(label: String, value: String, alignEnd: Boolean) {
  * Shows [TransitBatchDefaults.COLLAPSED_HOPS] rides; "View all" expands the rest in place
  * (spatial spring for size, effects spring for the fade). Each ride opens its own expense sheet.
  */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun CabsTransitBatchCard(
     batch: TransitBatchData,
     modifier: Modifier = Modifier,
     onHopClick: (TransitHopItem) -> Unit = {}
 ) {
-    var isExpanded by rememberSaveable(batch.id) { mutableStateOf(false) }
-    val haptic = LocalHapticFeedback.current
-    val visibleHops = batch.hops.take(TransitBatchDefaults.COLLAPSED_HOPS)
-    val extraHops = batch.hops.drop(TransitBatchDefaults.COLLAPSED_HOPS)
     val allRentals = batch.hops.isNotEmpty() && batch.hops.all { it.isRental }
-
-    CategoryCardFrame(
+    BatchCard(
+        stateKey = batch.id,
         kind = ExpenseCardKind.TRANSIT,
         icon = if (allRentals) Icons.Rounded.TwoWheeler else Icons.Rounded.DirectionsCar,
-        categoryLabel = batch.batchTitle,
-        headerSubtitle = batch.batchSubtitle,
-        accessibilitySummary = "${batch.batchTitle}, ${batch.totalRidesCount} rides, ${batch.totalAmountFormatted}",
-        // The batch has no single expense: a card tap toggles the timeline instead.
-        onClick = { if (extraHops.isNotEmpty()) isExpanded = !isExpanded },
+        title = batch.batchTitle,
+        subtitle = batch.batchSubtitle,
+        payerName = batch.payerName,
+        payerSummary = batch.payerSummary,
+        multiplePayers = batch.multiplePayers,
+        totalAmountFormatted = batch.totalAmountFormatted,
+        count = batch.totalRidesCount,
+        unitSingular = "ride",
+        unitPlural = "rides",
+        rows = batch.hops,
+        modifier = modifier,
+        onRowClick = onHopClick
+    )
+}
+
+/**
+ * v2.4.0 rc11: Food & dining / Activities / Shopping & other with 2+ expenses, in ONE card (same
+ * layout as the cabs batch). Each row opens its own expense sheet (edit, undo, history).
+ */
+@Composable
+fun CategoryBatchCard(
+    batch: CategoryBatchData,
+    modifier: Modifier = Modifier,
+    onRowClick: (TransitHopItem) -> Unit = {}
+) {
+    BatchCard(
+        stateKey = batch.id,
+        kind = batch.kind,
+        icon = when (batch.kind) {
+            ExpenseCardKind.FOOD -> Icons.Rounded.Restaurant
+            ExpenseCardKind.ACTIVITY -> Icons.Rounded.LocalActivity
+            else -> if (batch.title == "Shopping") Icons.Rounded.LocalMall else Icons.AutoMirrored.Rounded.ReceiptLong
+        },
+        title = batch.title,
+        subtitle = batch.subtitle,
+        payerName = batch.payerName,
+        payerSummary = batch.payerSummary,
+        multiplePayers = batch.multiplePayers,
+        totalAmountFormatted = batch.totalAmountFormatted,
+        count = batch.count,
+        unitSingular = batch.unitSingular,
+        unitPlural = batch.unitPlural,
+        rows = batch.rows,
+        modifier = modifier,
+        onRowClick = onRowClick
+    )
+}
+
+/**
+ * Shared batch layout: category total in the header, payer line, then a micro-timeline of rows.
+ * Shows [TransitBatchDefaults.COLLAPSED_HOPS] rows; "View all" expands the rest in place
+ * (spatial spring for size, effects spring for the fade).
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun BatchCard(
+    stateKey: String,
+    kind: ExpenseCardKind,
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    payerName: String,
+    payerSummary: String,
+    multiplePayers: Boolean,
+    totalAmountFormatted: String,
+    count: Int,
+    unitSingular: String,
+    unitPlural: String,
+    rows: List<TransitHopItem>,
+    modifier: Modifier = Modifier,
+    onRowClick: (TransitHopItem) -> Unit
+) {
+    var isExpanded by rememberSaveable(stateKey) { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
+    val visibleRows = rows.take(TransitBatchDefaults.COLLAPSED_HOPS)
+    val extraRows = rows.drop(TransitBatchDefaults.COLLAPSED_HOPS)
+    val countText = if (count == 1) "1 $unitSingular" else "$count $unitPlural"
+
+    CategoryCardFrame(
+        kind = kind,
+        icon = icon,
+        categoryLabel = title,
+        headerSubtitle = subtitle,
+        accessibilitySummary = "$title, $countText, $totalAmountFormatted",
+        // The batch has no single expense: a card tap toggles the list instead.
+        onClick = { if (extraRows.isNotEmpty()) isExpanded = !isExpanded },
         modifier = modifier,
         headerTrailing = {
             Column(horizontalAlignment = Alignment.End) {
-                Text(text = batch.totalAmountFormatted, style = MoneyAmountStyle, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
+                Text(text = totalAmountFormatted, style = MoneyAmountStyle, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
                 Text(text = "Category total", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     ) { colors ->
-        PayerLine(text = "Paid by ${batch.payerName}", payerName = batch.payerName)
+        PayerLine(text = payerSummary, payerName = payerName, multiplePayers = multiplePayers)
         Spacer(modifier = Modifier.padding(top = 6.dp))
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        visibleHops.forEachIndexed { index, hop ->
-            TransitHopRow(hop = hop, colors = colors, onClick = { onHopClick(hop) })
-            if (index < visibleHops.lastIndex || (isExpanded && extraHops.isNotEmpty())) {
+        visibleRows.forEachIndexed { index, row ->
+            TransitHopRow(hop = row, colors = colors, onClick = { onRowClick(row) })
+            if (index < visibleRows.lastIndex || (isExpanded && extraRows.isNotEmpty())) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), modifier = Modifier.padding(start = 20.dp))
             }
         }
         AnimatedVisibility(
-            visible = isExpanded && extraHops.isNotEmpty(),
+            visible = isExpanded && extraRows.isNotEmpty(),
             enter = expandVertically(animationSpec = SplitMateMotion.defaultSpatial()) + fadeIn(animationSpec = SplitMateMotion.defaultEffects()),
             exit = shrinkVertically(animationSpec = SplitMateMotion.defaultSpatial()) + fadeOut(animationSpec = SplitMateMotion.defaultEffects())
         ) {
             Column {
-                extraHops.forEachIndexed { index, hop ->
-                    TransitHopRow(hop = hop, colors = colors, onClick = { onHopClick(hop) })
-                    if (index < extraHops.lastIndex) {
+                extraRows.forEachIndexed { index, row ->
+                    TransitHopRow(hop = row, colors = colors, onClick = { onRowClick(row) })
+                    if (index < extraRows.lastIndex) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), modifier = Modifier.padding(start = 20.dp))
                     }
                 }
             }
         }
-        if (extraHops.isNotEmpty()) {
+        if (extraRows.isNotEmpty()) {
             Spacer(modifier = Modifier.padding(top = 8.dp))
             FilledTonalButton(
                 onClick = {
@@ -441,7 +523,7 @@ fun CabsTransitBatchCard(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
             ) {
                 Text(
-                    text = if (isExpanded) "Show fewer rides" else "View all ${batch.totalRidesCount} rides",
+                    text = if (isExpanded) "Show fewer $unitPlural" else "View all $count $unitPlural",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.ExtraBold
                 )
@@ -469,15 +551,26 @@ private fun TransitHopRow(hop: TransitHopItem, colors: ExpenseCategoryCardColors
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.width(64.dp)
         )
-        Text(
-            text = hop.destination,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = hop.destination,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            // v2.4.0 rc11: mixed-payer batches name the payer on every row.
+            if (hop.payerName != null) {
+                Text(
+                    text = "Paid by ${hop.payerName}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
         Spacer(modifier = Modifier.width(8.dp))
         Text(text = hop.amountFormatted, style = tnum(MaterialTheme.typography.bodyMedium, FontWeight.ExtraBold), color = MaterialTheme.colorScheme.onSurface)
     }

@@ -2660,6 +2660,13 @@ private fun MoneyCategoryExpenseItem(
             onHopClick = { hop -> item.expenses.firstOrNull { it.expenseId == hop.expenseId }?.let(openDetails) }
         )
 
+        // v2.4.0 rc11: 2+ meals / activities / shopping & other in one card; each row opens its expense sheet.
+        is com.splitmate.app.ui.components.MoneyExpenseItem.Batch -> com.splitmate.app.ui.components.CategoryBatchCard(
+            batch = item.data,
+            modifier = modifier,
+            onRowClick = { row -> item.expenses.firstOrNull { it.expenseId == row.expenseId }?.let(openDetails) }
+        )
+
         is com.splitmate.app.ui.components.MoneyExpenseItem.Food -> TripHubSwipeToManage(
             expense = item.expense,
             onDeleteExpense = { onDeleteExpense(item.expense.expenseId) },
