@@ -98,6 +98,7 @@ class TripGuideViewModel(
     private val _uiState = MutableStateFlow(
         TripGuideUiState(
             guideEnabled = repository.currentFlags().guideEnabled,
+            mapEnabled = repository.currentFlags().mapEnabled,
             isOffline = !network.state.value.online
         )
     )
@@ -732,6 +733,7 @@ class TripGuideViewModel(
         _uiState.update {
             it.copy(
                 guideEnabled = newFlags.guideEnabled,
+                mapEnabled = newFlags.mapEnabled,
                 subView = if (newFlags.guideEnabled) it.subView else PlanSubView.BOOKINGS
             )
         }

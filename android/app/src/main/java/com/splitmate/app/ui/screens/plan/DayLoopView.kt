@@ -2,6 +2,10 @@
 
 package com.splitmate.app.ui.screens.plan
 
+import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.togetherWith
 import com.splitmate.app.ui.components.SymbolIcon
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -88,8 +92,29 @@ fun DayLoopView(
     val stops = route?.orderedStops.orEmpty()
     val motion = LocalMotionScheme.current
 
+    // rc15: mapcn-style map pane above the stop list (MapLibre GL JS + OpenFreeMap, themed from tokens).
+    val showMap = state.mapEnabled && stay != null && route != null && stops.isNotEmpty()
+    val mapController = remember { com.splitmate.app.ui.components.map.LoopMapController() }
+    var selectedStopId by androidx.compose.runtime.saveable.rememberSaveable(loop.day) { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    var mapExpanded by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(true) }
+    androidx.compose.runtime.LaunchedEffect(selectedStopId) { mapController.select(selectedStopId) }
+
+    Column(modifier = modifier.fillMaxSize()) {
+    if (showMap) {
+        LoopMapSection(
+            stay = stay!!,
+            stops = stops,
+            offline = state.isOffline,
+            expanded = mapExpanded,
+            onToggle = { mapExpanded = !mapExpanded },
+            selectedStopId = selectedStopId,
+            onSelectStop = { selectedStopId = it },
+            onOpenDetails = { id -> stops.firstOrNull { it.id == id }?.let { actions.openPlace(it) } },
+            controller = mapController
+        )
+    }
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
+        modifier = Modifier.weight(1f).fillMaxWidth(),
         contentPadding = PaddingValues(
             start = PlanGuideDefaults.ScreenGutter,
             end = PlanGuideDefaults.ScreenGutter,
@@ -205,7 +230,10 @@ fun DayLoopView(
                             total = stops.size,
                             place = place,
                             legKm = route.legStraightKm.getOrNull(index),
-                            onOpen = { actions.openPlace(place) },
+                            onOpen = {
+                                if (showMap) selectedStopId = place.id
+                                actions.openPlace(place)
+                            },
                             moveTo = tripDays?.let { range ->
                                 { MoveToDayButton(placeName = place.name, range = range, currentDay = loop.day) { d -> onMovePlaceToDay(place.id, d) } }
                             },
@@ -271,7 +299,80 @@ fun DayLoopView(
             }
         }
     }
+    }
 }
+
+/**
+ * rc15: the collapsible map section. Expanded: the map pane (about 40% of a phone screen).
+ * Collapsed: one slim "Show map" row, so the list gets the whole height.
+ */
+@Composable
+private fun LoopMapSection(
+    stay: StayPin,
+    stops: List<Place>,
+    offline: Boolean,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    selectedStopId: String?,
+    onSelectStop: (String?) -> Unit,
+    onOpenDetails: (String) -> Unit,
+    controller: com.splitmate.app.ui.components.map.LoopMapController
+) {
+    val palette = com.splitmate.app.ui.DesignSystemBindings.activePalette
+    val stayLabel = PlanGuideFormat.sanitizeDisplay(stay.label) ?: "Your stay"
+    val model = remember(palette, stay, stops) {
+        val colors = com.splitmate.app.ui.theme.MapExtendedColors.of(palette)
+        val style = com.splitmate.app.ui.components.map.LoopMapStyle
+        com.splitmate.app.ui.components.map.LoopMapModel(
+            styleJson = style.style(colors),
+            overlayJson = style.overlay(colors),
+            dataJson = style.data(stay.location, stayLabel, stops),
+            points = listOf(com.splitmate.app.ui.components.map.LoopMapPoint(style.STAY_ID, 0, stay.location.lat, stay.location.lng, isStay = true)) +
+                stops.filter { it.location != null }.mapIndexed { i, p ->
+                    com.splitmate.app.ui.components.map.LoopMapPoint(p.id, i + 1, p.location!!.lat, p.location.lng, isStay = false)
+                }
+        )
+    }
+    val selection = selectedStopId?.let { id ->
+        val i = stops.indexOfFirst { it.id == id }
+        stops.getOrNull(i)?.let { p ->
+            com.splitmate.app.ui.components.map.LoopMapSelection(
+                id = p.id, index = i + 1,
+                name = PlanGuideFormat.sanitizeDisplay(p.name) ?: p.name,
+                kindLabel = PlanGuideFormat.kindLabel(p.kind)
+            )
+        }
+    }
+    val motion = LocalMotionScheme.current
+    Column(modifier = Modifier.fillMaxWidth().animateContentSize(motion.defaultSpatialSpec())) {
+        if (expanded) {
+            com.splitmate.app.ui.components.map.LoopMapPane(
+                model = model,
+                offline = offline,
+                selection = selection,
+                onSelectStop = onSelectStop,
+                onOpenDetails = onOpenDetails,
+                controller = controller,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(MAP_PANE_HEIGHT)
+            )
+        }
+        TextButton(
+            onClick = onToggle,
+            shapes = ButtonDefaults.shapes(),
+            modifier = Modifier
+                .padding(horizontal = 8.dp)
+                .heightIn(min = 48.dp)
+        ) {
+            SymbolIcon(if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(if (expanded) "Hide map" else "Show map", style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+private val MAP_PANE_HEIGHT = 300.dp
 
 @Composable
 private fun LoopTotals(loop: LoopUi, stopCount: Int, modifier: Modifier = Modifier) {

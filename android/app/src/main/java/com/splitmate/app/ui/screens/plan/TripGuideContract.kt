@@ -98,6 +98,8 @@ data class TripGuideUiState(
     /** rc14: set when Explore was opened from a day's loop; "Add to loop" then places on that day. */
     val exploreTargetDay: Int? = null,
     val guideEnabled: Boolean = true,       // remote kill-switch
+    /** rc15: remote kill-switch for the Loop map pane. */
+    val mapEnabled: Boolean = true,
     val phase: GuidePhase = GuidePhase.Empty,
     /** True ONLY while a network job is in flight (drives InFlightWavyProgressIndicator). */
     val networkInFlight: Boolean = false,

@@ -166,6 +166,8 @@ class GuideFeatureFlagsProvider(
         const val KEY_NOMINATIM = "nominatimEnabled"
         /** v2.3.5 (#3): HTML body fallback in ShortLinkResolver. */
         const val KEY_SHORT_LINK_BODY = "shortLinkBodyParseEnabled"
+        /** rc15: the in-app Loop map. */
+        const val KEY_MAP = "mapEnabled"
 
         /**
          * Parses the published flags JSON. Null when the body is not a JSON object (treated as a
@@ -180,7 +182,8 @@ class GuideFeatureFlagsProvider(
                     shortLinkParsingEnabled = booleanOrTrue(o, KEY_SHORT_LINK),
                     wdqsEnabled = booleanOrTrue(o, KEY_WDQS),
                     nominatimEnabled = booleanOrTrue(o, KEY_NOMINATIM),
-                    shortLinkBodyParseEnabled = booleanOrTrue(o, KEY_SHORT_LINK_BODY)
+                    shortLinkBodyParseEnabled = booleanOrTrue(o, KEY_SHORT_LINK_BODY),
+                    mapEnabled = booleanOrTrue(o, KEY_MAP)
                 )
             } catch (_: Exception) {
                 null
@@ -197,6 +200,7 @@ class GuideFeatureFlagsProvider(
                 .put(KEY_WDQS, flags.wdqsEnabled)
                 .put(KEY_NOMINATIM, flags.nominatimEnabled)
                 .put(KEY_SHORT_LINK_BODY, flags.shortLinkBodyParseEnabled)
+                .put(KEY_MAP, flags.mapEnabled)
                 .toString()
 
         internal fun decodeCache(raw: String): Pair<GuideFeatureFlags, Long>? = try {

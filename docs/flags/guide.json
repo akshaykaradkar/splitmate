@@ -4,5 +4,6 @@
   "shortLinkParsingEnabled": true,
   "wdqsEnabled": true,
   "nominatimEnabled": true,
-  "shortLinkBodyParseEnabled": true
+  "shortLinkBodyParseEnabled": true,
+  "mapEnabled": true
 }

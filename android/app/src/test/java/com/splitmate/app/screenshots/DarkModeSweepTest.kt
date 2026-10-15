@@ -1,5 +1,8 @@
 package com.splitmate.app.screenshots
 
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
@@ -336,6 +339,53 @@ class DarkModeSweepTest(private val themeName: String) {
     @Test fun s04_trip_plan() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Plan", exact = true); shot("s04_trip_plan") }
     /** rc13: Days -> "Make a loop" opens the Loop (no stay yet on the demo trip). */
     @Test fun p01_plan_loop() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Plan", exact = true); tap(text = "Make a loop"); shot("p01_plan_loop") }
+    /** rc15: the Loop map pane (fake canvas: WebView can't render on the JVM) with a selected stop. */
+    @Test fun p04_loop_map_pane() {
+        val vm = SplitMateViewModel()
+        vm.setExpressiveThemeMode(mode, compose.activity)
+        val stay = com.splitmate.app.data.guide.LatLng(15.335, 76.462)
+        val stops = listOf(
+            "Virupaksha Temple" to com.splitmate.app.data.guide.LatLng(15.336, 76.459),
+            "Hampi Bazaar" to com.splitmate.app.data.guide.LatLng(15.338, 76.465),
+            "Vittala Temple" to com.splitmate.app.data.guide.LatLng(15.343, 76.477),
+            "Lotus Mahal" to com.splitmate.app.data.guide.LatLng(15.320, 76.471)
+        ).mapIndexed { i, (n, l) ->
+            com.splitmate.app.data.guide.Place(id = "wd:Q$i", kind = com.splitmate.app.data.guide.PlaceKind.SEE, name = n, location = l, source = com.splitmate.app.data.guide.PlaceSource.WIKIDATA)
+        }
+        compose.setContent {
+            val ui by vm.uiState.collectAsStateWithLifecycle()
+            SplitMateMaterial3ExpressiveTheme(themeMode = ui.activeThemeMode, darkTheme = ui.isDarkTheme) {
+                val colors = com.splitmate.app.ui.theme.MapExtendedColors.of(com.splitmate.app.ui.DesignSystemBindings.activePalette)
+                val s = com.splitmate.app.ui.components.map.LoopMapStyle
+                val model = com.splitmate.app.ui.components.map.LoopMapModel(
+                    styleJson = s.style(colors), overlayJson = s.overlay(colors), dataJson = s.data(stay, "Hotel Mayura", stops),
+                    points = listOf(com.splitmate.app.ui.components.map.LoopMapPoint(s.STAY_ID, 0, stay.lat, stay.lng, true)) +
+                        stops.mapIndexed { i, p -> com.splitmate.app.ui.components.map.LoopMapPoint(p.id, i + 1, p.location!!.lat, p.location!!.lng, false) }
+                )
+                androidx.compose.runtime.CompositionLocalProvider(com.splitmate.app.ui.components.map.LocalUseFakeLoopMap provides true) {
+                    androidx.compose.material3.Surface(color = androidx.compose.material3.MaterialTheme.colorScheme.surface) {
+                        androidx.compose.foundation.layout.Column(modifier = androidx.compose.ui.Modifier.fillMaxSize()) {
+                            com.splitmate.app.ui.components.map.LoopMapPane(
+                                model = model, offline = false,
+                                selection = com.splitmate.app.ui.components.map.LoopMapSelection("wd:Q2", 3, "Vittala Temple", "See"),
+                                onSelectStop = {}, onOpenDetails = {},
+                                controller = remember { com.splitmate.app.ui.components.map.LoopMapController() },
+                                modifier = androidx.compose.ui.Modifier.fillMaxWidth().height(300.dp)
+                            )
+                            com.splitmate.app.ui.components.map.LoopMapPane(
+                                model = model, offline = true, selection = null, onSelectStop = {}, onOpenDetails = {},
+                                controller = remember { com.splitmate.app.ui.components.map.LoopMapController() },
+                                modifier = androidx.compose.ui.Modifier.fillMaxWidth().padding(top = 16.dp).height(180.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        settle()
+        shotNoAudit("p04_loop_map_pane")
+    }
+
     /** rc13: Plan › Explore (offline in tests: the destination / guide entry state). */
     @Test fun p02_plan_explore() { launch(); tap(text = "Lake Tahoe Cabin"); tap(text = "Plan", exact = true); tap(text = "Explore", exact = true); shot("p02_plan_explore") }
 

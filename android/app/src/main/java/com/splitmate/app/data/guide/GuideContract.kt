@@ -157,7 +157,9 @@ data class GuideFeatureFlags(
      * 256 KB of the final Google Maps HTML page to find the pin when the redirect URLs carry no
      * coordinates. Off = redirect headers only (v2.3.4 behaviour).
      */
-    val shortLinkBodyParseEnabled: Boolean = true
+    val shortLinkBodyParseEnabled: Boolean = true,
+    /** rc15: remote kill-switch for the in-app Loop map (MapLibre GL JS + OpenFreeMap tiles). */
+    val mapEnabled: Boolean = true
 )
 
 // ---------------------------------------------------------------------------------------------

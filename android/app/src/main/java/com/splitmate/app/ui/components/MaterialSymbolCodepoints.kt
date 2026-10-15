@@ -70,6 +70,7 @@ internal val MaterialSymbolCodepoints: Map<String, Int> = hashMapOf(
     "ExpandMore" to 0xe5cf, // expand_more
     "Explore" to 0xe87a, // explore
     "Fastfood" to 0xe57a, // fastfood
+    "FitScreen" to 0xea10, // fit_screen
     "Flag" to 0xf0c6, // flag
     "Flight" to 0xe539, // flight
     "FlightTakeoff" to 0xe905, // flight_takeoff
@@ -140,6 +141,7 @@ internal val MaterialSymbolCodepoints: Map<String, Int> = hashMapOf(
     "QrCodeScanner" to 0xf206, // qr_code_scanner
     "RamenDining" to 0xea64, // ramen_dining
     "ReceiptLong" to 0xef6e, // receipt_long
+    "Remove" to 0xe15b, // remove
     "Replay" to 0xe042, // replay
     "Restaurant" to 0xe56c, // restaurant
     "Restore" to 0xe8b3, // restore
