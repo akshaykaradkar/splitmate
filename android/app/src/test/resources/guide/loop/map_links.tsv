@@ -64,3 +64,11 @@ geo:0,0?q=Hotel+Mayura	NONE
 Room 12.5, floor 3.2	NONE
 https://maps.app.goo.gl/abcDEF123	NONE
 https://www.google.com/maps/place/X/data=!3d95.5!4d76.4	NONE
+# v2.4.0: live maps.app.goo.gl redirect targets recorded 2026-10-20 (hotel, landmark, dropped pin) + Apple Maps / OSM forms
+https://www.google.com/maps/place/Taj+Fort+Aguada+Resort+%26+Spa,+Goa/@15.4975365,73.7670868,17z/data=!4m9!3m8!1s0x3bbfc17572c6093d:0xc2b14e0b1a4873ef!5m2!4m1!1i2!8m2!3d15.4975365!4d73.7670868!16s%2Fg%2F1tkks9qr?entry=tts&g_ep=EgoyMDI2MTAxNC4wIPu8ASoASAFQAw%3D%3D&skid=85414f82-9eaf-4dd5-978a-dc3e77721255	PLACE_PIN	15.4975365	73.7670868
+https://www.google.com/maps/place/Hampi+Bazaar/@15.3341232,76.4643603,17z/data=!3m1!4b1!4m6!3m5!1s0x3bb77fdba4e7ba67:0xacabb2edc27d80a!8m2!3d15.3341232!4d76.4643603!16s%2Fg%2F11c5_vyzdn?entry=tts&g_ep=EgoyMDI2MTAxNC4wIPu8ASoASAFQAw%3D%3D&skid=7bf5c17f-1084-4f02-bb3f-6da00241ef46	PLACE_PIN	15.3341232	76.4643603
+https://www.google.com/maps/place/15%C2%B020'06.0%22N+76%C2%B027'36.0%22E/@15.335,76.46,17z/data=!3m1!4b1!4m4!3m3!8m2!3d15.335!4d76.46?entry=tts&skid=0ead35ed-6d21-45a9-bff9-db6d9428135e	PLACE_PIN	15.335	76.46
+https://maps.apple.com/?ll=15.3341232,76.4643603&q=Hampi%20Bazaar	QUERY_PARAM	15.3341232	76.4643603
+https://www.openstreetmap.org/?mlat=15.3341232&mlon=76.4643603#map=17/15.3341232/76.4643603	QUERY_PARAM	15.3341232	76.4643603
+https://www.openstreetmap.org/#map=17/15.3341232/76.4643603	VIEWPORT	15.3341232	76.4643603
+https://www.openstreetmap.org/?mlat=15.3341232	NONE

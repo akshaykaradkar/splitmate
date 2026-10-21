@@ -25,13 +25,21 @@ import javax.net.ssl.SSLException
  *   URLs are parsed offline only.
  * - **Host allow-list** for any URL in the input: `maps.app.goo.gl`, `goo.gl/maps…`,
  *   `maps.google.<tld>`, `(www.)google.<tld>/maps…`, `g.co/kgs…`. Any other host is Rejected,
- *   even when the URL happens to contain numbers.
+ *   even when the URL happens to contain numbers. v2.4.0: `maps.apple.com` and
+ *   `openstreetmap.org` links are accepted too, but parsed **offline only** (never fetched,
+ *   never a redirect target).
  * - **HTTPS only.** `http://` input or an `http://` redirect target is Rejected.
  * - **Manual redirects (v2.3.5):** GET first with a mobile-browser identity (HEAD only when GET
  *   is refused with 405/501), at most [MAX_REDIRECTS] redirects, one retry with a short backoff
  *   on I/O errors/timeouts (from the second hop on only while no coordinate or place-name hint is
  *   known). When a shortener answers a browser with a page instead of a redirect,
  *   it is asked once more with the app identity.
+ * - **Time budget (v2.4.0):** the whole lookup is capped at [OVERALL_TIMEOUT_MS] (12 s) and each
+ *   request at [OkHttpRedirectFetcher.CALL_TIMEOUT_MS] (6 s). Measured 2026-10-20: a live
+ *   `maps.app.goo.gl` link answers one 302 carrying `!3d<lat>!4d<lng>` in ~1.2 s, so a healthy
+ *   lookup finishes in ~1.3 s; the cap only matters on broken networks. Hitting the cap cancels
+ *   the in-flight request and returns the best partial result (viewport coordinate or place-name
+ *   hint) when one is known, otherwise an honest [REASON_TIMEOUT].
  * - **consent.google.\*** interstitials are not fetched. Their `continue=` parameter is decoded
  *   and followed instead. **google.\*\/sorry** (rate-limit) pages are not fetched either: their
  *   `continue=` URL is parsed offline and the chain stops there.
@@ -296,15 +304,20 @@ class ShortLinkResolver(
         /** Maximum number of HTTP redirects followed (audit §4.1; raised to 8 in v2.3.5). */
         const val MAX_REDIRECTS = 8
 
-        /** Wait before the single retry of a failed hop. */
-        const val RETRY_BACKOFF_MS = 600L
+        /** Wait before the single retry of a failed hop (v2.4.0: 300 ms, was 600 ms). */
+        const val RETRY_BACKOFF_MS = 300L
 
-        /** Upper bound for the whole chain (hops x retries) so the sheet never spins forever. */
-        const val OVERALL_TIMEOUT_MS = 45_000L
+        /**
+         * Hard cap for the whole lookup (hops × retries × body reads). v2.4.0: 12 s, was 45 s.
+         * The cap is authoritative: it cancels the in-flight OkHttp call (see
+         * [OkHttpRedirectFetcher]) and the best partial result (viewport coordinate, place-name
+         * hint) is returned instead of an error whenever one is known.
+         */
+        const val OVERALL_TIMEOUT_MS = 12_000L
 
         const val REASON_EMPTY = "Paste a Google Maps link or coordinates."
         const val REASON_NOTHING_FOUND = "No location found in the pasted text."
-        const val REASON_UNSUPPORTED_HOST = "Only Google Maps links are supported."
+        const val REASON_UNSUPPORTED_HOST = "Only Google Maps, Apple Maps or OpenStreetMap links are supported."
         const val REASON_INSECURE = "Only secure (https) links are supported."
         const val REASON_TOO_MANY_REDIRECTS = "This link redirects too many times."
         const val REASON_INVALID_REDIRECT = "This link could not be followed."
@@ -313,11 +326,12 @@ class ShortLinkResolver(
 
         // v2.3.5 (#3): failure messages that say what actually happened. Only REASON_OFFLINE and
         // REASON_CANT_CONNECT talk about connectivity, and only when that is the real cause.
-        const val REASON_OFFLINE = "You're offline. Connect and try again, or paste coordinates."
+        // v2.4.0: "offline" now also covers a connected-but-unvalidated network (captive portal).
+        const val REASON_OFFLINE = "No working internet connection right now. Connect and try again, or paste coordinates."
         const val REASON_CANT_CONNECT =
             "Couldn't connect to Google Maps on this network. Try again, or paste coordinates or search by name."
         const val REASON_TIMEOUT =
-            "Google Maps took too long to answer. Try again, or paste coordinates or search by name."
+            "Google Maps didn't answer within 12 seconds. Try again, paste coordinates, or search by name."
         const val REASON_SECURE_CONNECTION =
             "This network blocked the secure link to Google Maps. Paste coordinates or search by name."
         const val REASON_GOOGLE_REFUSED =
@@ -361,8 +375,11 @@ class ShortLinkResolver(
 
         private val HTTP_URL = Regex("""(?i)\bhttps?://[^\s<>"'`]+""")
         private val BARE_URL = Regex(
-            """(?i)(?<![\w./@-])(?:maps\.app\.goo\.gl|goo\.gl/maps|g\.co/kgs|maps\.google\.[a-z.]{2,10}|(?:www\.)?google\.[a-z.]{2,10}/maps)[^\s<>"'`]*"""
+            """(?i)(?<![\w./@-])(?:maps\.app\.goo\.gl|goo\.gl/maps|g\.co/kgs|maps\.google\.[a-z.]{2,10}|(?:www\.)?google\.[a-z.]{2,10}/maps|maps\.apple\.com|(?:www\.)?openstreetmap\.org|osm\.org)[^\s<>"'`]*"""
         )
+
+        /** v2.4.0: non-Google map hosts whose links are parsed offline only (never fetched). */
+        private val OFFLINE_ONLY_HOSTS = setOf("maps.apple.com", "openstreetmap.org", "www.openstreetmap.org", "osm.org", "www.osm.org")
 
         /**
          * Finds the first http(s) URL in free text (share-intent payloads put the name first).
@@ -372,6 +389,21 @@ class ShortLinkResolver(
             HTTP_URL.find(text)?.let { return trimTrailingPunctuation(it.value) }
             BARE_URL.find(text)?.let { return "https://" + trimTrailingPunctuation(it.value) }
             return null
+        }
+
+        /**
+         * v2.4.0: true when resolving [text] will (with default flags) make a network request, i.e.
+         * it holds a Google shortener / place-id link and no EXACT coordinate can be parsed offline.
+         * The ViewModel uses this to flag `networkInFlight` only for real lookups.
+         */
+        fun requiresNetwork(text: String): Boolean {
+            val trimmed = text.trim().take(MapLinkCoordinateParser.MAX_INPUT_CHARS)
+            val url = findFirstUrl(trimmed) ?: return false
+            val parsed = SimpleUrl.parse(url) ?: return false
+            if (parsed.scheme != "https" || !isAllowedInputUrl(parsed)) return false
+            val local = MapLinkCoordinateParser.extractCoordinate(trimmed)
+            if (local != null && local.precision == CoordinatePrecision.EXACT) return false
+            return needsNetwork(parsed)
         }
 
         private fun trimTrailingPunctuation(s: String): String = s.trimEnd('.', ',', ';', ':', '!', '?', ')', ']', '}', '\'', '"')
@@ -386,6 +418,7 @@ class ShortLinkResolver(
                 u.host == "g.co" -> path == "/kgs" || path.startsWith("/kgs/")
                 MAPS_GOOGLE.matches(u.host) -> true
                 GOOGLE_WWW.matches(u.host) -> path == "/maps" || path.startsWith("/maps/")
+                u.host in OFFLINE_ONLY_HOSTS -> true
                 else -> false
             }
         }
@@ -405,9 +438,10 @@ class ShortLinkResolver(
             return GOOGLE_WWW.matches(u.host) && (u.rawQueryParam("cid") != null || u.rawQueryParam("ftid") != null)
         }
 
-        /** Allow-list for redirect targets: input allow-list plus consent and any google.<tld> path. */
+        /** Allow-list for redirect targets: Google input hosts plus consent and any google.<tld> path. */
         internal fun isAllowedHopUrl(u: SimpleUrl): Boolean {
             if (u.port != null && u.port != 443) return false
+            if (u.host in OFFLINE_ONLY_HOSTS) return false
             return isAllowedInputUrl(u) || CONSENT_HOST.matches(u.host) || GOOGLE_WWW.matches(u.host)
         }
 

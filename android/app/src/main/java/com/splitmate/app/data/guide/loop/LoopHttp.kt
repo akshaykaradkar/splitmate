@@ -3,33 +3,55 @@ package com.splitmate.app.data.guide.loop
 import com.splitmate.app.data.guide.GuideHttp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.suspendCancellableCoroutine
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
+import okhttp3.Response
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 /**
- * Prefers IPv4 (`A`) records ahead of IPv6 (`AAAA`) records while keeping IPv6 as fallback.
+ * Orders DNS answers so that OkHttp reaches a working address family quickly.
  *
- * OkHttp 4.12 does not implement Happy Eyeballs (RFC 8305); on dual-stack Android carrier networks
- * where IPv6 routes to Google or OpenStreetMap are blackholed, trying IPv6 first burns 10–20s per
- * address before IPv4 is ever attempted. Putting IPv4 first avoids the blackhole while still
- * working on IPv6-only networks.
+ * OkHttp 4.12 does not implement Happy Eyeballs (RFC 8305): it dials the returned addresses one
+ * after another, each with the full connect timeout. Google hosts answer with many records
+ * (`maps.app.goo.gl`: 6 × A + 4 × AAAA on 2026-10-20), so a blackholed family (SYNs dropped, not
+ * refused) burns `addresses × connectTimeout` before the other family is ever tried — far more
+ * than one call's budget. v2.3.x put every IPv4 record first, which fixed IPv6 blackholes (Indian
+ * dual-stack carriers) but made an IPv4 blackhole (IPv6-only APN / Wi-Fi without 464XLAT)
+ * unreachable within the call timeout.
+ *
+ * v2.4.0: addresses are **interleaved by family** (RFC 8305 §4), IPv4 first:
+ * `[v4₁, v6₁, v4₂, v6₂, …]`. Whatever family is broken, the other one is dialled on the second
+ * attempt, i.e. after one connect timeout. Single-family answers are returned untouched.
  */
 object Ipv4PreferredDns : Dns {
-    override fun lookup(hostname: String): List<InetAddress> {
-        val addresses = Dns.SYSTEM.lookup(hostname)
+    override fun lookup(hostname: String): List<InetAddress> = interleave(Dns.SYSTEM.lookup(hostname))
+
+    /** Pure ordering step (unit-tested): IPv4 first, then alternate families. */
+    internal fun interleave(addresses: List<InetAddress>): List<InetAddress> {
         if (addresses.size <= 1) return addresses
         val ipv4 = addresses.filterIsInstance<Inet4Address>()
         if (ipv4.isEmpty() || ipv4.size == addresses.size) return addresses
         val ipv6 = addresses.filter { it !is Inet4Address }
-        return ipv4 + ipv6
+        val out = ArrayList<InetAddress>(addresses.size)
+        var i = 0
+        while (i < ipv4.size || i < ipv6.size) {
+            if (i < ipv4.size) out += ipv4[i]
+            if (i < ipv6.size) out += ipv6[i]
+            i++
+        }
+        return out
     }
 }
 
@@ -84,8 +106,14 @@ interface HttpTextFetcher {
 }
 
 /**
- * OkHttp implementation of [RedirectFetcher]: `followRedirects(false)`, IPv4-preferred DNS,
+ * OkHttp implementation of [RedirectFetcher]: `followRedirects(false)`, family-interleaved DNS,
  * HTTP/1.1 so closing a partially read 2 MB Google Maps page never stalls draining an HTTP/2 stream.
+ *
+ * v2.4.0: requests are **enqueued, not executed**, and bridged with `suspendCancellableCoroutine`.
+ * Cancelling the coroutine (sheet closed, new paste, the resolver's overall budget) cancels the
+ * OkHttp call immediately — a blocking `execute()` under `runInterruptible` cannot be interrupted
+ * while the socket is connecting or reading, so the old implementation kept running to its own
+ * timeout. No thread is parked; the capped body read happens on OkHttp's dispatcher thread.
  */
 class OkHttpRedirectFetcher(
     private val client: OkHttpClient = defaultClient()
@@ -99,47 +127,59 @@ class OkHttpRedirectFetcher(
         method: ProbeMethod,
         identity: FetchIdentity,
         maxBodyBytes: Int
-    ): RedirectProbe =
-        runInterruptible(Dispatchers.IO) {
-            if (!url.startsWith("https://", ignoreCase = true)) throw IOException("HTTPS only")
-            val builder = Request.Builder().url(url)
-            when (identity) {
-                FetchIdentity.BROWSER_MOBILE -> builder
-                    .header("User-Agent", MOBILE_BROWSER_USER_AGENT)
-                    .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-                    .header("Accept-Language", "en-US,en;q=0.9")
-                FetchIdentity.APP -> builder.header("User-Agent", GuideHttp.USER_AGENT)
-            }
-            when (method) {
-                ProbeMethod.HEAD -> builder.head()
-                ProbeMethod.GET -> {
-                    builder.get()
-                    if (maxBodyBytes <= 0) builder.header("Range", "bytes=0-0")
-                }
-            }
-            val call = client.newCall(builder.build())
-            try {
-                val response = call.execute()
-                try {
-                    val code = response.code
-                    val location = response.header("Location")
-                    val body = if (method == ProbeMethod.GET && maxBodyBytes > 0 && code in 200..299) {
-                        response.body?.byteStream()?.let { readTruncated(it, maxBodyBytes) }
-                    } else {
-                        null
-                    }
-                    // Cancel before closing a 2xx stream so OkHttp does not block draining unread MBs of Maps HTML/JS.
-                    if (code in 200..299) {
-                        runCatching { call.cancel() }
-                    }
-                    RedirectProbe(code, location, body)
-                } finally {
-                    runCatching { response.close() }
-                }
-            } finally {
-                if (!call.isCanceled()) runCatching { call.cancel() }
+    ): RedirectProbe {
+        if (!url.startsWith("https://", ignoreCase = true)) throw IOException("HTTPS only")
+        val builder = Request.Builder().url(url)
+        when (identity) {
+            FetchIdentity.BROWSER_MOBILE -> builder
+                .header("User-Agent", MOBILE_BROWSER_USER_AGENT)
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                .header("Accept-Language", "en-US,en;q=0.9")
+            FetchIdentity.APP -> builder.header("User-Agent", GuideHttp.USER_AGENT)
+        }
+        when (method) {
+            ProbeMethod.HEAD -> builder.head()
+            ProbeMethod.GET -> {
+                builder.get()
+                if (maxBodyBytes <= 0) builder.header("Range", "bytes=0-0")
             }
         }
+        val call = client.newCall(builder.build())
+        return suspendCancellableCoroutine { cont ->
+            cont.invokeOnCancellation { runCatching { call.cancel() } }
+            call.enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    if (cont.isActive) cont.resumeWithException(e)
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    val probe = try {
+                        response.use { r ->
+                            val code = r.code
+                            val location = r.header("Location")
+                            val body = if (method == ProbeMethod.GET && maxBodyBytes > 0 && code in 200..299) {
+                                r.body?.byteStream()?.let { readTruncated(it, maxBodyBytes) }
+                            } else {
+                                null
+                            }
+                            // Cancel before closing a 2xx stream so OkHttp does not block draining unread MBs of Maps HTML/JS.
+                            if (code in 200..299) runCatching { call.cancel() }
+                            RedirectProbe(code, location, body)
+                        }
+                    } catch (e: IOException) {
+                        if (cont.isActive) cont.resumeWithException(e)
+                        return
+                    } catch (e: RuntimeException) {
+                        if (cont.isActive) cont.resumeWithException(IOException(e.message ?: "response failed", e))
+                        return
+                    } finally {
+                        if (!call.isCanceled()) runCatching { call.cancel() }
+                    }
+                    if (cont.isActive) cont.resume(probe)
+                }
+            })
+        }
+    }
 
     companion object {
         /** Browser identity used for Google hosts (v2.3.5 #3). */
@@ -147,16 +187,26 @@ class OkHttpRedirectFetcher(
             "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) " +
                 "Chrome/124.0.0.0 Mobile Safari/537.36"
 
-        /** Redirect client: never follows redirects itself; IPv4-first DNS; HTTP/1.1; fast timeouts. */
+        /**
+         * v2.4.0 per-request budget. Measured 2026-10-20: `maps.app.goo.gl` answers a 302 in
+         * ~1.1–1.3 s (server time; connect 2 ms, TLS 13 ms), a full place page streams 256 KB in
+         * ~0.2 s. One connect attempt gets 3 s so a blackholed address family costs one attempt,
+         * not the whole call; the whole call (DNS + connects + headers + capped body) gets 6 s.
+         */
+        const val CONNECT_TIMEOUT_MS = 3_000L
+        const val READ_TIMEOUT_MS = 4_000L
+        const val CALL_TIMEOUT_MS = 6_000L
+
+        /** Redirect client: never follows redirects itself; family-interleaved DNS; HTTP/1.1; fast timeouts. */
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
             .dns(Ipv4PreferredDns)
             .protocols(listOf(Protocol.HTTP_1_1))
             .followRedirects(false)
             .followSslRedirects(false)
             .retryOnConnectionFailure(true)
-            .connectTimeout(6, TimeUnit.SECONDS)
-            .readTimeout(6, TimeUnit.SECONDS)
-            .callTimeout(10, TimeUnit.SECONDS)
+            .connectTimeout(CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            .readTimeout(READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            .callTimeout(CALL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
             .build()
 
         /** Earliest point at which [readTruncated] considers stopping before [max] bytes. */

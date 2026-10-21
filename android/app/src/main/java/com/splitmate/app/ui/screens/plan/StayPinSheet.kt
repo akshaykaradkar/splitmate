@@ -81,7 +81,9 @@ import com.splitmate.app.data.guide.Place
 import com.splitmate.app.data.guide.PlaceKind
 import com.splitmate.app.data.guide.PlaceSource
 import com.splitmate.app.data.guide.loop.NominatimGeocoder
+import com.splitmate.app.data.guide.loop.ShortLinkResolver
 import com.splitmate.app.ui.components.InFlightWavyProgressIndicator
+import kotlinx.coroutines.delay
 import com.splitmate.app.ui.components.LocalMotionScheme
 
 /** Input modes of the stay sheet (audit 5.2 E). */
@@ -237,6 +239,7 @@ fun StayPinSheet(
 
             StayFeedbackPanel(
                 feedback = feedback,
+                requestId = state.stayFeedbackRequestId,
                 showOsmCredit = searchedByName || stayUi.attribution != null,
                 destinationName = destinationName,
                 onSearchByName = { hint ->
@@ -474,6 +477,7 @@ private fun SleepListingsTab(
 @Composable
 private fun StayFeedbackPanel(
     feedback: StayInputFeedback,
+    requestId: Long,
     showOsmCredit: Boolean,
     destinationName: String?,
     onSearchByName: (String) -> Unit,
@@ -484,12 +488,7 @@ private fun StayFeedbackPanel(
 ) {
     when (feedback) {
         StayInputFeedback.Idle -> Unit
-        StayInputFeedback.Working -> Text(
-            text = "Finding location...",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
-        )
+        StayInputFeedback.Working -> WorkingStatus(requestId)
         is StayInputFeedback.Preview -> Surface(
             shape = PlanGuideDefaults.CardShape,
             color = MaterialTheme.colorScheme.surfaceContainerLowest,
@@ -629,6 +628,34 @@ private fun StayFeedbackPanel(
         }
     }
 }
+
+/**
+ * v2.4.0: elapsed-aware status under the wavy bar. The lookup is capped at
+ * [ShortLinkResolver.OVERALL_TIMEOUT_MS] (12 s); the copy changes at [SLOW_LOOKUP_AFTER_MS] so a
+ * slow network never looks frozen. Restarts for every new attempt (keyed on [requestId]).
+ */
+@Composable
+private fun WorkingStatus(requestId: Long) {
+    var slow by remember(requestId) { mutableStateOf(false) }
+    LaunchedEffect(requestId) {
+        slow = false
+        delay(SLOW_LOOKUP_AFTER_MS)
+        slow = true
+    }
+    Text(
+        text = if (slow) {
+            "Still asking Google Maps… this takes up to ${ShortLinkResolver.OVERALL_TIMEOUT_MS / 1000} seconds."
+        } else {
+            "Finding location..."
+        },
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+    )
+}
+
+/** After this long in [StayInputFeedback.Working] the status copy switches to the "still looking" form. */
+private const val SLOW_LOOKUP_AFTER_MS = 4_000L
 
 @Composable
 private fun InlineStayNameSearch(

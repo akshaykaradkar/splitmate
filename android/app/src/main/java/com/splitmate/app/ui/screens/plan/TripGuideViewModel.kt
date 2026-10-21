@@ -30,6 +30,7 @@ import com.splitmate.app.data.guide.TripGuideServices
 import com.splitmate.app.data.guide.content.WikimediaGuideSource
 import com.splitmate.app.data.guide.loop.LoopStopSelector
 import com.splitmate.app.data.guide.loop.NominatimGeocoder
+import com.splitmate.app.data.guide.loop.ShortLinkResolver
 import com.splitmate.app.data.guide.nav.MapsHandoff
 import com.splitmate.app.data.guide.nav.TravelMode
 import com.splitmate.app.data.guide.sync.PlanManifestCodec
@@ -362,12 +363,21 @@ class TripGuideViewModel(
             setStayFeedback(StayInputFeedback.Rejected(MSG_STAY_EMPTY))
             return
         }
+        // A new attempt always replaces the previous outcome (error, preview, fallback) first.
         setStayFeedback(StayInputFeedback.Working)
         stayJob?.cancel()
         stayJob = viewModelScope.launch {
-            val result = repository.resolveStayText(input)
+            // v2.4.0: the sheet's "Finding location" wavy bar is driven by networkInFlight, so the
+            // link lookup itself must be counted; offline parses (plain coordinates, full URLs
+            // with a pin) stay instant and never flash the bar.
+            val linkNeedsNetwork = ShortLinkResolver.requiresNetwork(input)
+            val result = if (linkNeedsNetwork) {
+                withNetwork { repository.resolveStayText(input) }
+            } else {
+                repository.resolveStayText(input)
+            }
             val directNameInput = result is StayResolution.Rejected &&
-                result.reason == com.splitmate.app.data.guide.loop.ShortLinkResolver.REASON_NOTHING_FOUND &&
+                result.reason == ShortLinkResolver.REASON_NOTHING_FOUND &&
                 !input.contains("://") &&
                 input.any { it.isLetter() }
             val hint = (result as? StayResolution.NoCoordinates)?.placeNameHint?.takeIf { it.isNotBlank() }
@@ -375,7 +385,7 @@ class TripGuideViewModel(
             if (hint != null && flags.nominatimEnabled && network.state.value.online) {
                 // v2.3.5 (#3): Google gave a place name (or user typed a hotel/area name directly).
                 // Search it by name once and show an Approximate preview (with the OSM credit).
-                val geocoded = repository.geocodeStay(hint, stored?.pack?.destination?.label)
+                val geocoded = withNetwork { repository.geocodeStay(hint, stored?.pack?.destination?.label) }
                 if (geocoded is StayResolution.Resolved) {
                     handleStayResolution(geocoded, fromNominatim = true)
                     return@launch
@@ -403,7 +413,7 @@ class TripGuideViewModel(
         setStayFeedback(StayInputFeedback.Working)
         stayJob?.cancel()
         stayJob = viewModelScope.launch {
-            val result = repository.geocodeStay(name, stored?.pack?.destination?.label)
+            val result = withNetwork { repository.geocodeStay(name, stored?.pack?.destination?.label) }
             handleStayResolution(result, fromNominatim = true)
         }
     }

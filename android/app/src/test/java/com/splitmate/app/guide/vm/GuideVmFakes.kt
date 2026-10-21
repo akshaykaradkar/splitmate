@@ -172,8 +172,17 @@ class FakeNearbySource : NearbySource {
 class FakeStayResolver : StayLocationResolver {
     var result: StayResolution = StayResolution.Resolved(GuideVmFixtures.STAY_LOC, "Hotel Mayura Bhuvaneswari", com.splitmate.app.data.guide.CoordinatePrecision.EXACT)
     val inputs = mutableListOf<String>()
+    /** v2.4.0: when set, resolve suspends until completed (lets tests observe Working/networkInFlight). */
+    var gate: CompletableDeferred<Unit>? = null
+    var cancelled = 0
     override suspend fun resolve(input: String): StayResolution {
         inputs += input
+        try {
+            gate?.await()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            cancelled++
+            throw e
+        }
         return result
     }
 }
@@ -181,8 +190,11 @@ class FakeStayResolver : StayLocationResolver {
 class FakeGeocoder : StayGeocoder {
     var result: StayResolution = StayResolution.Resolved(GuideVmFixtures.STAY_LOC, "Hampi Heritage Homestay", com.splitmate.app.data.guide.CoordinatePrecision.APPROXIMATE)
     val calls = mutableListOf<Pair<String, String?>>()
+    /** v2.4.0: when set, geocode suspends until completed. */
+    var gate: CompletableDeferred<Unit>? = null
     override suspend fun geocode(nameHint: String, destinationLabel: String?): StayResolution {
         calls += nameHint to destinationLabel
+        gate?.await()
         return result
     }
 }

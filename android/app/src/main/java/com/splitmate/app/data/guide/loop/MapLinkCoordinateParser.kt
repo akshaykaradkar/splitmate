@@ -79,6 +79,13 @@ object MapLinkCoordinateParser {
         RegexOption.IGNORE_CASE
     )
 
+    /** v2.4.0: OpenStreetMap marker `mlat=<lat>&mlon=<lng>` (either order). */
+    private val OSM_MARKER_LAT = Regex("""(?:^|[?&#;\s])mlat=${LAT_D}${NUM_END}""", RegexOption.IGNORE_CASE)
+    private val OSM_MARKER_LNG = Regex("""(?:^|[?&#;\s])mlon=${LNG_D}${NUM_END}""", RegexOption.IGNORE_CASE)
+
+    /** v2.4.0: OpenStreetMap viewport fragment `#map=<zoom>/<lat>/<lng>` (approximate). */
+    private val OSM_MAP_FRAGMENT = Regex("""#map=\d+(?:\.\d+)?/${LAT_D}/${LNG_D}${NUM_END}""", RegexOption.IGNORE_CASE)
+
     private val PATH_PLACE_SEARCH =
         Regex("""/(?:place|search)/(?:[^/?#]*/)*?\s*${LAT_D}${SEP}${LNG_D}${NUM_END}""")
 
@@ -105,9 +112,11 @@ object MapLinkCoordinateParser {
 
     // Place-name hint sources (matched against the RAW input, then decoded individually).
     private val PLACE_NAME = Regex("""/maps/place/([^/?#@]+)""")
+    /** v2.4.0: `/maps/search/<name>` (share-from-search links) and `/maps/dir/…/<name>` destinations are also names. */
+    private val SEARCH_NAME = Regex("""/maps/search/([^/?#@]+)""")
     private val GEO_LABEL = Regex("""geo:[^\s?]*\?q=[^(\s]*\(([^)]{1,200})\)""", RegexOption.IGNORE_CASE)
     private val QUERY_TEXT = Regex("""[?&](?:q|query)=([^&#\s]+)""", RegexOption.IGNORE_CASE)
-    private val FIRST_URL = Regex("""(?i)(?:https?://|geo:|\b(?:maps\.app\.goo\.gl|goo\.gl|g\.co|maps\.google\.|www\.google\.)\S*)""")
+    private val FIRST_URL = Regex("""(?i)(?:https?://|geo:|\b(?:maps\.app\.goo\.gl|goo\.gl|g\.co|maps\.google\.|www\.google\.|maps\.apple\.com|openstreetmap\.org|osm\.org)\S*)""")
 
     /** Parses [input] (a link or free text) into an optional coordinate and optional name hint. */
     fun parse(input: String): MapLinkParseResult {
@@ -136,6 +145,12 @@ object MapLinkCoordinateParser {
         QUERY_PARAM.findAll(s).forEach { m ->
             pair(m.groupValues[1], m.groupValues[2], CoordinatePattern.QUERY_PARAM)?.let { return it }
         }
+        // 2b. (v2.4.0) OpenStreetMap marker parameters.
+        OSM_MARKER_LAT.find(s)?.let { la ->
+            OSM_MARKER_LNG.find(s)?.let { lo ->
+                pair(la.groupValues[1], lo.groupValues[1], CoordinatePattern.QUERY_PARAM)?.let { return it }
+            }
+        }
         // 3a. /place/… and /search/… path coordinates.
         PATH_PLACE_SEARCH.findAll(s).forEach { m ->
             pair(m.groupValues[1], m.groupValues[2], CoordinatePattern.PATH)?.let { return it }
@@ -163,6 +178,10 @@ object MapLinkCoordinateParser {
         VIEWPORT.findAll(s).forEach { m ->
             pair(m.groupValues[1], m.groupValues[2], CoordinatePattern.VIEWPORT)?.let { return it }
         }
+        // 7b. (v2.4.0) OpenStreetMap `#map=zoom/lat/lng` viewport (approximate).
+        OSM_MAP_FRAGMENT.findAll(s).forEach { m ->
+            pair(m.groupValues[1], m.groupValues[2], CoordinatePattern.VIEWPORT)?.let { return it }
+        }
         // 8. Plain decimal pairs.
         DECIMAL_PAIR.findAll(s).forEach { m ->
             pair(m.groupValues[1], m.groupValues[2], CoordinatePattern.DECIMAL_PAIR)?.let { return it }
@@ -178,6 +197,7 @@ object MapLinkCoordinateParser {
     fun extractPlaceNameHint(input: String): String? {
         val raw = if (input.length > MAX_INPUT_CHARS) input.take(MAX_INPUT_CHARS) else input
         PLACE_NAME.find(raw)?.let { m -> usableHint(m.groupValues[1])?.let { return it } }
+        SEARCH_NAME.find(raw)?.let { m -> usableHint(m.groupValues[1])?.let { return it } }
         GEO_LABEL.find(raw)?.let { m -> usableHint(m.groupValues[1])?.let { return it } }
         QUERY_TEXT.findAll(raw).forEach { m -> usableHint(m.groupValues[1])?.let { return it } }
         val urlStart = FIRST_URL.find(raw)?.range?.first

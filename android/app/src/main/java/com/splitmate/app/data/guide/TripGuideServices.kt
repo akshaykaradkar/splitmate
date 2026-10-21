@@ -146,6 +146,11 @@ object TripGuideServices {
  * [NetworkMonitor] over the default-network callback. Metered-aware (hero 640 px, no background
  * refresh on metered). Registered once per process; failures fall back to "online, unmetered"
  * like CloudGroupSyncRepository.isInternetAvailable.
+ *
+ * v2.4.0: "online" requires `NET_CAPABILITY_VALIDATED` as well as `NET_CAPABILITY_INTERNET`
+ * (API 23+). A captive-portal Wi-Fi or a SIM with no data plan reports INTERNET but not
+ * VALIDATED; treating it as online made every stay-link lookup run into its timeout and tell the
+ * user "Google Maps took too long" instead of "no working internet".
  */
 internal class ConnectivityNetworkMonitor(context: Context) : NetworkMonitor {
     private val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
@@ -161,7 +166,7 @@ internal class ConnectivityNetworkMonitor(context: Context) : NetworkMonitor {
 
                 override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
                     _state.value = NetworkState(
-                        online = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET),
+                        online = isUsable(caps),
                         metered = !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
                     )
                 }
@@ -179,12 +184,18 @@ internal class ConnectivityNetworkMonitor(context: Context) : NetworkMonitor {
             val active = manager.activeNetwork ?: return NetworkState(online = false, metered = false)
             val caps = manager.getNetworkCapabilities(active) ?: return NetworkState(online = false, metered = false)
             NetworkState(
-                online = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET),
+                online = isUsable(caps),
                 metered = manager.isActiveNetworkMetered
             )
         } catch (_: Exception) {
             NetworkState(online = true, metered = false)
         }
+    }
+
+    private companion object {
+        fun isUsable(caps: NetworkCapabilities): Boolean =
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 }
 

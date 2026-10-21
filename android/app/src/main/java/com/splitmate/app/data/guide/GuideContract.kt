@@ -198,8 +198,9 @@ interface PlanManifestSync {
 
 /** Identified User-Agent required by the Wikimedia User-Agent policy (no PII). */
 object GuideHttp {
-    const val USER_AGENT =
-        "SplitMate/2.3.4 (Android; https://github.com/akshaykaradkar/splitmate; group-travel planner)"
+    /** v2.4.0: versioned from the build (was a hard-coded "2.3.4" that drifted from versionName). */
+    val USER_AGENT: String =
+        "SplitMate/${com.splitmate.app.BuildConfig.VERSION_NAME} (Android; https://github.com/akshaykaradkar/splitmate; group-travel planner)"
     const val CONNECT_TIMEOUT_MS = 8_000
     const val READ_TIMEOUT_MS = 10_000
 }
