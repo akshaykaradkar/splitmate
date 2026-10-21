@@ -597,6 +597,17 @@ private fun StayFeedbackPanel(
                 tone = PlanBannerTone.ERROR,
                 icon = Icons.Rounded.ErrorOutline
             )
+            // rc16: the technical cause (step, error, timing), small and selectable, so a failure on
+            // a real phone can be reported exactly instead of guessed.
+            feedback.detail?.let { detail ->
+                androidx.compose.foundation.text.selection.SelectionContainer {
+                    Text(
+                        text = "Details: $detail",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
             InlineStayNameSearch(
                 destinationName = destinationName,
                 initialQuery = "",

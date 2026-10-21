@@ -143,7 +143,8 @@ sealed class StayResolution {
     data class Resolved(val location: LatLng, val label: String?, val precision: CoordinatePrecision) : StayResolution()
     /** Link valid but carried no coordinates (e.g. ftid-only); UI should offer fallbacks. */
     data class NoCoordinates(val finalUrl: String?, val placeNameHint: String?) : StayResolution()
-    data class Rejected(val reason: String) : StayResolution()
+    /** [detail]: rc16 technical line (which step failed, how, how long) shown small under the error. */
+    data class Rejected(val reason: String, val detail: String? = null) : StayResolution()
 }
 
 /** Remote kill-switches (static JSON on GitHub Pages). Defaults are "enabled". */

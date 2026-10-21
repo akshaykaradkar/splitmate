@@ -98,7 +98,15 @@ object TripGuideServices {
         private val meteredSource by lazy { WikimediaGuideSource(heroWidth = CommonsImageClient.WIDTH_METERED) }
         private val textFetcher by lazy { OkHttpTextFetcher() }
         val shortLinks by lazy {
-            ShortLinkResolver(OkHttpRedirectFetcher(), isOnline = { network.state.value.online }, flags = flagsNow)
+            ShortLinkResolver(
+                // rc16: OkHttp and the platform HTTP stack race for each hop (see RacingRedirectFetcher).
+                com.splitmate.app.data.guide.loop.RacingRedirectFetcher(
+                    primary = OkHttpRedirectFetcher(),
+                    secondary = com.splitmate.app.data.guide.loop.UrlConnectionRedirectFetcher()
+                ),
+                isOnline = { network.state.value.online },
+                flags = flagsNow
+            )
         }
         val nominatim by lazy { NominatimGeocoder(textFetcher, flagsNow) }
         val wdqs by lazy { WdqsNearbySource(textFetcher, flagsNow) }

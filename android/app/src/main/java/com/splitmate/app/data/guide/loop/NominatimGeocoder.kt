@@ -95,7 +95,7 @@ class NominatimGeocoder(
      */
     suspend fun geocodeSmart(nameHint: String, destination: String?, destinationCenter: LatLng? = null): StayResolution {
         if (!flags().nominatimEnabled) return StayResolution.Rejected(REASON_DISABLED)
-        val plan = smartPlan(nameHint, destination)
+        val plan = fullPlan(nameHint, destination)
         if (plan.isEmpty()) return StayResolution.Rejected(REASON_EMPTY)
         val label = placeName(nameHint)
         var failures = 0
@@ -168,8 +168,60 @@ class NominatimGeocoder(
         /** v2.3.5: results requested per smart query. */
         const val SMART_LIMIT = 3
 
-        /** v2.3.5: maximum Nominatim requests per automatic fallback. */
-        const val MAX_SMART_QUERIES = 3
+        /**
+         * Maximum Nominatim requests per automatic fallback: the [smartPlan] (name-based, at most
+         * [MAX_NAME_QUERIES]) plus the rc16 [areaPlan] (locality / postcode). Still one user action
+         * at the shared 1 req/s (OSMF policy); worst case ~5 s.
+         */
+        const val MAX_SMART_QUERIES = 5
+        /** v2.3.5: the name-based part of the plan. */
+        const val MAX_NAME_QUERIES = 3
+
+        /** rc16: "PROP <owner>" / "Proprietor …" tails Google keeps in business names. */
+        private val OWNER_SUFFIX = Regex("""(?i)\s+(?:prop\.?|proprietor|owner)\b.*$""")
+        /** rc16: address parts that are position words, not places. */
+        private val GENERIC_PARTS = setOf("corner", "junction", "circle", "chowk", "main road", "highway")
+
+        /** rc16: index of the business name: the first part that is not a shop/plot/near prefix. */
+        private fun nameIndex(parts: List<String>): Int =
+            parts.indexOfFirst { !PLOT_PREFIX.matches(it) && it.count { c -> c.isLetter() } >= MIN_TAIL_TOKEN_CHARS }
+                .takeIf { it >= 0 } ?: 0
+
+        private fun cleanName(part: String): String = part.replace(OWNER_SUFFIX, "").trim().ifEmpty { part }
+
+        private fun isPlace(part: String): Boolean =
+            part.any { it.isLetter() } && part.lowercase() !in COUNTRY_NOISE &&
+                !PLOT_PREFIX.matches(part) && part.lowercase() !in GENERIC_PARTS
+
+        /**
+         * rc16 last resort when the business is not in OpenStreetMap: the area it is in. The last
+         * three place-like address parts with the postcode kept (e.g. `"Kuwarbav, Ratnagiri,
+         * Maharashtra 415639"`), then the postcode with its region. The result is APPROXIMATE and
+         * the preview asks the user to confirm.
+         */
+        internal fun areaPlan(nameHint: String, destination: String?): List<SmartQuery> {
+            val parts = hintParts(nameHint, destination)
+            if (parts.size < 2) return emptyList()
+            val address = parts.drop(nameIndex(parts) + 1).filter { isPlace(it) }
+            val out = LinkedHashMap<String, SmartQuery>()
+            if (address.size >= 2) {
+                val area = address.takeLast(3).joinToString(", ")
+                buildQuery(area, null)?.let { out.putIfAbsent(it.lowercase(), SmartQuery(it)) }
+            }
+            val postcode = parts.firstNotNullOfOrNull { POSTCODE.find(it)?.value }
+            val region = address.lastOrNull()?.replace(POSTCODE, "")?.trim()?.takeIf { it.any { c -> c.isLetter() } }
+            if (postcode != null && region != null) {
+                buildQuery("$postcode, $region", null)?.let { out.putIfAbsent(it.lowercase(), SmartQuery(it)) }
+            }
+            return out.values.toList()
+        }
+
+        /** rc16: [smartPlan] then [areaPlan], de-duplicated, capped at [MAX_SMART_QUERIES]. */
+        internal fun fullPlan(nameHint: String, destination: String?): List<SmartQuery> {
+            val out = LinkedHashMap<String, SmartQuery>()
+            for (q in smartPlan(nameHint, destination) + areaPlan(nameHint, destination)) out.putIfAbsent(q.text.lowercase(), q)
+            return out.values.take(MAX_SMART_QUERIES)
+        }
 
         private val POSTCODE = Regex("""\b\d{5,6}\b""")
         private val COUNTRY_NOISE = setOf("india", "bharat")
@@ -231,18 +283,20 @@ class NominatimGeocoder(
          */
         fun smartQueries(nameHint: String, destination: String?): List<String> {
             val parts = hintParts(nameHint, destination)
-            val name = parts.firstOrNull() ?: return emptyList()
+            if (parts.isEmpty()) return emptyList()
+            val ni = nameIndex(parts)
+            val name = cleanName(parts[ni])
             val full = parts.joinToString(", ")
-            val locality = parts.drop(1)
+            val locality = parts.drop(ni + 1)
                 .map { it.replace(POSTCODE, "").trim() }
-                .filter { p -> p.any { it.isLetter() } && p.lowercase() !in COUNTRY_NOISE }
+                .filter { p -> isPlace(p) }
                 .takeLast(2)
                 .joinToString(", ")
             val out = LinkedHashSet<String>()
             buildQuery(full, destination)?.let { out += it }
             if (locality.isNotEmpty()) buildQuery("$name, $locality", null)?.let { out += it }
             buildQuery(name, destination)?.let { out += it }
-            return out.take(MAX_SMART_QUERIES)
+            return out.take(MAX_NAME_QUERIES)
         }
 
         /**
@@ -256,15 +310,13 @@ class NominatimGeocoder(
 
         private fun fallbackPlan(nameHint: String, destination: String?): List<SmartQuery> {
             val parts = hintParts(nameHint, destination)
-            val name = parts.firstOrNull() ?: return emptyList()
+            if (parts.isEmpty()) return emptyList()
+            val ni = nameIndex(parts)
+            val name = cleanName(parts[ni])
             val dest = LoopText.clean(destination, maxChars = 100)
-            val addressParts = parts.drop(1)
+            val addressParts = parts.drop(ni + 1)
                 .map { it.replace(POSTCODE, "").trim() }
-                .filter { p ->
-                    p.count { it.isLetter() } >= MIN_TAIL_TOKEN_CHARS &&
-                        p.lowercase() !in COUNTRY_NOISE &&
-                        !PLOT_PREFIX.matches(p)
-                }
+                .filter { p -> p.count { it.isLetter() } >= MIN_TAIL_TOKEN_CHARS && isPlace(p) }
             val out = LinkedHashMap<String, SmartQuery>()
             if (addressParts.size >= 2 || (addressParts.isNotEmpty() && dest != null)) {
                 val streetAndCity = addressParts.take(2).joinToString(", ")
@@ -295,14 +347,18 @@ class NominatimGeocoder(
             val ordered = primary.take(2) + fallbackPlan(nameHint, destination) + primary.drop(2)
             val out = LinkedHashMap<String, SmartQuery>()
             for (q in ordered) out.putIfAbsent(q.text.lowercase(), q)
-            return out.values.take(MAX_SMART_QUERIES)
+            return out.values.take(MAX_NAME_QUERIES)
         }
 
         /** The place name part of a hint (before the first comma), for labels. */
-        fun placeName(nameHint: String): String? =
-            LoopText.clean(nameHint.removeSuffix("…"), maxChars = 200)
-                ?.substringBefore(',')?.trim()?.takeIf { it.isNotEmpty() }
-                ?.let { LoopText.clean(it) }
+        fun placeName(nameHint: String): String? {
+            val parts = LoopText.clean(nameHint.removeSuffix("…"), maxChars = 200)
+                ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
+                ?: return null
+            if (parts.isEmpty()) return null
+            // rc16: skip a leading "Shop No 504" and drop "PROP <owner>" so the label is the business.
+            return LoopText.clean(cleanName(parts[nameIndex(parts)]))
+        }
 
         /**
          * Parses a jsonv2 response array and returns the first entry with valid coordinates.

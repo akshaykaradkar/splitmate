@@ -70,7 +70,8 @@ sealed interface StayInputFeedback {
     data class Preview(val location: LatLng, val label: String?, val approximate: Boolean) : StayInputFeedback
     /** The link had no coordinates: offer "Search by name" / Sleep listing / coordinates. */
     data class NeedsFallback(val placeNameHint: String?) : StayInputFeedback
-    data class Rejected(val message: String) : StayInputFeedback
+    /** [detail]: rc16 technical line for network failures (shown small, selectable, for bug reports). */
+    data class Rejected(val message: String, val detail: String? = null) : StayInputFeedback
 }
 
 /** Loop view state. */

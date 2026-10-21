@@ -107,6 +107,7 @@ class ShortLinkResolver(
         var lastApprox: ParsedCoordinate? = localCoord
         var lastHint: String? = local.placeNameHint
         var lastUrl: String = url
+        (fetcher as? DiagnosticRedirectFetcher)?.resetTrace()
 
         return try {
             withTimeoutOrNull(OVERALL_TIMEOUT_MS) {
@@ -123,7 +124,7 @@ class ShortLinkResolver(
             } ?: when {
                 lastApprox != null -> StayResolution.Resolved(lastApprox!!.location, lastHint, lastApprox!!.precision)
                 lastHint != null -> StayResolution.NoCoordinates(lastUrl, lastHint)
-                else -> StayResolution.Rejected(if (isOnline() == false) REASON_OFFLINE else REASON_TIMEOUT)
+                else -> if (isOnline() == false) StayResolution.Rejected(REASON_OFFLINE) else StayResolution.Rejected(REASON_TIMEOUT, detail(null))
             }
         } catch (e: CancellationException) {
             throw e
@@ -131,9 +132,17 @@ class ShortLinkResolver(
             when {
                 lastApprox != null -> StayResolution.Resolved(lastApprox!!.location, lastHint, lastApprox!!.precision)
                 lastHint != null && isOnline() != false -> StayResolution.NoCoordinates(lastUrl, lastHint)
-                else -> StayResolution.Rejected(classifyFailure(e, isOnline()))
+                // Offline needs no technical detail; every other network failure carries the trace.
+                else -> isOnline().let { online -> StayResolution.Rejected(classifyFailure(e, online), if (online == false) null else detail(e)) }
             }
         }
+    }
+
+    /** rc16: what each network attempt did ("maps.app.goo.gl okhttp SocketTimeoutException 3001ms | …"). */
+    private fun detail(e: Throwable?): String? {
+        val lines = (fetcher as? DiagnosticRedirectFetcher)?.trace().orEmpty().toMutableList()
+        if (lines.isEmpty() && e != null) lines += "${e.javaClass.simpleName}${e.message?.let { ": " + it.take(80) } ?: ""}"
+        return lines.takeLast(MAX_DETAIL_LINES).joinToString(" | ").takeIf { it.isNotEmpty() }
     }
 
     private suspend fun follow(
@@ -315,6 +324,8 @@ class ShortLinkResolver(
          */
         const val OVERALL_TIMEOUT_MS = 12_000L
 
+        /** rc16: attempts listed in an error's technical detail. */
+        private const val MAX_DETAIL_LINES = 6
         const val REASON_EMPTY = "Paste a Google Maps link or coordinates."
         const val REASON_NOTHING_FOUND = "No location found in the pasted text."
         const val REASON_UNSUPPORTED_HOST = "Only Google Maps, Apple Maps or OpenStreetMap links are supported."

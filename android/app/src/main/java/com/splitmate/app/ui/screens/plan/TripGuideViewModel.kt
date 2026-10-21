@@ -883,7 +883,8 @@ class TripGuideViewModel(
             is StayResolution.Rejected -> {
                 previewFromNominatim = false
                 val reason = result.reason.trim().take(MAX_STAY_REASON_CHARS).takeIf { it.isNotEmpty() }
-                setStayFeedback(StayInputFeedback.Rejected(reason ?: MSG_STAY_GENERIC))
+                val detail = result.detail?.trim()?.take(MAX_STAY_DETAIL_CHARS)?.takeIf { it.isNotEmpty() }
+                setStayFeedback(StayInputFeedback.Rejected(reason ?: MSG_STAY_GENERIC, detail))
             }
         }
     }
@@ -986,6 +987,8 @@ class TripGuideViewModel(
         const val MSG_STAY_EMPTY = "Paste a map link or coordinates."
         const val MSG_STAY_OFFLINE = "You're offline. Paste coordinates instead."
         const val MSG_STAY_GENERIC = "Couldn't read that location."
+        /** rc16: cap for the technical detail line under a stay error. */
+        const val MAX_STAY_DETAIL_CHARS = 400
         const val MSG_LISTING_NO_LOCATION = "This listing has no map location. Try another option."
         const val MSG_STAY_SAVE_FAILED = "Couldn't save your stay. Try again."
         const val MSG_STAY_SET = "Stay set"

@@ -1,5 +1,6 @@
 package com.splitmate.app.data.guide.loop
 
+import kotlinx.coroutines.async
 import com.splitmate.app.data.guide.GuideHttp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
@@ -253,6 +254,145 @@ class OkHttpRedirectFetcher(
             }
             return String(out.toByteArray(), Charsets.UTF_8)
         }
+    }
+}
+
+/**
+ * rc16: [RedirectFetcher] on Android's platform HTTP stack (`HttpsURLConnection`), independent of
+ * our OkHttp client: different connection logic, the platform's own per-network DNS/socket
+ * binding. Used as the second lane of [RacingRedirectFetcher]. Never follows redirects.
+ * Cancellation disconnects the socket from the cancelling thread.
+ */
+class UrlConnectionRedirectFetcher(
+    private val connectTimeoutMs: Int = 5_000,
+    private val readTimeoutMs: Int = 5_000
+) : RedirectFetcher {
+    override suspend fun probe(url: String, method: ProbeMethod): RedirectProbe =
+        fetch(url, method, FetchIdentity.APP, maxBodyBytes = 0)
+
+    override suspend fun fetch(url: String, method: ProbeMethod, identity: FetchIdentity, maxBodyBytes: Int): RedirectProbe {
+        if (!url.startsWith("https://", ignoreCase = true)) throw IOException("HTTPS only")
+        return kotlinx.coroutines.withContext(Dispatchers.IO) {
+            val conn = java.net.URL(url).openConnection() as javax.net.ssl.HttpsURLConnection
+            val handle = coroutineContext[kotlinx.coroutines.Job]?.invokeOnCompletion { cause ->
+                if (cause != null) runCatching { conn.disconnect() }
+            }
+            try {
+                conn.instanceFollowRedirects = false
+                conn.useCaches = false
+                conn.connectTimeout = connectTimeoutMs
+                conn.readTimeout = readTimeoutMs
+                conn.requestMethod = method.name
+                when (identity) {
+                    FetchIdentity.BROWSER_MOBILE -> {
+                        conn.setRequestProperty("User-Agent", OkHttpRedirectFetcher.MOBILE_BROWSER_USER_AGENT)
+                        conn.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                        conn.setRequestProperty("Accept-Language", "en-US,en;q=0.9")
+                    }
+                    FetchIdentity.APP -> conn.setRequestProperty("User-Agent", GuideHttp.USER_AGENT)
+                }
+                if (method == ProbeMethod.GET && maxBodyBytes <= 0) conn.setRequestProperty("Range", "bytes=0-0")
+                val code = conn.responseCode
+                val location = conn.getHeaderField("Location")
+                val body = if (method == ProbeMethod.GET && maxBodyBytes > 0 && code in 200..299) {
+                    conn.inputStream.use { OkHttpRedirectFetcher.readTruncated(it, maxBodyBytes) }
+                } else {
+                    null
+                }
+                RedirectProbe(code, location, body)
+            } finally {
+                handle?.dispose()
+                runCatching { conn.disconnect() }
+            }
+        }
+    }
+}
+
+/** rc16: a fetcher that can report what its attempts did (for the error's technical detail). */
+interface DiagnosticRedirectFetcher {
+    fun resetTrace()
+    fun trace(): List<String>
+}
+
+/**
+ * rc16: races two independent HTTP stacks for each hop. [primary] (OkHttp) starts at once; if it
+ * has not answered within [headStartMs] (or fails earlier), [secondary] (platform
+ * HttpsURLConnection) starts too, and the first successful answer wins (the other is cancelled).
+ * Only when both fail does the hop fail, with the primary's error (secondary's attached as
+ * suppressed). Every attempt's outcome and timing is recorded for [trace].
+ *
+ * Why: a phone network can stall one stack (address family, middlebox, DNS path) while the other
+ * gets through; one Google redirect is tiny, so a parallel second attempt costs almost nothing.
+ */
+class RacingRedirectFetcher(
+    private val primary: RedirectFetcher,
+    private val secondary: RedirectFetcher,
+    private val headStartMs: Long = HEAD_START_MS,
+    private val clockMs: () -> Long = { System.nanoTime() / 1_000_000 },
+    private val primaryName: String = "okhttp",
+    private val secondaryName: String = "platform"
+) : RedirectFetcher, DiagnosticRedirectFetcher {
+
+    private val traceLines = java.util.Collections.synchronizedList(ArrayList<String>())
+
+    override fun resetTrace() = traceLines.clear()
+    override fun trace(): List<String> = synchronized(traceLines) { traceLines.toList() }
+
+    override suspend fun probe(url: String, method: ProbeMethod): RedirectProbe =
+        fetch(url, method, FetchIdentity.APP, maxBodyBytes = 0)
+
+    override suspend fun fetch(url: String, method: ProbeMethod, identity: FetchIdentity, maxBodyBytes: Int): RedirectProbe =
+        kotlinx.coroutines.coroutineScope {
+            val host = runCatching { java.net.URI(url).host }.getOrNull() ?: "?"
+            val primaryDone = kotlinx.coroutines.CompletableDeferred<Unit>()
+            val a = async {
+                try {
+                    attempt(primaryName, host) { primary.fetch(url, method, identity, maxBodyBytes) }
+                } finally {
+                    primaryDone.complete(Unit)
+                }
+            }
+            val b = async {
+                kotlinx.coroutines.withTimeoutOrNull(headStartMs) { primaryDone.await() }
+                if (a.isCompleted && a.await().isSuccess) return@async Result.failure<RedirectProbe>(IOException("not needed"))
+                attempt(secondaryName, host) { secondary.fetch(url, method, identity, maxBodyBytes) }
+            }
+            // First success wins; otherwise wait for the other lane.
+            val first = kotlinx.coroutines.selects.select<Pair<Result<RedirectProbe>, Boolean>> {
+                a.onAwait { it to true }
+                b.onAwait { it to false }
+            }
+            val firstResult = first.first
+            if (firstResult.isSuccess) {
+                (if (first.second) b else a).cancel()
+                return@coroutineScope firstResult.getOrThrow()
+            }
+            val other = (if (first.second) b else a).await()
+            if (other.isSuccess) return@coroutineScope other.getOrThrow()
+            val primaryError = (if (first.second) firstResult else other).exceptionOrNull()
+            val secondaryError = (if (first.second) other else firstResult).exceptionOrNull()
+            val error = (primaryError as? IOException) ?: IOException(primaryError?.message ?: "request failed", primaryError)
+            secondaryError?.takeIf { it !== error && it.message != "not needed" }?.let { error.addSuppressed(it) }
+            throw error
+        }
+
+    private suspend fun attempt(name: String, host: String, block: suspend () -> RedirectProbe): Result<RedirectProbe> {
+        val start = clockMs()
+        return try {
+            val r = block()
+            traceLines += "$host $name ${r.statusCode} ${clockMs() - start}ms"
+            Result.success(r)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            traceLines += "$host $name ${e.javaClass.simpleName}${e.message?.let { ": " + it.take(80) } ?: ""} ${clockMs() - start}ms"
+            Result.failure(e)
+        }
+    }
+
+    companion object {
+        /** Google's short-link redirect takes ~1.1 s server-side; give OkHttp 1.5 s alone first. */
+        const val HEAD_START_MS = 1_500L
     }
 }
 
