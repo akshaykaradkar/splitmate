@@ -1,13 +1,17 @@
 package com.splitmate.app.guide.loop
 
+import com.splitmate.app.data.guide.CoordinatePrecision
 import com.splitmate.app.data.guide.StayResolution
 import com.splitmate.app.data.guide.loop.FetchIdentity
 import com.splitmate.app.data.guide.loop.OkHttpRedirectFetcher
 import com.splitmate.app.data.guide.loop.ProbeMethod
+import com.splitmate.app.data.guide.loop.RacingRedirectFetcher
 import com.splitmate.app.data.guide.loop.RedirectFetcher
 import com.splitmate.app.data.guide.loop.RedirectProbe
 import com.splitmate.app.data.guide.loop.ShortLinkResolver
+import com.splitmate.app.data.guide.loop.UrlConnectionRedirectFetcher
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -54,6 +58,7 @@ class ShortLinkResolverLiveNetworkTest {
         "https://maps.app.goo.gl/FYwvSp1uuQhyTHPu5", // Hampi Bazaar (landmark)
         "https://maps.app.goo.gl/r8YTZYDoeTmhcoTt5", // dropped pin 15.335,76.46 (no place id)
         "https://maps.app.goo.gl/dkQxdkL37eLmLwiG9", // Hemprabha B&B, Ratnagiri (v2.3.5 fixture)
+        "https://maps.app.goo.gl/m18sW89UNW9NqgXM8", // Hemprabha B&B place-id short link (user's live link)
         // Share-text payload (name first).
         "Taj Fort Aguada Resort & Spa, Goa\nhttps://maps.app.goo.gl/fWJUZ1DrXLV5izF6A",
         // Legacy forms.
@@ -83,5 +88,38 @@ class ShortLinkResolverLiveNetworkTest {
         println(report)
         System.err.println(report)
         assertTrue(slow == 0, "some links exceeded the overall budget:\n$report")
+    }
+
+    @Test
+    fun `live - user link m18sW89UNW9NqgXM8 resolves EXACT via direct Google edge DNS and embed probe`(): Unit = runBlocking {
+        val racing = RacingRedirectFetcher(
+            primary = OkHttpRedirectFetcher(),
+            secondary = UrlConnectionRedirectFetcher(),
+            tertiary = OkHttpRedirectFetcher(OkHttpRedirectFetcher.directGoogleClient())
+        )
+        val resolver = ShortLinkResolver(racing, isOnline = { true })
+        val t0 = System.nanoTime()
+        val res = resolver.resolve("https://maps.app.goo.gl/m18sW89UNW9NqgXM8")
+        val ms = (System.nanoTime() - t0) / 1_000_000
+        System.err.println("m18sW89UNW9NqgXM8 racing result: $res in ${ms}ms | trace=${racing.trace()}")
+        assertTrue(res is StayResolution.Resolved, "Expected Resolved, got $res (trace=${racing.trace()})")
+        res as StayResolution.Resolved
+        assertEquals(CoordinatePrecision.EXACT, res.precision)
+        assertEquals(16.9983921, res.location.lat, 1e-4)
+        assertEquals(73.3569574, res.location.lng, 1e-4)
+        assertEquals("Hemprabha Bed And Breakfast", res.label)
+
+        // Also verify the direct-edge DNS client on its own (simulating blocked/sinkholed Dns.SYSTEM).
+        val directFetcher = TracingFetcher(OkHttpRedirectFetcher(OkHttpRedirectFetcher.directGoogleClient()))
+        val directResolver = ShortLinkResolver(directFetcher, isOnline = { true })
+        val t1 = System.nanoTime()
+        val directRes = directResolver.resolve("https://maps.app.goo.gl/m18sW89UNW9NqgXM8")
+        val directMs = (System.nanoTime() - t1) / 1_000_000
+        System.err.println("m18sW89UNW9NqgXM8 direct-edge DNS result: $directRes in ${directMs}ms\n${directFetcher.trace.joinToString("\n")}")
+        assertTrue(directRes is StayResolution.Resolved, "Expected direct-edge Resolved, got $directRes")
+        directRes as StayResolution.Resolved
+        assertEquals(CoordinatePrecision.EXACT, directRes.precision)
+        assertEquals(16.9983921, directRes.location.lat, 1e-4)
+        assertEquals(73.3569574, directRes.location.lng, 1e-4)
     }
 }

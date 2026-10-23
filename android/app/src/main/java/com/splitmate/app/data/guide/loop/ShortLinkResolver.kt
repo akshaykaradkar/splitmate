@@ -237,10 +237,40 @@ class ShortLinkResolver(
                 if (c != null && (c.precision == CoordinatePrecision.EXACT || approx == null)) {
                     return StayResolution.Resolved(c.location, pageHint, c.precision)
                 }
+                if (approx == null && pageHint != null) {
+                    resolveViaMapsEmbed(pageHint, parsed.host)?.let { return it }
+                }
                 return finish(approx, pageHint, current, probe.statusCode, redirects)
             }
             return finish(approx, hint, current, probe.statusCode, redirects)
         }
+    }
+
+    /**
+     * v2.4.0 rc17: when a mobile Google Maps place/ftid page serves the coordinate-free `mapslite`
+     * SPA shell, probe Google's lightweight `/maps/embed?origin=mfe&pb=!1m2!2m1!1s<query>` endpoint
+     * (~3 KB HTML containing `initEmbed([..., [lat, lng], ...])`) to extract the exact place pin.
+     */
+    private suspend fun resolveViaMapsEmbed(pageHint: String, parsedHost: String): StayResolution.Resolved? {
+        if (!GOOGLE_WWW.matches(parsedHost) && !MAPS_GOOGLE.matches(parsedHost)) return null
+        val embedUrl = "https://www.google.com/maps/embed?origin=mfe&pb=!1m2!2m1!1s${LoopText.percentEncode(pageHint)}"
+        val embedProbe = try {
+            fetcher.fetch(
+                url = embedUrl,
+                method = ProbeMethod.GET,
+                identity = FetchIdentity.BROWSER_MOBILE,
+                maxBodyBytes = MapsPageCoordinateExtractor.MAX_BODY_BYTES
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return null
+        }
+        if (embedProbe.statusCode !in 200..299 || embedProbe.body.isNullOrBlank()) return null
+        val embedPage = MapsPageCoordinateExtractor.extract(embedProbe.body)
+        val ec = embedPage.coordinate ?: return null
+        val label = embedPage.placeName ?: NominatimGeocoder.placeName(pageHint) ?: pageHint
+        return StayResolution.Resolved(ec.location, label, ec.precision)
     }
 
     /**

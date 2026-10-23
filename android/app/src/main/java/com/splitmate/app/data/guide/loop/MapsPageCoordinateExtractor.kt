@@ -30,6 +30,13 @@ object MapsPageCoordinateExtractor {
     private const val LNG = """(-?\d{1,3}\.\d{3,})"""
 
     private val MARKERS = Regex("""markers=(?:[^&"'|<>\s]*\|)*$LAT,\s*$LNG""")
+    /**
+     * v2.4.0 rc17: Google Maps `/maps/embed?origin=mfe&pb=!1m2!2m1!1s…` `initEmbed` place tuple:
+     * `["0x3bea0d22e1412a97:0x9395d694c999e8da","Shop No 504, …",[16.9983921,73.3569574],"1063…"],"Hemprabha …"`
+     */
+    private val EMBED_ENTITY = Regex(
+        """\[\s*"0x[0-9a-fA-F]+:0x[0-9a-fA-F]+"\s*,\s*"(?:[^"\\]|\\.)*"\s*,\s*\[\s*$LAT\s*,\s*$LNG\s*](?:\s*,\s*"[0-9]+")?\s*]\s*(?:,\s*"([^"\\]{1,200})")?"""
+    )
     private val NULL_TUPLE = Regex("""\[\s*null\s*,\s*null\s*,\s*$LAT\s*,\s*$LNG\s*]""")
     private val PIN = Regex("""!3d$LAT!4d$LNG""")
     private val CENTER = Regex("""[?&;]center=$LAT,\s*$LNG""")
@@ -80,8 +87,28 @@ object MapsPageCoordinateExtractor {
         }
     }
 
+    /**
+     * v2.4.0 rc17: true when [html] either already contains an EXACT coordinate OR is Google's
+     * coordinate-free mobile `mapslite` SPA shell (`<title></title>`, `maps_512dp.png`, and no
+     * `staticmap` / `APP_INITIALIZATION_STATE` in the header). Stopping early on `mapslite` avoids
+     * downloading 256 KB of JS/font boilerplate before the `/maps/embed` pin probe runs.
+     */
+    fun shouldStopReading(html: String?): Boolean {
+        if (html.isNullOrBlank()) return false
+        if (hasExactCoordinate(html)) return true
+        return isCoordinateFreeMapsLite(html)
+    }
+
+    internal fun isCoordinateFreeMapsLite(html: String): Boolean =
+        html.contains("mapslite") &&
+            html.contains("maps_512dp.png") &&
+            !html.contains("staticmap") &&
+            !html.contains("APP_INITIALIZATION_STATE") &&
+            !html.contains("initEmbed")
+
     private fun extractCoordinate(s: String): ParsedCoordinate? {
         firstValid(MARKERS, s, CoordinatePrecision.EXACT, CoordinatePattern.QUERY_PARAM)?.let { return it }
+        firstValid(EMBED_ENTITY, s, CoordinatePrecision.EXACT, CoordinatePattern.PLACE_PIN)?.let { return it }
         firstValid(NULL_TUPLE, s, CoordinatePrecision.EXACT, CoordinatePattern.PLACE_PIN)?.let { return it }
         firstValid(PIN, s, CoordinatePrecision.EXACT, CoordinatePattern.PLACE_PIN)?.let { return it }
         firstValid(CENTER, s, CoordinatePrecision.APPROXIMATE, CoordinatePattern.QUERY_PARAM)?.let { return it }
@@ -118,6 +145,9 @@ object MapsPageCoordinateExtractor {
             val raw = r.find(s)?.groupValues?.get(1) ?: continue
             val name = cleanTitle(raw) ?: continue
             return name
+        }
+        EMBED_ENTITY.find(s)?.groupValues?.getOrNull(3)?.takeIf { it.isNotBlank() }?.let { raw ->
+            (NominatimGeocoder.placeName(raw) ?: cleanTitle(raw))?.let { return it }
         }
         return urlFieldHint(s)
     }

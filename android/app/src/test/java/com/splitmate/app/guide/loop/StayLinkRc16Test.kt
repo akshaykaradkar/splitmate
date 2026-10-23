@@ -4,8 +4,11 @@ import com.splitmate.app.data.guide.CoordinatePrecision
 import com.splitmate.app.data.guide.GuideFeatureFlags
 import com.splitmate.app.data.guide.StayResolution
 import com.splitmate.app.data.guide.loop.FetchIdentity
+import com.splitmate.app.data.guide.loop.GoogleDirectEdgeDns
 import com.splitmate.app.data.guide.loop.HttpTextFetcher
 import com.splitmate.app.data.guide.loop.HttpTextResponse
+import com.splitmate.app.data.guide.loop.MapLinkCoordinateParser
+import com.splitmate.app.data.guide.loop.MapsPageCoordinateExtractor
 import com.splitmate.app.data.guide.loop.MinIntervalRateLimiter
 import com.splitmate.app.data.guide.loop.NominatimGeocoder
 import com.splitmate.app.data.guide.loop.ProbeMethod
@@ -147,8 +150,65 @@ class StayLinkRc16Test {
     fun `the app wires both stacks and shows the detail under the error`() {
         val services = File("src/main/java/com/splitmate/app/data/guide/TripGuideServices.kt").readText()
         assertTrue(services.contains("RacingRedirectFetcher(") && services.contains("UrlConnectionRedirectFetcher()"))
+        assertTrue(services.contains("directGoogleClient()"))
         val sheet = File("src/main/java/com/splitmate/app/ui/screens/plan/StayPinSheet.kt").readText()
         assertTrue(sheet.contains("text = \"Details: \$detail\""))
         assertFalse(sheet.contains("ACCESS_FINE_LOCATION"), "no location permission involved")
+    }
+
+    @Test
+    fun `rc17 - long 133-char place path keeps Maharashtra 415639 without 120-char truncation`() {
+        val extracted = MapLinkCoordinateParser.extractPlaceNameHint(redirect)
+        assertEquals(hint, extracted)
+        assertTrue(extracted!!.endsWith("Maharashtra 415639"), extracted)
+    }
+
+    @Test
+    fun `rc17 - maps embed initEmbed response resolves the real place-id link to EXACT coordinates`() = runBlocking {
+        val embedHtml = """
+            <!DOCTYPE html><html><head><title>Google Maps</title></head><body><script>
+            initEmbed([null,null,null,null,null,[[[2,"spotlit"]]],null,null,[["52"],
+            ["0x3bea0d22e1412a97:0x9395d694c999e8da","$hint, India",[16.9983921,73.3569574],"10634642029631105242"],
+            "Hemprabha Bed And Breakfast PROP PRASHANT KOPARDE",["Shop No 504","Kuwarbav","Ratnagiri, Maharashtra 415639","India"],4.9,86]]);
+            </script></body></html>
+        """.trimIndent()
+        val fetcher = object : RedirectFetcher {
+            override suspend fun probe(url: String, method: ProbeMethod) = fetch(url, method, FetchIdentity.APP, 0)
+            override suspend fun fetch(url: String, method: ProbeMethod, identity: FetchIdentity, maxBodyBytes: Int): RedirectProbe =
+                when {
+                    url.contains("maps.app.goo.gl") -> RedirectProbe(302, redirect)
+                    url.contains("/maps/embed") -> RedirectProbe(200, null, embedHtml)
+                    else -> RedirectProbe(200, null, "<html><script>mapslite=1;</script><img src=\"maps_512dp.png\"></html>")
+                }
+        }
+        val r = ShortLinkResolver(fetcher, isOnline = { true }, flags = { GuideFeatureFlags() })
+            .resolve("https://maps.app.goo.gl/m18sW89UNW9NqgXM8") as StayResolution.Resolved
+        assertEquals(CoordinatePrecision.EXACT, r.precision)
+        assertEquals(16.9983921, r.location.lat, 1e-7)
+        assertEquals(73.3569574, r.location.lng, 1e-7)
+        assertEquals("Hemprabha Bed And Breakfast", r.label)
+        assertTrue(MapsPageCoordinateExtractor.shouldStopReading("<html><script>mapslite=1;</script><img src=\"maps_512dp.png\"></html>"))
+    }
+
+    @Test
+    fun `rc17 - GoogleDirectEdgeDns resolves Google hosts in-memory and 3rd direct lane overtakes stalled DNS`() = runTest {
+        assertTrue(GoogleDirectEdgeDns.isGoogleHost("maps.app.goo.gl"))
+        assertTrue(GoogleDirectEdgeDns.isGoogleHost("www.google.com"))
+        assertTrue(GoogleDirectEdgeDns.isGoogleHost("maps.google.co.in"))
+        assertFalse(GoogleDirectEdgeDns.isGoogleHost("nominatim.openstreetmap.org"))
+        val directAddrs = GoogleDirectEdgeDns.lookup("maps.app.goo.gl")
+        assertTrue(directAddrs.size >= 6)
+        assertTrue(directAddrs.all { it.hostName == "maps.app.goo.gl" })
+
+        val racing = RacingRedirectFetcher(
+            primary = scripted { awaitCancellation() },
+            secondary = scripted { awaitCancellation() },
+            tertiary = scripted { delay(150); RedirectProbe(302, redirect) },
+            clockMs = { currentTime }
+        )
+        val probe = racing.fetch("https://maps.app.goo.gl/m18sW89UNW9NqgXM8", ProbeMethod.GET, FetchIdentity.BROWSER_MOBILE, 0)
+        assertEquals(302, probe.statusCode)
+        assertEquals(RacingRedirectFetcher.DIRECT_HEAD_START_MS + 150, currentTime)
+        assertTrue(racing.trace().any { it.contains("direct 302") }, racing.trace().toString())
     }
 }

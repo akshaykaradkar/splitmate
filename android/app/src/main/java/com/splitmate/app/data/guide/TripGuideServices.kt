@@ -99,10 +99,12 @@ object TripGuideServices {
         private val textFetcher by lazy { OkHttpTextFetcher() }
         val shortLinks by lazy {
             ShortLinkResolver(
-                // rc16: OkHttp and the platform HTTP stack race for each hop (see RacingRedirectFetcher).
+                // rc16 / rc17: OkHttp (system DNS), direct Google edge DNS (400 ms head start, zero DNS),
+                // and the platform HTTP stack (1.5 s head start) race for each hop.
                 com.splitmate.app.data.guide.loop.RacingRedirectFetcher(
                     primary = OkHttpRedirectFetcher(),
-                    secondary = com.splitmate.app.data.guide.loop.UrlConnectionRedirectFetcher()
+                    secondary = com.splitmate.app.data.guide.loop.UrlConnectionRedirectFetcher(),
+                    tertiary = OkHttpRedirectFetcher(OkHttpRedirectFetcher.directGoogleClient())
                 ),
                 isOnline = { network.state.value.online },
                 flags = flagsNow
@@ -121,7 +123,7 @@ object TripGuideServices {
             ),
             nearby = wdqs,
             stayResolver = shortLinks,
-            geocoder = NominatimStayGeocoder(nominatim),
+            geocoder = PlatformFallbackStayGeocoder(appContext, NominatimStayGeocoder(nominatim), flagsNow),
             store = store,
             planSync = NtfyPlanSyncTransport(planSync),
             flags = ProviderGuideFlagsSource(flagsProvider)
@@ -241,5 +243,43 @@ internal class AndroidTripGuideEnvironment(
                     ?: (snapshot?.toStation?.takeIf { it.isNotBlank() } ?: ticket?.toStation?.takeIf { it.isNotBlank() })
                         ?.let { resolveStationDisplayName(it) }
             }
+    }
+}
+
+/**
+ * v2.4.0 rc17: tries Android's built-in platform [android.location.Geocoder] (Play Services backed
+ * on Pixel/GMS devices, requiring zero permissions or API keys) with a 2.5 s timeout before
+ * falling back to [NominatimStayGeocoder].
+ */
+internal class PlatformFallbackStayGeocoder(
+    private val appContext: Context,
+    private val fallback: StayGeocoder,
+    private val flags: () -> GuideFeatureFlags
+) : StayGeocoder {
+    override suspend fun geocode(nameHint: String, destinationLabel: String?): StayResolution {
+        if (!flags().nominatimEnabled) return fallback.geocode(nameHint, destinationLabel)
+        val platformHit = kotlinx.coroutines.withTimeoutOrNull(2_500L) {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    if (!android.location.Geocoder.isPresent()) return@runCatching null
+                    val geocoder = android.location.Geocoder(appContext, java.util.Locale.US)
+                    val queries = NominatimGeocoder.smartQueries(nameHint, destinationLabel)
+                    val label = NominatimGeocoder.placeName(nameHint)
+                    for (q in queries) {
+                        @Suppress("DEPRECATION")
+                        val results = geocoder.getFromLocationName(q, 1)
+                        val first = results?.firstOrNull { it.hasLatitude() && it.hasLongitude() } ?: continue
+                        val ll = com.splitmate.app.data.guide.loop.MapLinkCoordinateParser.validate(first.latitude, first.longitude) ?: continue
+                        return@runCatching StayResolution.Resolved(
+                            location = ll,
+                            label = label ?: com.splitmate.app.data.guide.loop.LoopText.clean(first.featureName) ?: nameHint,
+                            precision = CoordinatePrecision.APPROXIMATE
+                        )
+                    }
+                    null
+                }.getOrNull()
+            }
+        }
+        return platformHit ?: fallback.geocode(nameHint, destinationLabel)
     }
 }

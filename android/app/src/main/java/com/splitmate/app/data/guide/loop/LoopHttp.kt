@@ -9,7 +9,6 @@ import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.Dns
 import okhttp3.OkHttpClient
-import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
 import java.io.ByteArrayOutputStream
@@ -17,9 +16,48 @@ import java.io.IOException
 import java.io.InputStream
 import java.net.Inet4Address
 import java.net.InetAddress
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+
+/**
+ * v2.4.0 rc17: zero-DNS-latency resolver for Google short-link and Maps hosts.
+ *
+ * Why: on Indian mobile/Wi-Fi networks and phones with Private DNS / AdGuard / carrier filters,
+ * `maps.app.goo.gl` (`*.app.goo.gl`, Firebase Dynamic Links) is frequently sinkholed (`0.0.0.0` /
+ * `::` / `NXDOMAIN`) or stalls in Android's `netd` resolver for several seconds. Google's anycast
+ * frontend edge IPs serve `maps.app.goo.gl`, `goo.gl`, `g.co`, and `www.google.com` on port 443
+ * with full TLS SNI and valid X.509 certificates. Constructing [InetAddress.getByAddress] with the
+ * original hostname and raw IP bytes performs **zero network DNS lookups** while preserving strict
+ * hostname verification and SNI in OkHttp.
+ */
+object GoogleDirectEdgeDns : Dns {
+    private val GOOGLE_HOST = Regex(
+        """^(?:maps\.app\.goo\.gl|goo\.gl|g\.co|(?:[a-z0-9-]+\.)?google\.(?:com|[a-z]{2}|co\.[a-z]{2}|com\.[a-z]{2}))$""",
+        RegexOption.IGNORE_CASE
+    )
+
+    // Interleaved IPv4 and IPv6 Google anycast edge addresses (verified against maps.app.goo.gl & www.google.com).
+    private val EDGE_RAW_IPS: List<ByteArray> = listOf(
+        byteArrayOf(142.toByte(), 251.toByte(), 12, 113), // 142.251.12.113
+        byteArrayOf(0x24, 0x04, 0x68, 0x00, 0x40, 0x09, 0x08, 0x0b, 0, 0, 0, 0, 0, 0, 0x20, 0x0e), // 2404:6800:4009:80b::200e (bom)
+        byteArrayOf(74, 125, 68, 113), // 74.125.68.113
+        byteArrayOf(0x24, 0x04, 0x68, 0x00, 0x40, 0x03, 0x0c, 0x11, 0, 0, 0, 0, 0, 0, 0, 0x8a.toByte()), // 2404:6800:4003:c11::8a
+        byteArrayOf(142.toByte(), 250.toByte(), 190.toByte(), 78), // 142.250.190.78
+        byteArrayOf(0x26, 0x07, 0xf8.toByte(), 0xb0.toByte(), 0x40, 0x04, 0x0c, 0x07, 0, 0, 0, 0, 0, 0, 0, 0x71), // 2607:f8b0:4004:c07::71
+        byteArrayOf(172.toByte(), 217.toByte(), 160.toByte(), 142.toByte()) // 172.217.160.142
+    )
+
+    fun isGoogleHost(hostname: String): Boolean = GOOGLE_HOST.matches(hostname)
+
+    fun directAddresses(hostname: String): List<InetAddress> =
+        EDGE_RAW_IPS.map { raw -> InetAddress.getByAddress(hostname, raw) }
+
+    override fun lookup(hostname: String): List<InetAddress> =
+        if (isGoogleHost(hostname)) directAddresses(hostname) else Ipv4PreferredDns.lookup(hostname)
+}
 
 /**
  * Orders DNS answers so that OkHttp reaches a working address family quickly.
@@ -35,9 +73,27 @@ import kotlin.coroutines.resumeWithException
  * v2.4.0: addresses are **interleaved by family** (RFC 8305 §4), IPv4 first:
  * `[v4₁, v6₁, v4₂, v6₂, …]`. Whatever family is broken, the other one is dialled on the second
  * attempt, i.e. after one connect timeout. Single-family answers are returned untouched.
+ *
+ * v2.4.0 rc17: filters out DNS-sinkhole bogons (`0.0.0.0`, `127.0.0.1`, `::`, `::1`, link-local)
+ * and falls back to [GoogleDirectEdgeDns] when system DNS blocks or fails for a Google host.
  */
 object Ipv4PreferredDns : Dns {
-    override fun lookup(hostname: String): List<InetAddress> = interleave(Dns.SYSTEM.lookup(hostname))
+    override fun lookup(hostname: String): List<InetAddress> {
+        val system = try {
+            Dns.SYSTEM.lookup(hostname).filter(::isUsableAddress)
+        } catch (e: UnknownHostException) {
+            if (GoogleDirectEdgeDns.isGoogleHost(hostname)) return GoogleDirectEdgeDns.directAddresses(hostname)
+            throw e
+        }
+        if (system.isEmpty()) {
+            if (GoogleDirectEdgeDns.isGoogleHost(hostname)) return GoogleDirectEdgeDns.directAddresses(hostname)
+            throw UnknownHostException("No usable addresses for $hostname")
+        }
+        return interleave(system)
+    }
+
+    internal fun isUsableAddress(addr: InetAddress): Boolean =
+        !addr.isAnyLocalAddress && !addr.isLoopbackAddress && !addr.isLinkLocalAddress && !addr.isMulticastAddress
 
     /** Pure ordering step (unit-tested): IPv4 first, then alternate families. */
     internal fun interleave(addresses: List<InetAddress>): List<InetAddress> {
@@ -198,16 +254,23 @@ class OkHttpRedirectFetcher(
         const val READ_TIMEOUT_MS = 4_000L
         const val CALL_TIMEOUT_MS = 6_000L
 
-        /** Redirect client: never follows redirects itself; family-interleaved DNS; HTTP/1.1; fast timeouts. */
+        /** Redirect client: never follows redirects itself; family-interleaved DNS; fast timeouts. */
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
             .dns(Ipv4PreferredDns)
-            .protocols(listOf(Protocol.HTTP_1_1))
             .followRedirects(false)
             .followSslRedirects(false)
             .retryOnConnectionFailure(true)
             .connectTimeout(CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
             .readTimeout(READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
             .callTimeout(CALL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            .build()
+
+        /**
+         * v2.4.0 rc17: redirect client bound to [GoogleDirectEdgeDns] so a stalled or sinkholed
+         * system/Private DNS on `maps.app.goo.gl` never blocks the lookup.
+         */
+        fun directGoogleClient(): OkHttpClient = defaultClient().newBuilder()
+            .dns(GoogleDirectEdgeDns)
             .build()
 
         /** Earliest point at which [readTruncated] considers stopping before [max] bytes. */
@@ -219,17 +282,16 @@ class OkHttpRedirectFetcher(
         /**
          * Reads at most [max] bytes and silently truncates the rest (HTML fallback only).
          *
-         * v2.3.5 (#3) rework: it stops before [max] only when [isComplete] says the bytes read so
-         * far already contain an EXACT coordinate (default: [MapsPageCoordinateExtractor.hasExactCoordinate]).
-         * Reaching `</head>` is not enough: the EXACT `[null,null,lat,lng]` tuples and the
-         * `APP_INITIALIZATION_STATE` array usually sit in `<body>`, after the head.
+         * v2.3.5 (#3) / v2.4.0 rc17: stops before [max] when [isComplete] says the bytes read so
+         * far either already contain an EXACT coordinate or are Google's coordinate-free `mapslite`
+         * SPA shell (default: [MapsPageCoordinateExtractor.shouldStopReading]).
          * If the server stalls or drops the connection after some bytes, those bytes are returned
          * instead of throwing.
          */
         internal fun readTruncated(
             input: InputStream,
             max: Int,
-            isComplete: (String) -> Boolean = MapsPageCoordinateExtractor::hasExactCoordinate
+            isComplete: (String) -> Boolean = MapsPageCoordinateExtractor::shouldStopReading
         ): String {
             val out = ByteArrayOutputStream()
             val buf = ByteArray(8 * 1024)
@@ -264,47 +326,50 @@ class OkHttpRedirectFetcher(
  * Cancellation disconnects the socket from the cancelling thread.
  */
 class UrlConnectionRedirectFetcher(
-    private val connectTimeoutMs: Int = 5_000,
-    private val readTimeoutMs: Int = 5_000
+    private val connectTimeoutMs: Int = 2_500,
+    private val readTimeoutMs: Int = 2_500,
+    private val callTimeoutMs: Long = 4_500L
 ) : RedirectFetcher {
     override suspend fun probe(url: String, method: ProbeMethod): RedirectProbe =
         fetch(url, method, FetchIdentity.APP, maxBodyBytes = 0)
 
     override suspend fun fetch(url: String, method: ProbeMethod, identity: FetchIdentity, maxBodyBytes: Int): RedirectProbe {
         if (!url.startsWith("https://", ignoreCase = true)) throw IOException("HTTPS only")
-        return kotlinx.coroutines.withContext(Dispatchers.IO) {
-            val conn = java.net.URL(url).openConnection() as javax.net.ssl.HttpsURLConnection
-            val handle = coroutineContext[kotlinx.coroutines.Job]?.invokeOnCompletion { cause ->
-                if (cause != null) runCatching { conn.disconnect() }
-            }
-            try {
-                conn.instanceFollowRedirects = false
-                conn.useCaches = false
-                conn.connectTimeout = connectTimeoutMs
-                conn.readTimeout = readTimeoutMs
-                conn.requestMethod = method.name
-                when (identity) {
-                    FetchIdentity.BROWSER_MOBILE -> {
-                        conn.setRequestProperty("User-Agent", OkHttpRedirectFetcher.MOBILE_BROWSER_USER_AGENT)
-                        conn.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-                        conn.setRequestProperty("Accept-Language", "en-US,en;q=0.9")
+        return kotlinx.coroutines.withTimeoutOrNull(callTimeoutMs) {
+            kotlinx.coroutines.withContext(Dispatchers.IO) {
+                val conn = java.net.URL(url).openConnection() as javax.net.ssl.HttpsURLConnection
+                val handle = coroutineContext[kotlinx.coroutines.Job]?.invokeOnCompletion { cause ->
+                    if (cause != null) runCatching { conn.disconnect() }
+                }
+                try {
+                    conn.instanceFollowRedirects = false
+                    conn.useCaches = false
+                    conn.connectTimeout = connectTimeoutMs
+                    conn.readTimeout = readTimeoutMs
+                    conn.requestMethod = method.name
+                    when (identity) {
+                        FetchIdentity.BROWSER_MOBILE -> {
+                            conn.setRequestProperty("User-Agent", OkHttpRedirectFetcher.MOBILE_BROWSER_USER_AGENT)
+                            conn.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                            conn.setRequestProperty("Accept-Language", "en-US,en;q=0.9")
+                        }
+                        FetchIdentity.APP -> conn.setRequestProperty("User-Agent", GuideHttp.USER_AGENT)
                     }
-                    FetchIdentity.APP -> conn.setRequestProperty("User-Agent", GuideHttp.USER_AGENT)
+                    if (method == ProbeMethod.GET && maxBodyBytes <= 0) conn.setRequestProperty("Range", "bytes=0-0")
+                    val code = conn.responseCode
+                    val location = conn.getHeaderField("Location")
+                    val body = if (method == ProbeMethod.GET && maxBodyBytes > 0 && code in 200..299) {
+                        conn.inputStream.use { OkHttpRedirectFetcher.readTruncated(it, maxBodyBytes) }
+                    } else {
+                        null
+                    }
+                    RedirectProbe(code, location, body)
+                } finally {
+                    handle?.dispose()
+                    runCatching { conn.disconnect() }
                 }
-                if (method == ProbeMethod.GET && maxBodyBytes <= 0) conn.setRequestProperty("Range", "bytes=0-0")
-                val code = conn.responseCode
-                val location = conn.getHeaderField("Location")
-                val body = if (method == ProbeMethod.GET && maxBodyBytes > 0 && code in 200..299) {
-                    conn.inputStream.use { OkHttpRedirectFetcher.readTruncated(it, maxBodyBytes) }
-                } else {
-                    null
-                }
-                RedirectProbe(code, location, body)
-            } finally {
-                handle?.dispose()
-                runCatching { conn.disconnect() }
             }
-        }
+        } ?: throw SocketTimeoutException("platform call timed out after ${callTimeoutMs}ms")
     }
 }
 
@@ -315,14 +380,13 @@ interface DiagnosticRedirectFetcher {
 }
 
 /**
- * rc16: races two independent HTTP stacks for each hop. [primary] (OkHttp) starts at once; if it
- * has not answered within [headStartMs] (or fails earlier), [secondary] (platform
- * HttpsURLConnection) starts too, and the first successful answer wins (the other is cancelled).
- * Only when both fail does the hop fail, with the primary's error (secondary's attached as
- * suppressed). Every attempt's outcome and timing is recorded for [trace].
- *
- * Why: a phone network can stall one stack (address family, middlebox, DNS path) while the other
- * gets through; one Google redirect is tiny, so a parallel second attempt costs almost nothing.
+ * rc16 / rc17: races independent HTTP stacks for each hop. [primary] (OkHttp with system DNS)
+ * starts at once; if [tertiary] (OkHttp with [GoogleDirectEdgeDns], bypassing system/Private DNS)
+ * is provided, it starts after [tertiaryHeadStartMs] (400 ms) or as soon as [primary] fails;
+ * if no lane has answered within [headStartMs] (1.5 s) (or [primary] fails earlier), [secondary]
+ * (platform `HttpsURLConnection`) starts too. The first successful answer wins and cancels the
+ * remaining lanes. Every attempt's outcome (including cancellation) and timing is recorded for
+ * [trace].
  */
 class RacingRedirectFetcher(
     private val primary: RedirectFetcher,
@@ -330,7 +394,10 @@ class RacingRedirectFetcher(
     private val headStartMs: Long = HEAD_START_MS,
     private val clockMs: () -> Long = { System.nanoTime() / 1_000_000 },
     private val primaryName: String = "okhttp",
-    private val secondaryName: String = "platform"
+    private val secondaryName: String = "platform",
+    private val tertiary: RedirectFetcher? = null,
+    private val tertiaryHeadStartMs: Long = DIRECT_HEAD_START_MS,
+    private val tertiaryName: String = "direct"
 ) : RedirectFetcher, DiagnosticRedirectFetcher {
 
     private val traceLines = java.util.Collections.synchronizedList(ArrayList<String>())
@@ -357,23 +424,51 @@ class RacingRedirectFetcher(
                 if (a.isCompleted && a.await().isSuccess) return@async Result.failure<RedirectProbe>(IOException("not needed"))
                 attempt(secondaryName, host) { secondary.fetch(url, method, identity, maxBodyBytes) }
             }
-            // First success wins; otherwise wait for the other lane.
-            val first = kotlinx.coroutines.selects.select<Pair<Result<RedirectProbe>, Boolean>> {
-                a.onAwait { it to true }
-                b.onAwait { it to false }
+            if (tertiary == null) {
+                // Classic 2-lane race.
+                val first = kotlinx.coroutines.selects.select<Pair<Result<RedirectProbe>, Boolean>> {
+                    a.onAwait { it to true }
+                    b.onAwait { it to false }
+                }
+                val firstResult = first.first
+                if (firstResult.isSuccess) {
+                    (if (first.second) b else a).cancel()
+                    return@coroutineScope firstResult.getOrThrow()
+                }
+                val other = (if (first.second) b else a).await()
+                if (other.isSuccess) return@coroutineScope other.getOrThrow()
+                val primaryError = (if (first.second) firstResult else other).exceptionOrNull()
+                val secondaryError = (if (first.second) other else firstResult).exceptionOrNull()
+                val error = (primaryError as? IOException) ?: IOException(primaryError?.message ?: "request failed", primaryError)
+                secondaryError?.takeIf { it !== error && it.message != "not needed" }?.let { error.addSuppressed(it) }
+                throw error
+            } else {
+                // 3-lane race with direct Google edge DNS lane starting at tertiaryHeadStartMs.
+                val c = async {
+                    kotlinx.coroutines.withTimeoutOrNull(tertiaryHeadStartMs) { primaryDone.await() }
+                    if (a.isCompleted && a.await().isSuccess) return@async Result.failure<RedirectProbe>(IOException("not needed"))
+                    attempt(tertiaryName, host) { tertiary.fetch(url, method, identity, maxBodyBytes) }
+                }
+                val lanes = mutableListOf(a, b, c)
+                val errors = mutableListOf<Throwable>()
+                while (lanes.isNotEmpty()) {
+                    val (res, winner) = kotlinx.coroutines.selects.select<Pair<Result<RedirectProbe>, kotlinx.coroutines.Deferred<Result<RedirectProbe>>>> {
+                        for (lane in lanes) {
+                            lane.onAwait { it to lane }
+                        }
+                    }
+                    lanes.remove(winner)
+                    if (res.isSuccess) {
+                        lanes.forEach { it.cancel() }
+                        return@coroutineScope res.getOrThrow()
+                    }
+                    res.exceptionOrNull()?.takeIf { it.message != "not needed" }?.let { errors += it }
+                }
+                val primaryError = errors.firstOrNull()
+                val error = (primaryError as? IOException) ?: IOException(primaryError?.message ?: "request failed", primaryError)
+                errors.drop(1).filter { it !== error }.forEach { error.addSuppressed(it) }
+                throw error
             }
-            val firstResult = first.first
-            if (firstResult.isSuccess) {
-                (if (first.second) b else a).cancel()
-                return@coroutineScope firstResult.getOrThrow()
-            }
-            val other = (if (first.second) b else a).await()
-            if (other.isSuccess) return@coroutineScope other.getOrThrow()
-            val primaryError = (if (first.second) firstResult else other).exceptionOrNull()
-            val secondaryError = (if (first.second) other else firstResult).exceptionOrNull()
-            val error = (primaryError as? IOException) ?: IOException(primaryError?.message ?: "request failed", primaryError)
-            secondaryError?.takeIf { it !== error && it.message != "not needed" }?.let { error.addSuppressed(it) }
-            throw error
         }
 
     private suspend fun attempt(name: String, host: String, block: suspend () -> RedirectProbe): Result<RedirectProbe> {
@@ -383,6 +478,7 @@ class RacingRedirectFetcher(
             traceLines += "$host $name ${r.statusCode} ${clockMs() - start}ms"
             Result.success(r)
         } catch (e: kotlinx.coroutines.CancellationException) {
+            traceLines += "$host $name cancelled ${clockMs() - start}ms"
             throw e
         } catch (e: Exception) {
             traceLines += "$host $name ${e.javaClass.simpleName}${e.message?.let { ": " + it.take(80) } ?: ""} ${clockMs() - start}ms"
@@ -391,8 +487,10 @@ class RacingRedirectFetcher(
     }
 
     companion object {
-        /** Google's short-link redirect takes ~1.1 s server-side; give OkHttp 1.5 s alone first. */
+        /** Google's short-link redirect takes ~1.1 s server-side; give OkHttp 1.5 s before platform stack. */
         const val HEAD_START_MS = 1_500L
+        /** Direct-edge DNS lane starts after 400 ms so a stalled system DNS is bypassed immediately. */
+        const val DIRECT_HEAD_START_MS = 400L
     }
 }
 

@@ -64,6 +64,13 @@ object MapLinkCoordinateParser {
     /** Inputs longer than this are truncated before matching (defensive against huge pastes). */
     const val MAX_INPUT_CHARS = 8_192
 
+    /**
+     * Maximum length of a place-name/address hint extracted from a `/maps/place/<address>` path.
+     * Indian Google Maps business paths often exceed 120 chars (shop no + name + owner + landmark +
+     * locality + city + state + 6-digit PIN), and truncating at 120 chars drops the city/PIN tail.
+     */
+    const val MAX_HINT_CHARS = 240
+
     // Number fragments. "_D" variants require a fractional part.
     private const val LAT_D = """([+-]?\d{1,2}\.\d+)"""
     private const val LNG_D = """([+-]?\d{1,3}\.\d+)"""
@@ -263,7 +270,7 @@ object MapLinkCoordinateParser {
 
     private fun usableHint(rawValue: String, decode: Boolean = true): String? {
         val decoded = if (decode) LoopText.deepDecode(rawValue) else rawValue
-        val cleaned = LoopText.clean(decoded) ?: return null
+        val cleaned = LoopText.clean(decoded, maxChars = MAX_HINT_CHARS) ?: return null
         // Reject values that are themselves coordinates or have no letters at all.
         if (extractCoordinateInternal(cleaned) != null) return null
         if (cleaned.none { it.isLetter() }) return null
