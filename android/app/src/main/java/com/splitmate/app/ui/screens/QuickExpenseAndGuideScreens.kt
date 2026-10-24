@@ -203,8 +203,17 @@ fun QuickExpenseScreen(
     }
 
     var amountDigits by remember { mutableStateOf("0") }
-    var expenseCategoryTitle by remember { mutableStateOf("Dinner & Food") }
+    var expenseCategoryTitle by remember {
+        mutableStateOf(uiState?.prefillExpenseTitle?.takeIf { it.isNotBlank() } ?: "Dinner & Food")
+    }
     var expenseCategoryRef by remember { mutableStateOf<String?>(null) }
+    androidx.compose.runtime.LaunchedEffect(uiState?.prefillExpenseTitle) {
+        val prefill = uiState?.prefillExpenseTitle?.takeIf { it.isNotBlank() }
+        if (prefill != null) {
+            expenseCategoryTitle = prefill
+            viewModel?.setPrefillExpenseTitle(null)
+        }
+    }
     var showEditTitleDialog by remember { mutableStateOf(false) }
     var pendingCommitAfterCategorySelection by remember { mutableStateOf(false) }
     // v2.3.4: expanded category catalog + user-created categories (title-based; no data change).

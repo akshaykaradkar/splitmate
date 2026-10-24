@@ -66,7 +66,8 @@ fun TripPlanTab(
     modifier: Modifier = Modifier,
     /** rc14: the trip's days; null until there are bookings or trip dates. */
     tripDays: com.splitmate.app.data.guide.TripDayRange? = null,
-    onFreezeTripDates: () -> Unit = {}
+    onFreezeTripDates: () -> Unit = {},
+    onLogExpenseForPlace: ((com.splitmate.app.data.guide.Place) -> Unit)? = null
 ) {
     val motion = LocalMotionScheme.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -85,8 +86,12 @@ fun TripPlanTab(
     PlanEffectsCollector(effects = effects, snackbarHostState = snackbarHostState)
 
     // Remote kill-switch: without the guide only Bookings remains, so the switch disappears.
-    // v2.4.0: Days | Explore in the switch; Loop is reached from a day ("Make a loop").
-    val options = if (state.guideEnabled) listOf(PlanSubView.BOOKINGS, PlanSubView.EXPLORE) else listOf(PlanSubView.BOOKINGS)
+    // v2.4.0-rc18: Days | Explore | Loop in the connected 3-segment M3 Expressive switcher.
+    val options = if (state.guideEnabled) {
+        listOf(PlanSubView.BOOKINGS, PlanSubView.EXPLORE, PlanSubView.LOOP)
+    } else {
+        listOf(PlanSubView.BOOKINGS)
+    }
     val reachable = if (state.guideEnabled) PlanSubView.entries.toList() else listOf(PlanSubView.BOOKINGS)
     val current = if (state.subView in reachable) state.subView else PlanSubView.BOOKINGS
 
@@ -134,30 +139,18 @@ fun TripPlanTab(
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            if (current == PlanSubView.LOOP) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
-                ) {
-                    androidx.compose.material3.TextButton(
-                        onClick = { actions.selectSubView(PlanSubView.BOOKINGS) },
-                        shapes = ButtonDefaults.shapes(),
-                        modifier = Modifier.defaultMinSize(minHeight = 48.dp)
-                    ) {
-                        com.splitmate.app.ui.components.SymbolIcon(
-                            imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = null
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        androidx.compose.material3.Text("Back to days")
-                    }
-                }
-            } else if (options.size > 1) {
+            if (options.size > 1) {
                 ConnectedButtonGroup(
                     options = options,
-                    selectedIndex = options.indexOf(current),
+                    selectedIndex = options.indexOf(current).coerceAtLeast(0),
                     onSelect = { _, view -> actions.selectSubView(view) },
-                    labelProvider = { it.label },
+                    labelProvider = { view ->
+                        if (view == PlanSubView.LOOP && state.loop.activeStopCount > 0) {
+                            "${view.label} · ${state.loop.activeStopCount}"
+                        } else {
+                            view.label
+                        }
+                    },
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
             }
@@ -200,7 +193,8 @@ fun TripPlanTab(
                         onMovePlaceToDay = { placeId, day ->
                             if (day != null) onFreezeTripDates()
                             actions.movePlaceToDay(placeId, day)
-                        }
+                        },
+                        onLogExpenseForPlace = onLogExpenseForPlace
                     )
                 }
             }
@@ -223,7 +217,11 @@ fun TripPlanTab(
                 place = selected,
                 card = card,
                 actions = dayAwareActions,
-                onDismiss = { actions.dismissPlace() }
+                onDismiss = { actions.dismissPlace() },
+                onLogExpense = if (onLogExpenseForPlace != null) ({
+                    actions.dismissPlace()
+                    onLogExpenseForPlace(selected)
+                }) else null
             )
         }
     }

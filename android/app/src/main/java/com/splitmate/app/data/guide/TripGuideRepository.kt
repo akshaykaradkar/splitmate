@@ -87,6 +87,9 @@ interface TripGuideEnvironment {
 
     /** Raw arrival station/city names from the group's train/flight bookings, chronological. */
     suspend fun bookingDestinationNames(groupId: String): List<String>
+
+    /** v2.4.0 rc18: Logged STAY booking titles (hotels/homestays) for 1-tap Stay suggestions. */
+    suspend fun stayBookingNames(groupId: String): List<String> = emptyList()
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -314,6 +317,37 @@ class TripGuideRepository(
         return if (merged.nearby.size == pack.nearby.size) null else merged
     }
 
+    /**
+     * v2.4.0 rc18: Stay-First Auto-Discovery.
+     * When the user sets a Stay before searching a destination in Explore, query WDQS around
+     * [stay] and construct a Stay-anchored [GuidePack] so Explore and Loop populate immediately.
+     */
+    suspend fun buildStayOnlyPack(stay: StayPin): GuidePack? {
+        val batch = try {
+            nearby.nearby(stay.location, NEARBY_KINDS, NEARBY_MIN_RESULTS)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            emptyList()
+        }
+        if (batch.isEmpty()) return null
+        val cleanLabel = stay.label.ifBlank { "Your stay" }
+        return GuidePack(
+            destination = Destination(
+                qid = "Q0",
+                label = cleanLabel,
+                description = "Places around $cleanLabel",
+                location = stay.location,
+                hero = batch.firstOrNull { it.image != null }?.image
+            ),
+            wikivoyage = null,
+            places = emptyList(),
+            nearby = batch,
+            attribution = listOf("Nearby landmarks from Wikidata (CC0)"),
+            fetchedAtEpochMs = clock()
+        )
+    }
+
     // ---- manifest -------------------------------------------------------------------------------
 
     fun observeManifestRow(groupId: String): Flow<TripPlanManifestEntity?> = store.observeManifestEntity(groupId)
@@ -360,6 +394,30 @@ class TripGuideRepository(
         if (day != null && day !in 1..PlanManifestCodec.MAX_DAY) return null
         val now = clock()
         return editManifest(groupId) { m -> PlanManifestMerger.pin(m, placeId, memberKey, now, day).withHeaderOf(m) }
+    }
+
+    /**
+     * v2.4.0 rc18: Atomically pins a batch of [placeIds] (optionally onto [day]) in a single
+     * manifest transaction. Used by "Suggest stops for Day N" and "Pin these stops".
+     */
+    suspend fun pinBatchToDay(
+        groupId: String,
+        placeIds: List<String>,
+        day: Int?,
+        memberKey: String?
+    ): PlanManifest? {
+        if (day != null && day !in 1..PlanManifestCodec.MAX_DAY) return null
+        val validIds = placeIds.filter { PlanManifestCodec.isValidPlaceId(it) && it != PlanManifestCodec.STAY_ID }.distinct()
+        if (validIds.isEmpty()) return null
+        val baseNow = clock()
+        return editManifest(groupId) { m ->
+            var cur = m
+            validIds.forEachIndexed { idx, id ->
+                val assignedDay = day ?: cur.days[id]
+                cur = PlanManifestMerger.pin(cur, id, memberKey, baseNow + idx, assignedDay)
+            }
+            cur.withHeaderOf(m)
+        }
     }
 
     /** Hides a place for the whole group (always strictly newer than any pin). Keeps the header. */

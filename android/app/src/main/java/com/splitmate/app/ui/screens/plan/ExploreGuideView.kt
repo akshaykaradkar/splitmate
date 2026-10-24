@@ -53,6 +53,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -168,6 +170,7 @@ fun ExploreGuideView(
                     actions = actions,
                     onClose = if (searchOpen && hasGuide) ({ searchOpen = false }) else null,
                     onSubmitted = { searchOpen = false },
+                    onOpenStaySheet = onOpenStaySheet,
                     modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                 )
             }
@@ -428,7 +431,7 @@ private fun PlaceCard(
                     card.distanceLabel?.let { distance ->
                         Text(
                             text = distance,
-                            style = MaterialTheme.typography.labelLarge,
+                            style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum"),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -489,6 +492,27 @@ private fun GuideChipsRow(
             colors = chipColors,
             elevation = AssistChipDefaults.elevatedAssistChipElevation(elevation = 1.dp)
         )
+        if (state.stay.stay != null) {
+            FilterChip(
+                selected = state.sortNearStay,
+                onClick = { actions.setSortNearStay(!state.sortNearStay) },
+                label = { ChipText("Near your stay") },
+                leadingIcon = {
+                    SymbolIcon(
+                        imageVector = if (state.sortNearStay) Icons.Rounded.CheckCircle else Icons.Rounded.Place,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                colors = FilterChipDefaults.filterChipColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    selectedLeadingIconColor = MaterialTheme.colorScheme.onSecondaryContainer
+                ),
+                modifier = Modifier.heightIn(min = 48.dp)
+            )
+        }
         // rc13 (audit H-2): the Loop is always one tap away from Explore, even on a trip with no
         // expenses (Days has no day to hang "Make a loop" on yet).
         val loopStops = state.loop.route?.orderedStops?.size ?: 0
@@ -739,6 +763,7 @@ private fun DestinationSearch(
     actions: TripGuideActions,
     onClose: (() -> Unit)?,
     onSubmitted: () -> Unit,
+    onOpenStaySheet: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val focusManager = LocalFocusManager.current
@@ -816,6 +841,29 @@ private fun DestinationSearch(
                     )
                 }
             }
+        }
+        if (onOpenStaySheet != null) {
+            val stayLabel = state.stay.stay?.label?.let { PlanGuideFormat.sanitizeDisplay(it) }
+                ?.let { PlanGuideFormat.truncate(it, 28) }
+            ElevatedAssistChip(
+                onClick = {
+                    focusManager.clearFocus()
+                    onOpenStaySheet()
+                },
+                label = {
+                    ChipText(
+                        if (stayLabel != null) "Stay: $stayLabel"
+                        else "Have a hotel or Airbnb link? Set your stay"
+                    )
+                },
+                leadingIcon = { SymbolIcon(Icons.Rounded.Hotel, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                trailingIcon = { SymbolIcon(Icons.Rounded.ChevronRight, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                colors = AssistChipDefaults.elevatedAssistChipColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+                ),
+                elevation = AssistChipDefaults.elevatedAssistChipElevation(elevation = 1.dp),
+                modifier = Modifier.heightIn(min = 48.dp)
+            )
         }
     }
 }

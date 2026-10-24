@@ -108,7 +108,8 @@ data class SplitMateUiState(
     val isCloudSyncing: Boolean = false,
     val cloudRestoreSummary: com.splitmate.app.data.CloudRestoreSummary? = null,
     val discoveredCloudProfile: com.splitmate.app.data.CloudUserProfileRecord? = null,
-    val memberPresenceByPhone: Map<String, Long> = emptyMap()
+    val memberPresenceByPhone: Map<String, Long> = emptyMap(),
+    val prefillExpenseTitle: String? = null
 ) {
     val activeExpressiveTheme: SplitMateThemeMode
         get() = activeThemeMode
@@ -542,6 +543,10 @@ class SplitMateViewModel(
         com.splitmate.app.ui.category.CustomExpenseCategoryStore.onGroupCategoriesChanged = { gid ->
             runCatching { syncActiveGroupNow(groupId = gid) }
         }
+    }
+
+    fun setPrefillExpenseTitle(title: String?) {
+        _uiState.update { it.copy(prefillExpenseTitle = title?.trim()?.takeIf { s -> s.isNotEmpty() }) }
     }
 
     private data class ParsedAvatarSeedDescriptor(

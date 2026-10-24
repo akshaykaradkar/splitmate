@@ -33,7 +33,9 @@ fun TripPlanTabHost(
     /** rc14: the trip's days (explicit trip dates, else first..last booking). */
     tripDays: com.splitmate.app.data.guide.TripDayRange? = null,
     /** rc14: saves the derived day range as the trip dates so day numbers can't shift later. */
-    onFreezeTripDates: () -> Unit = {}
+    onFreezeTripDates: () -> Unit = {},
+    onGuideStateChanged: (TripGuideUiState) -> Unit = {},
+    onLogExpenseForPlace: ((com.splitmate.app.data.guide.Place) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val factory = remember(groupId) { TripGuideViewModel.factory(context, groupId) }
@@ -42,6 +44,8 @@ fun TripPlanTabHost(
 
     val latestOnSubViewChanged by rememberUpdatedState(onSubViewChanged)
     LaunchedEffect(state.subView) { latestOnSubViewChanged(state.subView) }
+    val latestOnGuideStateChanged by rememberUpdatedState(onGuideStateChanged)
+    LaunchedEffect(state) { latestOnGuideStateChanged(state) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(vm, lifecycleOwner) {
@@ -67,6 +71,7 @@ fun TripPlanTabHost(
         bookingsContent = bookingsContent,
         modifier = modifier,
         tripDays = tripDays,
-        onFreezeTripDates = onFreezeTripDates
+        onFreezeTripDates = onFreezeTripDates,
+        onLogExpenseForPlace = onLogExpenseForPlace
     )
 }

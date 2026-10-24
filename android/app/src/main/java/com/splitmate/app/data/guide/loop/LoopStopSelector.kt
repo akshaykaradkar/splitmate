@@ -98,6 +98,94 @@ object LoopStopSelector {
         return LoopStopSelection(auto, autoSuggested = true, pinnedWithoutCoordinates = emptyList(), truncated = false)
     }
 
+    /**
+     * v2.4.0 rc18: Suggests up to [limit] stops for [targetDay] when that day has no stops yet.
+     *
+     * Rules:
+     * 1. Excludes SLEEP, places without coordinates, hidden places, and places already assigned
+     *    to a different day (`days[id] != null && days[id] != targetDay`).
+     * 2. Prioritises unplanned pinned places (`isPinned && days[id] == null`) first so the user's
+     *    saved shortlist gets scheduled before unpinned places.
+     * 3. Partitions candidates around [stay] into `totalDays.coerceIn(1, 6)` angular sectors so
+     *    Day 1, Day 2, Day 3 explore distinct geographic zones around the Stay.
+     * 4. Balances categories (up to 3 SEE/DO sights + up to 2 EAT spots for a 5-stop day) and
+     *    applies a 250 m anti-clustering preference when alternatives exist.
+     */
+    fun suggestForDay(
+        candidates: List<Place>,
+        pinned: Map<String, Long>,
+        hidden: Map<String, Long>,
+        days: Map<String, Int>,
+        targetDay: Int?,
+        stay: LatLng?,
+        totalDays: Int = 3,
+        limit: Int = 5
+    ): List<Place> {
+        val cap = limit.coerceIn(1, MAX_LOOP_STOPS)
+        val unique = dedupe(candidates)
+        val eligible = unique.filter { p ->
+            p.location != null &&
+                p.kind != PlaceKind.SLEEP &&
+                !isHidden(p.id, pinned, hidden) &&
+                (targetDay == null || days[p.id] == null || days[p.id] == targetDay)
+        }
+        if (eligible.isEmpty()) return emptyList()
+
+        val origin = stay ?: eligible.first().location
+        val sectorCount = totalDays.coerceIn(1, 6)
+        val targetSector = if (targetDay != null && targetDay >= 1) (targetDay - 1) % sectorCount else 0
+
+        fun sectorDistance(p: Place): Int {
+            if (origin == null || sectorCount <= 1 || targetDay == null) return 0
+            val loc = p.location ?: return sectorCount
+            val dLat = loc.lat - origin.lat
+            val dLng = loc.lng - origin.lng
+            if (kotlin.math.abs(dLat) < 1e-6 && kotlin.math.abs(dLng) < 1e-6) return 0
+            val angle = (kotlin.math.atan2(dLat, dLng) + Math.PI * 2.0) % (Math.PI * 2.0)
+            val sector = ((angle / (Math.PI * 2.0)) * sectorCount).toInt().coerceIn(0, sectorCount - 1)
+            val diff = kotlin.math.abs(sector - targetSector)
+            return minOf(diff, sectorCount - diff)
+        }
+
+        val comparator = compareBy<Place>(
+            { if (isPinned(it.id, pinned, hidden) && days[it.id] == null) 0 else 1 },
+            { sectorDistance(it) },
+            { kindPriority(it.kind) },
+            { distanceKey(it, stay) },
+            { it.id }
+        )
+        val sorted = eligible.sortedWith(comparator)
+
+        val maxEats = (cap / 2).coerceAtLeast(1)
+        val maxSights = (cap - 1).coerceAtLeast(1)
+        val picked = ArrayList<Place>(cap)
+        var eatCount = 0
+        var sightCount = 0
+
+        // Pass 1: category-balanced & 250m anti-clustered selection
+        for (p in sorted) {
+            if (picked.size >= cap) break
+            val isEat = p.kind == PlaceKind.EAT
+            if (isEat && eatCount >= maxEats) continue
+            if (!isEat && sightCount >= maxSights && sorted.any { it.kind == PlaceKind.EAT && it !in picked }) continue
+            val tooClose = p.location != null && picked.any { existing ->
+                existing.location != null && Haversine.km(existing.location, p.location) < 0.25
+            }
+            if (tooClose && eligible.size > cap) continue
+            picked += p
+            if (isEat) eatCount++ else sightCount++
+        }
+
+        // Pass 2: fill any remaining slots up to [cap]
+        if (picked.size < cap) {
+            for (p in sorted) {
+                if (picked.size >= cap) break
+                if (p !in picked) picked += p
+            }
+        }
+        return picked
+    }
+
     /** True iff [id] is pinned and the pin is newer than any hide. */
     fun isPinned(id: String, pinned: Map<String, Long>, hidden: Map<String, Long>): Boolean {
         val p = pinned[id] ?: return false

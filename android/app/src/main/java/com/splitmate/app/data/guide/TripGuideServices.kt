@@ -19,9 +19,12 @@ import com.splitmate.app.data.guide.loop.ShortLinkResolver
 import com.splitmate.app.data.guide.loop.WdqsNearbySource
 import com.splitmate.app.data.guide.sync.NtfyPlanManifestSync
 import com.splitmate.app.data.guide.sync.TripGuideStore
+import com.splitmate.app.ui.cleanDisplayExpenseTitle
 import com.splitmate.app.ui.extractTravelTicketFromTitle
 import com.splitmate.app.ui.loadPersistedPnrSnapshot
 import com.splitmate.app.ui.resolveStationDisplayName
+import com.splitmate.app.ui.screens.TripHubBookingCategory
+import com.splitmate.app.ui.screens.classifyGroupExpenseForTripHub
 import com.splitmate.app.ui.screens.plan.TripGuideViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
@@ -243,6 +246,17 @@ internal class AndroidTripGuideEnvironment(
                     ?: (snapshot?.toStation?.takeIf { it.isNotBlank() } ?: ticket?.toStation?.takeIf { it.isNotBlank() })
                         ?.let { resolveStationDisplayName(it) }
             }
+    }
+
+    override suspend fun stayBookingNames(groupId: String): List<String> = withContext(Dispatchers.IO) {
+        dao.getExpensesForGroup(groupId)
+            .sortedWith(compareBy({ it.scheduledAtEpochMs ?: it.createdAt }, { it.expenseId }))
+            .filter { classifyGroupExpenseForTripHub(it) == TripHubBookingCategory.STAY }
+            .mapNotNull { exp ->
+                cleanDisplayExpenseTitle(exp.title).trim().takeIf { it.length >= 2 }
+            }
+            .distinct()
+            .take(5)
     }
 }
 

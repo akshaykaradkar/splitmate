@@ -60,7 +60,9 @@ data class StayUi(
     val shareWithGroup: Boolean,            // default false (decision #14)
     val isShared: Boolean,                  // a stay came from another member's shared manifest
     val attribution: String?,               // "© OpenStreetMap contributors" when Nominatim-derived
-    val sleepListings: List<Place>          // Wikivoyage SLEEP listings for the picker
+    val sleepListings: List<Place>,         // Wikivoyage SLEEP listings for the picker
+    /** v2.4.0 rc18: logged STAY booking titles from the trip ledger for 1-tap selection. */
+    val bookingSuggestions: List<String> = emptyList()
 )
 
 /** Result of a stay input attempt, driving the stay sheet's inline feedback. */
@@ -87,7 +89,21 @@ data class LoopUi(
     /** rc14: pinned places with no day yet, shown in the "Not planned yet" tray. */
     val unplanned: List<Place> = emptyList(),
     /** rc14: true once any place has a day (each day then routes only its own places). */
-    val perDay: Boolean = false
+    val perDay: Boolean = false,
+    /** v2.4.0 rc18: true when the user manually reordered stops on this day. */
+    val isCustomOrdered: Boolean = false,
+    /** v2.4.0 rc18: true right after "Optimise route" overwrote a custom order (enables Undo). */
+    val canUndoOptimize: Boolean = false,
+    /** v2.4.0 rc18: road-estimated km saved by route optimisation vs. unoptimised order. */
+    val savedKm: Double? = null,
+    /** v2.4.0 rc18: estimated travel minutes saved by route optimisation. */
+    val savedMinutes: Int? = null,
+    /** v2.4.0 rc18: active travel mode for leg duration estimates and Maps handoff. */
+    val travelMode: TravelMode = TravelMode.DRIVING,
+    /** v2.4.0 rc18: day number -> ordered stop names for Days timeline summary cards. */
+    val dayStopNames: Map<Int, List<String>> = emptyMap(),
+    /** v2.4.0 rc18: count of stops in the active loop (for the top Loop · N segment label). */
+    val activeStopCount: Int = 0
 )
 
 data class TripGuideUiState(
@@ -116,7 +132,9 @@ data class TripGuideUiState(
     val stayFeedback: StayInputFeedback = StayInputFeedback.Idle,
     val stayFeedbackRequestId: Long = 0L,
     val loop: LoopUi = LoopUi(null, false, emptyList(), false, null, emptyList()),
-    val selectedPlace: Place? = null                     // place detail sheet
+    val selectedPlace: Place? = null,                    // place detail sheet
+    /** v2.4.0 rc18: when true and a Stay is set, Explore sections sort places closest to Stay first. */
+    val sortNearStay: Boolean = true
 )
 
 /** One-shot effects the screen must perform with an Android Context. */
@@ -179,4 +197,17 @@ interface TripGuideActions {
     /** rc14: open Explore so places added there go onto [day]. */
     fun openExploreForDay(day: Int?) = Unit
     fun shareLoop()
+
+    /** v2.4.0 rc18: toggle sorting Explore sections by proximity to the user's Stay. */
+    fun setSortNearStay(enabled: Boolean) = Unit
+    /** v2.4.0 rc18: move [placeId] up (-1) or down (+1) in the current day's loop order. */
+    fun moveStopInLoop(placeId: String, delta: Int) = Unit
+    /** v2.4.0 rc18: restore the custom stop order that was active before [reoptimizeLoop]. */
+    fun undoOptimizeLoop() = Unit
+    /** v2.4.0 rc18: switch between Driving and Walking for loop leg estimates and Maps handoff. */
+    fun setLoopTravelMode(mode: TravelMode) = Unit
+    /** v2.4.0 rc18: smart-fill [day] with up to 5 nearby category-balanced stops around the Stay. */
+    fun autoFillLoopDay(day: Int?) = Unit
+    /** v2.4.0 rc18: pin the currently auto-suggested loop stops so the user can edit them. */
+    fun pinSuggestedLoopStops() = Unit
 }

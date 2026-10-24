@@ -28,6 +28,7 @@ import com.splitmate.app.data.guide.TripGuideEnvironment
 import com.splitmate.app.data.guide.TripGuideRepository
 import com.splitmate.app.data.guide.TripGuideServices
 import com.splitmate.app.data.guide.content.WikimediaGuideSource
+import com.splitmate.app.data.guide.loop.DeterministicLoopOptimizer
 import com.splitmate.app.data.guide.loop.LoopStopSelector
 import com.splitmate.app.data.guide.loop.NominatimGeocoder
 import com.splitmate.app.data.guide.loop.ShortLinkResolver
@@ -130,6 +131,10 @@ class TripGuideViewModel(
     private var visible = true
     private var loopCacheKey: Any? = null
     private var loopCache: LoopUi = EMPTY_LOOP
+    private var stayBookingSuggestions: List<String> = emptyList()
+    private val customOrderByDay = mutableMapOf<Int?, List<String>>()
+    private val preOptimizeOrderByDay = mutableMapOf<Int?, List<String>>()
+    private var loopTravelMode: TravelMode = TravelMode.DRIVING
 
     private var guideJob: Job? = null
     private var guideJobIsBackground = false
@@ -157,7 +162,10 @@ class TripGuideViewModel(
         viewModelScope.launch { applyFlags(repository.refreshFlags()) }
         viewModelScope.launch {
             val raw = quietly(emptyList<String>()) { environment.bookingDestinationNames(groupId) }
+            val stays = quietly(emptyList<String>()) { environment.stayBookingNames(groupId) }
+            stayBookingSuggestions = stays
             _uiState.update { it.copy(bookingSuggestions = BookingDestinationSuggestions.normalise(raw)) }
+            if (stays.isNotEmpty()) render()
         }
         viewModelScope.launch { network.state.collect { onNetwork(it) } }
         viewModelScope.launch { repository.observeManifestRow(groupId).collect { onManifestRow(it) } }
@@ -499,9 +507,109 @@ class TripGuideViewModel(
     }
 
     override fun reoptimizeLoop() {
+        val day = _uiState.value.loopDay
+        val previousCustom = customOrderByDay.remove(day)
+        if (previousCustom != null) {
+            preOptimizeOrderByDay[day] = previousCustom
+        }
         loopCacheKey = null
         render()
         emit(TripGuideEffect.Snackbar(MSG_LOOP_OPTIMISED))
+    }
+
+    override fun undoOptimizeLoop() {
+        val day = _uiState.value.loopDay
+        val restored = preOptimizeOrderByDay.remove(day) ?: return
+        customOrderByDay[day] = restored
+        loopCacheKey = null
+        render()
+        emit(TripGuideEffect.Snackbar(MSG_LOOP_ORDER_RESTORED))
+    }
+
+    override fun moveStopInLoop(placeId: String, delta: Int) {
+        if (!flags.guideEnabled || delta == 0) return
+        val currentStops = _uiState.value.loop.route?.orderedStops ?: return
+        val ids = currentStops.map { it.id }.toMutableList()
+        val idx = ids.indexOf(placeId)
+        if (idx < 0) return
+        val targetIdx = (idx + delta).coerceIn(0, ids.lastIndex)
+        if (idx == targetIdx) return
+        val item = ids.removeAt(idx)
+        ids.add(targetIdx, item)
+        val day = _uiState.value.loopDay
+        customOrderByDay[day] = ids
+        preOptimizeOrderByDay.remove(day)
+        loopCacheKey = null
+        render()
+    }
+
+    override fun setLoopTravelMode(mode: TravelMode) {
+        if (loopTravelMode == mode) return
+        loopTravelMode = mode
+        loopCacheKey = null
+        render()
+    }
+
+    override fun setSortNearStay(enabled: Boolean) {
+        if (_uiState.value.sortNearStay == enabled) return
+        _uiState.update { it.copy(sortNearStay = enabled) }
+        render()
+    }
+
+    override fun autoFillLoopDay(day: Int?) {
+        if (!flags.guideEnabled) return
+        val pack = stored?.pack ?: return
+        val stayLoc = effectiveStay?.location ?: pack.destination.location
+        val totalDays = maxOf(manifest.days.values.maxOrNull() ?: 1, day ?: 1, 3)
+        val suggested = LoopStopSelector.suggestForDay(
+            candidates = pack.places + pack.nearby,
+            pinned = manifest.pinned,
+            hidden = manifest.hidden,
+            days = manifest.days,
+            targetDay = day,
+            stay = stayLoc,
+            totalDays = totalDays,
+            limit = 5
+        )
+        if (suggested.isEmpty()) {
+            emit(TripGuideEffect.Snackbar(MSG_LOOP_EMPTY))
+            return
+        }
+        viewModelScope.launch {
+            val updated = repository.pinBatchToDay(groupId, suggested.map { it.id }, day, memberKey())
+            if (updated == null) {
+                emit(TripGuideEffect.Snackbar(MSG_PLAN_EDIT_FAILED))
+                return@launch
+            }
+            manifest = updated
+            customOrderByDay.remove(day)
+            preOptimizeOrderByDay.remove(day)
+            loopCacheKey = null
+            render()
+            schedulePublish()
+            val label = if (day != null) "Day $day" else "your loop"
+            emit(TripGuideEffect.Snackbar("Suggested ${suggested.size} stops for $label"))
+        }
+    }
+
+    override fun pinSuggestedLoopStops() {
+        if (!flags.guideEnabled) return
+        val loop = _uiState.value.loop
+        val stops = loop.route?.orderedStops.orEmpty()
+        if (stops.isEmpty()) return
+        val day = _uiState.value.loopDay
+        viewModelScope.launch {
+            val updated = repository.pinBatchToDay(groupId, stops.map { it.id }, day, memberKey())
+            if (updated == null) {
+                emit(TripGuideEffect.Snackbar(MSG_PLAN_EDIT_FAILED))
+                return@launch
+            }
+            manifest = updated
+            loopCacheKey = null
+            render()
+            schedulePublish()
+            emit(TripGuideEffect.Snackbar("Pinned ${stops.size} stops to ${if (day != null) "Day $day" else "your loop"}"))
+        }
     }
 
     override fun openWholeLoopInMaps() {
@@ -510,7 +618,7 @@ class TripGuideViewModel(
             emit(TripGuideEffect.Snackbar(MSG_SET_STAY_FIRST))
             return
         }
-        val parts = MapsHandoff.loopDirectionsParts(route)
+        val parts = MapsHandoff.loopDirectionsParts(route, loopTravelMode)
         when {
             parts.isEmpty() -> emit(TripGuideEffect.Snackbar(MSG_LOOP_EMPTY))
             parts.size == 1 -> emit(TripGuideEffect.OpenUrl(parts[0].url))
@@ -534,7 +642,7 @@ class TripGuideViewModel(
             emit(TripGuideEffect.Snackbar(if (route == null) MSG_SET_STAY_FIRST else MSG_LOOP_EMPTY))
             return
         }
-        emit(TripGuideEffect.ShareText(MapsHandoff.loopShareText(route, effectiveStay?.label)))
+        emit(TripGuideEffect.ShareText(MapsHandoff.loopShareText(route, effectiveStay?.label, loopTravelMode)))
     }
 
     // =============================================================================================
@@ -683,12 +791,20 @@ class TripGuideViewModel(
         }
     }
 
-    /** LoopFetching: WDQS around a newly set stay, merged into the pack. */
+    /** LoopFetching: WDQS around a newly set stay, merged into the pack (or builds a Stay-anchored pack if none loaded yet). */
     private fun fetchNearbyAroundStay(stay: StayPin) {
-        val pack = stored?.pack ?: return
         if (!network.state.value.online || !flags.wdqsEnabled) return
+        val pack = stored?.pack
         stayNearbyJob?.cancel()
         stayNearbyJob = viewModelScope.launch {
+            if (pack == null) {
+                val stayPack = withNetwork { repository.buildStayOnlyPack(stay) } ?: return@launch
+                val saved = repository.persist(stayPack) ?: transientStored(stayPack)
+                if (hydratingQid == null && stored == null) {
+                    showStored(saved, TripGuideRepository.MSG_NO_CURATED)
+                }
+                return@launch
+            }
             val merged = withNetwork { repository.fetchNearbyInto(pack, stay.location) } ?: return@launch
             val saved = repository.persist(merged) ?: transientStored(merged)
             if (hydratingQid == null && stored?.pack?.destination?.qid == merged.destination.qid) {
@@ -807,13 +923,21 @@ class TripGuideViewModel(
         val showOsm = stayFromNominatim || (previewFromNominatim && feedback is StayInputFeedback.Preview)
         val eff = effectiveStay
         val isShared = eff != null && eff == manifest.stay && eff.setByMemberKey != memberKeyValue
+        val stayLabelForCards = if (stayLoc != null) eff?.label else null
+        val sortNear = _uiState.value.sortNearStay && stayLoc != null
         _uiState.update { s ->
             s.copy(
                 networkInFlight = inFlight > 0,
                 isOffline = offline,
                 offlineSavedLabel = if (offline && sp != null) TripGuidePresenter.offlineLabel(sp.fetchedAtEpochMs, zoneId) else null,
                 pack = pack,
-                sections = if (pack == null) emptyList() else TripGuidePresenter.buildSections(pack, manifest, origin),
+                sections = if (pack == null) emptyList() else TripGuidePresenter.buildSections(
+                    pack = pack,
+                    manifest = manifest,
+                    origin = origin,
+                    stayLabel = stayLabelForCards,
+                    sortByDistance = sortNear
+                ),
                 attribution = if (pack == null) emptyList() else TripGuidePresenter.attribution(pack),
                 saveOfflineSizeLabel = sp?.let { TripGuidePresenter.sizeLabel(it) },
                 stay = StayUi(
@@ -821,7 +945,8 @@ class TripGuideViewModel(
                     shareWithGroup = shareStay,
                     isShared = isShared,
                     attribution = if (showOsm) NominatimGeocoder.ATTRIBUTION else null,
-                    sleepListings = pack?.let { TripGuidePresenter.sleepListings(it) } ?: emptyList()
+                    sleepListings = pack?.let { TripGuidePresenter.sleepListings(it) } ?: emptyList(),
+                    bookingSuggestions = stayBookingSuggestions
                 ),
                 loop = loop
             )
@@ -831,10 +956,23 @@ class TripGuideViewModel(
     private fun loopFor(pack: GuidePack?, stay: LatLng?): LoopUi {
         if (pack == null) return EMPTY_LOOP
         val day = _uiState.value.loopDay
+        val customOrder = customOrderByDay[day]
+        val canUndo = preOptimizeOrderByDay.containsKey(day)
         val key = listOf(pack, manifest.pinned, manifest.hidden, manifest.days, stay, day)
-        if (key == loopCacheKey) return loopCache
-        val loop = TripGuidePresenter.buildLoop(pack, manifest, stay, repository.optimizer, day)
-        loopCacheKey = key
+        val cacheKey = key + listOf(customOrder, canUndo, loopTravelMode)
+        if (cacheKey == loopCacheKey) return loopCache
+        val loop = TripGuidePresenter.buildLoop(
+            pack = pack,
+            manifest = manifest,
+            stay = stay,
+            optimizer = repository.optimizer,
+            day = day,
+            customOrderIds = customOrder,
+            canUndoOptimize = canUndo,
+            travelMode = loopTravelMode,
+            paceMeals = true
+        )
+        loopCacheKey = cacheKey
         loopCache = loop
         return loop
     }
@@ -995,6 +1133,7 @@ class TripGuideViewModel(
         const val MSG_STAY_CLEARED = "Stay cleared"
         const val MSG_STAY_CLEAR_FAILED = "Couldn't clear the stay. Try again."
         const val MSG_LOOP_OPTIMISED = "Loop optimised"
+        const val MSG_LOOP_ORDER_RESTORED = "Previous stop order restored"
         const val MSG_SET_STAY_FIRST = "Set your stay to build a loop."
         const val MSG_LOOP_EMPTY = "Pin a few places to build a loop."
 
@@ -1061,14 +1200,32 @@ internal object TripGuidePresenter {
         return out.values.toList()
     }
 
-    fun buildSections(pack: GuidePack, manifest: PlanManifest, origin: LatLng?): List<GuideSection> {
+    fun buildSections(
+        pack: GuidePack,
+        manifest: PlanManifest,
+        origin: LatLng?,
+        stayLabel: String? = null,
+        sortByDistance: Boolean = false
+    ): List<GuideSection> {
         val pinned = PlanManifestMerger.visiblePinnedIds(manifest)
         val visible = mergedPlaces(pack).filter { !TripGuideRepository.isHiddenForExplore(manifest, it.id) }
         return SECTIONS.mapNotNull { (kind, title) ->
-            val cards = visible.filter { it.kind == kind }.map { p ->
+            val rawForKind = visible.filter { it.kind == kind }
+            val orderedForKind = if (sortByDistance && origin != null) {
+                rawForKind.sortedWith(
+                    compareBy<Place>(
+                        { if (it.id in pinned) 0 else 1 },
+                        { p -> p.location?.let { WikimediaGuideSource.haversineKm(origin, it) } ?: Double.MAX_VALUE },
+                        { it.id }
+                    )
+                )
+            } else {
+                rawForKind
+            }
+            val cards = orderedForKind.map { p ->
                 PlaceCardUi(
                     place = p,
-                    distanceLabel = distanceLabel(origin, p.location),
+                    distanceLabel = distanceLabel(origin, p.location, stayLabel),
                     isPinned = p.id in pinned,
                     isExcerpt = isExcerpt(p),
                     sourceLabel = if (p.source == PlaceSource.WIKIDATA) SOURCE_WIKIDATA else null
@@ -1078,12 +1235,15 @@ internal object TripGuidePresenter {
         }
     }
 
-    /** "1.2 km ≈" (road estimate = straight line × 1.35), or null without both points. */
-    fun distanceLabel(origin: LatLng?, target: LatLng?): String? {
+    /** "1.2 km ≈" (or "1.2 km ≈ from <Stay>" when [stayLabel] is given), or null without both points. */
+    fun distanceLabel(origin: LatLng?, target: LatLng?, stayLabel: String? = null): String? {
         if (origin == null || target == null) return null
         val road = WikimediaGuideSource.haversineKm(origin, target) * LoopRoute.ROAD_FACTOR
-        return if (road >= 100.0) String.format(Locale.ROOT, "%.0f km ≈", road)
+        val base = if (road >= 100.0) String.format(Locale.ROOT, "%.0f km ≈", road)
         else String.format(Locale.ROOT, "%.1f km ≈", road)
+        val cleanStay = stayLabel?.trim()?.takeIf { it.isNotEmpty() } ?: return base
+        val shortStay = if (cleanStay.length > 22) cleanStay.take(20).trimEnd() + "…" else cleanStay
+        return "$base from $shortStay"
     }
 
     /** Heuristic: the content engine caps blurbs at 280 chars and marks cuts with an ellipsis. */
@@ -1098,12 +1258,65 @@ internal object TripGuidePresenter {
         if (pack.nearby.any { it.source == PlaceSource.WIKIDATA }) pack.attribution + WIKIDATA_NEARBY_ATTRIBUTION
         else pack.attribution
 
-    fun buildLoop(pack: GuidePack, manifest: PlanManifest, stay: LatLng?, optimizer: LoopOptimizer, day: Int? = null): LoopUi {
+    fun buildLoop(
+        pack: GuidePack,
+        manifest: PlanManifest,
+        stay: LatLng?,
+        optimizer: LoopOptimizer,
+        day: Int? = null,
+        customOrderIds: List<String>? = null,
+        canUndoOptimize: Boolean = false,
+        travelMode: TravelMode = TravelMode.DRIVING,
+        paceMeals: Boolean = false
+    ): LoopUi {
+        val allCandidates = pack.places + pack.nearby
         val selection = LoopStopSelector.select(
-            pack.places + pack.nearby, manifest.pinned, manifest.hidden, stay, days = manifest.days, day = day
+            allCandidates, manifest.pinned, manifest.hidden, stay, days = manifest.days, day = day
         )
-        val route = stay?.let { optimizer.optimize(it, selection.stops) }
+        val rawOptimized = stay?.let { optimizer.optimize(it, selection.stops) }
+        val optimizedRoute = if (paceMeals && stay != null && rawOptimized != null && optimizer is DeterministicLoopOptimizer) {
+            DeterministicLoopOptimizer.applyMealCadence(stay, rawOptimized)
+        } else {
+            rawOptimized
+        }
+
+        val byId = selection.stops.associateBy { it.id }
+        val customStops = customOrderIds?.let { order ->
+            val known = order.mapNotNull { byId[it] }
+            val extra = selection.stops.filter { it.id !in order.toSet() }
+            (known + extra).takeIf { it.isNotEmpty() }
+        }
+        val isCustom = customStops != null && stay != null &&
+            customStops.map { it.id } != optimizedRoute?.orderedStops?.map { it.id }
+        val route = if (isCustom && stay != null) {
+            DeterministicLoopOptimizer.buildOrderedRoute(stay, customStops!!)
+        } else {
+            optimizedRoute
+        }
+
+        val baselineRoadKm = if (!isCustom && stay != null && selection.stops.size >= 3) {
+            val pinOrderStops = selection.stops.sortedWith(
+                compareBy<Place>({ manifest.pinned[it.id] ?: Long.MAX_VALUE }, { it.id })
+            )
+            val pinRoadKm = DeterministicLoopOptimizer.buildOrderedRoute(stay, pinOrderStops).totalRoadEstimateKm
+            val rankRoadKm = DeterministicLoopOptimizer.buildOrderedRoute(stay, selection.stops).totalRoadEstimateKm
+            maxOf(pinRoadKm, rankRoadKm)
+        } else null
+        val diffKm = if (baselineRoadKm != null && route != null) (baselineRoadKm - route.totalRoadEstimateKm) else 0.0
+        val savedKm = if (diffKm >= 0.4) diffKm else null
+        val speedKmh = if (travelMode == TravelMode.WALKING) 4.8 else 28.0
+        val savedMinutes = savedKm?.let { kotlin.math.max(1, kotlin.math.round((it / speedKmh) * 60.0).toInt()) }
+
+        val placeById = allCandidates.associateBy { it.id }
+        val dayStopNames = LinkedHashMap<Int, List<String>>()
+        for ((placeId, assignedDay) in manifest.days) {
+            if (!LoopStopSelector.isPinned(placeId, manifest.pinned, manifest.hidden)) continue
+            val placeName = placeById[placeId]?.name ?: continue
+            dayStopNames[assignedDay] = (dayStopNames[assignedDay] ?: emptyList()) + placeName
+        }
+
         val hasStops = route != null && route.orderedStops.isNotEmpty()
+        val activeStopCount = route?.orderedStops?.size ?: selection.stops.size
         return LoopUi(
             route = route,
             autoSuggested = selection.autoSuggested,
@@ -1113,7 +1326,14 @@ internal object TripGuidePresenter {
             caveats = if (hasStops) LOOP_CAVEATS else emptyList(),
             day = day,
             unplanned = selection.unplanned,
-            perDay = selection.perDay
+            perDay = selection.perDay,
+            isCustomOrdered = isCustom,
+            canUndoOptimize = canUndoOptimize,
+            savedKm = savedKm,
+            savedMinutes = savedMinutes,
+            travelMode = travelMode,
+            dayStopNames = dayStopNames,
+            activeStopCount = activeStopCount
         )
     }
 

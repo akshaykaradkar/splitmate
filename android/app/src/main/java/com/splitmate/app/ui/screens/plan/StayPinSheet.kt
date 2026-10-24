@@ -210,6 +210,7 @@ fun StayPinSheet(
             when (StayTab.entries[tab]) {
                 StayTab.LINK -> PasteLinkTab(
                     working = feedback == StayInputFeedback.Working,
+                    bookingSuggestions = stayUi.bookingSuggestions,
                     onSubmit = { text ->
                         searchedByName = false
                         actions.submitStayInput(text)
@@ -308,7 +309,11 @@ private fun CurrentStay(state: TripGuideUiState, actions: TripGuideActions) {
 }
 
 @Composable
-private fun PasteLinkTab(working: Boolean, onSubmit: (String) -> Unit) {
+private fun PasteLinkTab(
+    working: Boolean,
+    bookingSuggestions: List<String> = emptyList(),
+    onSubmit: (String) -> Unit
+) {
     var text by rememberSaveable { mutableStateOf("") }
     val clipboard = LocalClipboardManager.current
     val focusManager = LocalFocusManager.current
@@ -340,6 +345,31 @@ private fun PasteLinkTab(working: Boolean, onSubmit: (String) -> Unit) {
             colors = sheetFieldColors(),
             modifier = Modifier.fillMaxWidth()
         )
+        if (bookingSuggestions.isNotEmpty()) {
+            Text(
+                text = "From your trip bookings",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                bookingSuggestions.forEach { suggestion ->
+                    val labelText = PlanGuideFormat.sanitizeDisplay(suggestion) ?: return@forEach
+                    androidx.compose.material3.SuggestionChip(
+                        onClick = {
+                            text = suggestion.take(MAX_INPUT_CHARS)
+                            focusManager.clearFocus()
+                            onSubmit(suggestion)
+                        },
+                        label = { ChipText(labelText) },
+                        icon = { SymbolIcon(Icons.Rounded.Hotel, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        modifier = Modifier.heightIn(min = 48.dp)
+                    )
+                }
+            }
+        }
         Button(
             onClick = submit,
             shapes = ButtonDefaults.shapes(),

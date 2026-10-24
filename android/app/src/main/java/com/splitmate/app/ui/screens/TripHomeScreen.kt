@@ -1436,6 +1436,7 @@ fun TripHomeScreen(
                         )
                     }
                     val setTripDates: (Long, Long) -> Unit = { start, end -> viewModel.setTripDates(resolvedGroupId, start, end) }
+                    var planGuideState by remember(resolvedGroupId) { mutableStateOf<com.splitmate.app.ui.screens.plan.TripGuideUiState?>(null) }
                     TripPlanTabHost(
                         groupId = resolvedGroupId,
                         tripDays = tripDayRange,
@@ -1462,8 +1463,14 @@ fun TripHomeScreen(
                                 onDeleteExpense = { expenseId -> viewModel.rollbackExpense(expenseId) },
                                 onMakeLoop = onMakeLoop,
                                 tripDays = tripDayRange,
-                                onSetTripDates = setTripDates
+                                onSetTripDates = setTripDates,
+                                guideState = planGuideState
                             )
+                        },
+                        onGuideStateChanged = { planGuideState = it },
+                        onLogExpenseForPlace = { place ->
+                            viewModel.setPrefillExpenseTitle(place.name)
+                            onLogQuickExpenseClick()
                         },
                         onSubViewChanged = { planSubView = it }
                     )
@@ -4694,7 +4701,9 @@ private fun TripHubPlanTimelineView(
     /** rc14: the trip's days (explicit trip dates, else first..last booking). */
     tripDays: com.splitmate.app.data.guide.TripDayRange? = null,
     /** rc14: saves new trip dates (start of first day, end of last day); null hides the dates chip. */
-    onSetTripDates: ((startMs: Long, endMs: Long) -> Unit)? = null
+    onSetTripDates: ((startMs: Long, endMs: Long) -> Unit)? = null,
+    /** v2.4.0-rc18: live Trip Guide & Loop state so Days timeline surfaces per-day loop summaries. */
+    guideState: com.splitmate.app.ui.screens.plan.TripGuideUiState? = null
 ) {
     var showTripDates by remember { mutableStateOf(false) }
     if (showTripDates && onSetTripDates != null) {
@@ -4852,7 +4861,84 @@ private fun TripHubPlanTimelineView(
                 }
             }
 
-            if (dayItems.isEmpty()) {
+            val dayLoopStops = if (dayNumber != null) {
+                guideState?.loop?.dayStopNames?.get(dayNumber).orEmpty()
+            } else if (dayIndex == 0 && guideState?.loop?.perDay == false) {
+                guideState.loop.route?.orderedStops?.map { it.name }.orEmpty()
+            } else {
+                emptyList()
+            }
+            if (dayLoopStops.isNotEmpty()) {
+                item(key = "day_loop_summary_$epochDay") {
+                    val motion = com.splitmate.app.ui.components.LocalMotionScheme.current
+                    androidx.compose.material3.ElevatedCard(
+                        onClick = { onMakeLoop?.invoke(dayNumber) },
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.elevatedCardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .animateItem(
+                                fadeInSpec = motion.fastEffectsSpec(),
+                                placementSpec = motion.defaultSpatialSpec(),
+                                fadeOutSpec = motion.fastEffectsSpec()
+                            )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(38.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    SymbolIcon(
+                                        imageVector = Icons.Rounded.Route,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                val stopNoun = if (dayLoopStops.size == 1) "stop" else "stops"
+                                Text(
+                                    text = "${if (dayNumber != null) "Day $dayNumber loop" else "Day loop"} · ${dayLoopStops.size} $stopNoun",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontFeatureSettings = "tnum"),
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = dayLoopStops.joinToString(" → "),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            SymbolIcon(
+                                imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (dayItems.isEmpty() && dayLoopStops.isEmpty()) {
                 item(key = "day_empty_$epochDay") {
                     // rc14: reduced-motion aware tokens (LocalMotionScheme snaps under "Remove animations").
                     val motion = com.splitmate.app.ui.components.LocalMotionScheme.current

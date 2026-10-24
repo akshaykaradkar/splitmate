@@ -4,6 +4,7 @@ import com.splitmate.app.data.guide.LatLng
 import com.splitmate.app.data.guide.LoopOptimizer
 import com.splitmate.app.data.guide.LoopRoute
 import com.splitmate.app.data.guide.Place
+import com.splitmate.app.data.guide.PlaceKind
 import com.splitmate.app.data.guide.RouteCostProvider
 import kotlin.math.abs
 
@@ -298,6 +299,104 @@ class DeterministicLoopOptimizer(
                 if (abs(d[i][j] - d[j][i]) > IMPROVEMENT_EPS) return false
             }
             return true
+        }
+
+        /**
+         * v2.4.0 rc18: Builds a [LoopRoute] that preserves [orderedStops]'s exact visiting order
+         * (used for manual user reordering and for computing baseline unoptimized tour distance).
+         */
+        fun buildOrderedRoute(
+            start: LatLng,
+            orderedStops: List<Place>,
+            costProvider: RouteCostProvider = HaversineCostProvider()
+        ): LoopRoute {
+            val valid = orderedStops.filter { it.location != null }.distinctBy { it.id }
+            if (valid.isEmpty()) {
+                return LoopRoute(
+                    start = start,
+                    orderedStops = emptyList(),
+                    legStraightKm = listOf(0.0),
+                    totalStraightKm = 0.0,
+                    totalRoadEstimateKm = 0.0
+                )
+            }
+            val points = ArrayList<LatLng>(valid.size + 1)
+            points += start
+            valid.forEach { points += it.location!! }
+            val d = costProvider.matrixKm(points)
+            val legs = ArrayList<Double>(valid.size + 1)
+            var prev = 0
+            for (idx in 1..valid.size) {
+                legs += d[prev][idx]
+                prev = idx
+            }
+            legs += d[prev][0]
+            val total = legs.sum()
+            return LoopRoute(
+                start = start,
+                orderedStops = valid,
+                legStraightKm = legs,
+                totalStraightKm = total,
+                totalRoadEstimateKm = total * LoopRoute.ROAD_FACTOR
+            )
+        }
+
+        /**
+         * v2.4.0 rc18: Meal-cadence post-pass for day loops.
+         *
+         * When a loop has >= 4 stops with both sights (SEE/DO) and restaurants/cafes (EAT), pure
+         * geometric TSP can schedule a restaurant as Stop #1 in the morning or put two EAT stops
+         * back-to-back. This post-pass keeps the Held-Karp relative order of sights intact and
+         * slots EAT stops into natural midday (lunch) and evening (dinner) slots when the added
+         * detour is <= 35% + 1.5 km straight-line.
+         */
+        fun applyMealCadence(
+            start: LatLng,
+            route: LoopRoute,
+            costProvider: RouteCostProvider = HaversineCostProvider()
+        ): LoopRoute {
+            val stops = route.orderedStops
+            if (stops.size < 4) return route
+            val sights = stops.filter { it.kind != PlaceKind.EAT }
+            val eats = stops.filter { it.kind == PlaceKind.EAT }
+            if (eats.isEmpty() || sights.size < 2) return route
+
+            val startsWithEat = stops.first().kind == PlaceKind.EAT
+            val hasAdjacentEats = (0 until stops.size - 1).any {
+                stops[it].kind == PlaceKind.EAT && stops[it + 1].kind == PlaceKind.EAT
+            }
+            if (!startsWithEat && !hasAdjacentEats) return route
+
+            val paced = ArrayList<Place>(stops.size)
+            val remainingEats = eats.toMutableList()
+            val lunchSlotAfterSightIndex = (sights.size / 2).coerceAtLeast(1) - 1
+
+            for ((idx, sight) in sights.withIndex()) {
+                paced += sight
+                if (idx == lunchSlotAfterSightIndex && remainingEats.isNotEmpty()) {
+                    val anchor = sight.location ?: start
+                    val nextAnchor = sights.getOrNull(idx + 1)?.location ?: start
+                    val bestLunch = remainingEats.minByOrNull { eat ->
+                        val loc = eat.location ?: start
+                        Haversine.km(anchor, loc) + Haversine.km(loc, nextAnchor)
+                    }!!
+                    paced += bestLunch
+                    remainingEats.remove(bestLunch)
+                }
+            }
+            while (remainingEats.isNotEmpty()) {
+                val anchor = paced.lastOrNull()?.location ?: start
+                val bestNext = remainingEats.minByOrNull { eat ->
+                    val loc = eat.location ?: start
+                    Haversine.km(anchor, loc) + Haversine.km(loc, start)
+                }!!
+                paced += bestNext
+                remainingEats.remove(bestNext)
+            }
+
+            val candidate = buildOrderedRoute(start, paced, costProvider)
+            val maxAllowedKm = route.totalStraightKm * 1.35 + 1.5
+            return if (candidate.totalStraightKm <= maxAllowedKm) candidate else route
         }
     }
 }

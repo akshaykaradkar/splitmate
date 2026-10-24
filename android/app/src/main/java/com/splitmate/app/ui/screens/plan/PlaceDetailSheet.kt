@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Payments
 import androidx.compose.material.icons.rounded.Place
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -64,7 +66,8 @@ fun PlaceDetailSheet(
     place: Place,
     card: PlaceCardUi?,
     actions: TripGuideActions,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onLogExpense: (() -> Unit)? = null
 ) {
     val currentOnDismiss by rememberUpdatedState(onDismiss)
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
@@ -142,6 +145,21 @@ fun PlaceDetailSheet(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 AddToLoopToggle(pinned = card?.isPinned == true, onToggle = { actions.togglePin(place.id) })
+                if (onLogExpense != null) {
+                    FilledTonalButton(
+                        shapes = ButtonDefaults.shapes(),
+                        onClick = onLogExpense,
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        ),
+                        modifier = Modifier.heightIn(min = 48.dp)
+                    ) {
+                        SymbolIcon(Icons.AutoMirrored.Rounded.ReceiptLong, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Log expense", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
                 TextButton(
                     shapes = ButtonDefaults.shapes(),
                     onClick = {
