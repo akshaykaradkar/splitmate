@@ -445,8 +445,11 @@ fun EditLoggedExpenseDialog(
                     }
                     val splitIdsToSave = if (lockAmountAndSplit) initialSplitMemberIds.toList() else selectedSplitMemberIds.toList()
                     val finalTitle = if (includeTravelTicket && (pnrNumber.isNotBlank() || trainOrFlightNo.isNotBlank() || coachAndSeats.isNotBlank())) {
-                        val parsedFrom = routeFromTo.substringBefore("-").trim()
-                        val parsedTo = routeFromTo.substringAfter("-", "").trim()
+                        val routeParts = routeFromTo
+                            .split(Regex("""\s*(?:->|→|-|\bto\b)\s*""", RegexOption.IGNORE_CASE), limit = 2)
+                            .map { it.trim() }
+                        val parsedFrom = routeParts.getOrNull(0).orEmpty()
+                        val parsedTo = routeParts.getOrNull(1).orEmpty()
                         val parsedTicket = ParsedTravelTicket(
                             pnr = pnrNumber.trim(),
                             trainOrFlightNo = trainOrFlightNo.trim(),

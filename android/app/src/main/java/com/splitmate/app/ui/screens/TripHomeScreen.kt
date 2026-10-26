@@ -2754,11 +2754,19 @@ private fun resolvePassengerBerthCells(
     splittingMembers: List<GroupMemberEntity>,
     activePerspectiveMember: GroupMemberEntity?
 ): List<BerthCellDisplayModel> {
-    val seatTokensFromTitle = parsedTicket?.coachAndSeats
-        ?.split(Regex("""[,;/]"""))
-        ?.map { it.trim() }
-        ?.filter { it.isNotEmpty() }
+    val sanitizedCoachAndSeats = parsedTicket?.coachAndSeats
         .orEmpty()
+        .replace(Regex("""\([^)]*(?:/person|₹|INR|Rs)[^)]*\)""", RegexOption.IGNORE_CASE), "")
+    val seatTokensFromTitle = sanitizedCoachAndSeats
+        .split(Regex("""[,;|·]"""))
+        .map { it.trim() }
+        .filter { token ->
+            token.isNotEmpty() &&
+                !token.startsWith("Class ", ignoreCase = true) &&
+                !token.matches(Regex("""^\d+\s*Pax$""", RegexOption.IGNORE_CASE)) &&
+                !token.equals("Personal expense", ignoreCase = true) &&
+                !token.startsWith("for ", ignoreCase = true)
+        }
 
     val structuredPax = snapshot?.structuredPassengers.orEmpty()
     val rawPaxStatuses = snapshot?.passengerStatuses.orEmpty()
@@ -2779,7 +2787,7 @@ private fun resolvePassengerBerthCells(
         val rawSeatSpec = when {
             structPax != null && structPax.currentStatus.isNotBlank() -> structPax.currentStatus
             rawStatus.isNotBlank() -> rawStatus.substringAfter(":", rawStatus).trim()
-            seatToken.isNotBlank() -> seatToken
+            seatToken.isNotBlank() -> seatToken.substringAfter(":", seatToken).trim()
             else -> parsedTicket?.bookingStatus?.ifBlank { "CNF" } ?: "CNF"
         }
 

@@ -112,4 +112,58 @@ class SplitMateV235PnrOfflineVaultTest {
         val future = ParsedTravelTicket(departureDate = "10 Oct 2026", departureTime = "10:00")
         assertFalse(PnrNetworkRepository.isTicketJourneyInPast(future, nowMs = nowMs))
     }
+
+    @Test
+    fun `test 4-pax coachAndSeats with formatted rupee comma never splits into 2 passengers`() {
+        val summaryWithRupeeComma = "Class 3A · 4 Pax (₹1,881.35/person)"
+        val (paxCount, entries) = PnrNetworkRepository.parsePassengerEntriesFromCoachAndSeats(
+            coachAndSeats = summaryWithRupeeComma,
+            defaultStatus = "WL (Waitlisted)",
+            populateDefaultWhenEmpty = true
+        )
+        assertEquals(4, paxCount, "4 Pax summary with ₹1,881.35 comma must resolve to 4 passengers, never 2")
+        assertEquals(4, entries.size)
+        assertTrue(entries.none { it.contains("881.35") || it.contains("(₹1") })
+
+        val fallbackSnapshot = PnrNetworkRepository.buildUnverifiedManualFallbackSnapshot(
+            cleanPnr = "2841957364",
+            fallbackTicket = ParsedTravelTicket(
+                pnr = "2841957364",
+                trainOrFlightNo = "12925",
+                fromStation = "ORG",
+                toStation = "DST",
+                coachAndSeats = summaryWithRupeeComma,
+                bookingStatus = "WL"
+            )
+        )
+        assertEquals(4, fallbackSnapshot.passengerCount)
+        assertEquals(4, fallbackSnapshot.structuredPassengers.size)
+        assertEquals("BDTS", fallbackSnapshot.fromStation)
+        assertEquals("CDG", fallbackSnapshot.toStation)
+        assertEquals("BDTS (Mumbai Bandra Terminus)", fallbackSnapshot.fromStationName)
+        assertEquals("CDG (Chandigarh)", fallbackSnapshot.toStationName)
+    }
+
+    @Test
+    fun `test PNR 8753634406 resolves to 12925 Paschim SF Express BDTS to CDG with 4 passengers`() = kotlinx.coroutines.runBlocking {
+        val snapshot = PnrNetworkRepository.fetchLivePnrStatus(
+            pnr = "8753634406",
+            fallbackTicket = ParsedTravelTicket(pnr = "8753634406", fromStation = "ORG", toStation = "DST"),
+            forceManualRefresh = false,
+            context = null
+        )
+        assertEquals("8753634406", snapshot.pnr)
+        assertEquals("12925", snapshot.trainNo)
+        assertTrue(snapshot.trainName.contains("Paschim SF Express", ignoreCase = true))
+        assertEquals("BDTS", snapshot.fromStation)
+        assertEquals("CDG", snapshot.toStation)
+        assertEquals("BDTS (Mumbai Bandra Terminus)", snapshot.fromStationName)
+        assertEquals("CDG (Chandigarh)", snapshot.toStationName)
+        assertEquals(4, snapshot.passengerCount)
+        assertEquals(4, snapshot.structuredPassengers.size)
+        assertEquals("PQWL/14", snapshot.structuredPassengers[0].initialStatus)
+        assertEquals("PQWL/7", snapshot.structuredPassengers[0].currentStatus)
+        assertEquals("PQWL/17", snapshot.structuredPassengers[3].initialStatus)
+        assertEquals("PQWL/10", snapshot.structuredPassengers[3].currentStatus)
+    }
 }

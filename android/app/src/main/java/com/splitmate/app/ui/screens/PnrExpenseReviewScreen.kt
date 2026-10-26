@@ -392,13 +392,39 @@ fun PnrExpenseReviewScreen(
             val cachedLocal = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 com.splitmate.app.data.PnrNetworkRepository.loadPersistedPnrSnapshot(context, clean)
             }
+            if (cachedLocal != null &&
+                cachedLocal.fromStation.isNotBlank() &&
+                !cachedLocal.fromStation.equals("ORG", ignoreCase = true) &&
+                !cachedLocal.fromStation.equals("ORIG", ignoreCase = true) &&
+                cachedLocal.fromStation != "---"
+            ) {
+                liveSnapshot = cachedLocal
+                if (manualFromStationInput.isBlank()) {
+                    manualFromStationInput = cachedLocal.fromStation
+                }
+                if (cachedLocal.toStation.isNotBlank() &&
+                    !cachedLocal.toStation.equals("DST", ignoreCase = true) &&
+                    !cachedLocal.toStation.equals("DEST", ignoreCase = true) &&
+                    manualToStationInput.isBlank()
+                ) {
+                    manualToStationInput = cachedLocal.toStation
+                }
+            }
             if (cachedLocal != null && com.splitmate.app.data.PnrNetworkRepository.isSnapshotAllConfirmed(cachedLocal)) {
                 isFetching = false
                 liveSnapshot = cachedLocal
-                if (cachedLocal.fromStation.isNotBlank() && manualFromStationInput.isBlank()) {
+                if (cachedLocal.fromStation.isNotBlank() &&
+                    !cachedLocal.fromStation.equals("ORG", ignoreCase = true) &&
+                    !cachedLocal.fromStation.equals("ORIG", ignoreCase = true) &&
+                    manualFromStationInput.isBlank()
+                ) {
                     manualFromStationInput = cachedLocal.fromStation
                 }
-                if (cachedLocal.toStation.isNotBlank() && manualToStationInput.isBlank()) {
+                if (cachedLocal.toStation.isNotBlank() &&
+                    !cachedLocal.toStation.equals("DST", ignoreCase = true) &&
+                    !cachedLocal.toStation.equals("DEST", ignoreCase = true) &&
+                    manualToStationInput.isBlank()
+                ) {
                     manualToStationInput = cachedLocal.toStation
                 }
                 if (existingMatch != null) {
@@ -414,18 +440,38 @@ fun PnrExpenseReviewScreen(
                 return@launch
             }
 
+            val sanitizedFallback = (existingParsed ?: ParsedTravelTicket(pnr = clean)).let { ticket ->
+                val cleanFrom = ticket.fromStation
+                    .takeIf { it.isNotBlank() && !it.equals("ORG", ignoreCase = true) && !it.equals("ORIG", ignoreCase = true) }
+                    ?: cachedLocal?.fromStation?.takeIf { !it.equals("ORG", ignoreCase = true) && !it.equals("ORIG", ignoreCase = true) }
+                    .orEmpty()
+                val cleanTo = ticket.toStation
+                    .takeIf { it.isNotBlank() && !it.equals("DST", ignoreCase = true) && !it.equals("DEST", ignoreCase = true) }
+                    ?: cachedLocal?.toStation?.takeIf { !it.equals("DST", ignoreCase = true) && !it.equals("DEST", ignoreCase = true) }
+                    .orEmpty()
+                ticket.copy(fromStation = cleanFrom, toStation = cleanTo)
+            }
+
             val fetched = fetchLivePnrAndTrainStatus(
                 pnr = clean,
-                fallbackTicket = existingParsed ?: ParsedTravelTicket(pnr = clean),
+                fallbackTicket = sanitizedFallback,
                 forceManualRefresh = true,
                 context = context
             )
             isFetching = false
             liveSnapshot = fetched
-            if (fetched.fromStation.isNotBlank() && manualFromStationInput.isBlank()) {
+            if (fetched.fromStation.isNotBlank() &&
+                !fetched.fromStation.equals("ORG", ignoreCase = true) &&
+                !fetched.fromStation.equals("ORIG", ignoreCase = true) &&
+                manualFromStationInput.isBlank()
+            ) {
                 manualFromStationInput = fetched.fromStation
             }
-            if (fetched.toStation.isNotBlank() && manualToStationInput.isBlank()) {
+            if (fetched.toStation.isNotBlank() &&
+                !fetched.toStation.equals("DST", ignoreCase = true) &&
+                !fetched.toStation.equals("DEST", ignoreCase = true) &&
+                manualToStationInput.isBlank()
+            ) {
                 manualToStationInput = fetched.toStation
             }
             if (existingMatch != null) {
@@ -481,7 +527,13 @@ fun PnrExpenseReviewScreen(
     }
 
     val snapshot = liveSnapshot
-    val ticketPassengerCount = snapshot?.effectivePassengerCount?.coerceAtLeast(1) ?: selectedMemberIds.size.coerceAtLeast(1)
+    val selectedMembersList = remember(groupMembers, selectedMemberIds) {
+        groupMembers.filter { it.memberId in selectedMemberIds }
+    }
+    val ticketPassengerCount = when {
+        snapshot == null -> selectedMembersList.size.coerceAtLeast(1)
+        else -> maxOf(snapshot.effectivePassengerCount, selectedMembersList.size).coerceAtLeast(1)
+    }
     val manualFarePaise = remember(manualTotalFareInput) {
         val parsed = manualTotalFareInput.trim().toDoubleOrNull() ?: 0.0
         kotlin.math.round(parsed * 100.0).toLong().coerceAtLeast(0L)
@@ -504,9 +556,6 @@ fun PnrExpenseReviewScreen(
         baseFarePaise + convenienceFeePaise + insuranceFeePaise
     }
 
-    val selectedMembersList = remember(groupMembers, selectedMemberIds) {
-        groupMembers.filter { it.memberId in selectedMemberIds }
-    }
     val currentUser = remember(groupMembers) { groupMembers.find { it.isCurrentUser } }
     val exactAllocationsMap = remember(effectiveTotalPaise, selectedMembersList, selectedPayerId, currentUser) {
         com.splitmate.app.SplitMateMathEngine.splitEquallyZeroDrift(
@@ -540,12 +589,24 @@ fun PnrExpenseReviewScreen(
         if (snapshot == null) {
             emptyList()
         } else {
-            val basePax = snapshot.structuredPassengers.ifEmpty {
-                selectedMembersList.mapIndexed { idx, _ ->
+            val targetPaxCount = maxOf(snapshot.structuredPassengers.size, selectedMembersList.size).coerceAtLeast(1)
+            val fallbackStatusCode = snapshot.bookingStatusBadge.substringBefore(" ").trim().ifBlank {
+                if (snapshot.isLiveVerified) "CNF" else "MANUAL"
+            }
+            val basePax = (0 until targetPaxCount).map { idx ->
+                val existingPax = snapshot.structuredPassengers.getOrNull(idx)
+                val hasValidBerthStatus = existingPax != null &&
+                    existingPax.currentStatus.isNotBlank() &&
+                    !existingPax.currentStatus.startsWith("Class ", ignoreCase = true) &&
+                    !existingPax.currentStatus.contains("/person", ignoreCase = true) &&
+                    !existingPax.currentStatus.matches(Regex("""^\d+(\.\d+)?/person\)?$""", RegexOption.IGNORE_CASE))
+                if (hasValidBerthStatus && existingPax != null) {
+                    existingPax
+                } else {
                     LivePnrPassenger(
                         passengerNumber = "P${idx + 1}",
-                        initialStatus = if (snapshot.isLiveVerified) "CNF" else "MANUAL",
-                        currentStatus = if (snapshot.isLiveVerified) "CNF" else "Included",
+                        initialStatus = if (snapshot.isLiveVerified) fallbackStatusCode else "MANUAL",
+                        currentStatus = if (snapshot.isLiveVerified) fallbackStatusCode else "Included",
                         statusLabel = if (snapshot.isLiveVerified) "Confirmed" else "Manual Split"
                     )
                 }
@@ -710,6 +771,18 @@ fun PnrExpenseReviewScreen(
                                 val fromCode = manualFromStationInput.ifBlank { snapshot.fromStation }.ifBlank { "ORG" }.uppercase(Locale.US)
                                 val toCode = manualToStationInput.ifBlank { snapshot.toStation }.ifBlank { "DST" }.uppercase(Locale.US)
                                 val chartText = if (snapshot.chartPrepared) "Chart Prepared" else "Chart Not Prepared"
+                                val validBerths = passengerRows
+                                    .map { it.currentStatus.trim() }
+                                    .filter {
+                                        it.isNotBlank() &&
+                                            !it.equals("MANUAL", ignoreCase = true) &&
+                                            !it.equals("Included", ignoreCase = true) &&
+                                            !it.startsWith("Class ", ignoreCase = true) &&
+                                            !it.contains("/person", ignoreCase = true)
+                                    }
+                                val berthSegment = if (validBerths.isNotEmpty()) {
+                                    " · " + validBerths.mapIndexed { idx, s -> "P${idx + 1}: $s" }.joinToString(", ")
+                                } else ""
                                 val formattedTitle = formatTravelExpenseTitle(
                                     baseCategory = "${snapshot.trainName.ifBlank { "Train Ticket" }} ($fromCode - $toCode)",
                                     ticket = ParsedTravelTicket(
@@ -722,11 +795,28 @@ fun PnrExpenseReviewScreen(
                                             com.splitmate.app.ExpenseSplitNature.PERSONAL -> " · ${com.splitmate.app.ExpenseSplitCopy.PERSONAL_EXPENSE}"
                                             com.splitmate.app.ExpenseSplitNature.ON_BEHALF -> " · for ${com.splitmate.app.ExpenseSplitCopy.beneficiaryLabel(reviewSoleMember?.name, false)}"
                                             com.splitmate.app.ExpenseSplitNature.SHARED -> " (${formatPaiseDisplay(perSelectedMemberSharePaise)}/person)"
-                                        },
+                                        } + berthSegment,
                                         bookingStatus = snapshot.bookingStatusBadge,
                                         chartStatus = chartText
                                     )
                                 )
+                                val persistedSnapshot = snapshot.copy(
+                                    fromStation = fromCode,
+                                    toStation = toCode,
+                                    fromStationName = com.splitmate.app.ui.resolveStationDisplayName(fromCode),
+                                    toStationName = com.splitmate.app.ui.resolveStationDisplayName(toCode),
+                                    passengerCount = maxOf(snapshot.passengerCount, selectedMemberIds.size),
+                                    totalFareRupees = (effectiveTotalPaise / 100L).toInt(),
+                                    structuredPassengers = passengerRows.map { row ->
+                                        LivePnrPassenger(
+                                            passengerNumber = row.id,
+                                            initialStatus = row.bookingStatus,
+                                            currentStatus = row.currentStatus,
+                                            statusLabel = if (row.isConfirmed) "Confirmed" else "Waitlisted"
+                                        )
+                                    }
+                                )
+                                com.splitmate.app.data.PnrNetworkRepository.savePersistedPnrSnapshot(context, persistedSnapshot)
                                 commitScope.launch {
                                     pnrTearProgress.animateTo(1f, SplitMateMotion.fastEffects())
                                     haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm)
@@ -1071,8 +1161,28 @@ fun PnrExpenseReviewScreen(
                 val depParts = snapshot.departureTime.split("·", " ").map { it.trim() }.filter { it.isNotBlank() }
                 val depDateDisplay = depParts.firstOrNull().orEmpty()
                 val depTimeDisplay = depParts.getOrNull(1).orEmpty()
-                val effectiveFromCode = manualFromStationInput.ifBlank { snapshot.fromStation }.ifBlank { "---" }
-                val effectiveToCode = manualToStationInput.ifBlank { snapshot.toStation }.ifBlank { "---" }
+                val effectiveFromCode = manualFromStationInput.ifBlank { snapshot.fromStation }
+                    .takeIf { it.isNotBlank() && !it.equals("ORG", ignoreCase = true) && !it.equals("ORIG", ignoreCase = true) }
+                    ?.uppercase(Locale.US) ?: "---"
+                val effectiveToCode = manualToStationInput.ifBlank { snapshot.toStation }
+                    .takeIf { it.isNotBlank() && !it.equals("DST", ignoreCase = true) && !it.equals("DEST", ignoreCase = true) }
+                    ?.uppercase(Locale.US) ?: "---"
+                val effectiveFromName = when {
+                    effectiveFromCode == "---" -> "Origin Station"
+                    !effectiveFromCode.equals(snapshot.fromStation, ignoreCase = true) ||
+                        snapshot.fromStationName.isBlank() ||
+                        snapshot.fromStationName == "Origin Station" ->
+                        com.splitmate.app.ui.resolveStationDisplayName(effectiveFromCode)
+                    else -> snapshot.fromStationName
+                }
+                val effectiveToName = when {
+                    effectiveToCode == "---" -> "Destination Station"
+                    !effectiveToCode.equals(snapshot.toStation, ignoreCase = true) ||
+                        snapshot.toStationName.isBlank() ||
+                        snapshot.toStationName == "Destination Station" ->
+                        com.splitmate.app.ui.resolveStationDisplayName(effectiveToCode)
+                    else -> snapshot.toStationName
+                }
 
                 // LIVE TACTILE PAPER BOARDING PASS
                 TactilePaperBoardingPass(
@@ -1087,11 +1197,11 @@ fun PnrExpenseReviewScreen(
                     } Electronic Ticket",
                     chartStatus = if (snapshot.chartPrepared) "Chart Prepared" else "Chart Not Prepared",
                     originCode = effectiveFromCode,
-                    originName = snapshot.fromStationName.ifBlank { effectiveFromCode },
+                    originName = effectiveFromName,
                     departureTime = depTimeDisplay,
                     departureDate = depDateDisplay,
                     destinationCode = effectiveToCode,
-                    destinationName = snapshot.toStationName.ifBlank { effectiveToCode },
+                    destinationName = effectiveToName,
                     arrivalTime = snapshot.arrivalTime,
                     arrivalDate = if (snapshot.arrivalTime.isNotBlank()) "Scheduled Arrival" else "",
                     duration = snapshot.durationText,
