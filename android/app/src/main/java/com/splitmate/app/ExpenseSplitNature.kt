@@ -135,6 +135,25 @@ object ExpenseSplitCopy {
     }
 
     /**
+     * Exact vs Largest-Remainder per-person share caption in INR paise:
+     * - When [totalCents] divides evenly by [memberCount]: `"₹2,500.00/person"`
+     * - When Largest Remainder allocates +1 paise to early members: `"~₹2,508.47/person"`
+     */
+    fun perPersonCaption(
+        totalCents: Long,
+        memberCount: Int,
+        unitSuffix: String = "/person"
+    ): String {
+        val safeCount = memberCount.coerceAtLeast(1).toLong()
+        return if (totalCents % safeCount == 0L) {
+            "${com.splitmate.app.ui.formatIndianRupeesFromCents(totalCents / safeCount)}$unitSuffix"
+        } else {
+            val maxShareCents = (totalCents + safeCount - 1L) / safeCount
+            "~${com.splitmate.app.ui.formatIndianRupeesFromCents(maxShareCents)}$unitSuffix"
+        }
+    }
+
+    /**
      * Split-mode label where "Equal split · N members" / "N-way split" used to sit (paired with
      * [perPersonCaption], so PERSONAL avoids repeating "not split"):
      * PERSONAL -> "Personal expense"; ON_BEHALF -> "Paid for Akshay"; SHARED -> [sharedDetail].

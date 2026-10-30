@@ -2057,9 +2057,15 @@ object CloudGroupSyncRepository {
         }
 
         val mergedFlights = localDoc?.flightVaultByPnr.orEmpty().toMutableMap()
-        remoteDoc?.flightVaultByPnr?.forEach { (k, v) -> mergedFlights[k] = v }
+        remoteDoc?.flightVaultByPnr?.forEach { (k, v) ->
+            if (!mergedFlights.containsKey(k)) {
+                mergedFlights[k] = v
+            }
+        }
         val mergedTrains = localDoc?.trainSnapshotByPnr.orEmpty().toMutableMap()
-        remoteDoc?.trainSnapshotByPnr?.forEach { (k, v) -> mergedTrains[k] = v }
+        remoteDoc?.trainSnapshotByPnr?.forEach { (k, v) ->
+            mergedTrains[k] = PnrNetworkRepository.pickNewerTrainSnapshotJson(mergedTrains[k], v)
+        }
 
         val mergedPresence = mutableMapOf<String, Long>()
         (localDoc?.memberPresenceByPhone?.keys.orEmpty() + remoteDoc?.memberPresenceByPhone?.keys.orEmpty()).forEach { p ->
@@ -2530,8 +2536,15 @@ object CloudGroupSyncRepository {
             hasPendingLocalEntities = expenses.any { it.syncStatus.equals("PENDING", ignoreCase = true) } ||
                 settlements.any { it.syncStatus.equals("PENDING", ignoreCase = true) }
 
-            val flights = ctx?.let { PnrNetworkRepository.exportAllFlightVaultJsonByPnr(it) } ?: emptyMap()
-            val trains = ctx?.let { PnrNetworkRepository.exportAllTrainSnapshotJsonByPnr(it) } ?: emptyMap()
+            val referencedGroupPnrs: Set<String> = expenses.mapNotNull { exp ->
+                val rawPnr = exp.travelPnr.trim().ifBlank {
+                    com.splitmate.app.ui.extractTravelTicketFromTitle(exp.title)?.pnr?.trim()
+                        ?: PnrNetworkRepository.extractPnrFromFreeText(exp.title)
+                }
+                PnrNetworkRepository.normalizePnrKey(rawPnr).takeIf { it.isNotBlank() }
+            }.toSet()
+            val flights = ctx?.let { PnrNetworkRepository.exportGroupScopedFlightVaultJsonByPnr(it, referencedGroupPnrs) } ?: emptyMap()
+            val trains = ctx?.let { PnrNetworkRepository.exportGroupScopedTrainSnapshotJsonByPnr(it, referencedGroupPnrs) } ?: emptyMap()
 
             val initialPresence = if (normLocalPhone.length == 10) mapOf(normLocalPhone to nowMs) else emptyMap()
             val inferredOrgPhone = durableTombstones.organizerPhone10.ifBlank {

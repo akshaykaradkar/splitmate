@@ -90,7 +90,15 @@ fun EditLoggedExpenseDialog(
      * v2.3.5 (#4 guard a): true for itemized receipts. Amount and split chips are locked so the
      * edit cannot flatten tax / tip / item claims into an equal split; title + payer stay editable.
      */
-    lockAmountAndSplit: Boolean = false
+    lockAmountAndSplit: Boolean = false,
+    onSaveExact: ((
+        newTitle: String,
+        exactTotalCents: Long,
+        newPayerId: String,
+        updatedSplitMemberIds: List<String>,
+        newCategoryRef: String?,
+        explicitTravelPnr: String?
+    ) -> Unit)? = null
 ) {
     val existingTicket = remember(expense.title) { extractTravelTicketFromTitle(expense.title) }
     var editedTitle by remember(expense.title) {
@@ -100,8 +108,9 @@ fun EditLoggedExpenseDialog(
         mutableStateOf(expense.categoryRef)
     }
     var editedAmountStr by remember(expense.totalAmountCents) {
-        val rupees = expense.totalAmountCents / 100.0
-        mutableStateOf(if (rupees % 1.0 == 0.0) rupees.toLong().toString() else String.format(Locale.US, "%.2f", rupees))
+        val whole = expense.totalAmountCents / 100L
+        val rem = kotlin.math.abs(expense.totalAmountCents % 100L)
+        mutableStateOf(if (rem == 0L) whole.toString() else String.format(Locale.US, "%d.%02d", whole, rem))
     }
     var selectedPayerId by remember(expense.payerId) {
         mutableStateOf(expense.payerId)
@@ -109,10 +118,12 @@ fun EditLoggedExpenseDialog(
     var selectedSplitMemberIds by remember(expense.expenseId, initialSplitMemberIds) {
         mutableStateOf(initialSplitMemberIds.ifEmpty { groupMembers.map { it.memberId }.toSet() })
     }
-    var includeTravelTicket by remember(existingTicket) {
-        mutableStateOf(existingTicket != null)
+    var includeTravelTicket by remember(existingTicket, expense.travelPnr) {
+        mutableStateOf(existingTicket != null || expense.travelPnr.isNotBlank())
     }
-    var pnrNumber by remember(existingTicket) { mutableStateOf(existingTicket?.pnr ?: "") }
+    var pnrNumber by remember(existingTicket, expense.travelPnr) {
+        mutableStateOf(existingTicket?.pnr?.ifBlank { expense.travelPnr } ?: expense.travelPnr)
+    }
     var trainOrFlightNo by remember(existingTicket) { mutableStateOf(existingTicket?.trainOrFlightNo ?: "") }
     var routeFromTo by remember(existingTicket) { mutableStateOf(existingTicket?.route ?: "") }
     var departureInfo by remember(existingTicket) { mutableStateOf(existingTicket?.departureInfo ?: "") }
@@ -263,7 +274,7 @@ fun EditLoggedExpenseDialog(
 
                 OutlinedTextField(
                     value = editedAmountStr,
-                    onValueChange = { editedAmountStr = it.filter { ch -> ch.isDigit() || ch == '.' } },
+                    onValueChange = { editedAmountStr = com.splitmate.app.ui.sanitizeDecimalRupeesInput(it) },
                     label = { Text("Total Amount (₹)", fontSize = 12.sp) },
                     singleLine = true,
                     enabled = !lockAmountAndSplit,
@@ -403,15 +414,17 @@ fun EditLoggedExpenseDialog(
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         OutlinedTextField(
                             value = pnrNumber,
-                            onValueChange = { pnrNumber = it.filter { ch -> ch.isDigit() }.take(10) },
-                            label = { Text("10-Digit PNR", fontSize = 11.sp) },
+                            onValueChange = {
+                                pnrNumber = it.filter { ch -> ch.isLetterOrDigit() }.uppercase(Locale.US).take(10)
+                            },
+                            label = { Text("Train (10) / Flight (6) PNR", fontSize = 11.sp) },
                             singleLine = true,
                             modifier = Modifier.weight(1f)
                         )
                         OutlinedTextField(
                             value = trainOrFlightNo,
                             onValueChange = { trainOrFlightNo = it },
-                            label = { Text("Train #", fontSize = 11.sp) },
+                            label = { Text("Train / Flight #", fontSize = 11.sp) },
                             singleLine = true,
                             modifier = Modifier.weight(1f)
                         )
@@ -438,32 +451,47 @@ fun EditLoggedExpenseDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val parsedRupees = if (lockAmountAndSplit) {
-                        expense.totalAmountCents / 100.0
+                    val exactCents = if (lockAmountAndSplit) {
+                        expense.totalAmountCents
                     } else {
-                        editedAmountStr.toDoubleOrNull() ?: (expense.totalAmountCents / 100.0)
+                        com.splitmate.app.ui.parseRupeesToPaiseExact(editedAmountStr) ?: expense.totalAmountCents
                     }
+                    val parsedRupees = exactCents / 100.0
                     val splitIdsToSave = if (lockAmountAndSplit) initialSplitMemberIds.toList() else selectedSplitMemberIds.toList()
-                    val finalTitle = if (includeTravelTicket && (pnrNumber.isNotBlank() || trainOrFlightNo.isNotBlank() || coachAndSeats.isNotBlank())) {
+                    val cleanPnrTrim = pnrNumber.trim().uppercase(Locale.US)
+                    val explicitTravelPnrOverride: String = if (includeTravelTicket) cleanPnrTrim else ""
+                    val finalTitle = if (includeTravelTicket && (cleanPnrTrim.isNotBlank() || trainOrFlightNo.isNotBlank() || coachAndSeats.isNotBlank())) {
                         val routeParts = routeFromTo
                             .split(Regex("""\s*(?:->|→|-|\bto\b)\s*""", RegexOption.IGNORE_CASE), limit = 2)
                             .map { it.trim() }
                         val parsedFrom = routeParts.getOrNull(0).orEmpty()
                         val parsedTo = routeParts.getOrNull(1).orEmpty()
+                        val baseMode = if (cleanPnrTrim.length == 6 && cleanPnrTrim.any { it.isLetter() }) "Flight" else "Train / PNR Ticket"
                         val parsedTicket = ParsedTravelTicket(
-                            pnr = pnrNumber.trim(),
+                            pnr = cleanPnrTrim,
                             trainOrFlightNo = trainOrFlightNo.trim(),
                             fromStation = parsedFrom,
                             toStation = parsedTo,
                             departureTime = departureInfo.trim(),
                             coachAndSeats = coachAndSeats.trim(),
-                            cleanTitle = editedTitle.trim().ifBlank { "Train / PNR Ticket" }
+                            cleanTitle = editedTitle.trim().ifBlank { baseMode }
                         )
-                        formatTravelExpenseTitle(editedTitle.trim().ifBlank { "Train / PNR Ticket" }, parsedTicket)
+                        formatTravelExpenseTitle(editedTitle.trim().ifBlank { baseMode }, parsedTicket)
                     } else {
                         editedTitle.trim().ifBlank { "Group Expense" }
                     }
-                    onSave(finalTitle, parsedRupees, selectedPayerId, splitIdsToSave, editedCategoryRef)
+                    if (onSaveExact != null) {
+                        onSaveExact(
+                            finalTitle,
+                            exactCents,
+                            selectedPayerId,
+                            splitIdsToSave,
+                            editedCategoryRef,
+                            explicitTravelPnrOverride
+                        )
+                    } else {
+                        onSave(finalTitle, parsedRupees, selectedPayerId, splitIdsToSave, editedCategoryRef)
+                    }
                 },
                 shapes = ButtonDefaults.shapes(shape = SplitMateTheme.RadiusButton),
                 colors = ButtonDefaults.buttonColors(

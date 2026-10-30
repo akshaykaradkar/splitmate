@@ -473,7 +473,13 @@ fun resolveExpenseSchedule(
 
     val candidateDateTimeStrings = listOfNotNull(
         flightVault?.let { listOf(it.travelDate, it.departureTime).filter { s -> s.isNotBlank() }.joinToString(" ") }?.takeIf { it.isNotBlank() },
-        pnrSnapshot?.departureTime?.takeIf { it.isNotBlank() },
+        pnrSnapshot?.let { snap ->
+            if (snap.departureDate.isNotBlank() && !snap.departureTime.contains(snap.departureDate, ignoreCase = true)) {
+                "${snap.departureDate} ${snap.departureTime}".trim()
+            } else {
+                snap.departureTime.ifBlank { snap.departureDate }
+            }
+        }?.takeIf { it.isNotBlank() },
         parsedTicket?.departureInfo?.takeIf { it.isNotBlank() },
         parsedTicket?.departureDate?.takeIf { it.isNotBlank() },
         parsedTicket?.departureTime?.takeIf { it.isNotBlank() }
@@ -2788,7 +2794,9 @@ private fun resolvePassengerBerthCells(
             structPax != null && structPax.currentStatus.isNotBlank() -> structPax.currentStatus
             rawStatus.isNotBlank() -> rawStatus.substringAfter(":", rawStatus).trim()
             seatToken.isNotBlank() -> seatToken.substringAfter(":", seatToken).trim()
-            else -> parsedTicket?.bookingStatus?.ifBlank { "CNF" } ?: "CNF"
+            snapshot?.isLiveVerified == true && snapshot.bookingStatusBadge.isNotBlank() -> snapshot.bookingStatusBadge
+            parsedTicket?.statusExplicit == true && parsedTicket.bookingStatus.isNotBlank() -> parsedTicket.bookingStatus
+            else -> ""
         }
 
         val berthLabel = rawSeatSpec
@@ -2796,7 +2804,13 @@ private fun resolvePassengerBerthCells(
             .replace("CNF /", "", ignoreCase = true)
             .replace("/", " · ")
             .trim()
-            .ifBlank { "Seat ${idx + 1}" }
+            .ifBlank {
+                if (snapshot?.isLiveVerified == true && snapshot.bookingStatusBadge.startsWith("CNF", ignoreCase = true)) {
+                    "CNF"
+                } else {
+                    "Pax ${idx + 1}"
+                }
+            }
 
         val statusBadge = when {
             structPax != null && structPax.statusLabel.isNotBlank() -> structPax.statusLabel
@@ -2807,7 +2821,8 @@ private fun resolvePassengerBerthCells(
             rawSeatSpec.contains("SU", ignoreCase = true) -> "(SU)"
             rawSeatSpec.contains("RAC", ignoreCase = true) -> "(RAC)"
             rawSeatSpec.contains("WL", ignoreCase = true) -> "(WL)"
-            else -> "(CNF)"
+            rawSeatSpec.contains("CNF", ignoreCase = true) -> "(CNF)"
+            else -> ""
         }
 
         val resolvedTravelerName = member?.name
@@ -2858,9 +2873,13 @@ fun DeepGreenTrainTicketCard(
     )
 
     val parsedTicket = remember(expense.title) { extractTravelTicketFromTitle(expense.title) }
-    val pnrDigits = remember(expense.title, parsedTicket) {
-        parsedTicket?.pnr?.takeIf { it.isNotBlank() }
+    val pnrDigits = remember(expense.title, expense.travelPnr, parsedTicket) {
+        expense.travelPnr.trim().takeIf { it.length == 10 && it.all(Char::isDigit) }
+            ?: parsedTicket?.pnr?.takeIf { it.isNotBlank() }
             ?: Regex("""\b(\d{10})\b""").find(expense.title)?.groupValues?.getOrNull(1).orEmpty()
+    }
+    val openTrainPassKey = remember(pnrDigits, expense.expenseId) {
+        pnrDigits.ifBlank { "EXPENSE:${expense.expenseId}" }
     }
     val snapshot = remember(context, pnrDigits) {
         if (pnrDigits.isNotBlank()) loadPersistedPnrSnapshot(context, pnrDigits) else null
@@ -2910,9 +2929,13 @@ fun DeepGreenTrainTicketCard(
         }
     }
     val travelClassText = remember(snapshot, parsedTicket) {
-        snapshot?.travelClass?.ifBlank { null }
-            ?: parsedTicket?.bookingStatus?.ifBlank { "3A Sleeper" }
-            ?: "Confirmed"
+        val rawClass = snapshot?.travelClass?.ifBlank { null }
+            ?: parsedTicket?.bookingStatus?.takeIf { parsedTicket.statusExplicit && it.isNotBlank() }
+        if (!rawClass.isNullOrBlank()) {
+            com.splitmate.app.ui.formatIndianRailClassLabel(rawClass)
+        } else {
+            ""
+        }
     }
     val expenseSchedule = remember(context, expense) {
         resolveExpenseSchedule(context, expense)
@@ -2968,7 +2991,7 @@ fun DeepGreenTrainTicketCard(
                                 .background(TripHubTokens.PositiveSageText)
                         )
                         Text(
-                            text = if (snapshot?.isLiveVerified == true) "Live Sync" else "Confirmed",
+                            text = if (snapshot?.isLiveVerified == true) "Live Sync" else "Logged Ticket",
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.labelSmall,
                             color = TripHubTokens.PositiveSageText
@@ -2996,9 +3019,9 @@ fun DeepGreenTrainTicketCard(
         Card(
             onClick = {
                 performCrispTactileHaptic(context, localView, heavy = false)
-                onOpenTrainPnrReviewClick(pnrDigits)
+                onOpenTrainPnrReviewClick(openTrainPassKey)
             },
-            enabled = pnrDigits.isNotBlank(),
+            enabled = true,
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(
                 containerColor = TripHubTokens.CardSurface,
@@ -3060,7 +3083,7 @@ fun DeepGreenTrainTicketCard(
                                 color = TripHubTokens.TrainSecondarySage
                             )
                             Text(
-                                text = pnrDigits.ifBlank { "Verified" },
+                                text = pnrDigits.ifBlank { "No PNR" },
                                 style = MaterialTheme.typography.labelLarge.merge(
                                     TextStyle(
                                         fontFamily = SplitMateTnumMonospace,
@@ -3163,13 +3186,15 @@ fun DeepGreenTrainTicketCard(
                                         .background(TripHubTokens.TrainAccentLime)
                                 )
                             }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = travelClassText,
-                                fontWeight = FontWeight.SemiBold,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = TripHubTokens.TrainSecondarySage
-                            )
+                            if (travelClassText.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = travelClassText,
+                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TripHubTokens.TrainSecondarySage
+                                )
+                            }
                         }
 
                         Column(
@@ -3235,7 +3260,7 @@ fun DeepGreenTrainTicketCard(
                                                 horizontalArrangement = Arrangement.SpaceBetween
                                             ) {
                                                 Text(
-                                                    text = "${cell.berthCode} ${cell.statusCode}",
+                                                    text = listOf(cell.berthCode, cell.statusCode).filter { it.isNotBlank() }.joinToString(" "),
                                                     style = MaterialTheme.typography.labelSmall.merge(
                                                         TextStyle(
                                                             fontFamily = SplitMateTnumMonospace,
@@ -3383,9 +3408,14 @@ fun DeepGreenTrainTicketCard(
                                     ),
                                     color = TripHubTokens.TextPrimary
                                 )
+                                val exactTrainTravelerShare = com.splitmate.app.ExpenseSplitCopy.perPersonCaption(
+                                    totalCents = expense.totalAmountCents,
+                                    memberCount = splitBreakdown.splittingMembersCount,
+                                    unitSuffix = " / traveler"
+                                )
                                 Text(
                                     text = splitBreakdown.perPersonCaption(
-                                        "${splitBreakdown.perPersonHeadlineShare} / traveler (${splitBreakdown.splittingMembersCount}-way split)"
+                                        "$exactTrainTravelerShare (${splitBreakdown.splittingMembersCount}-way split)"
                                     ),
                                     style = MaterialTheme.typography.labelSmall.merge(
                                         TextStyle(
@@ -3449,7 +3479,7 @@ fun DeepGreenTrainTicketCard(
                         Button(
                             onClick = {
                                 performCrispTactileHaptic(context, localView, heavy = false)
-                                onOpenTrainPnrReviewClick(pnrDigits)
+                                onOpenTrainPnrReviewClick(openTrainPassKey)
                             },
                             shapes = ButtonDefaults.shapes(),
                             colors = ButtonDefaults.buttonColors(
@@ -3755,8 +3785,13 @@ fun PeriwinkleFlightBookingCard(
                                 ),
                                 color = TripHubTokens.TextPrimary
                             )
+                            val exactFlightTravelerShare = com.splitmate.app.ExpenseSplitCopy.perPersonCaption(
+                                totalCents = expense.totalAmountCents,
+                                memberCount = splitBreakdown.splittingMembersCount,
+                                unitSuffix = " / traveler"
+                            )
                             Text(
-                                text = splitBreakdown.perPersonCaption("${splitBreakdown.perPersonHeadlineShare} / traveler"),
+                                text = splitBreakdown.perPersonCaption(exactFlightTravelerShare),
                                 style = MaterialTheme.typography.labelSmall.merge(
                                     TextStyle(
                                         fontFamily = SplitMateTnumMonospace,

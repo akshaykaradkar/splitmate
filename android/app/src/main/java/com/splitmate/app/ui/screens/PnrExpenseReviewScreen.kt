@@ -73,11 +73,22 @@ import com.splitmate.app.ui.components.segmentedIslandItemShape
 import com.splitmate.app.ui.fetchLivePnrAndTrainStatus
 import com.splitmate.app.ui.formatTravelExpenseTitle
 import com.splitmate.app.ui.theme.activeTransitExtendedColors
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.spring
+import androidx.compose.material.icons.rounded.ContentPaste
+import androidx.compose.material.icons.rounded.Payments
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Sync
+import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.splitmate.app.ui.components.InFlightWavyProgressIndicator
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -277,7 +288,7 @@ class TactilePaperPerforatedShape(
 }
 
 // ============================================================================
-// 3. DATA MODELS FOR THE UI
+// 3. DATA MODELS & CONCURRENCY-SAFE SESSION CONTROLLER FOR THE UI
 // ============================================================================
 data class PassengerTicketRow(
     val id: String,
@@ -286,12 +297,245 @@ data class PassengerTicketRow(
     val isPayer: Boolean = false,
     val bookingStatus: String,
     val currentStatus: String,
-    val isConfirmed: Boolean = false
+    val isConfirmed: Boolean = false,
+    val exactShareDisplay: String? = null
 )
+
+/**
+ * Concurrency-safe state coordinator for [PnrExpenseReviewScreen].
+ *
+ * Enforces:
+ * - C-01: Cancels any prior in-flight lookup Job when PNR digits change and rejects stale completions.
+ * - C-02: Preserves mid-fetch user member/payer customizations (`hasUserCustomizedSplit` / `hasUserCustomizedPayer`)
+ *         and reads the latest group member list at completion time.
+ * - C-03: Isolates per-PNR transient manual station/fare overrides so PNR B never inherits PNR A's route or fare.
+ * - M-06: Selects `paxCount.coerceAtMost(groupMembers.size)` members when matching by passenger count.
+ */
+class PnrReviewSessionController(
+    private val scope: CoroutineScope,
+    private val fetcher: suspend (cleanPnr: String, forceManualRefresh: Boolean) -> LivePnrStatusSnapshot
+) {
+    var pnrInput by mutableStateOf("")
+    var isFetching by mutableStateOf(false)
+    var fetchError by mutableStateOf<String?>(null)
+    var liveSnapshot by mutableStateOf<LivePnrStatusSnapshot?>(null)
+
+    var manualTotalFareInput by mutableStateOf("")
+    var manualFromStationInput by mutableStateOf("")
+    var manualToStationInput by mutableStateOf("")
+
+    var selectedMemberIds by mutableStateOf<Set<String>>(emptySet())
+    var selectedPayerId by mutableStateOf("")
+    var hasUserCustomizedSplit by mutableStateOf(false)
+    var hasUserCustomizedPayer by mutableStateOf(false)
+
+    private var activeLookupJob: Job? = null
+
+    fun syncForGroupOrExistingExpense(
+        groupMembers: List<GroupMemberEntity>,
+        existingExpenseInGroup: com.splitmate.app.data.ExpenseEntity?,
+        existingSplitIdsInGroup: Set<String>,
+        forceResetUserCustomizations: Boolean = false
+    ) {
+        if (forceResetUserCustomizations) {
+            hasUserCustomizedSplit = false
+            hasUserCustomizedPayer = false
+        }
+        val validMemberIdSet = groupMembers.map { it.memberId }.toSet()
+        if (!hasUserCustomizedSplit || selectedMemberIds.none { it in validMemberIdSet }) {
+            selectedMemberIds = existingSplitIdsInGroup
+                .intersect(validMemberIdSet)
+                .ifEmpty { validMemberIdSet }
+        } else {
+            selectedMemberIds = selectedMemberIds.intersect(validMemberIdSet).ifEmpty { validMemberIdSet }
+        }
+        if (!hasUserCustomizedPayer || selectedPayerId !in validMemberIdSet) {
+            val existingPayer = existingExpenseInGroup?.payerId?.takeIf { it in validMemberIdSet }
+            selectedPayerId = existingPayer
+                ?: groupMembers.firstOrNull { it.isCurrentUser }?.memberId
+                ?: groupMembers.firstOrNull()?.memberId.orEmpty()
+        }
+    }
+
+    fun onToggleMember(memberId: String) {
+        hasUserCustomizedSplit = true
+        selectedMemberIds = if (memberId in selectedMemberIds) {
+            if (selectedMemberIds.size > 1) selectedMemberIds - memberId else selectedMemberIds
+        } else {
+            selectedMemberIds + memberId
+        }
+    }
+
+    fun onSelectExactTicketCount(groupMembers: List<GroupMemberEntity>, ticketPassengerCount: Int) {
+        hasUserCustomizedSplit = true
+        val safeTake = ticketPassengerCount.coerceAtLeast(1).coerceAtMost(groupMembers.size)
+        selectedMemberIds = groupMembers.take(safeTake).map { it.memberId }.toSet()
+    }
+
+    fun onSelectPayer(payerId: String) {
+        hasUserCustomizedPayer = true
+        selectedPayerId = payerId
+    }
+
+    fun onPnrDigitsChanged(
+        rawValue: String,
+        groupMembersProvider: () -> List<GroupMemberEntity>,
+        existingExpenseProvider: (String) -> com.splitmate.app.data.ExpenseEntity?,
+        existingSplitsProvider: (com.splitmate.app.data.ExpenseEntity?) -> Set<String>,
+        autoTriggerWhen10Digits: Boolean = true
+    ) {
+        val digits = rawValue.filter { it.isDigit() }.take(10)
+        val changed = digits != pnrInput
+        pnrInput = digits
+        if (changed) {
+            activeLookupJob?.cancel()
+            activeLookupJob = null
+            isFetching = false
+            fetchError = null
+            if (liveSnapshot?.pnr != digits) {
+                liveSnapshot = null
+                manualTotalFareInput = ""
+                manualFromStationInput = ""
+                manualToStationInput = ""
+                val membersNow = groupMembersProvider()
+                val existingNow = if (digits.length == 10) existingExpenseProvider(digits) else null
+                syncForGroupOrExistingExpense(
+                    groupMembers = membersNow,
+                    existingExpenseInGroup = existingNow,
+                    existingSplitIdsInGroup = existingSplitsProvider(existingNow),
+                    forceResetUserCustomizations = true
+                )
+            }
+        }
+        val currentSnap = liveSnapshot
+        if (autoTriggerWhen10Digits &&
+            digits.length == 10 &&
+            (currentSnap == null || currentSnap.pnr != digits || !currentSnap.isLiveVerified)
+        ) {
+            triggerLookup(
+                targetPnr = digits,
+                forceManualRefresh = false,
+                groupMembersProvider = groupMembersProvider,
+                existingExpenseProvider = existingExpenseProvider,
+                existingSplitsProvider = existingSplitsProvider
+            )
+        }
+    }
+
+    fun applyImportedSnapshot(
+        imported: LivePnrStatusSnapshot,
+        groupMembers: List<GroupMemberEntity>,
+        existingExpenseInGroup: com.splitmate.app.data.ExpenseEntity?,
+        existingSplitsInGroup: Set<String>
+    ) {
+        activeLookupJob?.cancel()
+        activeLookupJob = null
+        isFetching = false
+        fetchError = null
+        pnrInput = imported.pnr
+        liveSnapshot = imported
+        manualTotalFareInput = ""
+        manualFromStationInput = ""
+        manualToStationInput = ""
+        applyFetchedMemberDefaults(
+            fetched = imported,
+            membersNow = groupMembers,
+            existingMatch = existingExpenseInGroup,
+            existingSplits = existingSplitsInGroup
+        )
+    }
+
+    fun triggerLookup(
+        targetPnr: String,
+        forceManualRefresh: Boolean,
+        groupMembersProvider: () -> List<GroupMemberEntity>,
+        existingExpenseProvider: (String) -> com.splitmate.app.data.ExpenseEntity?,
+        existingSplitsProvider: (com.splitmate.app.data.ExpenseEntity?) -> Set<String>,
+        onCompleted: ((LivePnrStatusSnapshot) -> Unit)? = null
+    ) {
+        val clean = targetPnr.filter { it.isDigit() }.take(10)
+        if (clean.length != 10) {
+            fetchError = "Please enter a valid 10-digit IRCTC PNR number"
+            return
+        }
+        pnrInput = clean
+        fetchError = null
+        activeLookupJob?.cancel()
+        isFetching = true
+
+        activeLookupJob = scope.launch {
+            val fetched = try {
+                fetcher(clean, forceManualRefresh)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                com.splitmate.app.data.PnrNetworkRepository.buildUnverifiedManualFallbackSnapshot(cleanPnr = clean)
+            }
+            if (!isActive || pnrInput != clean) return@launch
+
+            isFetching = false
+            liveSnapshot = fetched
+
+            val membersNow = groupMembersProvider()
+            val existingMatch = existingExpenseProvider(clean)
+            val existingSplits = existingSplitsProvider(existingMatch)
+            applyFetchedMemberDefaults(
+                fetched = fetched,
+                membersNow = membersNow,
+                existingMatch = existingMatch,
+                existingSplits = existingSplits
+            )
+
+            fetchError = when {
+                fetched.isInvalidOrFlushedPnr ->
+                    "PNR $clean was reported invalid or flushed by CRIS (expired/past journey). You can still log ticket details manually below."
+                !fetched.isLiveVerified && existingMatch == null ->
+                    "Live IRCTC server unreachable or rate-limited — paste your IRCTC SMS/PDF above or enter ticket details manually below."
+                else -> null
+            }
+            onCompleted?.invoke(fetched)
+        }
+    }
+
+    private fun applyFetchedMemberDefaults(
+        fetched: LivePnrStatusSnapshot,
+        membersNow: List<GroupMemberEntity>,
+        existingMatch: com.splitmate.app.data.ExpenseEntity?,
+        existingSplits: Set<String>
+    ) {
+        val validIds = membersNow.map { it.memberId }.toSet()
+        if (existingMatch != null) {
+            val validExistingSplits = existingSplits.intersect(validIds)
+            if (!hasUserCustomizedSplit && validExistingSplits.isNotEmpty()) {
+                selectedMemberIds = validExistingSplits
+            }
+            if (!hasUserCustomizedPayer && existingMatch.payerId in validIds) {
+                selectedPayerId = existingMatch.payerId
+            }
+        } else if (fetched.isLiveVerified || fetched.baseFarePaise > 0L || fetched.structuredPassengers.isNotEmpty()) {
+            val matchedTrainMembers = fetched.structuredPassengers.mapNotNull { pax ->
+                matchSinglePassengerToGroupMember(pax.passengerNumber, membersNow)
+            }.distinctBy { it.memberId }
+
+            if (!hasUserCustomizedPayer && matchedTrainMembers.isNotEmpty()) {
+                selectedPayerId = matchedTrainMembers.first().memberId
+            }
+            val paxCount = fetched.effectivePassengerCount.coerceAtLeast(1)
+            if (!hasUserCustomizedSplit && membersNow.isNotEmpty()) {
+                selectedMemberIds = if (matchedTrainMembers.size >= 2) {
+                    matchedTrainMembers.map { it.memberId }.toSet()
+                } else {
+                    membersNow.take(paxCount.coerceAtMost(membersNow.size)).map { it.memberId }.toSet()
+                }
+            }
+        }
+    }
+}
 
 // ============================================================================
 // 4. MAIN SCREEN: PNR SEARCH + BOARDING PASS + MEMBER SPLIT + LEDGER CONFIRM
 // ============================================================================
+@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun PnrExpenseReviewScreen(
     viewModel: SplitMateViewModel,
@@ -305,209 +549,323 @@ fun PnrExpenseReviewScreen(
 
     val activeGroup = uiState.activeGroup
     val groupMembers = uiState.activeGroupMembers
+    val latestGroupMembers by rememberUpdatedState(groupMembers)
+    val latestUiState by rememberUpdatedState(uiState)
 
-    // Start empty unless launched from a specific logged ticket's 10-digit PNR
-    var pnrInput by remember(initialPnr) { mutableStateOf(initialPnr.filter { it.isDigit() }.take(10)) }
-    var isFetching by remember { mutableStateOf(false) }
-    var fetchError by remember { mutableStateOf<String?>(null) }
-    var isSubmitting by remember { mutableStateOf(false) }
+    val initialExpenseId = remember(initialPnr) {
+        initialPnr.takeIf { it.startsWith("EXPENSE:", ignoreCase = true) }
+            ?.substringAfter(":")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+    }
+    val initialExpenseMatch = remember(initialExpenseId, uiState.expenses) {
+        initialExpenseId?.let { expId -> uiState.expenses.find { it.expenseId == expId } }
+    }
+    val resolvedInitialPnrDigits = remember(initialPnr, initialExpenseMatch?.expenseId) {
+        if (initialExpenseMatch != null) {
+            initialExpenseMatch.travelPnr.filter { it.isDigit() }.take(10).ifBlank {
+                com.splitmate.app.ui.extractTravelTicketFromTitle(initialExpenseMatch.title)
+                    ?.pnr
+                    ?.filter { it.isDigit() }
+                    ?.take(10)
+                    .orEmpty()
+            }
+        } else {
+            initialPnr.filter { it.isDigit() }.take(10)
+        }
+    }
 
-    // Manual ticket entry overrides when CRIS is unreachable, rate-limited, or entered manually
-    var manualTotalFareInput by remember { mutableStateOf("") }
-    var manualFromStationInput by remember { mutableStateOf("") }
-    var manualToStationInput by remember { mutableStateOf("") }
+    // One-time group alignment on initial screen launch ONLY (never hijacks manual group switches!)
+    var didInitialGroupAlign by remember(initialPnr) { mutableStateOf(false) }
+    LaunchedEffect(initialPnr, uiState.expenses.size) {
+        if (!didInitialGroupAlign && initialPnr.isNotBlank()) {
+            val targetExpense = initialExpenseMatch ?: resolvedInitialPnrDigits
+                .takeIf { it.length == 10 }
+                ?.let { p10 ->
+                    uiState.expenses.firstOrNull { it.groupId == uiState.activeGroupId && (it.travelPnr == p10 || it.title.contains(p10)) }
+                        ?: uiState.expenses.firstOrNull { it.travelPnr == p10 || it.title.contains(p10) }
+                }
+            if (targetExpense != null) {
+                didInitialGroupAlign = true
+                if (targetExpense.groupId.isNotBlank() && targetExpense.groupId != uiState.activeGroupId) {
+                    viewModel.selectActiveGroup(targetExpense.groupId)
+                }
+            } else if (uiState.expenses.isNotEmpty() || initialExpenseId == null) {
+                didInitialGroupAlign = true
+            }
+        }
+    }
 
-    var liveSnapshot by remember { mutableStateOf<LivePnrStatusSnapshot?>(null) }
-
-    // Check which 10-digit IRCTC Train PNRs are already logged in the active group (excluding 6-char Flight PNRs)
+    // Check which Train tickets are already logged in the ACTIVE group (strictly group-scoped)
     val existingPnrExpensesInGroup = remember(uiState.expenses, uiState.activeGroupId) {
         uiState.expenses.filter { exp ->
-            exp.groupId == uiState.activeGroupId &&
-                exp.title.contains("PNR:", ignoreCase = true) &&
-                com.splitmate.app.ui.extractTravelTicketFromTitle(exp.title)?.pnr?.let { pnr ->
-                    pnr.length == 10 && pnr.all { ch -> ch.isDigit() }
-                } == true
+            exp.groupId == uiState.activeGroupId && (
+                exp.expenseCategory.equals("TRAIN", ignoreCase = true) ||
+                    (exp.title.contains("PNR:", ignoreCase = true) &&
+                        com.splitmate.app.ui.extractTravelTicketFromTitle(exp.title)?.pnr?.let { pnr ->
+                            pnr.length == 10 && pnr.all { ch -> ch.isDigit() }
+                        } == true)
+                )
         }
     }
 
-    // Reactive lookup of an existing logged expense matching the active 10-digit PNR
-    val selectedExistingExpense = remember(existingPnrExpensesInGroup, uiState.expenses, pnrInput, liveSnapshot) {
-        val clean10 = (liveSnapshot?.pnr?.takeIf { it.length == 10 } ?: pnrInput.filter { it.isDigit() }).take(10)
-        if (clean10.length == 10) {
-            existingPnrExpensesInGroup.firstOrNull { it.title.contains(clean10) }
-                ?: viewModel.findExistingExpenseByPnr(clean10, uiState.activeGroupId)?.first
-        } else null
-    }
-
-    LaunchedEffect(selectedExistingExpense?.groupId) {
-        val matchedGroupId = selectedExistingExpense?.groupId
-        if (!matchedGroupId.isNullOrBlank() && matchedGroupId != uiState.activeGroupId) {
-            viewModel.selectActiveGroup(matchedGroupId)
+    fun findExistingTrainExpenseInActiveGroup(clean10: String): com.splitmate.app.data.ExpenseEntity? {
+        val stateNow = latestUiState
+        val activeGid = stateNow.activeGroupId
+        if (initialExpenseMatch != null && initialExpenseMatch.groupId == activeGid) {
+            val initPnr = initialExpenseMatch.travelPnr.filter { it.isDigit() }.take(10)
+            if (clean10.isBlank() || initPnr == clean10 || initialExpenseMatch.title.contains(clean10)) {
+                return initialExpenseMatch
+            }
+        }
+        if (clean10.length != 10) return null
+        return stateNow.expenses.firstOrNull { exp ->
+            exp.groupId == activeGid && (exp.travelPnr == clean10 || exp.title.contains(clean10))
         }
     }
 
-    // Selected member IDs for splitting the ticket (hydrates from existing expense splits if inspecting/editing)
-    var selectedMemberIds by remember(groupMembers, selectedExistingExpense?.expenseId) {
-        val existingSplitMemberIds = if (selectedExistingExpense != null) {
-            uiState.splits
-                .filter { it.expenseId == selectedExistingExpense.expenseId && it.finalOwedCents > 0L }
-                .map { it.memberId }
-                .toSet()
-        } else emptySet()
-        mutableStateOf(existingSplitMemberIds.ifEmpty { groupMembers.map { it.memberId }.toSet() })
+    fun existingSplitsForExpense(exp: com.splitmate.app.data.ExpenseEntity?): Set<String> {
+        if (exp == null) return emptySet()
+        return latestUiState.splits
+            .filter { it.expenseId == exp.expenseId && it.finalOwedCents > 0L }
+            .map { it.memberId }
+            .toSet()
     }
 
-    // Selected Payer ID (hydrates from existing expense payer or defaults to Current User)
-    var selectedPayerId by remember(groupMembers, selectedExistingExpense?.expenseId) {
-        mutableStateOf(
-            selectedExistingExpense?.payerId
-                ?: groupMembers.firstOrNull { it.isCurrentUser }?.memberId
-                ?: groupMembers.firstOrNull()?.memberId.orEmpty()
+    val controller = remember(coroutineScope) {
+        PnrReviewSessionController(
+            scope = coroutineScope,
+            fetcher = { clean, forceManualRefresh ->
+                val stateNow = latestUiState
+                val activeMatch = findExistingTrainExpenseInActiveGroup(clean)
+                    ?: stateNow.expenses.firstOrNull { it.travelPnr == clean || it.title.contains(clean) }
+                val existingParsed = activeMatch?.let { exp ->
+                    val parsed = com.splitmate.app.ui.extractTravelTicketFromTitle(exp.title)
+                        ?: ParsedTravelTicket(pnr = clean, cleanTitle = exp.title)
+                    val exactDecimalFare = com.splitmate.app.ui.LivePnrStatusSnapshot(
+                        pnr = clean,
+                        trainNo = "",
+                        trainName = "",
+                        fromStation = "",
+                        toStation = "",
+                        departureTime = "",
+                        bookingStatusBadge = "",
+                        chartPrepared = false,
+                        passengerStatuses = emptyList(),
+                        coachPositionHint = "",
+                        liveTrainLocationRadar = "",
+                        confirmationProbability = "",
+                        sourceLabel = ""
+                    ).formatPaiseAsDecimalRupees(exp.totalAmountCents)
+                    parsed.copy(
+                        pnr = clean,
+                        fareRupees = parsed.fareRupees.ifBlank { if (exp.totalAmountCents > 0L) exactDecimalFare else "" }
+                    )
+                }
+                val cachedLocal = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    com.splitmate.app.data.PnrNetworkRepository.loadPersistedPnrSnapshot(context, clean)
+                }
+                if (!forceManualRefresh &&
+                    cachedLocal != null &&
+                    (cachedLocal.isLiveVerified || com.splitmate.app.data.PnrNetworkRepository.isSnapshotAllConfirmed(cachedLocal))
+                ) {
+                    return@PnrReviewSessionController cachedLocal
+                }
+                val sanitizedFallback = (existingParsed ?: ParsedTravelTicket(pnr = clean)).let { ticket ->
+                    val cleanFrom = ticket.fromStation
+                        .takeIf { it.isNotBlank() && !it.equals("ORG", ignoreCase = true) && !it.equals("ORIG", ignoreCase = true) }
+                        ?: cachedLocal?.fromStation?.takeIf { !it.equals("ORG", ignoreCase = true) && !it.equals("ORIG", ignoreCase = true) }
+                            .orEmpty()
+                    val cleanTo = ticket.toStation
+                        .takeIf { it.isNotBlank() && !it.equals("DST", ignoreCase = true) && !it.equals("DEST", ignoreCase = true) }
+                        ?: cachedLocal?.toStation?.takeIf { !it.equals("DST", ignoreCase = true) && !it.equals("DEST", ignoreCase = true) }
+                            .orEmpty()
+                    ticket.copy(fromStation = cleanFrom, toStation = cleanTo)
+                }
+                fetchLivePnrAndTrainStatus(
+                    pnr = clean,
+                    fallbackTicket = sanitizedFallback,
+                    forceManualRefresh = forceManualRefresh,
+                    context = context
+                )
+            }
         )
     }
 
-    fun triggerLivePnrLookup(targetPnr: String) {
-        val clean = targetPnr.filter { it.isDigit() }.take(10)
-        if (clean.length != 10) {
-            fetchError = "Please enter a valid 10-digit IRCTC PNR number"
-            return
-        }
-        fetchError = null
-        val existingMatch = existingPnrExpensesInGroup.firstOrNull { it.title.contains(clean) || it.travelPnr == clean }
-            ?: viewModel.findExistingExpenseByPnr(clean, uiState.activeGroupId)?.first
-            ?: uiState.expenses.firstOrNull { it.title.contains(clean) || it.travelPnr == clean }
-        val existingParsed = existingMatch?.let { exp ->
-            com.splitmate.app.ui.extractTravelTicketFromTitle(exp.title)?.let { parsed ->
-                if (parsed.fareRupees.isBlank() && exp.totalAmountCents > 0L) {
-                    parsed.copy(pnr = clean, fareRupees = (exp.totalAmountCents / 100L).toString())
-                } else {
-                    parsed.copy(pnr = clean)
-                }
-            }
-        }
-        
-        isFetching = true
-        coroutineScope.launch {
-            // Check local vault first before showing any network spinner
-            val cachedLocal = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                com.splitmate.app.data.PnrNetworkRepository.loadPersistedPnrSnapshot(context, clean)
-            }
-            if (cachedLocal != null &&
-                cachedLocal.fromStation.isNotBlank() &&
-                !cachedLocal.fromStation.equals("ORG", ignoreCase = true) &&
-                !cachedLocal.fromStation.equals("ORIG", ignoreCase = true) &&
-                cachedLocal.fromStation != "---"
-            ) {
-                liveSnapshot = cachedLocal
-                if (manualFromStationInput.isBlank()) {
-                    manualFromStationInput = cachedLocal.fromStation
-                }
-                if (cachedLocal.toStation.isNotBlank() &&
-                    !cachedLocal.toStation.equals("DST", ignoreCase = true) &&
-                    !cachedLocal.toStation.equals("DEST", ignoreCase = true) &&
-                    manualToStationInput.isBlank()
-                ) {
-                    manualToStationInput = cachedLocal.toStation
-                }
-            }
-            if (cachedLocal != null && com.splitmate.app.data.PnrNetworkRepository.isSnapshotAllConfirmed(cachedLocal)) {
-                isFetching = false
-                liveSnapshot = cachedLocal
-                if (cachedLocal.fromStation.isNotBlank() &&
-                    !cachedLocal.fromStation.equals("ORG", ignoreCase = true) &&
-                    !cachedLocal.fromStation.equals("ORIG", ignoreCase = true) &&
-                    manualFromStationInput.isBlank()
-                ) {
-                    manualFromStationInput = cachedLocal.fromStation
-                }
-                if (cachedLocal.toStation.isNotBlank() &&
-                    !cachedLocal.toStation.equals("DST", ignoreCase = true) &&
-                    !cachedLocal.toStation.equals("DEST", ignoreCase = true) &&
-                    manualToStationInput.isBlank()
-                ) {
-                    manualToStationInput = cachedLocal.toStation
-                }
-                if (existingMatch != null) {
-                    val existingSplits = uiState.splits
-                        .filter { it.expenseId == existingMatch.expenseId && it.finalOwedCents > 0L }
-                        .map { it.memberId }
-                        .toSet()
-                    if (existingSplits.isNotEmpty()) {
-                        selectedMemberIds = existingSplits
-                    }
-                    selectedPayerId = existingMatch.payerId
-                }
-                return@launch
-            }
+    var isSubmitting by remember { mutableStateOf(false) }
 
-            val sanitizedFallback = (existingParsed ?: ParsedTravelTicket(pnr = clean)).let { ticket ->
-                val cleanFrom = ticket.fromStation
-                    .takeIf { it.isNotBlank() && !it.equals("ORG", ignoreCase = true) && !it.equals("ORIG", ignoreCase = true) }
-                    ?: cachedLocal?.fromStation?.takeIf { !it.equals("ORG", ignoreCase = true) && !it.equals("ORIG", ignoreCase = true) }
-                    .orEmpty()
-                val cleanTo = ticket.toStation
-                    .takeIf { it.isNotBlank() && !it.equals("DST", ignoreCase = true) && !it.equals("DEST", ignoreCase = true) }
-                    ?: cachedLocal?.toStation?.takeIf { !it.equals("DST", ignoreCase = true) && !it.equals("DEST", ignoreCase = true) }
-                    .orEmpty()
-                ticket.copy(fromStation = cleanFrom, toStation = cleanTo)
-            }
+    val pnrInput = controller.pnrInput
+    val isFetching = controller.isFetching
+    val fetchError = controller.fetchError
+    val liveSnapshot = controller.liveSnapshot
+    val manualTotalFareInput = controller.manualTotalFareInput
+    val manualFromStationInput = controller.manualFromStationInput
+    val manualToStationInput = controller.manualToStationInput
+    val selectedMemberIds = controller.selectedMemberIds
+    val selectedPayerId = controller.selectedPayerId
 
-            val fetched = fetchLivePnrAndTrainStatus(
-                pnr = clean,
-                fallbackTicket = sanitizedFallback,
-                forceManualRefresh = true,
-                context = context
+    // Strictly scoped to the ACTIVE group (M-05: never edits Group A's expense when Group B is selected)
+    val selectedExistingExpense = remember(
+        existingPnrExpensesInGroup,
+        uiState.activeGroupId,
+        pnrInput,
+        liveSnapshot,
+        initialExpenseMatch?.expenseId
+    ) {
+        val clean10 = (liveSnapshot?.pnr?.takeIf { it.length == 10 } ?: pnrInput.filter { it.isDigit() }).take(10)
+        if (initialExpenseMatch != null && initialExpenseMatch.groupId == uiState.activeGroupId &&
+            (clean10.isBlank() || initialExpenseMatch.travelPnr == clean10 || initialExpenseMatch.title.contains(clean10))
+        ) {
+            initialExpenseMatch
+        } else if (clean10.length == 10) {
+            existingPnrExpensesInGroup.firstOrNull { it.travelPnr == clean10 || it.title.contains(clean10) }
+        } else null
+    }
+
+    // Keep selectedMemberIds & selectedPayerId strictly inside activeGroupMembers whenever active group changes
+    LaunchedEffect(uiState.activeGroupId, groupMembers, selectedExistingExpense?.expenseId) {
+        controller.syncForGroupOrExistingExpense(
+            groupMembers = groupMembers,
+            existingExpenseInGroup = selectedExistingExpense,
+            existingSplitIdsInGroup = existingSplitsForExpense(selectedExistingExpense),
+            forceResetUserCustomizations = false
+        )
+    }
+
+    var cooldownRemainingSec by remember(pnrInput) {
+        mutableIntStateOf(
+            com.splitmate.app.data.PnrNetworkRepository.getRemainingManualRefreshCooldownSeconds(context, pnrInput)
+        )
+    }
+
+    LaunchedEffect(pnrInput, liveSnapshot?.fetchedAtEpochMs) {
+        cooldownRemainingSec = maxOf(
+            liveSnapshot?.cooldownRemainingSeconds ?: 0,
+            com.splitmate.app.data.PnrNetworkRepository.getRemainingManualRefreshCooldownSeconds(context, pnrInput)
+        )
+    }
+
+    LaunchedEffect(pnrInput, cooldownRemainingSec > 0) {
+        while (cooldownRemainingSec > 0) {
+            kotlinx.coroutines.delay(1_000L)
+            cooldownRemainingSec = com.splitmate.app.data.PnrNetworkRepository
+                .getRemainingManualRefreshCooldownSeconds(context, pnrInput)
+        }
+    }
+
+    fun triggerLivePnrLookup(targetPnr: String, isExplicitManualRefresh: Boolean = true) {
+        controller.triggerLookup(
+            targetPnr = targetPnr,
+            forceManualRefresh = isExplicitManualRefresh,
+            groupMembersProvider = { latestGroupMembers },
+            existingExpenseProvider = ::findExistingTrainExpenseInActiveGroup,
+            existingSplitsProvider = ::existingSplitsForExpense,
+            onCompleted = { fetched ->
+                cooldownRemainingSec = maxOf(
+                    fetched.cooldownRemainingSeconds,
+                    com.splitmate.app.data.PnrNetworkRepository.getRemainingManualRefreshCooldownSeconds(context, fetched.pnr)
+                )
+            }
+        )
+    }
+
+    LaunchedEffect(initialPnr, initialExpenseMatch?.expenseId) {
+        if (resolvedInitialPnrDigits.length == 10 && liveSnapshot == null) {
+            controller.pnrInput = resolvedInitialPnrDigits
+            triggerLivePnrLookup(resolvedInitialPnrDigits, isExplicitManualRefresh = false)
+        } else if (initialExpenseMatch != null && resolvedInitialPnrDigits.isBlank() && liveSnapshot == null) {
+            val parsedFromExp = com.splitmate.app.ui.extractTravelTicketFromTitle(initialExpenseMatch.title)
+                ?: ParsedTravelTicket(cleanTitle = initialExpenseMatch.title)
+            val fallbackSnap = com.splitmate.app.data.PnrNetworkRepository.buildUnverifiedManualFallbackSnapshot(
+                cleanPnr = "",
+                fallbackTicket = parsedFromExp
             )
-            isFetching = false
-            liveSnapshot = fetched
-            if (fetched.fromStation.isNotBlank() &&
-                !fetched.fromStation.equals("ORG", ignoreCase = true) &&
-                !fetched.fromStation.equals("ORIG", ignoreCase = true) &&
-                manualFromStationInput.isBlank()
-            ) {
-                manualFromStationInput = fetched.fromStation
-            }
-            if (fetched.toStation.isNotBlank() &&
-                !fetched.toStation.equals("DST", ignoreCase = true) &&
-                !fetched.toStation.equals("DEST", ignoreCase = true) &&
-                manualToStationInput.isBlank()
-            ) {
-                manualToStationInput = fetched.toStation
-            }
-            if (existingMatch != null) {
-                val existingSplits = uiState.splits
-                    .filter { it.expenseId == existingMatch.expenseId && it.finalOwedCents > 0L }
-                    .map { it.memberId }
-                    .toSet()
-                if (existingSplits.isNotEmpty()) {
-                    selectedMemberIds = existingSplits
+            controller.liveSnapshot = fallbackSnap.copy(
+                baseFarePaiseOverride = initialExpenseMatch.totalAmountCents,
+                totalPayablePaiseOverride = initialExpenseMatch.totalAmountCents,
+                irctcPaymentMode = "NONE",
+                includeInsurance = false
+            )
+            controller.manualFromStationInput = parsedFromExp.fromStation
+            controller.manualToStationInput = parsedFromExp.toStation
+        }
+    }
+
+    // Companion PDF picker for IRCTC Electronic Reservation Slips (ERS)
+    val irctcPdfLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            val memberNamesSnapshot = latestGroupMembers.map { it.name }
+            coroutineScope.launch {
+                val extracted = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching {
+                        context.contentResolver.openInputStream(uri)?.use { stream ->
+                            com.splitmate.app.data.UniversalFlightTicketExtractor.extractFromPdfStream(
+                                inputStream = stream,
+                                groupMemberNames = memberNamesSnapshot,
+                                context = context
+                            )
+                        }
+                    }.getOrNull()
                 }
-                selectedPayerId = existingMatch.payerId
-            } else if (fetched.isLiveVerified && fetched.totalFareRupees > 0) {
-                val matchedTrainMembers = fetched.structuredPassengers.mapNotNull { pax ->
-                    matchSinglePassengerToGroupMember(pax.passengerNumber, groupMembers)
-                }.distinctBy { it.memberId }
-                if (matchedTrainMembers.isNotEmpty()) {
-                    selectedPayerId = matchedTrainMembers.first().memberId
-                }
-                val paxCount = fetched.effectivePassengerCount.coerceAtLeast(1)
-                if (groupMembers.isNotEmpty()) {
-                    selectedMemberIds = if (matchedTrainMembers.size >= 2) {
-                        matchedTrainMembers.map { it.memberId }.toSet()
-                    } else {
-                        groupMembers.take(paxCount.coerceAtLeast(groupMembers.size)).map { it.memberId }.toSet()
+                if (extracted != null && extracted.isValidFlightTicket) {
+                    val snap = extracted.toLivePnrStatusSnapshot()
+                    if (snap.pnr.length == 10 && snap.isLiveVerified) {
+                        com.splitmate.app.data.PnrNetworkRepository.savePersistedPnrSnapshot(context, snap)
                     }
+                    val existingExp = findExistingTrainExpenseInActiveGroup(snap.pnr)
+                    controller.applyImportedSnapshot(
+                        imported = snap,
+                        groupMembers = latestGroupMembers,
+                        existingExpenseInGroup = existingExp,
+                        existingSplitsInGroup = existingSplitsForExpense(existingExp)
+                    )
+                } else {
+                    controller.fetchError = "Could not extract an IRCTC train ticket from the selected PDF."
                 }
-            } else if (!fetched.isLiveVerified) {
-                fetchError = "Live IRCTC server unreachable or rate-limited — Enter ticket fare & route manually below."
             }
         }
     }
 
-    LaunchedEffect(initialPnr) {
-        val cleanInit = initialPnr.filter { it.isDigit() }.take(10)
-        if (cleanInit.length == 10 && liveSnapshot == null) {
-            triggerLivePnrLookup(cleanInit)
+    fun handlePasteIrctcSmsFromClipboard() {
+        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+        val clipText = clipboard?.primaryClip?.takeIf { it.itemCount > 0 }
+            ?.getItemAt(0)
+            ?.coerceToText(context)
+            ?.toString()
+            ?.trim()
+            .orEmpty()
+        if (clipText.isBlank()) {
+            controller.fetchError = "Clipboard is empty — copy your IRCTC SMS or 10-digit PNR first."
+            return
+        }
+        val parsedSms = com.splitmate.app.data.IrctcTicketTextExtractor.extractFromText(clipText)
+        if (parsedSms != null) {
+            if (parsedSms.pnr.length == 10 && parsedSms.fromStation.isNotBlank() && parsedSms.toStation.isNotBlank()) {
+                com.splitmate.app.data.PnrNetworkRepository.savePersistedPnrSnapshot(context, parsedSms)
+            }
+            val existingExp = findExistingTrainExpenseInActiveGroup(parsedSms.pnr)
+            controller.applyImportedSnapshot(
+                imported = parsedSms,
+                groupMembers = latestGroupMembers,
+                existingExpenseInGroup = existingExp,
+                existingSplitsInGroup = existingSplitsForExpense(existingExp)
+            )
+            return
+        }
+        val barePnr = com.splitmate.app.data.PnrNetworkRepository.extractPnrFromFreeText(clipText)
+            .takeIf { it.length == 10 && it.all { ch -> ch.isDigit() } }
+        if (barePnr != null) {
+            controller.onPnrDigitsChanged(
+                rawValue = barePnr,
+                groupMembersProvider = { latestGroupMembers },
+                existingExpenseProvider = ::findExistingTrainExpenseInActiveGroup,
+                existingSplitsProvider = ::existingSplitsForExpense,
+                autoTriggerWhen10Digits = true
+            )
+        } else {
+            controller.fetchError = "No 10-digit IRCTC PNR or ticket SMS found in clipboard."
         }
     }
 
@@ -515,16 +873,9 @@ fun PnrExpenseReviewScreen(
     val pnrStampScale = remember { androidx.compose.animation.core.Animatable(1.75f) }
     val pnrStampAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
 
-    // Format helper for Rupee strings
-    fun formatPaiseDisplay(paise: Long): String {
-        val rupees = paise / 100
-        val remPaise = kotlin.math.abs(paise % 100).toInt()
-        return if (remPaise == 0) {
-            "₹%,d".format(Locale.US, rupees)
-        } else {
-            "₹%,d.%02d".format(Locale.US, rupees, remPaise)
-        }
-    }
+    // Format helper delegating to Indian Lakh/Crore paise formatter (M-08: sign-safe & exact)
+    fun formatPaiseDisplay(paise: Long): String =
+        com.splitmate.app.ui.formatIndianRupeesFromCents(cents = paise, trimZeroDecimals = true)
 
     val snapshot = liveSnapshot
     val selectedMembersList = remember(groupMembers, selectedMemberIds) {
@@ -534,26 +885,70 @@ fun PnrExpenseReviewScreen(
         snapshot == null -> selectedMembersList.size.coerceAtLeast(1)
         else -> maxOf(snapshot.effectivePassengerCount, selectedMembersList.size).coerceAtLeast(1)
     }
+
+    // v1.8.5 Official IRCTC Dynamic Bill Engine Controls (UPI default | Card | Base ₹0 + Insurance)
+    var selectedIrctcPaymentMode by remember(snapshot?.pnr, snapshot?.isManualEntry) {
+        val defaultMode = when {
+            snapshot == null -> "UPI"
+            snapshot.isManualEntry && snapshot.baseFarePaise == 0L -> "NONE"
+            snapshot.irctcPaymentMode.isNotBlank() -> snapshot.irctcPaymentMode.uppercase(Locale.US)
+            else -> "UPI"
+        }
+        mutableStateOf(defaultMode)
+    }
+    var includeIrctcInsurance by remember(snapshot?.pnr, snapshot?.isPurelyWaitlistedAtBooking, snapshot?.isManualEntry) {
+        val defaultIns = when {
+            snapshot == null -> true
+            snapshot.isManualEntry && snapshot.baseFarePaise == 0L -> false
+            else -> snapshot.defaultIncludeInsurance
+        }
+        mutableStateOf(defaultIns)
+    }
+    var hasUserAdjustedIrctcFeeControls by remember(snapshot?.pnr, selectedExistingExpense?.expenseId) {
+        mutableStateOf(false)
+    }
+
     val manualFarePaise = remember(manualTotalFareInput) {
-        val parsed = manualTotalFareInput.trim().toDoubleOrNull() ?: 0.0
-        kotlin.math.round(parsed * 100.0).toLong().coerceAtLeast(0L)
+        com.splitmate.app.ui.parseRupeesToPaiseExact(manualTotalFareInput) ?: 0L
     }
-    // Prevent double-counted IRCTC fees (+₹25.40) when inspecting or editing an already-logged PNR ticket
+
+    // Separate baseFarePaise vs convenience/insurance fees so Vault never compounds +₹25.00 (M-01 & M-04)
     val baseFarePaise = when {
-        selectedExistingExpense != null && manualFarePaise == 0L -> selectedExistingExpense.totalAmountCents
         manualFarePaise > 0L -> manualFarePaise
-        else -> snapshot?.baseFarePaise ?: 0L
+        snapshot != null && snapshot.baseFarePaise > 0L -> snapshot.baseFarePaise
+        selectedExistingExpense != null -> selectedExistingExpense.totalAmountCents
+        else -> 0L
     }
-    val convenienceFeePaise = if (selectedExistingExpense == null && manualFarePaise == 0L && snapshot != null && snapshot.totalFareRupees > 0) {
-        snapshot.irctcConvenienceFeeUpiPaise
-    } else 0L
-    val insuranceFeePaise = if (selectedExistingExpense == null && manualFarePaise == 0L && snapshot != null && snapshot.totalFareRupees > 0) {
-        snapshot.travelInsurancePaise
-    } else 0L
-    val effectiveTotalPaise = if (selectedExistingExpense != null && manualFarePaise == 0L) {
-        selectedExistingExpense.totalAmountCents
-    } else {
-        baseFarePaise + convenienceFeePaise + insuranceFeePaise
+    val billReferenceSnapshot = remember(snapshot, baseFarePaise, ticketPassengerCount) {
+        snapshot?.copy(
+            baseFarePaiseOverride = baseFarePaise,
+            passengerCount = ticketPassengerCount
+        )
+    }
+    val useExistingLockedTotal = selectedExistingExpense != null &&
+        manualFarePaise == 0L &&
+        !hasUserAdjustedIrctcFeeControls &&
+        (snapshot == null || snapshot.baseFarePaise <= 0L || snapshot.totalPayablePaiseOverride == selectedExistingExpense.totalAmountCents)
+
+    val convenienceFeePaise = when {
+        billReferenceSnapshot == null || baseFarePaise <= 0L -> 0L
+        useExistingLockedTotal && snapshot?.baseFarePaise?.let { it > 0L && it < selectedExistingExpense!!.totalAmountCents } != true -> 0L
+        selectedIrctcPaymentMode == "UPI" -> billReferenceSnapshot.irctcConvenienceFeeUpiPaise
+        selectedIrctcPaymentMode == "CARD" -> billReferenceSnapshot.irctcConvenienceFeeCardPaise
+        else -> 0L
+    }
+    val insuranceFeePaise = when {
+        billReferenceSnapshot == null || baseFarePaise <= 0L -> 0L
+        useExistingLockedTotal && snapshot?.baseFarePaise?.let { it > 0L && it < selectedExistingExpense!!.totalAmountCents } != true -> 0L
+        includeIrctcInsurance -> billReferenceSnapshot.travelInsurancePaise
+        else -> 0L
+    }
+    val effectiveTotalPaise = when {
+        manualFarePaise > 0L -> baseFarePaise + convenienceFeePaise + insuranceFeePaise
+        hasUserAdjustedIrctcFeeControls && baseFarePaise > 0L -> baseFarePaise + convenienceFeePaise + insuranceFeePaise
+        selectedExistingExpense != null -> selectedExistingExpense.totalAmountCents
+        snapshot?.totalPayablePaiseOverride != null && !hasUserAdjustedIrctcFeeControls -> snapshot.totalPayablePaiseOverride
+        else -> baseFarePaise + convenienceFeePaise + insuranceFeePaise
     }
 
     val currentUser = remember(groupMembers) { groupMembers.find { it.isCurrentUser } }
@@ -573,6 +968,19 @@ fun PnrExpenseReviewScreen(
     }
     val perPersonTicketSharePaise = if (effectiveDividerCount > 0) effectiveTotalPaise / effectiveDividerCount else 0L
     val perSelectedMemberSharePaise = if (selectedMembersList.isNotEmpty()) effectiveTotalPaise / selectedMembersList.size else perPersonTicketSharePaise
+    val perPersonHeadlineCaption = remember(effectiveTotalPaise, selectedMembersList.size) {
+        com.splitmate.app.ExpenseSplitCopy.perPersonCaption(
+            totalCents = effectiveTotalPaise,
+            memberCount = selectedMembersList.size.coerceAtLeast(1)
+        )
+    }
+    val perPersonEachChipLabel = remember(effectiveTotalPaise, selectedMembersList.size) {
+        com.splitmate.app.ExpenseSplitCopy.perPersonCaption(
+            totalCents = effectiveTotalPaise,
+            memberCount = selectedMembersList.size.coerceAtLeast(1),
+            unitSuffix = " / each"
+        )
+    }
     val payerSharePaise = exactAllocationsMap[selectedPayerId]?.finalCents
         ?: if (selectedMembersList.any { it.memberId == selectedPayerId }) perSelectedMemberSharePaise else 0L
     // v2.3.3: UI-only split nature for review copy (no effect on the committed split).
@@ -584,8 +992,8 @@ fun PnrExpenseReviewScreen(
         reviewSoleMember?.name, reviewSoleMember?.isCurrentUser == true
     )
 
-    // Build PassengerTicketRow list strictly from snapshot.structuredPassengers + selected group members
-    val passengerRows = remember(snapshot, selectedMembersList, selectedPayerId) {
+    // Build PassengerTicketRow list strictly from snapshot.structuredPassengers + exact Largest-Remainder shares (M-03)
+    val passengerRows = remember(snapshot, selectedMembersList, selectedPayerId, exactAllocationsMap) {
         if (snapshot == null) {
             emptyList()
         } else {
@@ -626,6 +1034,7 @@ fun PnrExpenseReviewScreen(
                 } else {
                     "P${pax.passengerNumber}"
                 }
+                val memberExactPaise = matchedMember?.let { exactAllocationsMap[it.memberId]?.finalCents }
                 PassengerTicketRow(
                     id = cleanPaxId,
                     memberId = matchedMember?.memberId,
@@ -633,15 +1042,37 @@ fun PnrExpenseReviewScreen(
                     isPayer = matchedMember?.memberId == selectedPayerId,
                     bookingStatus = pax.initialStatus,
                     currentStatus = pax.currentStatus,
-                    isConfirmed = isCnf
+                    isConfirmed = isCnf,
+                    exactShareDisplay = memberExactPaise?.let { formatPaiseDisplay(it) }
                 )
             }
         }
     }
 
+    val resolvedFromCode = remember(manualFromStationInput, snapshot?.fromStation) {
+        manualFromStationInput.ifBlank { snapshot?.fromStation.orEmpty() }
+            .trim()
+            .takeIf { it.isNotBlank() && !it.equals("ORG", ignoreCase = true) && !it.equals("ORIG", ignoreCase = true) && it != "---" }
+            ?.uppercase(Locale.US)
+            .orEmpty()
+    }
+    val resolvedToCode = remember(manualToStationInput, snapshot?.toStation) {
+        manualToStationInput.ifBlank { snapshot?.toStation.orEmpty() }
+            .trim()
+            .takeIf { it.isNotBlank() && !it.equals("DST", ignoreCase = true) && !it.equals("DEST", ignoreCase = true) && it != "---" }
+            ?.uppercase(Locale.US)
+            .orEmpty()
+    }
+    val canModifySelectedExistingExpense = remember(selectedExistingExpense, uiState) {
+        selectedExistingExpense == null || viewModel.canCurrentUserModifyExpense(selectedExistingExpense, uiState)
+    }
+
     val canConfirmExpense = snapshot != null &&
         effectiveTotalPaise > 0L &&
+        resolvedFromCode.isNotBlank() &&
+        resolvedToCode.isNotBlank() &&
         selectedMemberIds.isNotEmpty() &&
+        canModifySelectedExistingExpense &&
         !isSubmitting
 
     Scaffold(
@@ -765,13 +1196,38 @@ fun PnrExpenseReviewScreen(
                         Button(
                             onClick = {
                                 if (!canConfirmExpense || isSubmitting) return@Button
+                                val capturedExistingExpense = selectedExistingExpense
+                                if (capturedExistingExpense != null && !viewModel.canCurrentUserModifyExpense(capturedExistingExpense)) {
+                                    controller.fetchError = com.splitmate.app.ExpenseEditPermission.READ_ONLY_REASON
+                                    return@Button
+                                }
+                                val capturedSnapshot = snapshot
+                                val fromCode = resolvedFromCode
+                                val toCode = resolvedToCode
+                                if (fromCode.isBlank() || toCode.isBlank()) return@Button
+
+                                // C-04: Snapshot all commit inputs immutably at t=0ms before the stamp animation
+                                val capturedBaseFarePaise = baseFarePaise
+                                val capturedTotalPaise = effectiveTotalPaise
+                                val capturedPaymentMode = selectedIrctcPaymentMode
+                                val capturedIncludeInsurance = includeIrctcInsurance
+                                val capturedPayerId = selectedPayerId
+                                val capturedMemberIds = selectedMemberIds.toList()
+                                val capturedPassengerRows = passengerRows.toList()
+                                val capturedSplitNature = reviewSplitNature
+                                val capturedSoleName = reviewSoleMember?.name
+                                val capturedPerPersonCaption = perPersonHeadlineCaption
+
                                 isSubmitting = true
                                 haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick)
                                 playBoardingPassTearAndStampOneShot(true)
-                                val fromCode = manualFromStationInput.ifBlank { snapshot.fromStation }.ifBlank { "ORG" }.uppercase(Locale.US)
-                                val toCode = manualToStationInput.ifBlank { snapshot.toStation }.ifBlank { "DST" }.uppercase(Locale.US)
-                                val chartText = if (snapshot.chartPrepared) "Chart Prepared" else "Chart Not Prepared"
-                                val validBerths = passengerRows
+
+                                val chartText = when {
+                                    !capturedSnapshot.isLiveVerified -> ""
+                                    capturedSnapshot.chartPrepared -> "Chart Prepared"
+                                    else -> "Chart Not Prepared"
+                                }
+                                val validBerths = capturedPassengerRows
                                     .map { it.currentStatus.trim() }
                                     .filter {
                                         it.isNotBlank() &&
@@ -783,31 +1239,39 @@ fun PnrExpenseReviewScreen(
                                 val berthSegment = if (validBerths.isNotEmpty()) {
                                     " · " + validBerths.mapIndexed { idx, s -> "P${idx + 1}: $s" }.joinToString(", ")
                                 } else ""
+                                val classPrefix = if (capturedSnapshot.travelClass.isNotBlank()) {
+                                    "Class ${capturedSnapshot.travelClass} · "
+                                } else ""
                                 val formattedTitle = formatTravelExpenseTitle(
-                                    baseCategory = "${snapshot.trainName.ifBlank { "Train Ticket" }} ($fromCode - $toCode)",
+                                    baseCategory = "${capturedSnapshot.trainName.ifBlank { "Train Ticket" }} ($fromCode - $toCode)",
                                     ticket = ParsedTravelTicket(
-                                        pnr = snapshot.pnr,
-                                        trainOrFlightNo = "${snapshot.trainNo} ${snapshot.trainName}".trim().ifBlank { "IRCTC Express" },
+                                        pnr = capturedSnapshot.pnr,
+                                        trainOrFlightNo = "${capturedSnapshot.trainNo} ${capturedSnapshot.trainName}".trim(),
                                         fromStation = fromCode,
                                         toStation = toCode,
-                                        departureTime = snapshot.departureTime,
-                                        coachAndSeats = "Class ${snapshot.travelClass.ifBlank { "SL/3A" }} · ${selectedMemberIds.size} Pax" + when (reviewSplitNature) {
+                                        departureDate = capturedSnapshot.departureDate,
+                                        departureTime = capturedSnapshot.departureTime,
+                                        coachAndSeats = "$classPrefix${capturedMemberIds.size} Pax" + when (capturedSplitNature) {
                                             com.splitmate.app.ExpenseSplitNature.PERSONAL -> " · ${com.splitmate.app.ExpenseSplitCopy.PERSONAL_EXPENSE}"
-                                            com.splitmate.app.ExpenseSplitNature.ON_BEHALF -> " · for ${com.splitmate.app.ExpenseSplitCopy.beneficiaryLabel(reviewSoleMember?.name, false)}"
-                                            com.splitmate.app.ExpenseSplitNature.SHARED -> " (${formatPaiseDisplay(perSelectedMemberSharePaise)}/person)"
+                                            com.splitmate.app.ExpenseSplitNature.ON_BEHALF -> " · for ${com.splitmate.app.ExpenseSplitCopy.beneficiaryLabel(capturedSoleName, false)}"
+                                            com.splitmate.app.ExpenseSplitNature.SHARED -> " ($capturedPerPersonCaption)"
                                         } + berthSegment,
-                                        bookingStatus = snapshot.bookingStatusBadge,
+                                        bookingStatus = if (capturedSnapshot.isLiveVerified) capturedSnapshot.bookingStatusBadge else "",
                                         chartStatus = chartText
                                     )
                                 )
-                                val persistedSnapshot = snapshot.copy(
+                                val persistedSnapshot = capturedSnapshot.copy(
                                     fromStation = fromCode,
                                     toStation = toCode,
                                     fromStationName = com.splitmate.app.ui.resolveStationDisplayName(fromCode),
                                     toStationName = com.splitmate.app.ui.resolveStationDisplayName(toCode),
-                                    passengerCount = maxOf(snapshot.passengerCount, selectedMemberIds.size),
-                                    totalFareRupees = (effectiveTotalPaise / 100L).toInt(),
-                                    structuredPassengers = passengerRows.map { row ->
+                                    passengerCount = maxOf(capturedSnapshot.passengerCount, capturedMemberIds.size),
+                                    totalFareRupees = (capturedBaseFarePaise / 100L).toInt(),
+                                    baseFarePaiseOverride = capturedBaseFarePaise.takeIf { it > 0L },
+                                    totalPayablePaiseOverride = capturedTotalPaise,
+                                    irctcPaymentMode = capturedPaymentMode,
+                                    includeInsurance = capturedIncludeInsurance,
+                                    structuredPassengers = capturedPassengerRows.map { row ->
                                         LivePnrPassenger(
                                             passengerNumber = row.id,
                                             initialStatus = row.bookingStatus,
@@ -816,7 +1280,6 @@ fun PnrExpenseReviewScreen(
                                         )
                                     }
                                 )
-                                com.splitmate.app.data.PnrNetworkRepository.savePersistedPnrSnapshot(context, persistedSnapshot)
                                 commitScope.launch {
                                     pnrTearProgress.animateTo(1f, SplitMateMotion.fastEffects())
                                     haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm)
@@ -826,20 +1289,32 @@ fun PnrExpenseReviewScreen(
                                         animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.52f, stiffness = 680f)
                                     )
                                     kotlinx.coroutines.delay(95L)
-                                    if (selectedExistingExpense != null) {
+                                    // R-07 & C-04: Persist Vault only for verified / real 10-digit PNRs, atomically with Room commit
+                                    if (capturedSnapshot.pnr.length == 10 &&
+                                        (capturedSnapshot.isLiveVerified || !capturedSnapshot.isManualEntry)
+                                    ) {
+                                        com.splitmate.app.data.PnrNetworkRepository.savePersistedPnrSnapshot(context, persistedSnapshot)
+                                    }
+                                    if (capturedExistingExpense != null) {
                                         viewModel.editExistingExpense(
-                                            expenseId = selectedExistingExpense.expenseId,
+                                            expenseId = capturedExistingExpense.expenseId,
                                             newTitle = formattedTitle,
-                                            newTotalRupees = effectiveTotalPaise / 100.0,
-                                            newPayerId = selectedPayerId,
-                                            selectedMemberIds = selectedMemberIds.toList()
+                                            newTotalRupees = capturedTotalPaise / 100.0,
+                                            newPayerId = capturedPayerId,
+                                            selectedMemberIds = capturedMemberIds,
+                                            newTotalCentsOverride = capturedTotalPaise,
+                                            categoryRef = "TRAIN",
+                                            explicitTravelPnr = capturedSnapshot.pnr
                                         )
                                     } else {
                                         viewModel.commitQuickEqualExpense(
                                             title = formattedTitle,
-                                            totalAmountCents = effectiveTotalPaise,
-                                            selectedMemberIds = selectedMemberIds.toList(),
-                                            payerMemberId = selectedPayerId
+                                            totalAmountCents = capturedTotalPaise,
+                                            selectedMemberIds = capturedMemberIds,
+                                            payerMemberId = capturedPayerId,
+                                            explicitCategory = "TRAIN",
+                                            explicitTravelPnr = capturedSnapshot.pnr,
+                                            explicitProviderName = capturedSnapshot.trainName
                                         )
                                     }
                                     onExpenseAdded()
@@ -874,19 +1349,23 @@ fun PnrExpenseReviewScreen(
                             Text(
                                 text = when {
                                     isSubmitting -> "Saving Pass..."
+                                    !canModifySelectedExistingExpense -> com.splitmate.app.ExpenseEditPermission.READ_ONLY_REASON
                                     selectedMemberIds.isEmpty() -> "Select At Least 1 Group Member Below"
+                                    resolvedFromCode.isBlank() || resolvedToCode.isBlank() -> "Enter Origin & Destination Stations Above"
                                     effectiveTotalPaise <= 0L -> "Enter Ticket Fare Above to Split"
                                     selectedExistingExpense != null -> "Update Split & Save Changes · ${formatPaiseDisplay(effectiveTotalPaise)}"
                                     reviewSplitNature == com.splitmate.app.ExpenseSplitNature.PERSONAL ->
                                         "Confirm & Add ${formatPaiseDisplay(effectiveTotalPaise)} · ${com.splitmate.app.ExpenseSplitCopy.PERSONAL_EXPENSE}"
                                     reviewSplitNature == com.splitmate.app.ExpenseSplitNature.ON_BEHALF ->
                                         "Confirm & Add ${formatPaiseDisplay(effectiveTotalPaise)} · for $reviewSoleLabel"
-                                    else -> "Confirm & Add ${formatPaiseDisplay(effectiveTotalPaise)} (${formatPaiseDisplay(perSelectedMemberSharePaise)}/person)"
+                                    else -> "Confirm & Add ${formatPaiseDisplay(effectiveTotalPaise)} ($perPersonHeadlineCaption)"
                                 },
                                 style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                                 fontFamily = FigtreeFontFamily,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
+                                fontSize = 14.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -904,18 +1383,31 @@ fun PnrExpenseReviewScreen(
                     .padding(horizontal = 20.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // 1. PNR SEARCH / LOOKUP BAR (Starts empty, auto-fetches on 10 digits or button tap)
+            // 1. PNR SEARCH / LOOKUP BAR (Starts empty, auto-fetches on 10 digits, rate-limit shielded)
+            val isTicketFinalConfirmed = remember(snapshot) {
+                com.splitmate.app.data.PnrNetworkRepository.isSnapshotAllConfirmed(snapshot)
+            }
             PnrSearchLookupCard(
                 pnrValue = pnrInput,
                 onPnrChange = { newValue ->
-                    val digits = newValue.filter { ch -> ch.isDigit() }.take(10)
-                    pnrInput = digits
-                    if (digits.length == 10 && digits != liveSnapshot?.pnr && !isFetching) {
-                        triggerLivePnrLookup(digits)
+                    if (!isSubmitting) {
+                        controller.onPnrDigitsChanged(
+                            rawValue = newValue,
+                            groupMembersProvider = { latestGroupMembers },
+                            existingExpenseProvider = ::findExistingTrainExpenseInActiveGroup,
+                            existingSplitsProvider = ::existingSplitsForExpense,
+                            autoTriggerWhen10Digits = true
+                        )
                     }
                 },
                 isFetching = isFetching,
-                onFetchClick = { triggerLivePnrLookup(pnrInput) }
+                hasLoadedSnapshot = snapshot != null,
+                isFinalConfirmed = isTicketFinalConfirmed,
+                cooldownRemainingSeconds = cooldownRemainingSec,
+                isControlsLocked = isSubmitting,
+                onFetchClick = { triggerLivePnrLookup(pnrInput, isExplicitManualRefresh = true) },
+                onPasteSmsClick = { if (!isSubmitting) handlePasteIrctcSmsFromClipboard() },
+                onImportPdfClick = { if (!isSubmitting) irctcPdfLauncher.launch("application/pdf") }
             )
 
             // Show already-logged PNRs in this group (tap any pill to load & inspect/edit that ticket)
@@ -939,12 +1431,44 @@ fun PnrExpenseReviewScreen(
                             color = TactilePaperPassTokens.SageConfirmedText
                         )
                         existingPnrExpensesInGroup.forEach { exp ->
-                            val extractedPnr = Regex("""PNR:\s*(\d{10})""").find(exp.title)?.groupValues?.getOrNull(1) ?: "Ticket"
+                            val extractedPnr = exp.travelPnr.filter { it.isDigit() }.take(10).ifBlank {
+                                Regex("""PNR:\s*(\d{10})""").find(exp.title)?.groupValues?.getOrNull(1).orEmpty()
+                            }
                             val isActiveTicket = selectedExistingExpense?.expenseId == exp.expenseId
                             Surface(
                                 onClick = {
-                                    pnrInput = extractedPnr
-                                    triggerLivePnrLookup(extractedPnr)
+                                    if (!isSubmitting) {
+                                        if (extractedPnr.length == 10) {
+                                            controller.onPnrDigitsChanged(
+                                                rawValue = extractedPnr,
+                                                groupMembersProvider = { latestGroupMembers },
+                                                existingExpenseProvider = ::findExistingTrainExpenseInActiveGroup,
+                                                existingSplitsProvider = ::existingSplitsForExpense,
+                                                autoTriggerWhen10Digits = false
+                                            )
+                                            triggerLivePnrLookup(extractedPnr, isExplicitManualRefresh = false)
+                                        } else {
+                                            val parsed = com.splitmate.app.ui.extractTravelTicketFromTitle(exp.title)
+                                                ?: ParsedTravelTicket(cleanTitle = exp.title)
+                                            val snap = com.splitmate.app.data.PnrNetworkRepository.buildUnverifiedManualFallbackSnapshot(
+                                                cleanPnr = "",
+                                                fallbackTicket = parsed
+                                            ).copy(
+                                                baseFarePaiseOverride = exp.totalAmountCents,
+                                                totalPayablePaiseOverride = exp.totalAmountCents,
+                                                irctcPaymentMode = "NONE",
+                                                includeInsurance = false
+                                            )
+                                            controller.applyImportedSnapshot(
+                                                imported = snap,
+                                                groupMembers = latestGroupMembers,
+                                                existingExpenseInGroup = exp,
+                                                existingSplitsInGroup = existingSplitsForExpense(exp)
+                                            )
+                                            controller.manualFromStationInput = parsed.fromStation
+                                            controller.manualToStationInput = parsed.toStation
+                                        }
+                                    }
                                 },
                                 shape = RoundedCornerShape(10.dp),
                                 color = if (isActiveTicket) TactilePaperPassTokens.SageConfirmedBg else Color.Transparent
@@ -960,8 +1484,9 @@ fun PnrExpenseReviewScreen(
                                         modifier = Modifier.size(14.dp)
                                     )
                                     Spacer(modifier = Modifier.width(5.dp))
+                                    val labelPrefix = if (extractedPnr.length == 10) "PNR $extractedPnr" else com.splitmate.app.ui.cleanDisplayExpenseTitle(exp.title)
                                     Text(
-                                        text = "PNR $extractedPnr · ${formatPaiseDisplay(exp.totalAmountCents)} ${if (isActiveTicket) "(Editing below)" else "(Tap to view pass)"}",
+                                        text = "$labelPrefix · ${formatPaiseDisplay(exp.totalAmountCents)} ${if (isActiveTicket) "(Editing below)" else "(Tap to view pass)"}",
                                         style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                                         fontFamily = FigtreeFontFamily,
                                         fontWeight = if (isActiveTicket) FontWeight.Bold else FontWeight.SemiBold,
@@ -983,7 +1508,7 @@ fun PnrExpenseReviewScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = fetchError!!,
+                        text = fetchError,
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 12.sp,
@@ -1000,8 +1525,9 @@ fun PnrExpenseReviewScreen(
                     border = androidx.compose.foundation.BorderStroke(1.dp, TactilePaperPassTokens.SageConfirmedBorder),
                     modifier = Modifier.fillMaxWidth()
                 ) {
+                    val pnrDesc = snapshot.pnr.takeIf { it.isNotBlank() }?.let { "PNR $it" } ?: "train ticket"
                     Text(
-                        text = "Inspecting logged PNR ${snapshot.pnr} (${formatPaiseDisplay(selectedExistingExpense.totalAmountCents)}). You can adjust passengers or who paid below and tap 'Update Split & Save Changes'.",
+                        text = "Inspecting logged $pnrDesc (${formatPaiseDisplay(selectedExistingExpense.totalAmountCents)}). You can adjust passengers, IRCTC bill mode, or who paid below and tap 'Update Split & Save Changes'.",
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,
@@ -1048,7 +1574,7 @@ fun PnrExpenseReviewScreen(
                             color = TactilePaperPassTokens.InkPrimary
                         )
                         Text(
-                            text = "Nothing is pre-filled or hardcoded. Type your 10-digit PNR number above to fetch live train route, passenger statuses, and exact IRCTC bill.",
+                            text = "Nothing is pre-filled or hardcoded. Type your 10-digit PNR number, paste your IRCTC SMS, or import your ERS PDF above to load live train route, passenger berths, and exact IRCTC bill.",
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.Medium,
                             fontSize = 13.sp,
@@ -1059,9 +1585,10 @@ fun PnrExpenseReviewScreen(
                         // v2.4.0 rc3: official FilledTonalButton with the shapes() press morph.
                         FilledTonalButton(
                             onClick = {
-                                val manualPnr = pnrInput.filter { it.isDigit() }.padEnd(10, '0').take(10)
-                                pnrInput = manualPnr
-                                liveSnapshot = com.splitmate.app.data.PnrNetworkRepository.buildUnverifiedManualFallbackSnapshot(
+                                // Zero-Placeholder Mandate (#3): never fabricate trailing '0' digits!
+                                val manualPnr = pnrInput.filter { it.isDigit() }.take(10)
+                                controller.pnrInput = manualPnr
+                                controller.liveSnapshot = com.splitmate.app.data.PnrNetworkRepository.buildUnverifiedManualFallbackSnapshot(
                                     cleanPnr = manualPnr
                                 )
                             },
@@ -1096,7 +1623,7 @@ fun PnrExpenseReviewScreen(
                 }
             } else {
                 // Manual Ticket Fare & Route Override Card when CRIS is offline / unverified or fare is 0
-                if (snapshot.isManualEntry || !snapshot.isLiveVerified || effectiveTotalPaise <= 0L) {
+                if (snapshot.isManualEntry || !snapshot.isLiveVerified || effectiveTotalPaise <= 0L || resolvedFromCode.isBlank() || resolvedToCode.isBlank()) {
                     Surface(
                         shape = RoundedCornerShape(18.dp),
                         color = TactilePaperPassTokens.PaperSurface,
@@ -1120,10 +1647,11 @@ fun PnrExpenseReviewScreen(
                             OutlinedTextField(
                                 value = manualTotalFareInput,
                                 onValueChange = { input ->
-                                    if (input.all { it.isDigit() || it == '.' }) {
-                                        manualTotalFareInput = input
+                                    if (!isSubmitting) {
+                                        controller.manualTotalFareInput = com.splitmate.app.ui.sanitizeDecimalRupeesInput(input)
                                     }
                                 },
+                                enabled = !isSubmitting,
                                 label = { Text("Total Ticket Fare (₹)", fontFamily = FigtreeFontFamily) },
                                 placeholder = { Text("e.g. 2450.00", fontFamily = FigtreeFontFamily) },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -1137,18 +1665,28 @@ fun PnrExpenseReviewScreen(
                             ) {
                                 OutlinedTextField(
                                     value = manualFromStationInput,
-                                    onValueChange = { manualFromStationInput = it.uppercase(Locale.US).take(24) },
+                                    onValueChange = {
+                                        if (!isSubmitting) {
+                                            controller.manualFromStationInput = it.uppercase(Locale.US).take(24)
+                                        }
+                                    },
+                                    enabled = !isSubmitting,
                                     label = { Text("From Station", fontFamily = FigtreeFontFamily) },
-                                    placeholder = { Text("NDLS / Delhi", fontFamily = FigtreeFontFamily) },
+                                    placeholder = { Text("BDTS / NDLS", fontFamily = FigtreeFontFamily) },
                                     singleLine = true,
                                     colors = TactilePaperPassTokens.tactileTextFieldColors(),
                                     modifier = Modifier.weight(1f)
                                 )
                                 OutlinedTextField(
                                     value = manualToStationInput,
-                                    onValueChange = { manualToStationInput = it.uppercase(Locale.US).take(24) },
+                                    onValueChange = {
+                                        if (!isSubmitting) {
+                                            controller.manualToStationInput = it.uppercase(Locale.US).take(24)
+                                        }
+                                    },
+                                    enabled = !isSubmitting,
                                     label = { Text("To Station", fontFamily = FigtreeFontFamily) },
-                                    placeholder = { Text("MMCT / Mumbai", fontFamily = FigtreeFontFamily) },
+                                    placeholder = { Text("CDG / MMCT", fontFamily = FigtreeFontFamily) },
                                     singleLine = true,
                                     colors = TactilePaperPassTokens.tactileTextFieldColors(),
                                     modifier = Modifier.weight(1f)
@@ -1158,44 +1696,64 @@ fun PnrExpenseReviewScreen(
                     }
                 }
 
-                val depParts = snapshot.departureTime.split("·", " ").map { it.trim() }.filter { it.isNotBlank() }
-                val depDateDisplay = depParts.firstOrNull().orEmpty()
-                val depTimeDisplay = depParts.getOrNull(1).orEmpty()
-                val effectiveFromCode = manualFromStationInput.ifBlank { snapshot.fromStation }
-                    .takeIf { it.isNotBlank() && !it.equals("ORG", ignoreCase = true) && !it.equals("ORIG", ignoreCase = true) }
-                    ?.uppercase(Locale.US) ?: "---"
-                val effectiveToCode = manualToStationInput.ifBlank { snapshot.toStation }
-                    .takeIf { it.isNotBlank() && !it.equals("DST", ignoreCase = true) && !it.equals("DEST", ignoreCase = true) }
-                    ?.uppercase(Locale.US) ?: "---"
+                // R-08: Split strictly on "•" or "·" when departureDate is not already populated (never split "15 Mar 2026" on spaces!)
+                val depBulletParts = snapshot.departureTime.split("•", "·").map { it.trim() }.filter { it.isNotBlank() }
+                val depDateDisplay = snapshot.departureDate.ifBlank {
+                    if (depBulletParts.size >= 2) depBulletParts.first() else ""
+                }
+                val depTimeDisplay = if (snapshot.departureDate.isNotBlank()) {
+                    if (depBulletParts.size >= 2) depBulletParts.last() else snapshot.departureTime
+                } else {
+                    if (depBulletParts.size >= 2) depBulletParts.last() else snapshot.departureTime
+                }
+
+                val effectiveFromCode = resolvedFromCode.ifBlank { "—" }
+                val effectiveToCode = resolvedToCode.ifBlank { "—" }
                 val effectiveFromName = when {
-                    effectiveFromCode == "---" -> "Origin Station"
-                    !effectiveFromCode.equals(snapshot.fromStation, ignoreCase = true) ||
-                        snapshot.fromStationName.isBlank() ||
-                        snapshot.fromStationName == "Origin Station" ->
-                        com.splitmate.app.ui.resolveStationDisplayName(effectiveFromCode)
+                    resolvedFromCode.isBlank() -> "Enter origin above"
+                    !resolvedFromCode.equals(snapshot.fromStation, ignoreCase = true) || snapshot.fromStationName.isBlank() ->
+                        com.splitmate.app.ui.resolveStationDisplayName(resolvedFromCode)
                     else -> snapshot.fromStationName
                 }
                 val effectiveToName = when {
-                    effectiveToCode == "---" -> "Destination Station"
-                    !effectiveToCode.equals(snapshot.toStation, ignoreCase = true) ||
-                        snapshot.toStationName.isBlank() ||
-                        snapshot.toStationName == "Destination Station" ->
-                        com.splitmate.app.ui.resolveStationDisplayName(effectiveToCode)
+                    resolvedToCode.isBlank() -> "Enter destination above"
+                    !resolvedToCode.equals(snapshot.toStation, ignoreCase = true) || snapshot.toStationName.isBlank() ->
+                        com.splitmate.app.ui.resolveStationDisplayName(resolvedToCode)
                     else -> snapshot.toStationName
                 }
+                val formattedRailClass = com.splitmate.app.ui.formatIndianRailClassLabel(snapshot.travelClass)
+                val quotaLabel = when (snapshot.quotaText.trim().uppercase(Locale.US)) {
+                    "TQ", "TATKAL" -> "Tatkal"
+                    "PT" -> "Premium Tatkal"
+                    "LD" -> "Ladies Quota"
+                    "GN", "GENERAL" -> "General Quota"
+                    else -> "IRCTC"
+                }
+                val travelClassCaption = listOfNotNull(
+                    formattedRailClass.takeIf { it.isNotBlank() },
+                    "$quotaLabel E-Ticket"
+                ).joinToString(" · ")
+                val upiFeePreviewDisplay = formatPaiseDisplay(billReferenceSnapshot?.irctcConvenienceFeeUpiPaise ?: 0L)
+                val cardFeePreviewDisplay = formatPaiseDisplay(billReferenceSnapshot?.irctcConvenienceFeeCardPaise ?: 0L)
+                val insFeePreviewDisplay = formatPaiseDisplay(billReferenceSnapshot?.travelInsurancePaise ?: 0L)
 
                 // LIVE TACTILE PAPER BOARDING PASS
                 TactilePaperBoardingPass(
                     pnrNumber = snapshot.pnr,
-                    trainNumber = snapshot.trainNo.ifBlank { "IRCTC" },
-                    trainName = snapshot.trainName.ifBlank { "Manual Ticket Entry" }
+                    trainNumber = snapshot.trainNo.ifBlank { "Train" },
+                    trainName = snapshot.trainName.ifBlank {
+                        if (snapshot.isLiveVerified) "Indian Railways" else "Manual Ticket"
+                    }
                         .lowercase(Locale.US)
                         .split(" ")
                         .joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } },
-                    travelClass = "Class ${snapshot.travelClass.ifBlank { "SL/3A" }} · ${
-                        if (snapshot.quotaText == "TQ") "Tatkal" else "IRCTC"
-                    } Electronic Ticket",
-                    chartStatus = if (snapshot.chartPrepared) "Chart Prepared" else "Chart Not Prepared",
+                    travelClass = travelClassCaption,
+                    chartStatus = when {
+                        snapshot.isInvalidOrFlushedPnr -> "Flushed / Expired"
+                        !snapshot.isLiveVerified -> "Manual Entry"
+                        snapshot.chartPrepared -> "Chart Prepared"
+                        else -> "Chart Not Prepared"
+                    },
                     originCode = effectiveFromCode,
                     originName = effectiveFromName,
                     departureTime = depTimeDisplay,
@@ -1203,19 +1761,37 @@ fun PnrExpenseReviewScreen(
                     destinationCode = effectiveToCode,
                     destinationName = effectiveToName,
                     arrivalTime = snapshot.arrivalTime,
-                    arrivalDate = if (snapshot.arrivalTime.isNotBlank()) "Scheduled Arrival" else "",
+                    arrivalDate = snapshot.arrivalDate,
                     duration = snapshot.durationText,
                     totalFareDisplay = formatPaiseDisplay(effectiveTotalPaise),
                     baseFareDisplay = formatPaiseDisplay(baseFarePaise),
                     convenienceFeeDisplay = formatPaiseDisplay(convenienceFeePaise),
                     insuranceFeeDisplay = formatPaiseDisplay(insuranceFeePaise),
-                    perPersonShareDisplay = formatPaiseDisplay(perSelectedMemberSharePaise),
+                    perPersonShareDisplay = perPersonEachChipLabel,
                     passengerCount = ticketPassengerCount,
                     passengers = passengerRows,
                     splitNatureCaption = when (reviewSplitNature) {
                         com.splitmate.app.ExpenseSplitNature.PERSONAL -> com.splitmate.app.ExpenseSplitCopy.PERSONAL_NOT_SPLIT
                         com.splitmate.app.ExpenseSplitNature.ON_BEHALF -> "Paid for $reviewSoleLabel"
                         com.splitmate.app.ExpenseSplitNature.SHARED -> null
+                    },
+                    showIrctcBillControls = baseFarePaise > 0L,
+                    selectedPaymentMode = selectedIrctcPaymentMode,
+                    includeInsurance = includeIrctcInsurance,
+                    upiFeeChipLabel = "UPI +$upiFeePreviewDisplay",
+                    cardFeeChipLabel = "Card +$cardFeePreviewDisplay",
+                    insuranceChipLabel = "Insurance +$insFeePreviewDisplay",
+                    onSelectPaymentMode = { mode ->
+                        if (!isSubmitting) {
+                            hasUserAdjustedIrctcFeeControls = true
+                            selectedIrctcPaymentMode = mode
+                        }
+                    },
+                    onToggleInsurance = {
+                        if (!isSubmitting) {
+                            hasUserAdjustedIrctcFeeControls = true
+                            includeIrctcInsurance = !includeIrctcInsurance
+                        }
                     }
                 )
 
@@ -1226,24 +1802,22 @@ fun PnrExpenseReviewScreen(
                     members = groupMembers,
                     selectedMemberIds = selectedMemberIds,
                     selectedPayerId = selectedPayerId,
-                    onSelectPayer = { newPayerId -> selectedPayerId = newPayerId },
+                    onSelectPayer = { newPayerId ->
+                        if (!isSubmitting) controller.onSelectPayer(newPayerId)
+                    },
                     exactAllocationsMap = exactAllocationsMap,
                     formatPaise = ::formatPaiseDisplay,
                     onToggleMember = { memberId ->
-                        selectedMemberIds = if (memberId in selectedMemberIds) {
-                            if (selectedMemberIds.size > 1) selectedMemberIds - memberId else selectedMemberIds
-                        } else {
-                            selectedMemberIds + memberId
-                        }
+                        if (!isSubmitting) controller.onToggleMember(memberId)
                     },
                     onSelectExactTicketCount = {
-                        selectedMemberIds = groupMembers.take(ticketPassengerCount).map { it.memberId }.toSet()
+                        if (!isSubmitting) controller.onSelectExactTicketCount(groupMembers, ticketPassengerCount)
                     },
                     onAddMemberToGroup = { newFriendName ->
-                        viewModel.addMemberToActiveGroup(newFriendName)
+                        if (!isSubmitting) viewModel.addMemberToActiveGroup(newFriendName)
                     },
                     totalFareDisplay = formatPaiseDisplay(effectiveTotalPaise),
-                    perMemberShareDisplay = formatPaiseDisplay(perSelectedMemberSharePaise),
+                    perMemberShareDisplay = perPersonHeadlineCaption,
                     payerReimbursementDisplay = formatPaiseDisplay(
                         (effectiveTotalPaise - payerSharePaise).coerceAtLeast(0L)
                     ),
@@ -1254,135 +1828,272 @@ fun PnrExpenseReviewScreen(
             Spacer(modifier = Modifier.height(16.dp))
         }
 
+        val stampLabelPnr = (liveSnapshot?.pnr ?: pnrInput).takeIf { it.isNotBlank() }?.let { "PNR $it · " }.orEmpty()
         BoardingPassCommitStampOverlay(
             tearProgress = pnrTearProgress.value,
             stampScale = pnrStampScale.value,
             stampAlpha = pnrStampAlpha.value,
             accentColor = TactilePaperPassTokens.ForestTop,
-            stampSubLabel = "IRCTC PNR ${liveSnapshot?.pnr ?: pnrInput} · Verified Split"
+            stampSubLabel = "IRCTC ${stampLabelPnr}Split Saved"
         )
         }
     }
 }
 
 // ============================================================================
-// 5. COMPONENT: PNR SEARCH INPUT BAR
+// 5. COMPONENT: PNR SEARCH INPUT BAR + ANTI-BAN COOLDOWN + SMS/PDF COMPANIONS
 // ============================================================================
+@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun PnrSearchLookupCard(
     pnrValue: String,
     onPnrChange: (String) -> Unit,
     isFetching: Boolean = false,
-    onFetchClick: () -> Unit
+    hasLoadedSnapshot: Boolean = false,
+    isFinalConfirmed: Boolean = false,
+    cooldownRemainingSeconds: Int = 0,
+    isControlsLocked: Boolean = false,
+    onFetchClick: () -> Unit,
+    onPasteSmsClick: () -> Unit = {},
+    onImportPdfClick: () -> Unit = {}
 ) {
+    val haptic = LocalHapticFeedback.current
+    val isCooldownBlocked = hasLoadedSnapshot && cooldownRemainingSeconds > 0 && !isFinalConfirmed
+    val isButtonEnabled = !isFetching && !isControlsLocked && !isCooldownBlocked && !(hasLoadedSnapshot && isFinalConfirmed)
+
     Surface(
         shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(TactilePaperPassTokens.SageConfirmedBg),
-                    contentAlignment = Alignment.Center
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.ConfirmationNumber,
-                        contentDescription = null,
-                        tint = TactilePaperPassTokens.SageConfirmedText,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(TactilePaperPassTokens.SageConfirmedBg),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.ConfirmationNumber,
+                            contentDescription = null,
+                            tint = TactilePaperPassTokens.SageConfirmedText,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
 
-                Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
 
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Enter your 10-digit PNR",
-                        fontFamily = FigtreeFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
-                        letterSpacing = 0.1.sp,
-                        color = TactilePaperPassTokens.InkMuted
-                    )
-                    Box(contentAlignment = Alignment.CenterStart) {
-                        if (pnrValue.isEmpty()) {
-                            Text(
-                                text = "Tap here to enter 10-digit PNR...",
-                                fontFamily = FigtreeFontFamily,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 15.sp,
-                                color = TactilePaperPassTokens.InkMuted
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Enter your 10-digit PNR",
+                            fontFamily = FigtreeFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            letterSpacing = 0.1.sp,
+                            color = TactilePaperPassTokens.InkMuted
+                        )
+                        Box(contentAlignment = Alignment.CenterStart) {
+                            if (pnrValue.isEmpty()) {
+                                Text(
+                                    text = "Tap here to enter 10-digit PNR...",
+                                    fontFamily = FigtreeFontFamily,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 15.sp,
+                                    color = TactilePaperPassTokens.InkMuted
+                                )
+                            }
+                            BasicTextField(
+                                value = pnrValue,
+                                onValueChange = onPnrChange,
+                                enabled = !isControlsLocked,
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                textStyle = TextStyle(
+                                    fontFamily = FigtreeFontFamily,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 17.sp,
+                                    letterSpacing = 1.4.sp,
+                                    fontFeatureSettings = "tnum",
+                                    color = TactilePaperPassTokens.InkPrimary
+                                ),
+                                modifier = Modifier.fillMaxWidth()
                             )
                         }
-                        BasicTextField(
-                            value = pnrValue,
-                            onValueChange = onPnrChange,
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            textStyle = TextStyle(
-                                fontFamily = FigtreeFontFamily,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 17.sp,
-                                letterSpacing = 1.4.sp,
-                                fontFeatureSettings = "tnum",
-                                color = TactilePaperPassTokens.InkPrimary
-                            ),
-                            modifier = Modifier.fillMaxWidth()
+                    }
+                }
+
+                // v2.4.0 rc3: official Button with the shapes() press morph + Layer-1 rage-tap lock.
+                Button(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                        onFetchClick()
+                    },
+                    enabled = isButtonEnabled,
+                    shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(12.dp)),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = TactilePaperPassTokens.ForestTop,
+                        contentColor = TactilePaperPassTokens.ForestAccent,
+                        disabledContainerColor = TactilePaperPassTokens.DisabledSlab,
+                        disabledContentColor = TactilePaperPassTokens.InkSecondary
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        when {
+                            isFetching -> {
+                                ContainedLoadingIndicator(
+                                    containerSize = 20.dp,
+                                    containerColor = TactilePaperPassTokens.ForestBadgeFill,
+                                    indicatorColor = TactilePaperPassTokens.ForestAccent
+                                )
+                            }
+                            hasLoadedSnapshot && isFinalConfirmed -> {
+                                Icon(
+                                    imageVector = Icons.Rounded.CheckCircle,
+                                    contentDescription = "Confirmed",
+                                    tint = TactilePaperPassTokens.InkSecondary,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                            isCooldownBlocked -> {
+                                Icon(
+                                    imageVector = Icons.Rounded.Schedule,
+                                    contentDescription = "Refresh Cooldown",
+                                    tint = TactilePaperPassTokens.InkSecondary,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                            hasLoadedSnapshot -> {
+                                Icon(
+                                    imageVector = Icons.Rounded.Sync,
+                                    contentDescription = "Refresh Live PNR",
+                                    tint = TactilePaperPassTokens.ForestAccent,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                            else -> {
+                                Icon(
+                                    imageVector = Icons.Rounded.Search,
+                                    contentDescription = "Fetch Live PNR",
+                                    tint = TactilePaperPassTokens.ForestAccent,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = when {
+                                isFetching -> "Fetching..."
+                                hasLoadedSnapshot && isFinalConfirmed -> "Final CNF"
+                                isCooldownBlocked -> "Wait ${cooldownRemainingSeconds}s"
+                                hasLoadedSnapshot -> "Refresh"
+                                else -> "Fetch PNR"
+                            },
+                            fontFamily = FigtreeFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = if (isButtonEnabled) TactilePaperPassTokens.OnForest else TactilePaperPassTokens.InkSecondary
                         )
                     }
                 }
             }
 
-            // v2.4.0 rc3: official Button with the shapes() press morph.
-            Button(
-                onClick = onFetchClick,
-                shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(12.dp)),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = TactilePaperPassTokens.ForestTop,
-                    contentColor = TactilePaperPassTokens.ForestAccent
-                ),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp)
-            ) {
+            // Network-only wait indicator (>= 400ms min visibility, hidden on cached/static state)
+            InFlightWavyProgressIndicator(
+                inFlight = isFetching,
+                color = TactilePaperPassTokens.SageConfirmedText,
+                trackColor = TactilePaperPassTokens.SageConfirmedBg,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp)
+            )
+
+            if (isCooldownBlocked) {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    if (isFetching) {
-                        ContainedLoadingIndicator(
-                            containerSize = 20.dp,
-                            containerColor = TactilePaperPassTokens.ForestBadgeFill,
-                            indicatorColor = TactilePaperPassTokens.ForestAccent
+                    Icon(
+                        imageVector = Icons.Rounded.Schedule,
+                        contentDescription = null,
+                        tint = TactilePaperPassTokens.SageConfirmedText,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "Updated just now · Next live check in ${cooldownRemainingSeconds}s",
+                        style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                        fontFamily = FigtreeFontFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TactilePaperPassTokens.SageConfirmedText
+                    )
+                }
+            }
+
+            // Zero-permission on-device companions: Paste IRCTC SMS or Import IRCTC ERS PDF
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(start = 14.dp, end = 14.dp, bottom = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AssistChip(
+                    onClick = onPasteSmsClick,
+                    enabled = !isControlsLocked && !isFetching,
+                    label = {
+                        Text(
+                            text = "Paste IRCTC SMS",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FigtreeFontFamily,
+                            fontWeight = FontWeight.Bold
                         )
-                    } else {
+                    },
+                    leadingIcon = {
                         Icon(
-                            imageVector = Icons.Rounded.Search,
-                            contentDescription = "Fetch Live PNR",
-                            tint = TactilePaperPassTokens.ForestAccent,
+                            imageVector = Icons.Rounded.ContentPaste,
+                            contentDescription = null,
                             modifier = Modifier.size(15.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(5.dp))
-                    Text(
-                        text = if (isFetching) "Fetching..." else "Fetch PNR",
-                        fontFamily = FigtreeFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
-                        color = TactilePaperPassTokens.OnForest
-                    )
-                }
+                )
+                AssistChip(
+                    onClick = onImportPdfClick,
+                    enabled = !isControlsLocked && !isFetching,
+                    label = {
+                        Text(
+                            text = "Import Ticket PDF",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FigtreeFontFamily,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Rounded.UploadFile,
+                            contentDescription = null,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                )
             }
         }
     }
@@ -1391,6 +2102,7 @@ fun PnrSearchLookupCard(
 // ============================================================================
 // 6. HERO COMPONENT: SKEUOMORPHIC PAPER BOARDING PASS
 // ============================================================================
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TactilePaperBoardingPass(
     pnrNumber: String,
@@ -1415,7 +2127,15 @@ fun TactilePaperBoardingPass(
     passengerCount: Int,
     passengers: List<PassengerTicketRow>,
     // v2.3.3: non-null for PERSONAL / ON_BEHALF tickets; replaces per-person share captions.
-    splitNatureCaption: String? = null
+    splitNatureCaption: String? = null,
+    showIrctcBillControls: Boolean = false,
+    selectedPaymentMode: String = "UPI",
+    includeInsurance: Boolean = true,
+    upiFeeChipLabel: String = "UPI",
+    cardFeeChipLabel: String = "Card",
+    insuranceChipLabel: String = "Insurance",
+    onSelectPaymentMode: (String) -> Unit = {},
+    onToggleInsurance: () -> Unit = {}
 ) {
     val ticketShape = remember { TactilePaperPerforatedShape(perforationRatio = 0.76f) }
     val isChartPrepared = chartStatus.lowercase(Locale.US).let {
@@ -1659,7 +2379,7 @@ fun TactilePaperBoardingPass(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Passengers on this PNR (${passengers.size})",
+                        text = "Passengers on this ticket (${passengers.size})",
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
@@ -1765,8 +2485,10 @@ fun TactilePaperBoardingPass(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        text = splitNatureCaption ?: "Per-Passenger Share: $perPersonShareDisplay",
-                                        style = MaterialTheme.typography.labelSmall,
+                                        text = splitNatureCaption
+                                            ?: pax.exactShareDisplay?.let { "Exact Share: $it" }
+                                            ?: "Share: $perPersonShareDisplay",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
                                         fontWeight = FontWeight.SemiBold,
                                         color = TactilePaperPassTokens.SageConfirmedText,
                                         maxLines = 2,
@@ -1852,7 +2574,7 @@ fun TactilePaperBoardingPass(
                 )
             }
 
-            // SECTION D: BOTTOM TICKET STUB (TOTAL ALL-INCLUSIVE FARE, PER-PASSENGER SHARE & BARCODE)
+            // SECTION D: BOTTOM TICKET STUB (TOTAL ALL-INCLUSIVE FARE, IRCTC BILL ENGINE & BARCODE)
             // v2.3.2: static fare data carries no progress bar; hierarchy comes from type + spacing.
             Column(
                 modifier = Modifier
@@ -1885,11 +2607,13 @@ fun TactilePaperBoardingPass(
                                 .height(26.dp)
                         )
                         Spacer(modifier = Modifier.height(4.dp))
-                        val formattedPnr = if (pnrNumber.length == 10) {
-                            "${pnrNumber.substring(0, 4)}-${pnrNumber.substring(4, 7)}-${pnrNumber.substring(7, 10)}"
-                        } else pnrNumber
+                        val formattedPnr = when {
+                            pnrNumber.length == 10 -> "${pnrNumber.substring(0, 4)}-${pnrNumber.substring(4, 7)}-${pnrNumber.substring(7, 10)}"
+                            pnrNumber.isNotBlank() -> pnrNumber
+                            else -> "Manual Entry"
+                        }
                         Text(
-                            text = "PNR $formattedPnr",
+                            text = if (pnrNumber.isNotBlank()) "PNR $formattedPnr" else formattedPnr,
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.Bold,
                             fontSize = 11.sp,
@@ -1919,7 +2643,7 @@ fun TactilePaperBoardingPass(
                         color = TactilePaperPassTokens.SageConfirmedBg
                     ) {
                         Text(
-                            text = splitNatureCaption ?: "$perPersonShareDisplay / each",
+                            text = splitNatureCaption ?: perPersonShareDisplay,
                             style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.ExtraBold,
@@ -1938,6 +2662,79 @@ fun TactilePaperBoardingPass(
                     fontSize = 11.sp,
                     color = TactilePaperPassTokens.InkSecondary
                 )
+
+                // Restored v1.8.5 Official IRCTC Dynamic Bill Engine (UPI default | Card | Base ₹0 + Insurance)
+                if (showIrctcBillControls) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val paymentModes = listOf(
+                            "UPI" to upiFeeChipLabel,
+                            "CARD" to cardFeeChipLabel,
+                            "NONE" to "Base ₹0"
+                        )
+                        paymentModes.forEach { (modeKey, modeLabel) ->
+                            val isModeSelected = selectedPaymentMode.equals(modeKey, ignoreCase = true)
+                            FilterChip(
+                                selected = isModeSelected,
+                                onClick = { onSelectPaymentMode(modeKey) },
+                                label = {
+                                    Text(
+                                        text = modeLabel,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                                        fontFamily = FigtreeFontFamily,
+                                        fontWeight = if (isModeSelected) FontWeight.ExtraBold else FontWeight.SemiBold
+                                    )
+                                },
+                                leadingIcon = if (isModeSelected) {
+                                    {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                } else null,
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = TactilePaperPassTokens.SageConfirmedBg,
+                                    selectedLabelColor = TactilePaperPassTokens.SageConfirmedText,
+                                    selectedLeadingIconColor = TactilePaperPassTokens.SageConfirmedText
+                                )
+                            )
+                        }
+                        FilterChip(
+                            selected = includeInsurance,
+                            onClick = onToggleInsurance,
+                            label = {
+                                Text(
+                                    text = insuranceChipLabel,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                                    fontFamily = FigtreeFontFamily,
+                                    fontWeight = if (includeInsurance) FontWeight.ExtraBold else FontWeight.SemiBold
+                                )
+                            },
+                            leadingIcon = if (includeInsurance) {
+                                {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Check,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            } else null,
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = TactilePaperPassTokens.SageConfirmedBg,
+                                selectedLabelColor = TactilePaperPassTokens.SageConfirmedText,
+                                selectedLeadingIconColor = TactilePaperPassTokens.SageConfirmedText
+                            )
+                        )
+                    }
+                }
             }
         }
     }

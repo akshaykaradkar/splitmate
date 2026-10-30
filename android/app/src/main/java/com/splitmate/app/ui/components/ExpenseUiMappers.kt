@@ -446,7 +446,7 @@ object ExpenseUiMappers {
             isFlight = isFlight,
             totalFormatted = formatIndianRupeesFromCents(expense.totalAmountCents),
             perPersonShare = if (b.splittingMembersCount > 1 && isEqualSplit(expense, splits)) b.perPersonHeadlineShare else "",
-            openKey = if (isFlight) "EXPENSE:${expense.expenseId}" else trainPnr
+            openKey = if (isFlight) "EXPENSE:${expense.expenseId}" else trainPnr.ifBlank { "EXPENSE:${expense.expenseId}" }
         )
     }
 

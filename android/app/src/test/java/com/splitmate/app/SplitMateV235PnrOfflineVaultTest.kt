@@ -3,12 +3,31 @@ package com.splitmate.app
 import com.splitmate.app.data.PnrNetworkRepository
 import com.splitmate.app.data.TicketDateTimeParser
 import com.splitmate.app.ui.ParsedTravelTicket
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.io.IOException
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
 class SplitMateV235PnrOfflineVaultTest {
+
+    @BeforeEach
+    fun setUp() {
+        PnrNetworkRepository.clearAllCaches(null)
+        PnrNetworkRepository.httpTransportOverride = null
+        PnrNetworkRepository.clockMsProvider = { System.currentTimeMillis() }
+        PnrNetworkRepository.bypassCrisNightBlackoutForTest = true
+    }
+
+    @AfterEach
+    fun tearDown() {
+        PnrNetworkRepository.httpTransportOverride = null
+        PnrNetworkRepository.clockMsProvider = { System.currentTimeMillis() }
+        PnrNetworkRepository.bypassCrisNightBlackoutForTest = false
+        PnrNetworkRepository.clearAllCaches(null)
+    }
 
     @Test
     fun `test TicketDateTimeParser formats`() {
@@ -130,40 +149,101 @@ class SplitMateV235PnrOfflineVaultTest {
             fallbackTicket = ParsedTravelTicket(
                 pnr = "2841957364",
                 trainOrFlightNo = "12925",
-                fromStation = "ORG",
-                toStation = "DST",
+                fromStation = "BDTS",
+                toStation = "CDG",
                 coachAndSeats = summaryWithRupeeComma,
                 bookingStatus = "WL"
             )
         )
         assertEquals(4, fallbackSnapshot.passengerCount)
         assertEquals(4, fallbackSnapshot.structuredPassengers.size)
+        assertFalse(fallbackSnapshot.isLiveVerified)
         assertEquals("BDTS", fallbackSnapshot.fromStation)
         assertEquals("CDG", fallbackSnapshot.toStation)
         assertEquals("BDTS (Mumbai Bandra Terminus)", fallbackSnapshot.fromStationName)
         assertEquals("CDG (Chandigarh)", fallbackSnapshot.toStationName)
+
+        // Placeholder ORG/DST must never fabricate route stations from a hardcoded train map
+        val placeholderFallback = PnrNetworkRepository.buildUnverifiedManualFallbackSnapshot(
+            cleanPnr = "2841957364",
+            fallbackTicket = ParsedTravelTicket(
+                pnr = "2841957364",
+                trainOrFlightNo = "12925",
+                fromStation = "ORG",
+                toStation = "DST",
+                coachAndSeats = summaryWithRupeeComma,
+                bookingStatus = "WL"
+            )
+        )
+        assertEquals("", placeholderFallback.fromStation)
+        assertEquals("", placeholderFallback.toStation)
     }
 
     @Test
-    fun `test PNR 8753634406 resolves to 12925 Paschim SF Express BDTS to CDG with 4 passengers`() = kotlinx.coroutines.runBlocking {
-        val snapshot = PnrNetworkRepository.fetchLivePnrStatus(
+    fun `test PNR 8753634406 resolves via live ConfirmTkt JSON and returns honest manual fallback when offline`() = kotlinx.coroutines.runBlocking {
+        PnrNetworkRepository.httpTransportOverride = PnrNetworkRepository.PnrHttpTransport { _ ->
+            throw IOException("Simulated offline network")
+        }
+        val offlineSnapshot = PnrNetworkRepository.fetchLivePnrStatus(
             pnr = "8753634406",
             fallbackTicket = ParsedTravelTicket(pnr = "8753634406", fromStation = "ORG", toStation = "DST"),
             forceManualRefresh = false,
             context = null
         )
+        assertFalse(offlineSnapshot.isLiveVerified, "Offline uncached PNR must never fabricate live verification")
+        assertEquals("", offlineSnapshot.fromStation)
+        assertEquals("", offlineSnapshot.toStation)
+
+        PnrNetworkRepository.clearAllCaches(null)
+        val confirmTktJson = """
+            {
+              "error": null,
+              "errorCode": 0,
+              "trainNumber": "12925",
+              "trainName": "PASCHIM EXPRESS",
+              "boardingStation": "BDTS",
+              "boardingStationName": "Mumbai Bandra Terminus",
+              "reservationUpto": "CDG",
+              "reservationUptoName": "Chandigarh",
+              "journeyClass": "3A",
+              "quota": "GN",
+              "departureTime": "11:30",
+              "arrivalTime": "15:23",
+              "duration": "27:53",
+              "doj": "15-11-2026",
+              "ticketFare": "7500",
+              "chartPrepared": false,
+              "cacheTime": "2026-10-30T12:00:00",
+              "passengerList": [
+                {"passengerSerialNumber": 1, "bookingStatus": "PQWL/14", "currentStatus": "PQWL/2", "confirmTktStatus": "Probable"},
+                {"passengerSerialNumber": 2, "bookingStatus": "PQWL/15", "currentStatus": "PQWL/3", "confirmTktStatus": "Probable"},
+                {"passengerSerialNumber": 3, "bookingStatus": "PQWL/16", "currentStatus": "PQWL/4", "confirmTktStatus": "Probable"},
+                {"passengerSerialNumber": 4, "bookingStatus": "PQWL/17", "currentStatus": "PQWL/5", "confirmTktStatus": "Probable"}
+              ]
+            }
+        """.trimIndent()
+        PnrNetworkRepository.httpTransportOverride = PnrNetworkRepository.PnrHttpTransport { _ ->
+            PnrNetworkRepository.PnrHttpResponse(statusCode = 200, body = confirmTktJson)
+        }
+
+        val snapshot = PnrNetworkRepository.fetchLivePnrStatus(
+            pnr = "8753634406",
+            fallbackTicket = ParsedTravelTicket(pnr = "8753634406", fromStation = "ORG", toStation = "DST"),
+            forceManualRefresh = true,
+            context = null
+        )
+        assertTrue(snapshot.isLiveVerified)
         assertEquals("8753634406", snapshot.pnr)
         assertEquals("12925", snapshot.trainNo)
-        assertTrue(snapshot.trainName.contains("Paschim SF Express", ignoreCase = true))
+        assertTrue(snapshot.trainName.contains("PASCHIM", ignoreCase = true))
         assertEquals("BDTS", snapshot.fromStation)
         assertEquals("CDG", snapshot.toStation)
-        assertEquals("BDTS (Mumbai Bandra Terminus)", snapshot.fromStationName)
-        assertEquals("CDG (Chandigarh)", snapshot.toStationName)
+        assertEquals(750_000L, snapshot.baseFarePaiseOverride)
         assertEquals(4, snapshot.passengerCount)
         assertEquals(4, snapshot.structuredPassengers.size)
         assertEquals("PQWL/14", snapshot.structuredPassengers[0].initialStatus)
-        assertEquals("PQWL/7", snapshot.structuredPassengers[0].currentStatus)
+        assertEquals("PQWL/2", snapshot.structuredPassengers[0].currentStatus)
         assertEquals("PQWL/17", snapshot.structuredPassengers[3].initialStatus)
-        assertEquals("PQWL/10", snapshot.structuredPassengers[3].currentStatus)
+        assertEquals("PQWL/5", snapshot.structuredPassengers[3].currentStatus)
     }
 }

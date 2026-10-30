@@ -838,38 +838,5 @@ private fun resolveFlightTicketByPnr(
     }
 
     val persistedSnap = PnrNetworkRepository.loadPersistedPnrSnapshot(context, normalized) ?: return null
-    return UniversalFlightTicketExtractor.UniversalFlightTicketResult(
-        pnr = normalized,
-        otaBookingId = "PNR-$normalized",
-        airlineCode = persistedSnap.trainNo.substringBefore(" "),
-        airlineName = persistedSnap.trainName,
-        flightNumber = persistedSnap.trainNo,
-        originIata = persistedSnap.fromStation,
-        originCity = persistedSnap.fromStationName,
-        originAirportName = persistedSnap.fromStationName,
-        destinationIata = persistedSnap.toStation,
-        destinationCity = persistedSnap.toStationName,
-        destinationAirportName = persistedSnap.toStationName,
-        travelDate = persistedSnap.departureTime.substringBefore("•").trim(),
-        bookingDate = "",
-        departureTime = persistedSnap.departureTime.substringAfter("•", persistedSnap.departureTime).trim(),
-        arrivalTime = persistedSnap.arrivalTime,
-        durationText = persistedSnap.durationText,
-        cabinClass = persistedSnap.travelClass.substringBefore("•").trim().ifBlank { "Economy" },
-        fareType = persistedSnap.quotaText,
-        cabinBaggage = "7 Kgs",
-        checkInBaggage = "15 Kgs",
-        passengers = persistedSnap.structuredPassengers.map { sp ->
-            UniversalFlightTicketExtractor.ExtractedFlightPassenger(
-                fullName = sp.passengerNumber,
-                seatNumber = sp.currentStatus.substringAfter("/", "-").trim(),
-                eTicketOrPnr = normalized
-            )
-        },
-        matchedGroupMembers = emptyList(),
-        totalFarePaise = persistedSnap.totalFareRupees.toLong() * 100L,
-        discountSavedPaise = 0L,
-        paymentMethod = "UPI",
-        extractionDurationMs = 0L
-    )
+    return PnrNetworkRepository.snapshotToFlightTicketResult(normalized, persistedSnap)
 }

@@ -1157,6 +1157,7 @@ class SplitMateViewModel(
     }
 
     fun clearLocalVault() {
+        com.splitmate.app.data.PnrNetworkRepository.clearAllCaches(appContext)
         _uiState.update {
             it.copy(
                 groups = emptyList(),
@@ -4274,6 +4275,23 @@ class SplitMateViewModel(
                 statusBannerMessage = "Rolled back \"${removed?.title ?: "Expense"}\""
             )
         }
+        com.splitmate.app.data.PnrNetworkRepository.invalidateReconstructedFlightCacheForExpense(expenseId)
+        val removedPnr = removedExpense?.let { exp ->
+            com.splitmate.app.data.PnrNetworkRepository.normalizePnrKey(
+                exp.travelPnr.ifBlank { extractTravelTicketFromTitle(exp.title)?.pnr.orEmpty() }
+            )
+        }.orEmpty()
+        if (removedPnr.isNotBlank()) {
+            val stillReferenced = _uiState.value.expenses.any { other ->
+                val otherPnr = com.splitmate.app.data.PnrNetworkRepository.normalizePnrKey(
+                    other.travelPnr.ifBlank { extractTravelTicketFromTitle(other.title)?.pnr.orEmpty() }
+                )
+                otherPnr.equals(removedPnr, ignoreCase = true)
+            }
+            if (!stillReferenced) {
+                com.splitmate.app.data.PnrNetworkRepository.evictPnrFromVault(appContext, removedPnr)
+            }
+        }
         viewModelScope.launch(ioDispatcher) {
             val d = dao
             if (d != null) {
@@ -4436,7 +4454,9 @@ class SplitMateViewModel(
         selectedMemberIds: List<String>? = null,
         newTotalCentsOverride: Long? = null,
         /** v2.3.5: new categoryRef; [KEEP_CATEGORY_REF] (default) leaves the stored one untouched. */
-        categoryRef: String? = KEEP_CATEGORY_REF
+        categoryRef: String? = KEEP_CATEGORY_REF,
+        /** Optional explicit PNR override (`null` = infer/preserve; `""` = explicitly clear PNR). */
+        explicitTravelPnr: String? = null
     ) {
         val state = _uiState.value
         val existing = state.expenses.find { it.expenseId == expenseId } ?: return
@@ -4447,10 +4467,15 @@ class SplitMateViewModel(
         }
         val cleanTitle = newTitle.trim().ifEmpty { existing.title }
         val inferred = inferStructuredExpenseMetadata(cleanTitle)
+        val resolvedTravelPnr = when {
+            explicitTravelPnr != null -> com.splitmate.app.data.PnrNetworkRepository.normalizePnrKey(explicitTravelPnr)
+            inferred.travelPnr.isNotBlank() -> inferred.travelPnr
+            else -> existing.travelPnr
+        }
 
         // Guard against editing an expense to collide with another expense's PNR in the same group
         // (labelled "PNR: XXXXXX" 6-10 alphanumeric Flight/Train PNR, or bare 10-digit Train PNR)
-        val newPnrDigits = inferred.travelPnr.takeIf { it.isNotBlank() }
+        val newPnrDigits = resolvedTravelPnr.takeIf { it.isNotBlank() }
         if (!newPnrDigits.isNullOrBlank()) {
             val pnrWordMatcher = Regex("""\b${Regex.escape(newPnrDigits)}\b""", RegexOption.IGNORE_CASE)
             val conflictingExpense = state.expenses.firstOrNull { other ->
@@ -4471,11 +4496,18 @@ class SplitMateViewModel(
 
         val existingSplits = state.splits.filter { it.expenseId == expenseId && it.finalOwedCents > 0L }
         val groupMembers = state.members.filter { it.groupId == existing.groupId }
+
+        val resolvedPayerId = newPayerId.ifBlank { existing.payerId }
+        // M-05 Conservation Guard: reject foreign group payerId so Group net balances always sum to 0!
+        if (groupMembers.isNotEmpty() && groupMembers.none { it.memberId == resolvedPayerId }) {
+            _uiState.update { it.copy(statusBannerMessage = "Selected payer does not belong to this group") }
+            return
+        }
+
         val splitMemberIds = selectedMemberIds?.filter { id -> groupMembers.any { it.memberId == id } }
             ?.ifEmpty { null }
             ?: existingSplits.map { it.memberId }.ifEmpty { groupMembers.map { it.memberId } }
 
-        val resolvedPayerId = newPayerId.ifBlank { existing.payerId }
         val currentUser = groupMembers.find { it.isCurrentUser }
         val chosenMembers = groupMembers.filter { splitMemberIds.contains(it.memberId) }.ifEmpty { groupMembers }
         val equalAllocations = SplitMateMathEngine.splitEquallyZeroDrift(
@@ -4501,21 +4533,62 @@ class SplitMateViewModel(
             return
         }
 
+        val resolvedCategory = when {
+            explicitTravelPnr != null && resolvedTravelPnr.isBlank() && inferred.expenseCategory == "OTHER" -> "OTHER"
+            inferred.expenseCategory != "OTHER" -> inferred.expenseCategory
+            resolvedTravelPnr.length == 6 -> "FLIGHT"
+            resolvedTravelPnr.length == 10 && resolvedTravelPnr.all { it.isDigit() } -> "TRAIN"
+            else -> existing.expenseCategory
+        }
+
         com.splitmate.app.data.CloudGroupSyncRepository.setGroupPendingCloudPush(null, existing.groupId, true)
         val updatedExpense = existing.copy(
             title = cleanTitle,
             payerId = resolvedPayerId,
             baseSubtotalCents = if (isItemized) existing.baseSubtotalCents else newTotalCents,
             totalAmountCents = if (isItemized) existing.totalAmountCents else newTotalCents,
-            expenseCategory = inferred.expenseCategory.takeIf { it != "OTHER" } ?: existing.expenseCategory,
-            travelPnr = inferred.travelPnr.ifBlank { existing.travelPnr },
-            providerName = inferred.providerName.ifBlank { existing.providerName },
+            expenseCategory = resolvedCategory,
+            travelPnr = resolvedTravelPnr,
+            providerName = if (explicitTravelPnr != null && resolvedTravelPnr.isBlank() && inferred.providerName.isBlank()) "" else inferred.providerName.ifBlank { existing.providerName },
             scheduledAtEpochMs = inferred.scheduledAtEpochMs ?: existing.scheduledAtEpochMs,
             syncStatus = if (dao != null || state.isOfflineMode) "PENDING" else "SYNCED",
             categoryRef = if (categoryRef == KEEP_CATEGORY_REF) existing.categoryRef else categoryRef?.takeIf { it.isNotBlank() }
         )
         if (categoryRef != KEEP_CATEGORY_REF) {
             com.splitmate.app.ui.category.CustomExpenseCategoryStore.ensurePublished(appContext, existing.groupId, categoryRef)
+        }
+
+        // D-01: Keep PnrNetworkRepository Vault synchronized with Room edits
+        com.splitmate.app.data.PnrNetworkRepository.invalidateReconstructedFlightCacheForExpense(expenseId)
+        val previousPnr = com.splitmate.app.data.PnrNetworkRepository.normalizePnrKey(existing.travelPnr)
+        if (previousPnr.isNotBlank() && !previousPnr.equals(resolvedTravelPnr, ignoreCase = true)) {
+            val otherRefs = state.expenses.any { other ->
+                other.expenseId != expenseId &&
+                    com.splitmate.app.data.PnrNetworkRepository.normalizePnrKey(other.travelPnr).equals(previousPnr, ignoreCase = true)
+            }
+            if (!otherRefs) {
+                com.splitmate.app.data.PnrNetworkRepository.evictPnrFromVault(appContext, previousPnr)
+            }
+        }
+        if (resolvedTravelPnr.length == 6) {
+            com.splitmate.app.data.PnrNetworkRepository.loadConfirmedFlightTicketResult(appContext, resolvedTravelPnr)?.let { cachedFlight ->
+                if (cachedFlight.totalFarePaise != updatedExpense.totalAmountCents) {
+                    com.splitmate.app.data.PnrNetworkRepository.saveConfirmedFlightTicketToVault(
+                        appContext,
+                        cachedFlight.copy(totalFarePaise = updatedExpense.totalAmountCents)
+                    )
+                }
+            }
+        } else if (resolvedTravelPnr.length == 10 && resolvedTravelPnr.all { it.isDigit() }) {
+            com.splitmate.app.data.PnrNetworkRepository.loadPersistedPnrSnapshot(appContext, resolvedTravelPnr)?.let { cachedTrain ->
+                val parsedTicket = extractTravelTicketFromTitle(cleanTitle)
+                val syncedTrain = cachedTrain.copy(
+                    fromStation = parsedTicket?.fromStation?.takeIf { it.isNotBlank() } ?: cachedTrain.fromStation,
+                    toStation = parsedTicket?.toStation?.takeIf { it.isNotBlank() } ?: cachedTrain.toStation,
+                    totalPayablePaiseOverride = updatedExpense.totalAmountCents
+                )
+                com.splitmate.app.data.PnrNetworkRepository.savePersistedPnrSnapshot(appContext, syncedTrain)
+            }
         }
 
         val updatedSplits = if (isItemized) allExistingSplits else equalAllocations.mapIndexed { idx, alloc ->

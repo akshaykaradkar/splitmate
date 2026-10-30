@@ -1467,30 +1467,56 @@ fun SplitMateMainDashboardScaffold(
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     isParsingFlightPdf = false
                     if (extracted != null && (extracted.isValidFlightTicket || extracted.totalFarePaise > 0L)) {
-                        val existingMatch = viewModel.findExistingExpenseByPnr(
-                            pnr = extracted.pnr,
-                            preferredGroupId = uiState.openedGroupDetailId ?: uiState.activeGroupId
-                        )
-                        if (existingMatch != null) {
-                            val (existingExp, matchedGroup) = existingMatch
-                            viewModel.selectActiveGroup(existingExp.groupId)
-                            if (uiState.openedGroupDetailId != null) {
-                                viewModel.openGroupDetail(existingExp.groupId)
+                        if (extracted.isTrainPdfTicket) {
+                            val trainSnapshot = extracted.toLivePnrStatusSnapshot()
+                            if (trainSnapshot.pnr.length == 10 && trainSnapshot.pnr.all { it.isDigit() }) {
+                                com.splitmate.app.data.PnrNetworkRepository.savePersistedPnrSnapshot(context, trainSnapshot)
                             }
-                            Toast.makeText(
-                                context,
-                                "Already added! PNR ${extracted.pnr} (${matchedGroup?.name ?: "Group"}) — showing earlier expense.",
-                                Toast.LENGTH_LONG
-                            ).show()
-                            val cachedEarlierFlight = com.splitmate.app.data.PnrNetworkRepository.loadConfirmedFlightTicketResult(context, extracted.pnr)
-                            activeFlightTicketResult = cachedEarlierFlight ?: extracted
+                            val existingTrainMatch = viewModel.findExistingExpenseByPnr(
+                                pnr = trainSnapshot.pnr,
+                                preferredGroupId = uiState.openedGroupDetailId ?: uiState.activeGroupId
+                            )
+                            if (existingTrainMatch != null) {
+                                val (existingExp, matchedGroup) = existingTrainMatch
+                                viewModel.selectActiveGroup(existingExp.groupId)
+                                if (uiState.openedGroupDetailId != null) {
+                                    viewModel.openGroupDetail(existingExp.groupId)
+                                }
+                                Toast.makeText(
+                                    context,
+                                    "Already added! Train PNR ${trainSnapshot.pnr} (${matchedGroup?.name ?: "Group"}) — showing earlier expense.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                            activeFlightTicketResult = null
+                            activeReviewPnr = trainSnapshot.pnr
+                            showPnrReviewScreen = true
                         } else {
-                            activeFlightTicketResult = extracted
+                            val existingMatch = viewModel.findExistingExpenseByPnr(
+                                pnr = extracted.pnr,
+                                preferredGroupId = uiState.openedGroupDetailId ?: uiState.activeGroupId
+                            )
+                            if (existingMatch != null) {
+                                val (existingExp, matchedGroup) = existingMatch
+                                viewModel.selectActiveGroup(existingExp.groupId)
+                                if (uiState.openedGroupDetailId != null) {
+                                    viewModel.openGroupDetail(existingExp.groupId)
+                                }
+                                Toast.makeText(
+                                    context,
+                                    "Already added! PNR ${extracted.pnr} (${matchedGroup?.name ?: "Group"}) — showing earlier expense.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                                val cachedEarlierFlight = com.splitmate.app.data.PnrNetworkRepository.loadConfirmedFlightTicketResult(context, extracted.pnr)
+                                activeFlightTicketResult = cachedEarlierFlight ?: extracted
+                            } else {
+                                activeFlightTicketResult = extracted
+                            }
                         }
                     } else {
                         Toast.makeText(
                             context,
-                            "Could not detect a valid Flight E-Ticket in this PDF.",
+                            "Could not detect a valid Flight or IRCTC Train E-Ticket in this PDF.",
                             Toast.LENGTH_SHORT
                         ).show()
                     }
@@ -2185,6 +2211,19 @@ fun LedgersDashboardScreen(
                     newPayerId = newPayerId,
                     selectedMemberIds = updatedSplitMemberIds,
                     categoryRef = newCategoryRef
+                )
+                editingExpense = null
+            },
+            onSaveExact = { newTitle, exactCents, newPayerId, updatedSplitMemberIds, newCategoryRef, explicitTravelPnr ->
+                viewModel.editExistingExpense(
+                    expenseId = exp.expenseId,
+                    newTitle = newTitle,
+                    newTotalRupees = exactCents / 100.0,
+                    newPayerId = newPayerId,
+                    selectedMemberIds = updatedSplitMemberIds,
+                    newTotalCentsOverride = exactCents,
+                    categoryRef = newCategoryRef,
+                    explicitTravelPnr = explicitTravelPnr
                 )
                 editingExpense = null
             },
@@ -3048,7 +3087,7 @@ fun LedgersDashboardScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         trainPnrExpensesInGroup.forEach { (exp, ticket) ->
-                                            val formattedFare = "₹${String.format(Locale.US, "%.0f", exp.totalAmountCents / 100.0)}"
+                                            val formattedFare = formatIndianRupeesFromCents(exp.totalAmountCents, trimZeroDecimals = true)
                                             Surface(
                                                 onClick = { onOpenPnrWithTicket(ticket.pnr) },
                                                 shape = SplitMateTheme.RadiusBadge,
@@ -8325,6 +8364,19 @@ fun AuditVaultScreen(
                     newPayerId = newPayerId,
                     selectedMemberIds = updatedSplitMemberIds,
                     categoryRef = newCategoryRef
+                )
+                editingExpenseEntity = null
+            },
+            onSaveExact = { newTitle, exactCents, newPayerId, updatedSplitMemberIds, newCategoryRef, explicitTravelPnr ->
+                viewModel.editExistingExpense(
+                    expenseId = exp.expenseId,
+                    newTitle = newTitle,
+                    newTotalRupees = exactCents / 100.0,
+                    newPayerId = newPayerId,
+                    selectedMemberIds = updatedSplitMemberIds,
+                    newTotalCentsOverride = exactCents,
+                    categoryRef = newCategoryRef,
+                    explicitTravelPnr = explicitTravelPnr
                 )
                 editingExpenseEntity = null
             },

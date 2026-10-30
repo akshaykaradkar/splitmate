@@ -167,6 +167,19 @@ fun TripHubExpenseManagementHost(
                 )
                 editingExpenseId = null
             },
+            onSaveExact = { newTitle, exactCents, newPayerId, updatedSplitMemberIds, newCategoryRef, explicitTravelPnr ->
+                viewModel.editExistingExpense(
+                    expenseId = exp.expenseId,
+                    newTitle = newTitle,
+                    newTotalRupees = exactCents / 100.0,
+                    newPayerId = newPayerId,
+                    selectedMemberIds = updatedSplitMemberIds,
+                    newTotalCentsOverride = exactCents,
+                    categoryRef = newCategoryRef,
+                    explicitTravelPnr = explicitTravelPnr
+                )
+                editingExpenseId = null
+            },
             lockAmountAndSplit = viewModel.isExpenseItemized(exp, uiState)
         )
     }

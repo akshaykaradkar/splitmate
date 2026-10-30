@@ -167,7 +167,14 @@ fun ActivityDetailSheet(
                 // v2.3.3: "Paid by X · Personal expense" / "Paid by X for Y · Y owes ₹Z"; SHARED unchanged.
                 text = breakdown.paidBySubtitle(
                     payerName = payer?.name ?: "You",
-                    sharedDetail = "${breakdown.perPersonHeadlineShare}/person"
+                    sharedDetail = if (currencySymbol == "₹") {
+                        com.splitmate.app.ExpenseSplitCopy.perPersonCaption(
+                            totalCents = expense.totalAmountCents,
+                            memberCount = breakdown.splittingMembersCount
+                        )
+                    } else {
+                        "${breakdown.perPersonHeadlineShare}/person"
+                    }
                 ),
                 fontFamily = SplitMateTheme.FontRounded,
                 fontSize = 12.sp,
@@ -188,15 +195,24 @@ fun ActivityDetailSheet(
             )
 
             if (parsedTravelTicket != null &&
-                (parsedTravelTicket.pnr.isNotBlank() || isFlightTicketExpense(expense.title, parsedTravelTicket))
+                (parsedTravelTicket.pnr.isNotBlank() ||
+                    expense.travelPnr.isNotBlank() ||
+                    expense.expenseCategory.equals("TRAIN", ignoreCase = true) ||
+                    expense.expenseCategory.equals("FLIGHT", ignoreCase = true) ||
+                    isFlightTicketExpense(expense.title, parsedTravelTicket))
             ) {
                 Spacer(modifier = Modifier.height(16.dp))
+                val resolvedPnrDisplay = parsedTravelTicket.pnr.ifBlank { expense.travelPnr.trim() }
                 Button(
                     onClick = {
                         val gId = expense.groupId
                         val isFlightSel = isFlightTicketExpense(expense.title, parsedTravelTicket) ||
                             expense.expenseCategory.equals("FLIGHT", ignoreCase = true)
-                        val pnrCode = if (isFlightSel) "EXPENSE:${expense.expenseId}" else parsedTravelTicket.pnr
+                        val pnrCode = if (isFlightSel) {
+                            "EXPENSE:${expense.expenseId}"
+                        } else {
+                            resolvedPnrDisplay.ifBlank { "EXPENSE:${expense.expenseId}" }
+                        }
                         onDismiss()
                         onOpenBoardingPass(gId, pnrCode)
                     },
@@ -220,8 +236,8 @@ fun ActivityDetailSheet(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (parsedTravelTicket.pnr.isNotBlank()) {
-                            "Open boarding pass (PNR ${parsedTravelTicket.pnr})"
+                        text = if (resolvedPnrDisplay.isNotBlank()) {
+                            "Open boarding pass (PNR $resolvedPnrDisplay)"
                         } else {
                             "Open boarding pass"
                         },

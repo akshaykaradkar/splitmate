@@ -127,14 +127,21 @@ object UniversalFlightTicketExtractor {
                 listOf(ExtractedFlightPassenger(fullName = "Passenger 1"))
             }
             val structuredPax = effectivePax.mapIndexed { idx, pax ->
-                val seatBadge = if (pax.seatNumber.isNotBlank() && pax.seatNumber != "-") "Seat ${pax.seatNumber}" else cabinClass.ifBlank { "Economy" }
+                val seatBadge = when {
+                    pax.seatNumber.isNotBlank() && pax.seatNumber != "-" ->
+                        if (isTrainPdfTicket) pax.seatNumber else "Seat ${pax.seatNumber}"
+                    cabinClass.isNotBlank() -> cabinClass
+                    else -> ""
+                }
+                val currentText = if (seatBadge.isNotBlank()) "CNF ($seatBadge)" else "CNF"
                 LivePnrPassenger(
                     passengerNumber = pax.fullName.ifBlank { "P${idx + 1}" },
                     initialStatus = "CNF",
-                    currentStatus = "CNF ($seatBadge)",
+                    currentStatus = currentText,
                     statusLabel = "Confirmed • ${pax.passengerType}"
                 )
             }
+            val modePrefix = if (isTrainPdfTicket) "Train" else "Flight"
             return LivePnrStatusSnapshot(
                 pnr = pnr.ifBlank { flightNumber.replace(" ", "") },
                 trainNo = flightNumber,
@@ -142,7 +149,7 @@ object UniversalFlightTicketExtractor {
                 fromStation = originIata,
                 toStation = destinationIata,
                 departureTime = listOf(travelDate, departureTime).filter { it.isNotBlank() }.joinToString(" "),
-                travelClass = cabinClass.ifBlank { "ECONOMY" },
+                travelClass = cabinClass,
                 totalFareRupees = (totalFarePaise / 100L).toInt(),
                 passengerCount = effectivePax.size,
                 bookingStatusBadge = "CNF",
@@ -153,16 +160,23 @@ object UniversalFlightTicketExtractor {
                 toStationName = if (destinationCity.isNotBlank()) "$destinationIata ($destinationCity)" else destinationIata,
                 arrivalTime = arrivalTime,
                 durationText = durationText,
-                quotaText = fareType.ifBlank { "REGULAR" },
+                quotaText = fareType,
                 coachPositionHint = listOfNotNull(
                     cabinBaggage.takeIf { it.isNotBlank() }?.let { "Cabin: $it" },
                     checkInBaggage.takeIf { it.isNotBlank() }?.let { "Check-in: $it" }
-                ).joinToString(" • ").ifBlank { "Flight $flightNumber" },
-                liveTrainLocationRadar = "Flight $flightNumber ($originIata -> $destinationIata)",
+                ).joinToString(" • ").ifBlank {
+                    listOf(modePrefix, flightNumber).filter { it.isNotBlank() }.joinToString(" ")
+                },
+                liveTrainLocationRadar = if (originIata.isNotBlank() && destinationIata.isNotBlank()) {
+                    "$modePrefix $flightNumber ($originIata -> $destinationIata)".trim()
+                } else "",
                 confirmationProbability = "100% Confirmed",
                 sourceLabel = "Universal E-Ticket Extractor (${extractionDurationMs}ms)",
                 isLiveVerified = true,
-                isManualEntry = false
+                isManualEntry = false,
+                baseFarePaiseOverride = if (totalFarePaise > 0L) totalFarePaise else null,
+                departureDate = travelDate,
+                fetchedAtEpochMs = System.currentTimeMillis()
             )
         }
 
@@ -945,7 +959,7 @@ object UniversalFlightTicketExtractor {
             if (fiveDigitNo.isNotBlank()) {
                 detectedFlights.add(fiveDigitNo)
             }
-            airlineName = trainNameMatch?.groupValues?.getOrNull(2)?.trim()?.takeIf { it.isNotBlank() } ?: "IRCTC Express"
+            airlineName = trainNameMatch?.groupValues?.getOrNull(2)?.trim().orEmpty()
         }
 
         val primaryFlightNumber = detectedFlights.firstOrNull().orEmpty()
@@ -967,16 +981,32 @@ object UniversalFlightTicketExtractor {
         val timingsResult = extractUniversalTimingsAndDates(flatText, compactText)
 
         // --- PASS 6: Cabin Class, Dynamic Fare Family & Baggage Allowance (O(1) upperCompact checks) ---
-        val cabinClass = when {
-            upperCompact.contains("BUSINESS CLASS") || upperCompact.contains("| BUSINESS") -> "Business"
-            upperCompact.contains("FIRST CLASS") -> "First Class"
-            upperCompact.contains("PREMIUM ECONOMY") -> "Premium Economy"
-            bcbpMatch?.groupValues?.get(8) == "J" || bcbpMatch?.groupValues?.get(8) == "C" -> "Business"
-            else -> "Economy"
+        val isTrainRecord = isIrctcTrainPdf || (pnr.length == 10 && pnr.all { it.isDigit() })
+        val cabinClass = if (isTrainRecord) {
+            Regex("""\bClass\s*[:\-]?\s*(1A|2A|3A|3E|CC|EC|EA|FC|SL|2S)\b""", RegexOption.IGNORE_CASE)
+                .find(compactText)?.groupValues?.getOrNull(1)?.uppercase(Locale.US)
+                ?: Regex("""\b(1A|2A|3A|3E|CC|EC|SL|2S)\b""").find(upperCompact)?.groupValues?.getOrNull(1)
+                ?: ""
+        } else {
+            when {
+                upperCompact.contains("BUSINESS CLASS") || upperCompact.contains("| BUSINESS") -> "Business"
+                upperCompact.contains("FIRST CLASS") -> "First Class"
+                upperCompact.contains("PREMIUM ECONOMY") -> "Premium Economy"
+                bcbpMatch?.groupValues?.get(8) == "J" || bcbpMatch?.groupValues?.get(8) == "C" -> "Business"
+                upperCompact.contains("ECONOMY") || airlineCode.isNotBlank() -> "Economy"
+                else -> ""
+            }
         }
-        val fareType = UniversalFareFamilyRegex.find(compactText)
-            ?.groupValues?.get(1)?.uppercase(Locale.US)?.replace(Regex("""\s+"""), " ")
-            ?: "REGULAR"
+        val fareType = if (isTrainRecord) {
+            Regex("""\bQuota\s*[:\-]?\s*(GN|GENERAL|TQ|TATKAL|PT|LD|SS|PQ|RL)\b""", RegexOption.IGNORE_CASE)
+                .find(compactText)?.groupValues?.getOrNull(1)?.uppercase(Locale.US)
+                ?.let { if (it == "GENERAL") "GN" else if (it == "TATKAL") "TQ" else it }
+                ?: ""
+        } else {
+            UniversalFareFamilyRegex.find(compactText)
+                ?.groupValues?.get(1)?.uppercase(Locale.US)?.replace(Regex("""\s+"""), " ")
+                ?: ""
+        }
 
         val cabinBaggage = CabinBaggageRegex.find(compactText)?.groupValues?.get(1)?.trim().orEmpty()
         val checkInBaggage = CheckInBaggageRegex.find(compactText)?.groupValues?.get(1)?.trim().orEmpty()

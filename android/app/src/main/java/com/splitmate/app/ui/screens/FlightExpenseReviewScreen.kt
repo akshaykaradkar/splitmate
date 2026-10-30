@@ -594,24 +594,32 @@ fun FlightExpenseReviewScreen(
         }
     }
 
-    // If this PNR was already logged in another group and user uploaded the same PDF from Home, switch to that group automatically
+    // One-time group alignment on initial open ONLY (M-05: never hijacks manual group switches!)
+    var didInitialFlightGroupAlign by remember(pnrCode) { mutableStateOf(false) }
     LaunchedEffect(pnrCode, existingFlightMatchAnyGroup?.first?.groupId) {
-        val matchedGroupId = existingFlightMatchAnyGroup?.first?.groupId
-        if (!matchedGroupId.isNullOrBlank() && activeGroup?.groupId != matchedGroupId) {
-            viewModel.selectActiveGroup(matchedGroupId)
-            if (uiState.openedGroupDetailId != null) {
-                viewModel.openGroupDetail(matchedGroupId)
+        if (!didInitialFlightGroupAlign) {
+            val matchedGroupId = existingFlightMatchAnyGroup?.first?.groupId
+            if (!matchedGroupId.isNullOrBlank()) {
+                didInitialFlightGroupAlign = true
+                if (activeGroup?.groupId != matchedGroupId) {
+                    viewModel.selectActiveGroup(matchedGroupId)
+                    if (uiState.openedGroupDetailId != null) {
+                        viewModel.openGroupDetail(matchedGroupId)
+                    }
+                }
             }
         }
     }
 
-    val existingFlightExpenseInGroup = remember(uiState.expenses, activeGroup?.groupId, pnrCode, existingFlightMatchAnyGroup) {
+    // M-05: Strictly scoped to activeGroup so switching to Group B creates a new expense in Group B
+    val existingFlightExpenseInGroup = remember(uiState.expenses, activeGroup?.groupId, pnrCode) {
         if (pnrCode.isBlank() || pnrCode == "FLIGHT") {
             null
         } else {
             uiState.expenses.firstOrNull { exp ->
-                exp.groupId == activeGroup?.groupId && exp.title.contains(pnrCode, ignoreCase = true)
-            } ?: existingFlightMatchAnyGroup?.first
+                exp.groupId == activeGroup?.groupId &&
+                    (exp.travelPnr.equals(pnrCode, ignoreCase = true) || exp.title.contains(pnrCode, ignoreCase = true))
+            }
         }
     }
 
@@ -627,11 +635,14 @@ fun FlightExpenseReviewScreen(
     }
 
     // Smart Payer Selection:
-    // 1. If editing an already-logged expense for this PNR, preserve its saved payerId.
-    // 2. Otherwise, if a flight passenger matches a group member (e.g., "Pratiksha"), AUTOMATICALLY assign that member as the Payer!
-    // 3. Only fall back to currentUser (Admin) if no passenger on the ticket matches any member in the group.
+    // 1. If editing an already-logged expense in THIS group, preserve its saved payerId (verified ∈ groupMembers).
+    // 2. Otherwise, if a flight passenger matches a group member, assign that member as the Payer.
+    // 3. Fall back to currentUser in activeGroup.
     var selectedPayerId by remember(activeGroup?.groupId, extractedTicket.pnr, groupMembers, existingFlightExpenseInGroup?.expenseId) {
-        val defaultPayerId = existingFlightExpenseInGroup?.payerId
+        val validExistingPayer = existingFlightExpenseInGroup?.payerId?.takeIf { id ->
+            groupMembers.any { it.memberId == id }
+        }
+        val defaultPayerId = validExistingPayer
             ?: autoMatchedPrimaryPayer?.memberId
             ?: groupMembers.firstOrNull { it.isCurrentUser }?.memberId
             ?: groupMembers.firstOrNull()?.memberId.orEmpty()
@@ -991,30 +1002,49 @@ fun FlightExpenseReviewScreen(
                             .navigationBarsPadding()
                             .padding(horizontal = 20.dp, vertical = 12.dp)
                     ) {
-                        val formattedButtonTotal = NumberFormat.getNumberInstance(Locale("en", "IN")).format(totalAirfareRupees)
+                        val canModifyFlightExpense = existingFlightExpenseInGroup == null ||
+                            viewModel.canCurrentUserModifyExpense(existingFlightExpenseInGroup, uiState)
+                        val exactButtonTotal = com.splitmate.app.ui.formatIndianRupeesFromCents(
+                            cents = totalAirfarePaise,
+                            trimZeroDecimals = true
+                        )
                         Button(
                             onClick = {
                                 if (selectedMemberIds.isEmpty() || totalAirfarePaise <= 0L || isCommittingBoardingPass) return@Button
+                                val capturedExistingExpense = existingFlightExpenseInGroup
+                                if (capturedExistingExpense != null && !viewModel.canCurrentUserModifyExpense(capturedExistingExpense)) {
+                                    return@Button
+                                }
+                                // C-04: Snapshot commit state immutably at t=0ms before tear/stamp animation
+                                val capturedTotalPaise = totalAirfarePaise
+                                val capturedTotalRupees = totalAirfareRupees
+                                val capturedPayerId = selectedPayerId
+                                val capturedMemberIds = selectedMemberIds.toList()
+
                                 isCommittingBoardingPass = true
                                 haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                 playBoardingPassTearAndStampOneShot(isAudioSensoryEnabled)
                                 val baseParsedTicket = extractedTicket.toParsedTravelTicket()
-                                val cabinLabel = extractedTicket.cabinClass.ifBlank { if (extractedTicket.isTrainPdfTicket) "3A" else "Economy" }
-                                val paxSeatSummary = baseParsedTicket.coachAndSeats.takeIf { it.isNotBlank() && !it.equals(cabinLabel, ignoreCase = true) }
+                                val cabinLabel = extractedTicket.cabinClass.ifBlank {
+                                    if (extractedTicket.isTrainPdfTicket) "" else "Economy"
+                                }
+                                val paxSeatSummary = baseParsedTicket.coachAndSeats.takeIf {
+                                    it.isNotBlank() && !it.equals(cabinLabel, ignoreCase = true)
+                                }
+                                val cabinPrefix = if (cabinLabel.isNotBlank()) "$cabinLabel · " else ""
                                 val enrichedSeats = if (!paxSeatSummary.isNullOrBlank()) {
-                                    "$cabinLabel · $paxSeatSummary"
+                                    "$cabinPrefix$paxSeatSummary"
                                 } else {
-                                    "$cabinLabel · ${selectedMemberIds.size} Pax"
+                                    "$cabinPrefix${capturedMemberIds.size} Pax"
                                 }
                                 val parsedTicket = baseParsedTicket.copy(coachAndSeats = enrichedSeats)
                                 val defaultVehicleWord = if (extractedTicket.isTrainPdfTicket) "Train" else "Flight"
+                                val routeSegment = if (extractedTicket.originIata.isNotBlank() && extractedTicket.destinationIata.isNotBlank()) {
+                                    " (${extractedTicket.originIata} - ${extractedTicket.destinationIata})"
+                                } else ""
                                 val formattedTitle = formatTravelExpenseTitle(
-                                    baseCategory = "${extractedTicket.airlineName.ifBlank { defaultVehicleWord }} ${extractedTicket.flightNumber} (${extractedTicket.originIata} - ${extractedTicket.destinationIata})",
+                                    baseCategory = "${extractedTicket.airlineName.ifBlank { defaultVehicleWord }} ${extractedTicket.flightNumber}".trim() + routeSegment,
                                     ticket = parsedTicket
-                                )
-                                PnrNetworkRepository.saveConfirmedFlightTicketToVault(
-                                    context = context,
-                                    result = extractedTicket.copy(totalFarePaise = totalAirfarePaise)
                                 )
                                 commitScope.launch {
                                     commitTearProgress.animateTo(1f, SplitMateMotion.fastEffects())
@@ -1025,26 +1055,38 @@ fun FlightExpenseReviewScreen(
                                         animationSpec = spring(dampingRatio = 0.52f, stiffness = 680f)
                                     )
                                     delay(95L)
-                                    if (existingFlightExpenseInGroup != null) {
+                                    if (extractedTicket.isValidFlightTicket) {
+                                        PnrNetworkRepository.saveConfirmedFlightTicketToVault(
+                                            context = context,
+                                            result = extractedTicket.copy(totalFarePaise = capturedTotalPaise)
+                                        )
+                                    }
+                                    if (capturedExistingExpense != null) {
                                         viewModel.editExistingExpense(
-                                            expenseId = existingFlightExpenseInGroup.expenseId,
+                                            expenseId = capturedExistingExpense.expenseId,
                                             newTitle = formattedTitle,
-                                            newTotalRupees = totalAirfarePaise / 100.0,
-                                            newPayerId = selectedPayerId,
-                                            selectedMemberIds = selectedMemberIds.toList()
+                                            newTotalRupees = capturedTotalPaise / 100.0,
+                                            newPayerId = capturedPayerId,
+                                            selectedMemberIds = capturedMemberIds,
+                                            newTotalCentsOverride = capturedTotalPaise,
+                                            categoryRef = "FLIGHT",
+                                            explicitTravelPnr = extractedTicket.pnr
                                         )
                                     } else {
                                         viewModel.commitQuickEqualExpense(
                                             title = formattedTitle,
-                                            totalAmountCents = totalAirfarePaise,
-                                            selectedMemberIds = selectedMemberIds.toList(),
-                                            payerMemberId = selectedPayerId
+                                            totalAmountCents = capturedTotalPaise,
+                                            selectedMemberIds = capturedMemberIds,
+                                            payerMemberId = capturedPayerId,
+                                            explicitCategory = "FLIGHT",
+                                            explicitTravelPnr = extractedTicket.pnr,
+                                            explicitProviderName = extractedTicket.airlineName
                                         )
                                     }
-                                    onConfirmAndAddToLedger(totalAirfareRupees)
+                                    onConfirmAndAddToLedger(capturedTotalRupees)
                                 }
                             },
-                            enabled = selectedMemberIds.isNotEmpty() && totalAirfarePaise > 0L && !isCommittingBoardingPass,
+                            enabled = selectedMemberIds.isNotEmpty() && totalAirfarePaise > 0L && canModifyFlightExpense && !isCommittingBoardingPass,
                             shapes = ButtonDefaults.shapes(),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = FlightPassTokens.CommitCtaContainer,
@@ -1059,8 +1101,7 @@ fun FlightExpenseReviewScreen(
                                 .shadow(12.dp, FlightPassTokens.RadiusPill, spotColor = FlightPassTokens.AviationNavy.copy(alpha = 0.2f)),
                             contentPadding = PaddingValues(horizontal = 20.dp)
                         ) {
-                            val isCommitEnabled = selectedMemberIds.isNotEmpty() && totalAirfarePaise > 0L && !isCommittingBoardingPass
-                            val exactButtonTotal = if (totalAirfarePaise % 100L == 0L) "₹$formattedButtonTotal" else formatFlightPaiseExact(totalAirfarePaise)
+                            val isCommitEnabled = selectedMemberIds.isNotEmpty() && totalAirfarePaise > 0L && canModifyFlightExpense && !isCommittingBoardingPass
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Center
@@ -1081,10 +1122,10 @@ fun FlightExpenseReviewScreen(
                                 }
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(
-                                    text = if (existingFlightExpenseInGroup != null) {
-                                        "Already added · update split ($exactButtonTotal)"
-                                    } else {
-                                        "Confirm $exactButtonTotal · Paid by $payerMemberName"
+                                    text = when {
+                                        !canModifyFlightExpense -> com.splitmate.app.ExpenseEditPermission.READ_ONLY_REASON
+                                        existingFlightExpenseInGroup != null -> "Already added · update split ($exactButtonTotal)"
+                                        else -> "Confirm $exactButtonTotal · Paid by $payerMemberName"
                                     },
                                     style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                                     fontSize = 15.5.sp,
@@ -1127,9 +1168,10 @@ fun FlightExpenseReviewScreen(
                         "Parsed in ${extractedTicket.extractionDurationMs}ms"
                     }
                     PnrSyncStatusBanner(
-                        pnr = pnrCode,
+                        pnr = extractedTicket.pnr,
                         subtitleText = subtitleInfo,
-                        rightStatusLabel = syncRightLabel
+                        rightStatusLabel = syncRightLabel,
+                        statusBadgeText = if (extractedTicket.isValidFlightTicket) "Confirmed" else ""
                     )
                 }
 
@@ -1143,29 +1185,42 @@ fun FlightExpenseReviewScreen(
 
                 // 3. INTERACTIVE 3D FOLDABLE BOARDING PASS WITH ANIMATED PAPER TEAR, WALLET POCKET & SOUND
                 item {
-                    val cabinSubtitle = listOf(
-                        extractedTicket.cabinClass.ifBlank { "Economy" },
-                        extractedTicket.fareType.ifBlank { "Confirmed" }
-                    ).joinToString(" · ")
-                    val routeSubtitle = if (extractedTicket.viaAirports.isNotEmpty()) {
-                        "Via ${extractedTicket.viaAirports.joinToString(", ")}"
-                    } else {
-                        "${extractedTicket.travelDate.ifBlank { "Confirmed" }} · Non-Stop"
+                    val cabinSubtitle = listOfNotNull(
+                        extractedTicket.cabinClass.takeIf { it.isNotBlank() },
+                        extractedTicket.fareType.takeIf { it.isNotBlank() }
+                    ).joinToString(" · ").ifBlank { "E-Ticket" }
+                    val routeSubtitle = when {
+                        extractedTicket.viaAirports.isNotEmpty() -> "Via ${extractedTicket.viaAirports.joinToString(", ")}"
+                        extractedTicket.travelDate.isNotBlank() -> extractedTicket.travelDate
+                        else -> ""
                     }
-                    val baggageSummary = buildString {
-                        val cab = extractedTicket.cabinBaggage.substringBefore("(").trim().ifBlank { "7 Kgs" }
-                        val chk = extractedTicket.checkInBaggage.substringBefore("(").trim().ifBlank { "15 Kgs" }
-                        append("Cabin $cab + Check-in $chk")
-                    }
-                    val firstPax = uiPassengers.firstOrNull()?.name ?: "PASSENGER"
-                    val bcbpSurname = firstPax.substringAfterLast(" ").uppercase(Locale.US)
-                    val bcbpGiven = firstPax.substringBeforeLast(" ", "").uppercase(Locale.US).ifBlank { "PAX" }
-                    val bcbpDisplay = "M1$bcbpSurname/$bcbpGiven E${extractedTicket.originIata}${extractedTicket.destinationIata}${extractedTicket.flightNumber} · PNR $pnrCode"
+                    // #10: Omit baggage pill when cabin/check-in baggage was not present on the ticket
+                    val cabClean = extractedTicket.cabinBaggage.substringBefore("(").trim()
+                    val chkClean = extractedTicket.checkInBaggage.substringBefore("(").trim()
+                    val baggageSummary = listOfNotNull(
+                        cabClean.takeIf { it.isNotBlank() }?.let { "Cabin $it" },
+                        chkClean.takeIf { it.isNotBlank() }?.let { "Check-in $it" }
+                    ).joinToString(" + ")
 
-                    // v2.3.3: UI-only split nature — solo / on-behalf tickets never show "× 1 Split".
+                    // #10: Encode only real extracted ticket metadata (never synthetic IATA "M1..." strings)
+                    val realRouteCaption = if (extractedTicket.originIata.isNotBlank() && extractedTicket.destinationIata.isNotBlank()) {
+                        "${extractedTicket.originIata}→${extractedTicket.destinationIata}"
+                    } else null
+                    val bcbpDisplay = listOfNotNull(
+                        uiPassengers.firstOrNull()?.name?.takeIf { it.isNotBlank() },
+                        realRouteCaption,
+                        extractedTicket.flightNumber.takeIf { it.isNotBlank() },
+                        extractedTicket.pnr.takeIf { it.isNotBlank() }?.let { "PNR $it" }
+                    ).joinToString(" · ")
+
+                    // v2.3.3 + M-03: Largest-Remainder-aware per-person caption
                     val reviewSplitNature = com.splitmate.app.ExpenseSplitClassifier.classifySelection(selectedPayerId, selectedMemberIds)
                     val perSeatDisplay = if (selectedMemberIds.isNotEmpty()) {
-                        val perMemberFloorPaise = totalAirfarePaise / selectedMemberIds.size.coerceAtLeast(1).toLong()
+                        val perMemberCaption = com.splitmate.app.ExpenseSplitCopy.perPersonCaption(
+                            totalCents = totalAirfarePaise,
+                            memberCount = selectedMemberIds.size.coerceAtLeast(1),
+                            unitSuffix = ""
+                        )
                         val soleMember = if (reviewSplitNature == com.splitmate.app.ExpenseSplitNature.SHARED) null
                             else groupMembers.find { it.memberId == selectedMemberIds.singleOrNull() }
                         com.splitmate.app.ExpenseSplitCopy.paidBySubtitle(
@@ -1176,30 +1231,31 @@ fun FlightExpenseReviewScreen(
                             beneficiaryShare = formatFlightPaiseExact(totalAirfarePaise),
                             sharedDetail = ""
                         ).takeIf { reviewSplitNature != com.splitmate.app.ExpenseSplitNature.SHARED }
-                            ?: "${formatFlightPaiseExact(perMemberFloorPaise)} × ${selectedMemberIds.size} Split · Paid by $payerMemberName"
+                            ?: "$perMemberCaption × ${selectedMemberIds.size} Split · Paid by $payerMemberName"
                     } else {
                         "Taxes & Airport Fees Included"
                     }
 
                     AnimatedLuxuryAirlineBoardingPass(
                         airlineName = extractedTicket.airlineName.ifBlank { "Flight" },
-                        flightNumber = extractedTicket.flightNumber.ifBlank { pnrCode },
+                        flightNumber = extractedTicket.flightNumber.ifBlank { extractedTicket.pnr },
                         aircraftType = cabinSubtitle,
-                        gateNumber = extractedTicket.travelDate.ifBlank { "Confirmed" },
-                        boardingTime = extractedTicket.departureTime.ifBlank { "On Time" },
+                        gateNumber = extractedTicket.travelDate,
+                        boardingTime = extractedTicket.departureTime,
                         originCode = extractedTicket.originIata.ifBlank { "—" },
-                        originAirportName = extractedTicket.originCity.ifBlank { extractedTicket.originAirportName.ifBlank { "Origin Airport" } },
-                        departureTime = extractedTicket.departureTime.ifBlank { "--:--" },
+                        originAirportName = extractedTicket.originCity.ifBlank { extractedTicket.originAirportName },
+                        departureTime = extractedTicket.departureTime,
                         destinationCode = extractedTicket.destinationIata.ifBlank { "—" },
-                        destinationAirportName = extractedTicket.destinationCity.ifBlank { extractedTicket.destinationAirportName.ifBlank { "Destination Airport" } },
-                        arrivalTime = extractedTicket.arrivalTime.ifBlank { "--:--" },
-                        flightDuration = extractedTicket.durationText.ifBlank { "Direct" },
+                        destinationAirportName = extractedTicket.destinationCity.ifBlank { extractedTicket.destinationAirportName },
+                        arrivalTime = extractedTicket.arrivalTime,
+                        flightDuration = extractedTicket.durationText,
                         flightDistance = routeSubtitle,
-                        pnrNumber = pnrCode,
+                        pnrNumber = extractedTicket.pnr,
                         passengers = uiPassengers,
                         totalAirfare = totalAirfareRupees,
+                        totalAirfarePaise = totalAirfarePaise,
                         perSeatSummaryText = perSeatDisplay,
-                        eTicketReference = extractedTicket.otaBookingId.ifBlank { "PNR-$pnrCode" },
+                        eTicketReference = extractedTicket.otaBookingId.ifBlank { extractedTicket.pnr.ifBlank { "E-Ticket" } },
                         baggageLabel = baggageSummary,
                         bcbpBarcodeText = bcbpDisplay,
                         isSensorySoundEnabled = isAudioSensoryEnabled
@@ -1724,7 +1780,8 @@ fun PaperSensoryFeedbackBanner(
 fun PnrSyncStatusBanner(
     pnr: String,
     subtitleText: String = "Saved for Offline Access",
-    rightStatusLabel: String = "Saved Offline"
+    rightStatusLabel: String = "Saved Offline",
+    statusBadgeText: String = ""
 ) {
     Surface(
         shape = FlightPassTokens.RadiusInner,
@@ -1764,7 +1821,7 @@ fun PnrSyncStatusBanner(
                     // v2.3.6: the PNR gets its own line and the status chips sit below it, so neither a
                     // long airline label nor the CNF chip can squeeze the PNR (it used to wrap letter by letter).
                     Text(
-                        text = "PNR $pnr",
+                        text = if (pnr.isNotBlank() && pnr != "FLIGHT") "PNR $pnr" else "Flight Ticket",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Black,
                         color = FlightPassTokens.PrimaryDark,
@@ -1784,20 +1841,22 @@ fun PnrSyncStatusBanner(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Surface(
-                            shape = FlightPassTokens.RadiusPill,
-                            color = FlightPassTokens.StatusGreenSurface,
-                            border = BorderStroke(0.5.dp, FlightPassTokens.StatusGreenBorder)
-                        ) {
-                            Text(
-                                text = "Confirmed CNF",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                softWrap = false,
-                                color = FlightPassTokens.StatusGreenText,
-                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
-                            )
+                        if (statusBadgeText.isNotBlank()) {
+                            Surface(
+                                shape = FlightPassTokens.RadiusPill,
+                                color = FlightPassTokens.StatusGreenSurface,
+                                border = BorderStroke(0.5.dp, FlightPassTokens.StatusGreenBorder)
+                            ) {
+                                Text(
+                                    text = statusBadgeText,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    color = FlightPassTokens.StatusGreenText,
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                )
+                            }
                         }
                         // Static status label (the old tap-to-cycle fake "processing" states were removed with the aurora effect)
                         Surface(
@@ -1857,9 +1916,10 @@ fun AnimatedLuxuryAirlineBoardingPass(
     pnrNumber: String,
     passengers: List<FlightPassenger>,
     totalAirfare: Long,
+    totalAirfarePaise: Long = totalAirfare * 100L,
     perSeatSummaryText: String = "Taxes & Fees Included",
     eTicketReference: String = "E-Ticket",
-    baggageLabel: String = "Cabin 7kg + Check-in 15kg",
+    baggageLabel: String = "",
     bcbpBarcodeText: String = "",
     isSensorySoundEnabled: Boolean = true
 ) {
@@ -2153,32 +2213,34 @@ fun AnimatedLuxuryAirlineBoardingPass(
                                 .weight(1f)
                                 .padding(horizontal = 6.dp)
                         ) {
-                            Surface(
-                                shape = FlightPassTokens.RadiusPill,
-                                color = FlightPassTokens.AppBackground,
-                                border = BorderStroke(1.dp, FlightPassTokens.BorderSubtle)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                            if (flightDuration.isNotBlank()) {
+                                Surface(
+                                    shape = FlightPassTokens.RadiusPill,
+                                    color = FlightPassTokens.AppBackground,
+                                    border = BorderStroke(1.dp, FlightPassTokens.BorderSubtle)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Timer,
-                                        contentDescription = null,
-                                        tint = FlightPassTokens.TextSecondary,
-                                        modifier = Modifier.size(12.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = flightDuration,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = FlightPassTokens.PrimaryDark
-                                    )
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Timer,
+                                            contentDescription = null,
+                                            tint = FlightPassTokens.TextSecondary,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = flightDuration,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = FlightPassTokens.PrimaryDark
+                                        )
+                                    }
                                 }
-                            }
 
-                            Spacer(modifier = Modifier.height(10.dp))
+                                Spacer(modifier = Modifier.height(10.dp))
+                            }
 
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -2279,18 +2341,20 @@ fun AnimatedLuxuryAirlineBoardingPass(
                             letterSpacing = 0.1.sp
                         )
 
-                        Surface(
-                            shape = FlightPassTokens.RadiusPill,
-                            color = FlightPassTokens.StatusGreenSurface,
-                            border = BorderStroke(0.5.dp, FlightPassTokens.StatusGreenBorder)
-                        ) {
-                            Text(
-                                text = baggageLabel,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = FlightPassTokens.StatusGreenText,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                            )
+                        if (baggageLabel.isNotBlank()) {
+                            Surface(
+                                shape = FlightPassTokens.RadiusPill,
+                                color = FlightPassTokens.StatusGreenSurface,
+                                border = BorderStroke(0.5.dp, FlightPassTokens.StatusGreenBorder)
+                            ) {
+                                Text(
+                                    text = baggageLabel,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = FlightPassTokens.StatusGreenText,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
                         }
                     }
 
@@ -2521,6 +2585,12 @@ fun AnimatedLuxuryAirlineBoardingPass(
             // 4. BOTTOM TICKET STUB: DETACHES WITH 3D TILT & TUCKS INTO STITCHED
             //    PERIWINKLE LEATHER WALLET POCKET SLEEVE (ZERO SCROLL JUMP!)
             // ------------------------------------------------------------------
+            val formattedTotalAirfare = remember(totalAirfarePaise) {
+                com.splitmate.app.ui.formatIndianRupeesFromCents(
+                    cents = totalAirfarePaise,
+                    trimZeroDecimals = true
+                )
+            }
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2567,7 +2637,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
                                 letterSpacing = 0.1.sp
                             )
                             EditorialFinancialTotalText(
-                                text = "₹${NumberFormat.getNumberInstance(Locale("en", "IN")).format(totalAirfare)}",
+                                text = formattedTotalAirfare,
                                 style = MaterialTheme.typography.displaySmall.copy(
                                     fontSize = 38.sp,
                                     letterSpacing = (-1.5).sp,
@@ -2686,7 +2756,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
                                 )
                             }
                             Text(
-                                text = "PNR $pnrNumber · ₹${NumberFormat.getNumberInstance(Locale("en", "IN")).format(totalAirfare)}",
+                                text = if (pnrNumber.isNotBlank()) "PNR $pnrNumber · $formattedTotalAirfare" else formattedTotalAirfare,
                                 style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,

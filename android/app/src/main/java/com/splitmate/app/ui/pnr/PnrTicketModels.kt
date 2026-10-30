@@ -14,15 +14,14 @@ data class ParsedTravelTicket(
     val departureDate: String = "",
     val departureTime: String = "",
     val coachAndSeats: String = "",
-    val bookingStatus: String = "CNF", // CNF, WL, RAC
-    val chartStatus: String = "Chart Prepared",
+    val bookingStatus: String = "", // CNF, WL, RAC, UNVERIFIED, or "" when unknown
+    val chartStatus: String = "",
     val liveTrainRadar: String = "",
     val fareRupees: String = "",
     val cleanTitle: String = "",
     /**
      * `true` only when [bookingStatus] came from a real source (an explicit `Status:` segment in a
-     * reviewed expense title, a live response, or the user's confirmed review). The `"CNF"` default
-     * of [bookingStatus] is a display placeholder and must never be trusted for an offline lock.
+     * reviewed expense title, a live response, or the user's confirmed review).
      */
     val statusExplicit: Boolean = false
 ) {
@@ -43,6 +42,10 @@ data class LivePnrPassenger(
     val statusLabel: String
 )
 
+private val AcIndianRailClasses = setOf(
+    "1A", "2A", "3A", "3E", "CC", "EC", "EA", "FC", "1AC", "2AC", "3AC", "HA", "HB"
+)
+
 data class LivePnrStatusSnapshot(
     val pnr: String,
     val trainNo: String,
@@ -61,38 +64,80 @@ data class LivePnrStatusSnapshot(
     val toStationName: String = "",
     val arrivalTime: String = "",
     val durationText: String = "",
-    val quotaText: String = "GN",
+    val quotaText: String = "",
     val coachPositionHint: String,
     val liveTrainLocationRadar: String,
     val confirmationProbability: String,
     val sourceLabel: String,
     val isLiveVerified: Boolean = true,
-    val isManualEntry: Boolean = false
+    val isManualEntry: Boolean = false,
+    val baseFarePaiseOverride: Long? = null,
+    val totalPayablePaiseOverride: Long? = null,
+    val irctcPaymentMode: String = "UPI",
+    val includeInsurance: Boolean? = null,
+    val departureDate: String = "",
+    val arrivalDate: String = "",
+    val platformNumber: String = "",
+    val fetchedAtEpochMs: Long = 0L,
+    val upstreamCacheEpochMs: Long = 0L,
+    val isInvalidOrFlushedPnr: Boolean = false,
+    val cooldownRemainingSeconds: Int = 0
 ) {
     /**
      * Official Indian Railways / IRCTC Tariff Classification:
-     * Non-AC classes ("SL", "2S", "II", "GN", "UR") are charged ₹10+18% GST (₹11.80 UPI) / ₹15+18% GST (₹17.70 Card).
-     * AC classes ("1A", "2A", "3A", "3E", "CC", "EC", "EA", "FC") are charged ₹20+18% GST (₹23.60 UPI) / ₹30+18% GST (₹35.40 Card).
+     * Explicit AC classes ("1A", "2A", "3A", "3E", "CC", "EC", "EA", "FC") are charged
+     * ₹20+18% GST (₹23.60 UPI) / ₹30+18% GST (₹35.40 Card).
+     * Non-AC classes ("SL", "2S", "II", "GN", "UR") or unspecified classes are never overcharged AC rates.
      */
     val isAcClass: Boolean
-        get() = travelClass.trim().uppercase() !in setOf("SL", "2S", "II", "GN", "UR")
+        get() = travelClass.trim().uppercase(Locale.US) in AcIndianRailClasses
 
     val effectivePassengerCount: Int
-        get() = passengerCount.coerceAtLeast(passengerStatuses.size.coerceAtLeast(1))
+        get() = passengerCount.coerceAtLeast(
+            structuredPassengers.size.coerceAtLeast(passengerStatuses.size.coerceAtLeast(1))
+        )
 
+    /**
+     * Pure integer-paise base ticket fare (before IRCTC convenience fee & optional travel insurance).
+     * Never overwritten by post-fee payable totals so re-entry never compounds +₹25.00.
+     */
     val baseFarePaise: Long
-        get() = totalFareRupees.toLong() * 100L
+        get() = baseFarePaiseOverride ?: (totalFareRupees.toLong() * 100L)
+
+    /**
+     * IRCTC does not levy optional travel insurance (₹0.45/pax) on purely waitlisted bookings at time of booking.
+     */
+    val isPurelyWaitlistedAtBooking: Boolean
+        get() {
+            if (structuredPassengers.isNotEmpty()) {
+                return structuredPassengers.all { pax ->
+                    val statusRef = pax.initialStatus.ifBlank { pax.currentStatus }.uppercase(Locale.US)
+                    statusRef.contains("WL") && !statusRef.contains("CNF") && !statusRef.contains("RAC")
+                }
+            }
+            if (passengerStatuses.isNotEmpty()) {
+                return passengerStatuses.all { entry ->
+                    val upper = entry.uppercase(Locale.US)
+                    upper.contains("WL") && !upper.contains("CNF") && !upper.contains("RAC")
+                }
+            }
+            val badgeUpper = bookingStatusBadge.uppercase(Locale.US)
+            return badgeUpper.contains("WL") && !badgeUpper.contains("CNF") && !badgeUpper.contains("RAC")
+        }
+
+    val defaultIncludeInsurance: Boolean
+        get() = includeInsurance ?: !isPurelyWaitlistedAtBooking
 
     // IRCTC Convenience Fee per PNR (inclusive of 18% GST)
     val irctcConvenienceFeeUpiPaise: Long
-        get() = if (totalFareRupees > 0) (if (isAcClass) 2360L else 1180L) else 0L
+        get() = if (baseFarePaise > 0L) (if (isAcClass) 2360L else 1180L) else 0L
 
     val irctcConvenienceFeeCardPaise: Long
-        get() = if (totalFareRupees > 0) (if (isAcClass) 3540L else 1770L) else 0L
+        get() = if (baseFarePaise > 0L) (if (isAcClass) 3540L else 1770L) else 0L
 
     // IRCTC Optional Travel Insurance Premium: ₹0.45 (45 paise) per passenger (inclusive of 18% GST)
     val travelInsurancePaise: Long
-        get() = if (totalFareRupees > 0) effectivePassengerCount * 45L else 0L
+        get() = if (baseFarePaise > 0L) effectivePassengerCount * 45L else 0L
 
     // Dynamic All-Inclusive IRCTC Totals in Paise
     val allInclusiveUpiPaise: Long
@@ -101,9 +146,16 @@ data class LivePnrStatusSnapshot(
     val allInclusiveCardPaise: Long
         get() = baseFarePaise + irctcConvenienceFeeCardPaise + travelInsurancePaise
 
-    fun computeCustomTotalPaise(paymentMode: String = "UPI", includeInsurance: Boolean = true): Long {
-        if (totalFareRupees <= 0) return 0L
-        val convFee = when (paymentMode.uppercase()) {
+    val effectivePayablePaise: Long
+        get() = totalPayablePaiseOverride
+            ?: computeCustomTotalPaise(paymentMode = irctcPaymentMode, includeInsurance = defaultIncludeInsurance)
+
+    fun computeCustomTotalPaise(
+        paymentMode: String = irctcPaymentMode,
+        includeInsurance: Boolean = defaultIncludeInsurance
+    ): Long {
+        if (baseFarePaise <= 0L) return 0L
+        val convFee = when (paymentMode.trim().uppercase(Locale.US)) {
             "UPI" -> irctcConvenienceFeeUpiPaise
             "CARD" -> irctcConvenienceFeeCardPaise
             else -> 0L
@@ -113,10 +165,82 @@ data class LivePnrStatusSnapshot(
     }
 
     fun formatPaiseAsDecimalRupees(paise: Long): String {
-        val whole = paise / 100L
-        val rem = abs(paise % 100L)
-        return if (rem == 0L) "$whole" else String.format(Locale.US, "%d.%02d", whole, rem)
+        val sign = if (paise < 0L) "-" else ""
+        val absPaise = abs(paise)
+        val whole = absPaise / 100L
+        val rem = absPaise % 100L
+        return if (rem == 0L) "$sign$whole" else String.format(Locale.US, "%s%d.%02d", sign, whole, rem)
     }
+}
+
+/**
+ * Maps Indian Railways class codes accurately without conflating AC 3-Tier (3A) with Non-AC Sleeper (SL).
+ */
+fun formatIndianRailClassLabel(rawClass: String): String {
+    val clean = rawClass.trim().uppercase(Locale.US)
+    return when (clean) {
+        "" -> ""
+        "1A", "1AC" -> "First AC (1A)"
+        "2A", "2AC" -> "AC 2-Tier (2A)"
+        "3A", "3AC" -> "AC 3-Tier (3A)"
+        "3E" -> "AC 3-Economy (3E)"
+        "CC" -> "AC Chair Car (CC)"
+        "EC" -> "Exec. Chair Car (EC)"
+        "EA" -> "Exec. Anubhuti (EA)"
+        "FC" -> "First Class (FC)"
+        "SL" -> "Sleeper (SL)"
+        "2S" -> "Second Sitting (2S)"
+        "II", "GN", "UR" -> "Unreserved ($clean)"
+        else -> rawClass.trim()
+    }
+}
+
+/**
+ * Sanitizes a user-typed decimal rupee input so it allows digits and at most ONE decimal point
+ * with at most 2 fractional paise digits (preventing "2450..50" silent parse failures).
+ */
+fun sanitizeDecimalRupeesInput(raw: String): String {
+    if (raw.isEmpty()) return ""
+    val sb = StringBuilder()
+    var seenDot = false
+    var decimals = 0
+    for (ch in raw) {
+        when {
+            ch.isDigit() -> {
+                if (!seenDot) {
+                    if (sb.length < 9) sb.append(ch)
+                } else if (decimals < 2) {
+                    sb.append(ch)
+                    decimals++
+                }
+            }
+            ch == '.' && !seenDot -> {
+                seenDot = true
+                if (sb.isEmpty()) sb.append('0')
+                sb.append('.')
+            }
+        }
+    }
+    return sb.toString()
+}
+
+/**
+ * Parses a decimal rupee string directly into exact Long integer paise without IEEE-754 Double drift.
+ * Returns null if blank, negative, or malformed (e.g., multiple decimal points).
+ */
+fun parseRupeesToPaiseExact(raw: String): Long? {
+    val cleaned = raw.replace("₹", "").replace(",", "").trim()
+    if (cleaned.isEmpty()) return null
+    if (cleaned.count { it == '.' } > 1) return null
+    val match = Regex("""^(\d{1,10})(?:\.(\d{0,2}))?$""").matchEntire(cleaned) ?: return null
+    val wholeRupees = match.groupValues[1].toLongOrNull() ?: return null
+    val fracRaw = match.groupValues[2]
+    val paisePart = when (fracRaw.length) {
+        0 -> 0L
+        1 -> (fracRaw[0] - '0').toLong() * 10L
+        else -> fracRaw.take(2).toLongOrNull() ?: return null
+    }
+    return wholeRupees * 100L + paisePart
 }
 
 private val OfflineStationNames = mapOf(
@@ -241,7 +365,7 @@ fun extractTravelTicketFromTitle(title: String): ParsedTravelTicket? {
     var toSt = ""
     var dep = ""
     var seats = ""
-    var status = "CNF"
+    var status = ""
     var isExplicitStatus = false
 
     segments.forEachIndexed { idx, seg ->
@@ -249,7 +373,7 @@ fun extractTravelTicketFromTitle(title: String): ParsedTravelTicket? {
             seg.startsWith("PNR:", ignoreCase = true) -> pnr = seg.substringAfter(":").trim()
             seg.startsWith("Status:", ignoreCase = true) -> {
                 status = seg.substringAfter(":").trim()
-                isExplicitStatus = true
+                isExplicitStatus = status.isNotBlank()
             }
             seg.startsWith("Dep:", ignoreCase = true) -> dep = seg.substringAfter(":").trim()
             seg.startsWith("Seats:", ignoreCase = true) || seg.startsWith("Coach", ignoreCase = true) ->
@@ -281,8 +405,16 @@ fun extractTravelTicketFromTitle(title: String): ParsedTravelTicket? {
             }
         }
     }
-    if (seats.contains("WL", ignoreCase = true) && status == "CNF") status = "WL"
-    if (seats.contains("RAC", ignoreCase = true) && status == "CNF") status = "RAC"
+    if (status.isBlank() || (!isExplicitStatus && status.equals("CNF", ignoreCase = true))) {
+        when {
+            seats.contains("WL", ignoreCase = true) -> status = "WL"
+            seats.contains("RAC", ignoreCase = true) -> status = "RAC"
+            seats.contains("CNF", ignoreCase = true) -> {
+                status = "CNF"
+                isExplicitStatus = true
+            }
+        }
+    }
 
     val hasFlightIndicator = (pnr.length == 6 && pnr.any { it.isLetter() }) ||
         Regex("""^(6E|AI|IX|QP|SG|UK|I5|9I|S5)[\s\-]?\d{2,4}$""", RegexOption.IGNORE_CASE).matches(trainNo) ||
@@ -324,6 +456,12 @@ fun extractTravelTicketFromTitle(title: String): ParsedTravelTicket? {
         dep
     }
 
+    val resolvedChartStatus = when {
+        status.contains("WL", ignoreCase = true) || status.contains("RAC", ignoreCase = true) -> "Chart Not Prepared"
+        status.contains("CNF", ignoreCase = true) && isExplicitStatus -> "Chart Prepared"
+        else -> ""
+    }
+
     val parsed = ParsedTravelTicket(
         pnr = pnr,
         trainOrFlightNo = trainNo,
@@ -334,7 +472,7 @@ fun extractTravelTicketFromTitle(title: String): ParsedTravelTicket? {
         departureTime = if (extractedDepDate.isNotBlank() && extractedDepTime.isNotBlank()) extractedDepTime else dep,
         coachAndSeats = seats,
         bookingStatus = status,
-        chartStatus = if (status.contains("WL", ignoreCase = true)) "Chart Not Prepared" else "Chart Prepared",
+        chartStatus = resolvedChartStatus,
         cleanTitle = normalizedCleanTitle,
         statusExplicit = isExplicitStatus
     )
