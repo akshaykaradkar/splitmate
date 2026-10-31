@@ -24,10 +24,14 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -36,15 +40,34 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountBalanceWallet
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ElectricBolt
 import androidx.compose.material.icons.rounded.HistoryEdu
+import androidx.compose.material.icons.rounded.SpaceDashboard
 import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationItemIconPosition
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ShortNavigationBar
+import androidx.compose.material3.ShortNavigationBarItem
+import androidx.compose.material3.ShortNavigationBarItemDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.WideNavigationRail
+import androidx.compose.material3.WideNavigationRailDefaults
+import androidx.compose.material3.WideNavigationRailItem
+import androidx.compose.material3.WideNavigationRailItemDefaults
+import androidx.compose.material3.WideNavigationRailValue
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldLayout
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.material3.rememberWideNavigationRailState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -62,6 +85,14 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -79,8 +110,12 @@ import com.splitmate.app.ui.DesignSystemBindings
 import com.splitmate.app.ui.SplitMateExpressiveTypography
 import com.splitmate.app.ui.SplitMateViewModel
 import com.splitmate.app.ui.components.ActiveTravelPassMode
+import com.splitmate.app.ui.components.ExpressivePlainTooltipBox
 import com.splitmate.app.ui.components.HorizontalFloatingToolbar
 import com.splitmate.app.ui.components.SplitMateMotion
+import com.splitmate.app.ui.components.SymbolIcon
+import com.splitmate.app.ui.feel.LocalMoneySnackbar
+import com.splitmate.app.ui.feel.MoneyScaffoldSnackbarHost
 import com.splitmate.app.ui.screens.FlightExpenseReviewScreen
 import com.splitmate.app.ui.screens.PnrExpenseReviewScreen
 import com.splitmate.app.ui.screens.QuickExpenseScreen
@@ -200,6 +235,7 @@ object SplitMateNavRouteLabels {
  * When adding a new top-level destination, wire it into `SplitMateMainDashboardScaffold` first,
  * then mirror it here as a [SplitMateRoute] to keep the two hosts in parity.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SplitMateAppNavHost(
     viewModel: SplitMateViewModel,
@@ -208,6 +244,7 @@ fun SplitMateAppNavHost(
     onOpenSettings: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val moneySnackbar = LocalMoneySnackbar.current
     val coroutineScope = rememberCoroutineScope()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -284,11 +321,8 @@ fun SplitMateAppNavHost(
                             if (uiState.openedGroupDetailId != null) {
                                 viewModel.openGroupDetail(existingExp.groupId)
                             }
-                            Toast.makeText(
-                                context,
-                                "Already added! PNR ${extracted.pnr} (${matchedGroup?.name ?: "Group"}) — showing earlier expense.",
-                                Toast.LENGTH_LONG
-                            ).show()
+                            val msg = "Already added! PNR ${extracted.pnr} (${matchedGroup?.name ?: "Group"}) — showing earlier expense."
+                            moneySnackbar?.say(msg) ?: Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                             PnrNetworkRepository.loadConfirmedFlightTicketResult(context, extracted.pnr) ?: extracted
                         } else {
                             extracted
@@ -301,11 +335,8 @@ fun SplitMateAppNavHost(
                             )
                         )
                     } else {
-                        Toast.makeText(
-                            context,
-                            "Could not detect a valid Flight E-Ticket in this PDF.",
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        val errMsg = "Could not detect a valid Flight E-Ticket in this PDF."
+                        moneySnackbar?.say(errMsg) ?: Toast.makeText(context, errMsg, Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -385,33 +416,222 @@ fun SplitMateAppNavHost(
         }
     }
 
-    Scaffold(
-        containerColor = SplitMateTheme.ScreenBg,
-        bottomBar = {
-            AnimatedVisibility(
-                visible = isGlobalTabVisible && selectedGlobalTab != null && !isBottomBarHiddenByScroll,
-                enter = slideInVertically(
-                    animationSpec = navBarSpring,
-                    initialOffsetY = { it }
-                ) + fadeIn(animationSpec = navBarFadeSpring),
-                exit = slideOutVertically(
-                    animationSpec = navBarSpring,
-                    targetOffsetY = { it }
-                ) + fadeOut(animationSpec = navBarFadeSpring)
-            ) {
-                if (selectedGlobalTab != null) {
-                    SplitMateGlobalBottomBar(
-                        selectedTab = selectedGlobalTab,
-                        onTabSelected = { tab -> switchGlobalTab(tab) },
-                        onQuickSplitClick = { navigateTo(SplitMateRoute.QuickExpense) }
-                    )
-                }
-            }
-        },
+    val activePalette = DesignSystemBindings.activePalette
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .nestedScroll(bottomBarNestedScroll)
-    ) { innerPadding ->
+    ) {
+        val isCompactWindow = maxWidth < 600.dp
+        val isExpandedWindow = maxWidth >= 840.dp
+        val railState = rememberWideNavigationRailState(
+            if (isExpandedWindow) WideNavigationRailValue.Expanded else WideNavigationRailValue.Collapsed
+        )
+        LaunchedEffect(isExpandedWindow) {
+            if (isExpandedWindow) railState.expand() else railState.collapse()
+        }
+        val railExpanded = railState.targetValue == WideNavigationRailValue.Expanded
+        val navSuiteType = when {
+            selectedGlobalTab == null -> NavigationSuiteType.None
+            isCompactWindow && !isGlobalTabVisible -> NavigationSuiteType.None
+            isCompactWindow -> NavigationSuiteType.ShortNavigationBarCompact
+            railExpanded -> NavigationSuiteType.WideNavigationRailExpanded
+            else -> NavigationSuiteType.WideNavigationRailCollapsed
+        }
+
+        NavigationSuiteScaffoldLayout(
+            navigationSuite = {
+                when (navSuiteType) {
+                    NavigationSuiteType.ShortNavigationBarCompact,
+                    NavigationSuiteType.ShortNavigationBarMedium -> {
+                        ShortNavigationBar(
+                            containerColor = activePalette.surfaceContainer,
+                            contentColor = SplitMateTheme.PrimaryDark,
+                            modifier = Modifier.testTag("NavHostAdaptiveShortNavigationBar")
+                        ) {
+                            GlobalNavTab.entries.forEach { tab ->
+                                val isSelected = selectedGlobalTab == tab
+                                ShortNavigationBarItem(
+                                    selected = isSelected,
+                                    onClick = { switchGlobalTab(tab) },
+                                    iconPosition = NavigationItemIconPosition.Top,
+                                    icon = {
+                                        SymbolIcon(
+                                            imageVector = tab.icon,
+                                            contentDescription = null,
+                                            filled = isSelected,
+                                            textWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            text = if (tab == GlobalNavTab.AUDIT) SplitMateNavRouteLabels.ACTIVITY else tab.label,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                            fontFamily = SplitMateTheme.FontRounded,
+                                            maxLines = 1,
+                                            modifier = Modifier.clearAndSetSemantics {}
+                                        )
+                                    },
+                                    colors = ShortNavigationBarItemDefaults.colors(
+                                        selectedIconColor = activePalette.onPrimaryContainer,
+                                        selectedTextColor = SplitMateTheme.PrimaryDark,
+                                        selectedIndicatorColor = SplitMateTheme.AccentSage,
+                                        unselectedIconColor = SplitMateTheme.TextSecondary,
+                                        unselectedTextColor = SplitMateTheme.TextSecondary
+                                    ),
+                                    modifier = Modifier.semantics { contentDescription = tab.label }
+                                )
+                            }
+                        }
+                    }
+                    NavigationSuiteType.WideNavigationRailCollapsed,
+                    NavigationSuiteType.WideNavigationRailExpanded -> {
+                        val toggleLabel = if (railExpanded) "Collapse rail" else "Expand rail"
+                        WideNavigationRail(
+                            state = railState,
+                            colors = WideNavigationRailDefaults.colors(
+                                containerColor = SplitMateTheme.ScreenBg,
+                                contentColor = SplitMateTheme.PrimaryDark
+                            ),
+                            header = {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    ExpressivePlainTooltipBox(
+                                        tooltipText = toggleLabel,
+                                        modifier = Modifier.padding(start = 12.dp)
+                                    ) {
+                                        IconButton(
+                                            onClick = { coroutineScope.launch { railState.toggle() } },
+                                            shapes = IconButtonDefaults.shapes(),
+                                            modifier = Modifier.semantics {
+                                                stateDescription = if (railExpanded) "Expanded" else "Collapsed"
+                                            }
+                                        ) {
+                                            SymbolIcon(
+                                                imageVector = Icons.Rounded.SpaceDashboard,
+                                                contentDescription = toggleLabel,
+                                                tint = SplitMateTheme.PrimaryDark
+                                            )
+                                        }
+                                    }
+                                    ExtendedFloatingActionButton(
+                                        onClick = { navigateTo(SplitMateRoute.QuickExpense) },
+                                        expanded = railExpanded,
+                                        icon = {
+                                            SymbolIcon(
+                                                imageVector = Icons.Rounded.Add,
+                                                contentDescription = null,
+                                                tint = activePalette.onPrimary
+                                            )
+                                        },
+                                        text = {
+                                            Text(
+                                                text = "Quick split",
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = activePalette.onPrimary,
+                                                fontFamily = SplitMateTheme.FontRounded,
+                                                modifier = Modifier.clearAndSetSemantics {}
+                                            )
+                                        },
+                                        containerColor = activePalette.primary,
+                                        contentColor = activePalette.onPrimary,
+                                        modifier = Modifier
+                                            .padding(start = 12.dp)
+                                            .semantics { contentDescription = SplitMateNavRouteLabels.QUICK_SPLIT }
+                                    )
+                                }
+                            },
+                            modifier = Modifier.testTag("NavHostAdaptiveNavigationRail")
+                        ) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            GlobalNavTab.entries.forEach { tab ->
+                                val isSelected = selectedGlobalTab == tab
+                                WideNavigationRailItem(
+                                    railExpanded = railExpanded,
+                                    selected = isSelected,
+                                    onClick = { switchGlobalTab(tab) },
+                                    icon = {
+                                        SymbolIcon(
+                                            imageVector = tab.icon,
+                                            contentDescription = null,
+                                            filled = isSelected,
+                                            textWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            text = if (tab == GlobalNavTab.AUDIT) SplitMateNavRouteLabels.ACTIVITY else tab.label,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            fontFamily = SplitMateTheme.FontRounded,
+                                            modifier = Modifier.clearAndSetSemantics {}
+                                        )
+                                    },
+                                    colors = WideNavigationRailItemDefaults.colors(
+                                        selectedIconColor = SplitMateTheme.SageText,
+                                        selectedTextColor = SplitMateTheme.PrimaryDark,
+                                        selectedIndicatorColor = SplitMateTheme.AccentSage,
+                                        unselectedIconColor = SplitMateTheme.TextSecondary,
+                                        unselectedTextColor = SplitMateTheme.TextSecondary
+                                    ),
+                                    modifier = Modifier.semantics { contentDescription = tab.label }
+                                )
+                            }
+                        }
+                    }
+                    else -> Unit
+                }
+            },
+            layoutType = navSuiteType
+        ) {
+            Scaffold(
+                containerColor = SplitMateTheme.ScreenBg,
+                snackbarHost = { MoneyScaffoldSnackbarHost() },
+                floatingActionButton = {
+                    AnimatedVisibility(
+                        visible = isCompactWindow && isGlobalTabVisible && selectedGlobalTab != null,
+                        enter = slideInVertically(
+                            animationSpec = navBarSpring,
+                            initialOffsetY = { it }
+                        ) + fadeIn(animationSpec = navBarFadeSpring),
+                        exit = slideOutVertically(
+                            animationSpec = navBarSpring,
+                            targetOffsetY = { it }
+                        ) + fadeOut(animationSpec = navBarFadeSpring)
+                    ) {
+                        ExtendedFloatingActionButton(
+                            onClick = { navigateTo(SplitMateRoute.QuickExpense) },
+                            expanded = !isBottomBarHiddenByScroll,
+                            icon = {
+                                SymbolIcon(
+                                    imageVector = Icons.Rounded.Add,
+                                    contentDescription = null,
+                                    tint = activePalette.onPrimary
+                                )
+                            },
+                            text = {
+                                Text(
+                                    text = "Quick split",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = activePalette.onPrimary,
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    modifier = Modifier.clearAndSetSemantics {}
+                                )
+                            },
+                            containerColor = activePalette.primary,
+                            contentColor = activePalette.onPrimary,
+                            elevation = FloatingActionButtonDefaults.elevation(
+                                defaultElevation = 6.dp,
+                                pressedElevation = 10.dp
+                            ),
+                            modifier = Modifier.semantics { contentDescription = SplitMateNavRouteLabels.QUICK_SPLIT }
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            ) { innerPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -614,6 +834,8 @@ fun SplitMateAppNavHost(
                 }
             }
         }
+            }
+        }
     }
 }
 
@@ -800,6 +1022,10 @@ fun ExpressiveFloatingToolbarItem(
         modifier = modifier
             .minimumInteractiveComponentSize()
             .defaultMinSize(minWidth = 64.dp, minHeight = 48.dp)
+            .semantics {
+                role = Role.Tab
+                selected = isSelected
+            }
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
@@ -819,7 +1045,8 @@ fun ExpressiveFloatingToolbarItem(
                     color = selectedContentColor,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 13.sp,
-                    fontFamily = SplitMateTheme.FontRounded
+                    fontFamily = SplitMateTheme.FontRounded,
+                    modifier = Modifier.clearAndSetSemantics {}
                 )
             }
         }

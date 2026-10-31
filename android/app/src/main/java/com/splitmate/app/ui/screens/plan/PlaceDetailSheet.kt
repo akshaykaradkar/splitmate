@@ -3,7 +3,6 @@
 package com.splitmate.app.ui.screens.plan
 
 import com.splitmate.app.ui.components.SymbolIcon
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -31,7 +30,6 @@ import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +39,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,7 +53,9 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.splitmate.app.data.guide.CommonsImage
 import com.splitmate.app.data.guide.Place
+import com.splitmate.app.ui.components.ExpressivePlainTooltipBox
 import com.splitmate.app.ui.components.GuideShapeTokens
+import kotlinx.coroutines.launch
 
 /**
  * Place detail sheet (audit 5.9: details live here, not on the card): photo with credit, name,
@@ -71,6 +72,7 @@ fun PlaceDetailSheet(
 ) {
     val currentOnDismiss by rememberUpdatedState(onDismiss)
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    val scope = rememberCoroutineScope()
     val name = PlanGuideFormat.sanitizeDisplay(place.name) ?: place.name
     val blurb = PlanGuideFormat.sanitizeDisplay(place.blurb)
     val isExcerpt = card?.isExcerpt ?: PlanGuideFormat.isExcerptHeuristic(place.blurb)
@@ -80,7 +82,6 @@ fun PlaceDetailSheet(
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
-        BackHandler { currentOnDismiss() }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -105,12 +106,21 @@ fun PlaceDetailSheet(
                         .weight(1f)
                         .semantics { heading() }
                 )
-                IconButton(onClick = { currentOnDismiss() }, shapes = IconButtonDefaults.shapes()) {
-                    SymbolIcon(
-                        imageVector = Icons.Rounded.Close,
-                        contentDescription = "Close",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                ExpressivePlainTooltipBox(tooltipText = "Close") {
+                    IconButton(
+                        onClick = {
+                            scope.launch { sheetState.hide() }.invokeOnCompletion {
+                                if (!sheetState.isVisible) currentOnDismiss()
+                            }
+                        },
+                        shapes = IconButtonDefaults.shapes()
+                    ) {
+                        SymbolIcon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = "Close",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
             PlaceLabelsRow(

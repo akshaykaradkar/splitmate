@@ -77,7 +77,6 @@ import com.splitmate.app.ui.components.LocalMotionScheme
 import com.splitmate.app.ui.components.MaterialShapes
 import com.splitmate.app.ui.components.RoundedPolygonShape
 import com.splitmate.app.ui.components.SettledCelebrationBadge
-import com.splitmate.app.ui.components.rememberAnimatedSegmentedIslandItemShape
 import com.splitmate.app.ui.formatIndianRupeesFromCents
 
 /*
@@ -329,39 +328,45 @@ fun MoneyCheckSheet(
 
             if (!report.passed) {
                 val fixable = report.issues.filter { it.expenseId != null }
-                fixable.forEachIndexed { idx, issue ->
-                    val shape = rememberAnimatedSegmentedIslandItemShape(
-                        index = idx, totalCount = fixable.size, outerCorner = 16.dp, innerCorner = 4.dp
-                    )
-                    Surface(
-                        shape = shape,
-                        color = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(role = Role.Button) { issue.expenseId?.let(onOpenExpense) }
+                if (fixable.isNotEmpty()) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(androidx.compose.material3.ListItemDefaults.SegmentedGap)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp).defaultMinSize(minHeight = 40.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
+                        fixable.forEachIndexed { idx, issue ->
+                            androidx.compose.material3.SegmentedListItem(
+                                onClick = { issue.expenseId?.let(onOpenExpense) },
+                                shapes = androidx.compose.material3.ListItemDefaults.segmentedShapes(
+                                    index = idx,
+                                    count = fixable.size
+                                ),
+                                colors = androidx.compose.material3.ListItemDefaults.segmentedColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                                    supportingContentColor = MaterialTheme.colorScheme.onErrorContainer,
+                                    trailingContentColor = MaterialTheme.colorScheme.onErrorContainer
+                                ),
+                                supportingContent = {
+                                    Text(
+                                        text = MoneyCheckCopy.issueLine(issue),
+                                        style = MaterialTheme.typography.bodySmall.merge(tnum)
+                                    )
+                                },
+                                trailingContent = {
+                                    Icon(imageVector = Icons.Rounded.ChevronRight, contentDescription = null)
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
                                 Text(
                                     text = issue.expenseId?.let(titleOf) ?: issue.title,
                                     style = MaterialTheme.typography.titleSmall,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
-                                Text(
-                                    text = MoneyCheckCopy.issueLine(issue),
-                                    style = MaterialTheme.typography.bodySmall.merge(tnum)
-                                )
                             }
-                            Icon(imageVector = Icons.Rounded.ChevronRight, contentDescription = null)
                         }
                     }
+                    Spacer(modifier = Modifier.height(14.dp))
                 }
-                if (fixable.isNotEmpty()) Spacer(modifier = Modifier.height(14.dp))
             }
 
             CheckList(rows = main)
@@ -379,9 +384,7 @@ fun MoneyCheckSheet(
                 enter = expandVertically(motion.defaultSpatialSpec()) + fadeIn(motion.defaultEffectsSpec()),
                 exit = shrinkVertically(motion.fastSpatialSpec()) + fadeOut(motion.fastEffectsSpec())
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    CheckList(rows = details)
-                }
+                CheckList(rows = details)
             }
             Spacer(modifier = Modifier.height(12.dp))
             SyncFooter(sync)
@@ -389,35 +392,40 @@ fun MoneyCheckSheet(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun ColumnScope.CheckList(rows: List<CheckRow>) {
-    rows.forEachIndexed { idx, row ->
-        val shape = rememberAnimatedSegmentedIslandItemShape(
-            index = idx, totalCount = rows.size, outerCorner = 16.dp, innerCorner = 4.dp
-        )
-        Surface(
-            shape = shape,
-            color = MaterialTheme.colorScheme.surfaceContainerLowest,
-            modifier = Modifier
-                .fillMaxWidth()
-                .semantics(mergeDescendants = true) {
-                    contentDescription = "${row.title}. ${if (row.passed) "Passed" else "Needs a look"}. ${row.detail}"
-                }
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+private fun CheckList(rows: List<CheckRow>) {
+    Column(verticalArrangement = Arrangement.spacedBy(androidx.compose.material3.ListItemDefaults.SegmentedGap)) {
+        rows.forEachIndexed { idx, row ->
+            Surface(
+                shape = androidx.compose.material3.ListItemDefaults.segmentedShapes(index = idx, count = rows.size).shape,
+                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics(mergeDescendants = true) {
+                        contentDescription = "${row.title}. ${if (row.passed) "Passed" else "Needs a look"}. ${row.detail}"
+                    }
             ) {
-                MoneyCheckGlyph(passed = row.passed, size = 28.dp)
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = row.title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
-                    Text(
-                        text = row.detail,
-                        style = MaterialTheme.typography.bodySmall.merge(tnum),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                androidx.compose.material3.ListItem(
+                    colors = androidx.compose.material3.ListItemDefaults.colors(
+                        containerColor = androidx.compose.ui.graphics.Color.Transparent
+                    ),
+                    leadingContent = { MoneyCheckGlyph(passed = row.passed, size = 28.dp) },
+                    headlineContent = {
+                        Text(
+                            text = row.title,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    },
+                    supportingContent = {
+                        Text(
+                            text = row.detail,
+                            style = MaterialTheme.typography.bodySmall.merge(tnum),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                )
             }
         }
     }

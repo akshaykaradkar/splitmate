@@ -45,14 +45,12 @@ import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -79,6 +77,7 @@ import com.splitmate.app.data.guide.LoopRoute
 import com.splitmate.app.data.guide.Place
 import com.splitmate.app.data.guide.StayPin
 import com.splitmate.app.data.guide.nav.TravelMode
+import com.splitmate.app.ui.components.ExpressivePlainTooltipBox
 import com.splitmate.app.ui.components.LocalMotionScheme
 import java.util.Locale
 import kotlin.math.round
@@ -339,6 +338,7 @@ private fun LoopTotals(
                     selected = loop.travelMode == TravelMode.DRIVING,
                     onClick = { actions.setLoopTravelMode(TravelMode.DRIVING) },
                     label = { ChipText("Drive") },
+                    shapes = FilterChipDefaults.shapes(),
                     leadingIcon = {
                         SymbolIcon(
                             imageVector = Icons.Rounded.DirectionsCar,
@@ -358,6 +358,7 @@ private fun LoopTotals(
                     selected = loop.travelMode == TravelMode.WALKING,
                     onClick = { actions.setLoopTravelMode(TravelMode.WALKING) },
                     label = { ChipText("Walk") },
+                    shapes = FilterChipDefaults.shapes(),
                     leadingIcon = {
                         SymbolIcon(
                             imageVector = Icons.AutoMirrored.Rounded.DirectionsWalk,
@@ -633,45 +634,51 @@ private fun LoopStopCard(
                         horizontalArrangement = Arrangement.End
                     ) {
                         if (onMoveUp != null) {
-                            IconButton(
-                                onClick = onMoveUp,
-                                shapes = IconButtonDefaults.shapes(),
-                                modifier = Modifier.semantics { contentDescription = "Move $name earlier in loop" }
-                            ) {
-                                SymbolIcon(
-                                    imageVector = Icons.Rounded.ArrowUpward,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(18.dp)
-                                )
+                            ExpressivePlainTooltipBox(tooltipText = "Move $name earlier in loop") {
+                                IconButton(
+                                    onClick = onMoveUp,
+                                    shapes = IconButtonDefaults.shapes(),
+                                    modifier = Modifier.semantics { contentDescription = "Move $name earlier in loop" }
+                                ) {
+                                    SymbolIcon(
+                                        imageVector = Icons.Rounded.ArrowUpward,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
                         }
                         if (onMoveDown != null) {
-                            IconButton(
-                                onClick = onMoveDown,
-                                shapes = IconButtonDefaults.shapes(),
-                                modifier = Modifier.semantics { contentDescription = "Move $name later in loop" }
-                            ) {
-                                SymbolIcon(
-                                    imageVector = Icons.Rounded.ArrowDownward,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(18.dp)
-                                )
+                            ExpressivePlainTooltipBox(tooltipText = "Move $name later in loop") {
+                                IconButton(
+                                    onClick = onMoveDown,
+                                    shapes = IconButtonDefaults.shapes(),
+                                    modifier = Modifier.semantics { contentDescription = "Move $name later in loop" }
+                                ) {
+                                    SymbolIcon(
+                                        imageVector = Icons.Rounded.ArrowDownward,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
                         }
                         if (onLogExpense != null) {
-                            IconButton(
-                                onClick = onLogExpense,
-                                shapes = IconButtonDefaults.shapes(),
-                                modifier = Modifier.semantics { contentDescription = "Log expense at $name" }
-                            ) {
-                                SymbolIcon(
-                                    imageVector = Icons.AutoMirrored.Rounded.ReceiptLong,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
+                            ExpressivePlainTooltipBox(tooltipText = "Log expense at $name") {
+                                IconButton(
+                                    onClick = onLogExpense,
+                                    shapes = IconButtonDefaults.shapes(),
+                                    modifier = Modifier.semantics { contentDescription = "Log expense at $name" }
+                                ) {
+                                    SymbolIcon(
+                                        imageVector = Icons.AutoMirrored.Rounded.ReceiptLong,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
                         }
                         moveTo?.invoke()

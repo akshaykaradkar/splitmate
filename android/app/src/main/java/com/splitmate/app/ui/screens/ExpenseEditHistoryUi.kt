@@ -191,20 +191,43 @@ fun ExpenseEditHistorySection(
                 }
                 if (expanded) {
                     val visible = if (showAll) changes else changes.take(5)
-                    visible.forEach { change ->
-                        Column(Modifier.fillMaxWidth().padding(start = 30.dp)) {
-                            Text(
-                                text = "${ExpenseHistoryPresentation.whenLabel(change.atEpochMs)} · " +
-                                    ExpenseHistoryPresentation.whoLabel(change.byMemberId, memberNames) +
-                                    when {
-                                        change.isRevert -> " · changed back"
-                                        change.isConcurrent -> " · 2 edits at the same time, kept this one"
-                                        else -> ""
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 18.dp),
+                        verticalArrangement = Arrangement.spacedBy(androidx.compose.material3.ListItemDefaults.SegmentedGap)
+                    ) {
+                        visible.forEachIndexed { idx, change ->
+                            Surface(
+                                shape = androidx.compose.material3.ListItemDefaults.segmentedShapes(
+                                    index = idx,
+                                    count = visible.size
+                                ).shape,
+                                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                androidx.compose.material3.ListItem(
+                                    colors = androidx.compose.material3.ListItemDefaults.colors(
+                                        containerColor = androidx.compose.ui.graphics.Color.Transparent
+                                    ),
+                                    overlineContent = {
+                                        Text(
+                                            text = "${ExpenseHistoryPresentation.whenLabel(change.atEpochMs)} · " +
+                                                ExpenseHistoryPresentation.whoLabel(change.byMemberId, memberNames) +
+                                                when {
+                                                    change.isRevert -> " · changed back"
+                                                    change.isConcurrent -> " · 2 edits at the same time, kept this one"
+                                                    else -> ""
+                                                },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            ChangeAmountLine(change, amountStyle)
+                                    headlineContent = {
+                                        ChangeAmountLine(change, amountStyle)
+                                    }
+                                )
+                            }
                         }
                     }
                     if (!showAll && changes.size > 5) {

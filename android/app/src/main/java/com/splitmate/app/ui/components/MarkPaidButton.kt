@@ -48,7 +48,7 @@ fun MarkPaidButton(
             onClick = onClick,
             shapes = ButtonDefaults.shapes(),
             colors = ButtonDefaults.buttonColors(containerColor = containerColor, contentColor = contentColor),
-            contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+            contentPadding = ButtonDefaults.contentPaddingFor(ButtonDefaults.MinHeight),
             modifier = (if (fillWidth) Modifier.weight(1f) else Modifier).heightIn(min = 40.dp)
         ) {
             Icon(imageVector = Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
@@ -56,16 +56,18 @@ fun MarkPaidButton(
             Text(text = "Mark paid", style = SplitMateExpressiveTypography.labelLargeEmphasized, maxLines = 1)
         }
         if (onRemind != null) {
-            FilledTonalIconButton(
-                onClick = onRemind,
-                shapes = IconButtonDefaults.shapes(),
-                // Sage tonal pair: the default secondaryContainer is peach, which means "owes" here.
-                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            ) {
-                Icon(imageVector = Icons.AutoMirrored.Rounded.Chat, contentDescription = "Remind on WhatsApp")
+            ExpressivePlainTooltipBox(tooltipText = "Remind on WhatsApp") {
+                FilledTonalIconButton(
+                    onClick = onRemind,
+                    shapes = IconButtonDefaults.shapes(),
+                    // Sage tonal pair: the default secondaryContainer is peach, which means "owes" here.
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                ) {
+                    Icon(imageVector = Icons.AutoMirrored.Rounded.Chat, contentDescription = "Remind on WhatsApp")
+                }
             }
         }
     }

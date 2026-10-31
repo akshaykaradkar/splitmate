@@ -19,10 +19,14 @@ import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -267,32 +271,37 @@ fun TripLifecycleCard(
 
         TripLifecycleResolver.State.ACTIVE -> {
             if (TripLifecycleResolver.canToggle(isOrganizer) && stats.totalSpentCents > 0L) {
-                // v2.4.0 rc3: the official M3 assist chip, so it reads as an action (the grey pill
-                // looked disabled). Flag icon in primary, label in onSurface.
-                androidx.compose.material3.AssistChip(
+                // v2.4.0 rc21: migrated from androidx.compose.material3.AssistChip( to Expressive
+                // OutlinedButton so standalone organizer actions share ButtonDefaults.shapes() press morph.
+                OutlinedButton(
                     onClick = { confirmWrapUp = true },
-                    label = {
-                        Text(
-                            "Trip over? Wrap it up",
-                            fontFamily = FigtreeFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(Icons.Rounded.Flag, contentDescription = null, modifier = Modifier.size(16.dp))
-                    },
-                    shape = RoundedCornerShape(50),
-                    colors = androidx.compose.material3.AssistChipDefaults.assistChipColors(
+                    shapes = ButtonDefaults.shapes(),
+                    colors = ButtonDefaults.outlinedButtonColors(
                         containerColor = palette.surfaceContainerLowest,
-                        labelColor = palette.onSurface,
-                        leadingIconContentColor = palette.primary
+                        contentColor = palette.onSurface
                     ),
                     border = BorderStroke(1.dp, palette.outlineVariant),
-                    modifier = modifier.heightIn(min = 40.dp)
-                )
+                    contentPadding = ButtonDefaults.SmallContentPadding,
+                    modifier = modifier
+                        .heightIn(min = ButtonDefaults.MinHeight)
+                        .minimumInteractiveComponentSize()
+                ) {
+                    Icon(
+                        Icons.Rounded.Flag,
+                        contentDescription = null,
+                        tint = palette.primary,
+                        modifier = Modifier.size(ButtonDefaults.IconSize)
+                    )
+                    Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                    Text(
+                        "Trip over? Wrap it up",
+                        fontFamily = FigtreeFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }

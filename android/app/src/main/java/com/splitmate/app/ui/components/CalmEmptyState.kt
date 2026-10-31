@@ -32,6 +32,7 @@ import com.splitmate.app.ui.feel.feel
  * line and at most one action. No cards, no lists of options, no decoration on money. Static:
  * nothing animates, so it is also correct under reduced motion.
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun CalmEmptyState(
     icon: ImageVector,
@@ -75,12 +76,17 @@ fun CalmEmptyState(
                     haptics.feel(Feel.Tick)
                     onAction()
                 },
+                shapes = ButtonDefaults.shapes(),
                 // Sage tonal pair: the default secondaryContainer is peach, which means "owes" here.
                 colors = ButtonDefaults.filledTonalButtonColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ),
-                contentPadding = ButtonDefaults.ButtonWithIconContentPadding
+                contentPadding = if (actionIcon != null) {
+                    ButtonDefaults.contentPaddingFor(ButtonDefaults.MinHeight)
+                } else {
+                    ButtonDefaults.ContentPadding
+                }
             ) {
                 if (actionIcon != null) {
                     Icon(imageVector = actionIcon, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))

@@ -74,10 +74,11 @@ fun SettleUpShareButton(
             }
         },
         enabled = !isRendering,
+        shapes = ButtonDefaults.shapes(),
         modifier = modifier.semantics {
             contentDescription = if (isRendering) "Making settle-up image" else "Share settle-up as image"
         },
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        contentPadding = ButtonDefaults.contentPaddingFor(ButtonDefaults.MinHeight),
         colors = ButtonDefaults.filledTonalButtonColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,

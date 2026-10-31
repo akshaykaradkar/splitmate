@@ -29,21 +29,23 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.MergeType
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.PersonAdd
-import androidx.compose.material.icons.rounded.PersonPin
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -57,6 +59,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,6 +67,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -82,6 +87,7 @@ import com.splitmate.app.ui.SplitMateTnumMonospace
 import com.splitmate.app.ui.SplitMateViewModel
 import com.splitmate.app.ui.components.ButtonGroup
 import com.splitmate.app.ui.components.ExpressiveActionItem
+import com.splitmate.app.ui.components.ExpressiveTooltipIconButton
 import com.splitmate.app.ui.components.SplitMateMotion
 import com.splitmate.app.ui.extractInitialsFromNameOrSeed
 import com.splitmate.app.ui.formatIndianRupeesFromCents
@@ -89,6 +95,7 @@ import com.splitmate.app.ui.performCrispTactileHaptic
 import kotlin.math.abs
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.FilledTonalButton
+import kotlinx.coroutines.launch
 
 /**
  * Compact Buckwheat Sage header pill displaying `"Invite & Trip Code"` with `Icons.Rounded.PersonAdd`.
@@ -262,20 +269,15 @@ fun TripSyncAndPerspectiveSheet(
     }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        containerColor = SplitMateTheme.ScreenBg,
+        shape = MaterialTheme.shapes.extraLarge,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         scrimColor = com.splitmate.app.ui.DesignSystemBindings.activePalette.scrim.copy(alpha = 0.55f),
-        dragHandle = {
-            BottomSheetDefaults.DragHandle(
-                color = SplitMateTheme.BorderLight,
-                width = 36.dp,
-                height = 4.dp
-            )
-        }
+        dragHandle = { BottomSheetDefaults.DragHandle() }
     ) {
         Column(
             modifier = Modifier
@@ -312,13 +314,14 @@ fun TripSyncAndPerspectiveSheet(
                             modifier = Modifier.size(22.dp)
                         )
                     }
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Invite Friends & Trip Code",
                             fontFamily = FigtreeFontFamily,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 18.sp,
-                            color = SplitMateTheme.PrimaryDark
+                            color = SplitMateTheme.PrimaryDark,
+                            modifier = Modifier.semantics { heading() }
                         )
                         Text(
                             text = "$resolvedGroupName · Trip Code $formattedJoinCode",
@@ -328,6 +331,21 @@ fun TripSyncAndPerspectiveSheet(
                             color = SplitMateTheme.TextSecondary
                         )
                     }
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                ExpressiveTooltipIconButton(
+                    tooltipText = "Close",
+                    onClick = {
+                        scope.launch { sheetState.hide() }.invokeOnCompletion {
+                            if (!sheetState.isVisible) onDismiss()
+                        }
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = "Close",
+                        tint = SplitMateTheme.TextSecondary
+                    )
                 }
             }
 
@@ -588,7 +606,7 @@ fun TripSyncAndPerspectiveSheet(
                                     runCatching { context.startActivity(fallbackIntent) }
                                 }
                             },
-                            shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(14.dp)),
+                            shapes = ButtonDefaults.shapes(),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = SplitMateTheme.SageText,
                                 contentColor = com.splitmate.app.ui.DesignSystemBindings.activePalette.onPrimary
@@ -623,7 +641,7 @@ fun TripSyncAndPerspectiveSheet(
                                 isFeedbackError = false
                                 feedbackBannerText = "Copied full invite message to clipboard"
                             },
-                            shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(14.dp)),
+                            shapes = ButtonDefaults.shapes(),
                             border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
                             modifier = Modifier
                                 .weight(0.95f)
@@ -731,7 +749,7 @@ fun TripSyncAndPerspectiveSheet(
                                             }
                                         }
                                     },
-                                    shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(12.dp)),
+                                    shapes = ButtonDefaults.shapes(),
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = SplitMateTheme.SageText,
                                         contentColor = com.splitmate.app.ui.DesignSystemBindings.activePalette.onPrimary
@@ -763,6 +781,13 @@ fun TripSyncAndPerspectiveSheet(
                     OutlinedTextField(
                         value = manualPasteInput,
                         onValueChange = { manualPasteInput = it },
+                        label = {
+                            Text(
+                                text = "Trip code or invite link",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FigtreeFontFamily
+                            )
+                        },
                         placeholder = {
                             Text(
                                 text = "Enter 6-character code (e.g. K9X-4M2), WhatsApp invite, or link",
@@ -809,7 +834,7 @@ fun TripSyncAndPerspectiveSheet(
                                     feedbackBannerText = "Clipboard is empty"
                                 }
                             },
-                            shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(14.dp)),
+                            shapes = ButtonDefaults.shapes(),
                             border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
                             modifier = Modifier
                                 .weight(1f)
@@ -846,7 +871,7 @@ fun TripSyncAndPerspectiveSheet(
                                 }
                             },
                             enabled = manualPasteInput.isNotBlank(),
-                            shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(14.dp)),
+                            shapes = ButtonDefaults.shapes(),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = SplitMateTheme.PrimaryDark,
                                 contentColor = SplitMateTheme.ScreenBg,

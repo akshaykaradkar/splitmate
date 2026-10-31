@@ -60,12 +60,18 @@ import com.splitmate.app.ui.SplitMateViewModel
 import com.splitmate.app.ui.components.ConnectedButtonGroup
 import com.splitmate.app.ui.components.ContainedLoadingIndicator
 import com.splitmate.app.ui.components.EditorialFinancialTotalText
+import com.splitmate.app.ui.components.ExpressiveTooltipFilledTonalIconButton
+import com.splitmate.app.ui.components.ExpressiveTooltipOutlinedIconButton
 import com.splitmate.app.ui.components.SplitMateMotion
 import com.splitmate.app.ui.components.rememberAnimatedSegmentedIslandItemShape
+import com.splitmate.app.ui.components.rememberReducedMotionEnabled
 import com.splitmate.app.ui.components.segmentedIslandItemShape
 import com.splitmate.app.ui.extractInitialsFromNameOrSeed
+import com.splitmate.app.ui.feel.MoneyScaffoldSnackbarHost
 import com.splitmate.app.ui.formatTravelExpenseTitle
 import com.splitmate.app.ui.theme.activeTransitExtendedColors
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.NumberFormat
@@ -852,6 +858,7 @@ fun FlightExpenseReviewScreen(
     val commitStampScale = remember { Animatable(1.75f) }
     val commitStampAlpha = remember { Animatable(0f) }
     var isCommittingBoardingPass by remember { mutableStateOf(false) }
+    val reducedMotion = rememberReducedMotionEnabled()
 
     // Enforce Tabular Numerals (tnum) and SplitMate Brand Typography (Plus Jakarta Sans / Figtree)
     val tabularTextStyle = LocalTextStyle.current.copy(
@@ -862,103 +869,92 @@ fun FlightExpenseReviewScreen(
     CompositionLocalProvider(LocalTextStyle provides tabularTextStyle) {
         Scaffold(
             containerColor = FlightPassTokens.AppBackground,
+            snackbarHost = { MoneyScaffoldSnackbarHost() },
             topBar = {
                 TopAppBar(
                     title = {
-                        Column {
-                            Text(
-                                text = "Review Flight Expense",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = FlightPassTokens.PrimaryDark
+                        Text(
+                            text = "Review Flight Expense",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = FlightPassTokens.PrimaryDark,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.semantics { heading() }
+                        )
+                    },
+                    subtitle = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(FlightPassTokens.StatusGreenDot)
                             )
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .clip(CircleShape)
-                                        .background(FlightPassTokens.StatusGreenDot)
-                                )
-                                Spacer(modifier = Modifier.width(5.dp))
-                                Text(
-                                    text = "Saved for Offline Access · ${activeGroup?.name ?: "Trip Group"}",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = FlightPassTokens.StatusGreenText,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(
+                                text = "Saved for Offline Access · ${activeGroup?.name ?: "Trip Group"}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = FlightPassTokens.StatusGreenText,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     },
                     navigationIcon = {
-                        IconButton(
-                            shapes = IconButtonDefaults.shapes(),
+                        ExpressiveTooltipOutlinedIconButton(
+                            tooltipText = "Back",
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                 onBackClick()
                             },
-                            modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                            colors = IconButtonDefaults.outlinedIconButtonColors(
+                                containerColor = FlightPassTokens.TicketPaperWhite,
+                                contentColor = FlightPassTokens.PrimaryDark
+                            ),
+                            border = BorderStroke(1.dp, FlightPassTokens.BorderSubtle)
                         ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = FlightPassTokens.TicketPaperWhite,
-                                border = BorderStroke(1.dp, FlightPassTokens.BorderSubtle),
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                                        contentDescription = "Back",
-                                        tint = FlightPassTokens.PrimaryDark,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                                contentDescription = "Back",
+                                tint = FlightPassTokens.PrimaryDark,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     },
                     actions = {
-                        // Upload Another PDF Action Button
-                        IconButton(
-                            shapes = IconButtonDefaults.shapes(),
+                        // Upload Another PDF Action Button (48.dp touch target + PlainTooltip)
+                        ExpressiveTooltipFilledTonalIconButton(
+                            tooltipText = "Upload Another Flight PDF",
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                 onPickAnotherPdfClick()
                             },
-                            modifier = Modifier.minimumInteractiveComponentSize()
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = FlightPassTokens.SkyBlue,
+                                contentColor = FlightPassTokens.SkyBlueText
+                            )
                         ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = FlightPassTokens.SkyBlue,
-                                border = BorderStroke(1.dp, FlightPassTokens.SkyBlueBorder),
-                                modifier = Modifier.size(38.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.UploadFile,
-                                        contentDescription = "Upload Another Flight PDF",
-                                        tint = FlightPassTokens.SkyBlueText,
-                                        modifier = Modifier.size(19.dp)
-                                    )
-                                }
-                            }
+                            Icon(
+                                imageVector = Icons.Rounded.UploadFile,
+                                contentDescription = "Upload Another Flight PDF",
+                                tint = FlightPassTokens.SkyBlueText,
+                                modifier = Modifier.size(19.dp)
+                            )
                         }
 
-                        // Switch Group Dropdown Button (48dp touch bounds, 40dp visual circle)
+                        // Switch Group Dropdown Button (48.dp touch target + PlainTooltip + DropdownMenuPopup)
                         Box {
-                            // v2.4.0 rc3: official OutlinedIconButton with the shapes() press morph.
-                            OutlinedIconButton(
+                            ExpressiveTooltipOutlinedIconButton(
+                                tooltipText = "Switch Group",
                                 onClick = { showGroupDropdown = true },
-                                shapes = IconButtonDefaults.shapes(),
                                 colors = IconButtonDefaults.outlinedIconButtonColors(
                                     containerColor = FlightPassTokens.AviationNavy,
                                     contentColor = FlightPassTokens.AviationOnVariant
                                 ),
                                 border = BorderStroke(1.dp, FlightPassTokens.SkyBlueBorder),
-                                modifier = Modifier
-                                    .padding(end = 8.dp)
-                                    .minimumInteractiveComponentSize()
-                                    .size(40.dp)
+                                modifier = Modifier.padding(end = 4.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Rounded.Groups,
@@ -967,23 +963,35 @@ fun FlightExpenseReviewScreen(
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
-                            DropdownMenu(
+                            DropdownMenuPopup(
                                 expanded = showGroupDropdown,
                                 onDismissRequest = { showGroupDropdown = false }
                             ) {
-                                uiState.groups.forEach { grp ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = grp.name,
-                                                fontWeight = if (grp.groupId == activeGroup?.groupId) FontWeight.ExtraBold else FontWeight.Medium
-                                            )
-                                        },
-                                        onClick = {
-                                            viewModel.selectActiveGroup(grp.groupId)
-                                            showGroupDropdown = false
-                                        }
-                                    )
+                                DropdownMenuGroup(shapes = MenuDefaults.groupShape(0, 1)) {
+                                    uiState.groups.forEachIndexed { grpIdx, grp ->
+                                        val isSelectedGroup = grp.groupId == activeGroup?.groupId
+                                        DropdownMenuItem(
+                                            selected = isSelectedGroup,
+                                            onClick = {
+                                                viewModel.selectActiveGroup(grp.groupId)
+                                                showGroupDropdown = false
+                                            },
+                                            text = {
+                                                Text(
+                                                    text = grp.name,
+                                                    fontWeight = if (isSelectedGroup) FontWeight.ExtraBold else FontWeight.Medium
+                                                )
+                                            },
+                                            shapes = MenuDefaults.itemShape(grpIdx, uiState.groups.size),
+                                            selectedLeadingIcon = {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Check,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -1052,7 +1060,7 @@ fun FlightExpenseReviewScreen(
                                     launch { commitStampAlpha.animateTo(1f, SplitMateMotion.fastEffects()) }
                                     commitStampScale.animateTo(
                                         targetValue = 1f,
-                                        animationSpec = spring(dampingRatio = 0.52f, stiffness = 680f)
+                                        animationSpec = if (reducedMotion) snap() else spring(dampingRatio = 0.52f, stiffness = 680f)
                                     )
                                     delay(95L)
                                     if (extractedTicket.isValidFlightTicket) {
@@ -1390,60 +1398,92 @@ fun FlightExpenseReviewScreen(
                                             )
                                         }
                                     }
-                                    DropdownMenu(
+                                    DropdownMenuPopup(
                                         expanded = showPayerDropdown,
                                         onDismissRequest = { showPayerDropdown = false }
                                     ) {
-                                        groupMembers.forEach { m ->
-                                            val isOnTicket = m.memberId in matchedTicketMemberIds
-                                            DropdownMenuItem(
-                                                text = {
-                                                    Row(
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                                    ) {
-                                                        Text(
-                                                            text = if (m.isCurrentUser) "${m.name} (You)" else m.name,
-                                                            fontWeight = if (m.memberId == selectedPayerId) FontWeight.ExtraBold else FontWeight.Medium
+                                        DropdownMenuGroup(shapes = MenuDefaults.groupShape(0, 1)) {
+                                            groupMembers.forEachIndexed { mIdx, m ->
+                                                val isOnTicket = m.memberId in matchedTicketMemberIds
+                                                val isCurrentPayer = m.memberId == selectedPayerId
+                                                DropdownMenuItem(
+                                                    selected = isCurrentPayer,
+                                                    onClick = {
+                                                        selectedPayerId = m.memberId
+                                                        showPayerDropdown = false
+                                                    },
+                                                    shapes = MenuDefaults.itemShape(mIdx, groupMembers.size),
+                                                    selectedLeadingIcon = {
+                                                        Icon(
+                                                            imageVector = Icons.Rounded.Check,
+                                                            contentDescription = null,
+                                                            modifier = Modifier.size(18.dp)
                                                         )
-                                                        if (isOnTicket) {
-                                                            Icon(
-                                                                imageVector = Icons.Rounded.FlightTakeoff,
-                                                                contentDescription = "On Ticket",
-                                                                tint = FlightPassTokens.SkyBlueText,
-                                                                modifier = Modifier.size(13.dp)
-                                                            )
+                                                    },
+                                                    text = {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                        ) {
                                                             Text(
-                                                                text = "On Ticket",
-                                                                fontSize = 11.sp,
-                                                                fontWeight = FontWeight.Bold,
-                                                                color = FlightPassTokens.SkyBlueText
+                                                                text = if (m.isCurrentUser) "${m.name} (You)" else m.name,
+                                                                fontWeight = if (isCurrentPayer) FontWeight.ExtraBold else FontWeight.Medium
                                                             )
+                                                            if (isOnTicket) {
+                                                                Icon(
+                                                                    imageVector = Icons.Rounded.FlightTakeoff,
+                                                                    contentDescription = "On Ticket",
+                                                                    tint = FlightPassTokens.SkyBlueText,
+                                                                    modifier = Modifier.size(13.dp)
+                                                                )
+                                                                Text(
+                                                                    text = "On Ticket",
+                                                                    fontSize = 11.sp,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = FlightPassTokens.SkyBlueText
+                                                                )
+                                                            }
                                                         }
                                                     }
-                                                },
-                                                onClick = {
-                                                    selectedPayerId = m.memberId
-                                                    showPayerDropdown = false
-                                                }
-                                            )
+                                                )
+                                            }
                                         }
                                     }
                                 }
 
-                                Surface(
-                                    shape = FlightPassTokens.RadiusPill,
-                                    color = FlightPassTokens.StatusGreenSurface,
-                                    border = BorderStroke(1.dp, FlightPassTokens.StatusGreenBorder)
-                                ) {
-                                    Text(
-                                        text = "Exact split",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = FlightPassTokens.StatusGreenText,
-                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
-                                    )
-                                }
+                                val allFlightMembersSelected = groupMembers.isNotEmpty() && selectedMemberIds.size == groupMembers.size
+                                FilterChip(
+                                    selected = allFlightMembersSelected,
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                        selectedMemberIds = groupMembers.map { it.memberId }.toSet()
+                                    },
+                                    shapes = FilterChipDefaults.shapes(),
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        containerColor = FlightPassTokens.TicketPaperWhite,
+                                        selectedContainerColor = FlightPassTokens.StatusGreenSurface,
+                                        labelColor = FlightPassTokens.PrimaryDark,
+                                        selectedLabelColor = FlightPassTokens.StatusGreenText
+                                    ),
+                                    leadingIcon = if (allFlightMembersSelected) {
+                                        {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Check,
+                                                contentDescription = null,
+                                                tint = FlightPassTokens.StatusGreenText,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
+                                    } else null,
+                                    modifier = Modifier.minimumInteractiveComponentSize(),
+                                    label = {
+                                        Text(
+                                            text = if (allFlightMembersSelected) "All selected" else "Select all",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                )
                             }
                         }
 
@@ -2018,6 +2058,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
     )
 
     // 3. Holographic "BOARDING VERIFIED" Gate Stamp Slam (1.6f -> 1.0f bouncy overshoot)
+    val reducedMotion = rememberReducedMotionEnabled()
     val stampAlpha by animateFloatAsState(
         targetValue = if (isFolded) 1f else 0f,
         animationSpec = SplitMateMotion.fastEffects(),
@@ -2025,10 +2066,14 @@ fun AnimatedLuxuryAirlineBoardingPass(
     )
     val stampScale by animateFloatAsState(
         targetValue = if (isFolded) 1.0f else 1.55f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
+        animationSpec = if (reducedMotion) {
+            snap()
+        } else {
+            spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessMedium
+            )
+        },
         label = "GateStampScale"
     )
 

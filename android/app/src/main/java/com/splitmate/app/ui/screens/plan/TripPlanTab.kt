@@ -2,7 +2,9 @@
 
 package com.splitmate.app.ui.screens.plan
 
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -19,10 +21,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,13 +42,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.splitmate.app.ui.components.ConnectedButtonGroup
+import com.splitmate.app.ui.components.ExpressivePlainTooltipBox
 import com.splitmate.app.ui.components.InFlightWavyProgressIndicator
 import com.splitmate.app.ui.components.LocalMotionScheme
+import com.splitmate.app.ui.feel.SplitMateBuckwheatSnackbarHost
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -155,12 +160,19 @@ fun TripPlanTab(
                 )
             }
             // Driven ONLY by an in-flight network job; it keeps a 400ms minimum and animates out itself.
+            val wavyDescription = when {
+                state.stayFeedback == StayInputFeedback.Working -> "Finding stay location"
+                state.phase == GuidePhase.Resolving -> "Finding destination"
+                state.phase is GuidePhase.Hydrating -> "Building trip guide"
+                state.pack != null -> "Refreshing trip guide"
+                else -> "Loading guide"
+            }
             InFlightWavyProgressIndicator(
                 inFlight = state.networkInFlight,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
-                contentDescription = "Loading guide"
+                contentDescription = wavyDescription
             )
             Crossfade(
                 targetState = current,
@@ -199,10 +211,11 @@ fun TripPlanTab(
                 }
             }
         }
-        SnackbarHost(
+        SplitMateBuckwheatSnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
                 .padding(16.dp)
         )
     }
@@ -254,23 +267,50 @@ private fun LoopMapsPartsSheet(
     onDismiss: () -> Unit
 ) {
     val opened = remember(parts) { androidx.compose.runtime.mutableStateListOf<Int>() }
+    val sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    val currentOnDismiss by rememberUpdatedState(onDismiss)
     androidx.compose.material3.ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        onDismissRequest = { currentOnDismiss() },
+        sheetState = sheetState,
         containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 20.dp, end = 20.dp, bottom = 28.dp),
+                .padding(start = 20.dp, end = 20.dp, bottom = 28.dp)
+                .navigationBarsPadding(),
             verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)
         ) {
-            androidx.compose.material3.Text(
-                text = "Open in Google Maps",
-                style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
-                modifier = Modifier.semantics { heading() }
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                androidx.compose.material3.Text(
+                    text = "Open in Google Maps",
+                    style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
+                    modifier = Modifier
+                        .weight(1f)
+                        .semantics { heading() }
+                )
+                ExpressivePlainTooltipBox(tooltipText = "Close") {
+                    IconButton(
+                        onClick = {
+                            scope.launch { sheetState.hide() }.invokeOnCompletion {
+                                if (!sheetState.isVisible) currentOnDismiss()
+                            }
+                        },
+                        shapes = IconButtonDefaults.shapes()
+                    ) {
+                        com.splitmate.app.ui.components.SymbolIcon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = "Close",
+                            tint = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
             androidx.compose.material3.Text(
                 text = "Google Maps takes up to 9 stops at a time, so your loop opens in ${parts.size} parts. Open them in order.",
                 style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
@@ -288,8 +328,8 @@ private fun LoopMapsPartsSheet(
                         .defaultMinSize(minHeight = 56.dp)
                 ) {
                     com.splitmate.app.ui.components.SymbolIcon(
-                        imageVector = if (index in opened) androidx.compose.material.icons.Icons.Rounded.CheckCircle
-                        else androidx.compose.material.icons.Icons.Rounded.Map,
+                        imageVector = if (index in opened) Icons.Rounded.CheckCircle
+                        else Icons.Rounded.Map,
                         contentDescription = null
                     )
                     Spacer(modifier = Modifier.width(10.dp))

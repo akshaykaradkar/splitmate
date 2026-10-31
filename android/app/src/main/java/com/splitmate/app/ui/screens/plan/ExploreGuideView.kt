@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
+@file:OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 
 package com.splitmate.app.ui.screens.plan
 
@@ -20,15 +20,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -46,26 +46,34 @@ import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.Route
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material.icons.rounded.TravelExplore
 import androidx.compose.material.icons.rounded.WarningAmber
-import androidx.compose.material3.ElevatedAssistChip
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DockedSearchBar
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.SearchBarDefaults
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.carousel.HorizontalMultiBrowseCarousel
+import androidx.compose.material3.carousel.rememberCarouselState
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -88,10 +96,9 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
@@ -101,8 +108,12 @@ import com.splitmate.app.data.guide.CommonsImage
 import com.splitmate.app.data.guide.GuidePack
 import com.splitmate.app.data.guide.PlaceKind
 import com.splitmate.app.ui.components.ContainedLoadingIndicator
+import com.splitmate.app.ui.components.ExpressivePlainTooltipBox
+import com.splitmate.app.ui.components.GuideShapeTokens
 import com.splitmate.app.ui.components.LoadingIndicatorDefaults
 import com.splitmate.app.ui.components.LocalMotionScheme
+import com.splitmate.app.ui.components.rememberReducedMotionEnabled
+import kotlinx.coroutines.delay
 
 /**
  * Explore sub-view (audit 5.2 A-C): search and suggestions, the loading canvas, then the hydrated
@@ -130,110 +141,130 @@ fun ExploreGuideView(
         is GuidePhase.Error -> pack == null
         else -> false
     }
+    val pullRefreshState = rememberPullToRefreshState()
+    val reducedMotion = rememberReducedMotionEnabled()
+    val isRefreshing = state.networkInFlight && hasGuide
 
-    LazyColumn(
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = { actions.retry() },
+        state = pullRefreshState,
+        enabled = hasGuide && !searchOpen,
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(PlanGuideDefaults.CardSpacing)
+        indicator = {
+            if (!reducedMotion) {
+                PullToRefreshDefaults.LoadingIndicator(
+                    state = pullRefreshState,
+                    isRefreshing = isRefreshing,
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
+            }
+        }
     ) {
-        val offlineLabel = state.offlineSavedLabel
-        if (state.isOffline && offlineLabel != null) {
-            item(key = "offline") {
-                OfflineStatusChip(
-                    label = offlineLabel,
-                    icon = Icons.Rounded.CloudOff,
-                    modifier = Modifier
-                        .padding(horizontal = PlanGuideDefaults.ScreenGutter)
-                        .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
-                )
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(PlanGuideDefaults.CardSpacing)
+        ) {
+            val offlineLabel = state.offlineSavedLabel
+            if (state.isOffline && offlineLabel != null) {
+                item(key = "offline") {
+                    OfflineStatusChip(
+                        label = offlineLabel,
+                        icon = Icons.Rounded.CloudOff,
+                        modifier = Modifier
+                            .padding(horizontal = PlanGuideDefaults.ScreenGutter)
+                            .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
+                    )
+                }
             }
-        }
-        if (state.guideUpdateAvailable && hasGuide) {
-            item(key = "guide_updated") {
-                PlanInlineBanner(
-                    message = "Guide updated. A newer version of this guide is available.",
-                    tone = PlanBannerTone.INFO,
-                    icon = Icons.Rounded.NewReleases,
-                    actionLabel = "Update",
-                    onAction = { actions.acceptGuideUpdate() },
-                    modifier = Modifier
-                        .padding(horizontal = PlanGuideDefaults.ScreenGutter)
-                        .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
-                )
+            if (state.guideUpdateAvailable && hasGuide) {
+                item(key = "guide_updated") {
+                    PlanInlineBanner(
+                        message = "Guide updated. A newer version of this guide is available.",
+                        tone = PlanBannerTone.INFO,
+                        icon = Icons.Rounded.NewReleases,
+                        actionLabel = "Update",
+                        onAction = { actions.acceptGuideUpdate() },
+                        modifier = Modifier
+                            .padding(horizontal = PlanGuideDefaults.ScreenGutter)
+                            .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
+                    )
+                }
             }
-        }
 
-        if (showSearch) {
-            item(key = "search") {
-                DestinationSearch(
-                    state = state,
-                    actions = actions,
-                    onClose = if (searchOpen && hasGuide) ({ searchOpen = false }) else null,
-                    onSubmitted = { searchOpen = false },
-                    onOpenStaySheet = onOpenStaySheet,
-                    modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
-                )
-            }
-            if (phase is GuidePhase.Disambiguate) {
-                item(key = "disambiguate") {
-                    DisambiguationChips(
-                        phase = phase,
+            if (showSearch) {
+                item(key = "search") {
+                    DestinationSearch(
+                        state = state,
                         actions = actions,
-                        onChosen = { searchOpen = false },
+                        onClose = if (searchOpen && hasGuide) ({ searchOpen = false }) else null,
+                        onSubmitted = { searchOpen = false },
+                        onOpenStaySheet = onOpenStaySheet,
                         modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                     )
                 }
-            }
-            if (phase is GuidePhase.Error && pack == null) {
-                item(key = "error") {
-                    PhaseErrorBanner(phase, actions, Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null))
+                if (phase is GuidePhase.Disambiguate) {
+                    item(key = "disambiguate") {
+                        DisambiguationChips(
+                            phase = phase,
+                            actions = actions,
+                            onChosen = { searchOpen = false },
+                            modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
+                        )
+                    }
+                }
+                if (phase is GuidePhase.Error && pack == null) {
+                    item(key = "error") {
+                        PhaseErrorBanner(phase, actions, Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null))
+                    }
+                }
+                if (phase == GuidePhase.Resolving) {
+                    item(key = "resolving_skeleton") {
+                        HeroSkeleton(
+                            label = "Finding your destination",
+                            modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
+                        )
+                    }
                 }
             }
-            if (phase == GuidePhase.Resolving) {
-                item(key = "resolving_skeleton") {
-                    HeroSkeleton(
-                        label = "Finding your destination",
-                        modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
-                    )
-                }
-            }
-        }
 
-        when {
-            phase is GuidePhase.Hydrating && !searchOpen -> {
-                val sameDestination = pack != null && pack.destination.qid == phase.candidate.qid
-                item(key = "hero") {
-                    GuideHero(
-                        title = PlanGuideFormat.sanitizeDisplay(phase.candidate.label) ?: phase.candidate.label,
-                        subtitle = PlanGuideFormat.sanitizeDisplay(phase.candidate.description),
-                        hero = if (sameDestination) pack?.destination?.hero else null,
-                        showPlaceholderIcon = false,
-                        modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
+            when {
+                phase is GuidePhase.Hydrating && !searchOpen -> {
+                    val sameDestination = pack != null && pack.destination.qid == phase.candidate.qid
+                    item(key = "hero") {
+                        GuideHero(
+                            title = PlanGuideFormat.sanitizeDisplay(phase.candidate.label) ?: phase.candidate.label,
+                            subtitle = PlanGuideFormat.sanitizeDisplay(phase.candidate.description),
+                            hero = if (sameDestination) pack?.destination?.hero else null,
+                            showPlaceholderIcon = false,
+                            modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
+                        )
+                    }
+                    item(key = "hydrating_skeleton") {
+                        SectionSkeletons(modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null))
+                    }
+                }
+                hasGuide && pack != null && !searchOpen -> {
+                    hydratedGuide(
+                        state = state,
+                        pack = pack,
+                        actions = actions,
+                        expandedSections = expandedSections,
+                        onOpenStaySheet = onOpenStaySheet,
+                        onChangeDestination = { searchOpen = true }
                     )
                 }
-                item(key = "hydrating_skeleton") {
-                    SectionSkeletons(modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null))
-                }
             }
-            hasGuide && pack != null && !searchOpen -> {
-                hydratedGuide(
-                    state = state,
-                    pack = pack,
-                    actions = actions,
-                    expandedSections = expandedSections,
-                    onOpenStaySheet = onOpenStaySheet,
-                    onChangeDestination = { searchOpen = true }
+
+            item(key = "attribution") {
+                AttributionFooter(
+                    lines = state.attribution,
+                    modifier = Modifier
+                        .padding(top = 12.dp)
+                        .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
                 )
             }
-        }
-
-        item(key = "attribution") {
-            AttributionFooter(
-                lines = state.attribution,
-                modifier = Modifier
-                    .padding(top = 12.dp)
-                    .animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
-            )
         }
     }
 }
@@ -307,6 +338,26 @@ private fun LazyListScope.hydratedGuide(
     }
 
     val sections = state.sections.filter { it.places.isNotEmpty() }
+    val featured = sections
+        .flatMap { section ->
+            val sectionTitle = PlanGuideFormat.sanitizeDisplay(section.title) ?: PlanGuideFormat.kindLabel(section.kind)
+            section.places.map { card -> card to sectionTitle }
+        }
+        .filter { (card, _) ->
+            card.place.image?.thumbUrl?.let { PlanGuideFormat.isSafeHttpsUrl(it) } == true
+        }
+        .distinctBy { (card, _) -> card.place.id }
+        .take(8)
+    if (featured.size >= 3) {
+        item(key = "featured_carousel") {
+            val motion = LocalMotionScheme.current
+            FeaturedPlacesCarousel(
+                featured = featured,
+                actions = actions,
+                modifier = Modifier.animateItem(fadeInSpec = null, placementSpec = motion.defaultSpatialSpec(), fadeOutSpec = null)
+            )
+        }
+    }
     if (sections.isEmpty()) {
         item(key = "sections_empty") {
             Text(
@@ -464,6 +515,101 @@ private fun PlaceCard(
 /** rc13: flip to true once "Save offline" really saves the guide and images for offline use. */
 internal const val SAVE_OFFLINE_READY = false
 
+/**
+ * Editorial highlights carousel for illustrated places (`HorizontalMultiBrowseCarousel` +
+ * `GuideShapeTokens.PlaceThumbnail` 16dp squircle). Each card merges its semantics into one
+ * accessible button.
+ */
+@Composable
+private fun FeaturedPlacesCarousel(
+    featured: List<Pair<PlaceCardUi, String>>,
+    actions: TripGuideActions,
+    modifier: Modifier = Modifier
+) {
+    val carouselState = rememberCarouselState { featured.size }
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        PlanSectionHeader(
+            title = "Highlights",
+            modifier = Modifier.padding(
+                start = PlanGuideDefaults.ScreenGutter,
+                end = PlanGuideDefaults.ScreenGutter,
+                top = 8.dp
+            )
+        )
+        HorizontalMultiBrowseCarousel(
+            state = carouselState,
+            preferredItemWidth = 186.dp,
+            itemSpacing = 8.dp,
+            contentPadding = PaddingValues(horizontal = PlanGuideDefaults.ScreenGutter),
+            modifier = Modifier.fillMaxWidth()
+        ) { index ->
+            val (card, sectionTitle) = featured[index]
+            val place = card.place
+            val url = place.image?.thumbUrl?.takeIf { PlanGuideFormat.isSafeHttpsUrl(it) } ?: return@HorizontalMultiBrowseCarousel
+            val name = PlanGuideFormat.sanitizeDisplay(place.name) ?: place.name
+            val a11yLabel = PlanGuideFormat.placeA11yLabel(name, card.distanceLabel, sectionTitle)
+            Box(
+                modifier = Modifier
+                    .height(148.dp)
+                    .fillMaxWidth()
+                    .maskClip(GuideShapeTokens.PlaceThumbnail)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .clickable(role = Role.Button, onClickLabel = "Open details") {
+                        actions.openPlace(place)
+                    }
+                    .clearAndSetSemantics {
+                        contentDescription = a11yLabel
+                        role = Role.Button
+                    }
+            ) {
+                AsyncImage(
+                    model = rememberGuideImageRequest(url),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize()
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(
+                            Brush.verticalGradient(
+                                0f to Color.Transparent,
+                                0.45f to com.splitmate.app.ui.DesignSystemBindings.activePalette.scrim.copy(alpha = 0.14f),
+                                1f to com.splitmate.app.ui.DesignSystemBindings.activePalette.scrim.copy(alpha = PlanGuideDefaults.HeroScrimAlpha)
+                            )
+                        )
+                )
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = HubExtendedColors.OnImageScrim,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = sectionTitle,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = HubExtendedColors.OnImageScrim.copy(alpha = 0.9f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun GuideChipsRow(
     state: TripGuideUiState,
@@ -472,9 +618,11 @@ private fun GuideChipsRow(
     onChangeDestination: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val chipColors = AssistChipDefaults.elevatedAssistChipColors(
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+    val pillColors = ButtonDefaults.filledTonalButtonColors(
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+        contentColor = MaterialTheme.colorScheme.onSurface
     )
+    val pillPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
     FlowRow(
         modifier = modifier
             .fillMaxWidth()
@@ -484,19 +632,27 @@ private fun GuideChipsRow(
     ) {
         val stayLabel = state.stay.stay?.label?.let { PlanGuideFormat.sanitizeDisplay(it) }
             ?.let { PlanGuideFormat.truncate(it, 24) }
-        ElevatedAssistChip(
+        FilledTonalButton(
             onClick = onOpenStaySheet,
-            label = { ChipText(if (stayLabel != null) "Stay: $stayLabel" else "Stay: not set") },
-            leadingIcon = { SymbolIcon(Icons.Rounded.Hotel, contentDescription = null, modifier = Modifier.size(18.dp)) },
-            trailingIcon = { SymbolIcon(Icons.Rounded.ChevronRight, contentDescription = null, modifier = Modifier.size(18.dp)) },
-            colors = chipColors,
-            elevation = AssistChipDefaults.elevatedAssistChipElevation(elevation = 1.dp)
-        )
+            shapes = ButtonDefaults.shapes(),
+            colors = pillColors,
+            contentPadding = pillPadding,
+            modifier = Modifier
+                .heightIn(min = 40.dp)
+                .minimumInteractiveComponentSize()
+        ) {
+            SymbolIcon(Icons.Rounded.Hotel, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            ChipText(if (stayLabel != null) "Stay: $stayLabel" else "Stay: not set")
+            Spacer(Modifier.width(4.dp))
+            SymbolIcon(Icons.Rounded.ChevronRight, contentDescription = null, modifier = Modifier.size(18.dp))
+        }
         if (state.stay.stay != null) {
             FilterChip(
                 selected = state.sortNearStay,
                 onClick = { actions.setSortNearStay(!state.sortNearStay) },
                 label = { ChipText("Near your stay") },
+                shapes = FilterChipDefaults.shapes(),
                 leadingIcon = {
                     SymbolIcon(
                         imageVector = if (state.sortNearStay) Icons.Rounded.CheckCircle else Icons.Rounded.Place,
@@ -516,45 +672,72 @@ private fun GuideChipsRow(
         // rc13 (audit H-2): the Loop is always one tap away from Explore, even on a trip with no
         // expenses (Days has no day to hang "Make a loop" on yet).
         val loopStops = state.loop.route?.orderedStops?.size ?: 0
-        ElevatedAssistChip(
+        FilledTonalButton(
             onClick = { actions.selectSubView(PlanSubView.LOOP) },
-            label = { ChipText(if (loopStops > 0) "View loop ($loopStops)" else "View loop") },
-            leadingIcon = { SymbolIcon(Icons.Rounded.Route, contentDescription = null, modifier = Modifier.size(18.dp)) },
-            colors = chipColors,
-            elevation = AssistChipDefaults.elevatedAssistChipElevation(elevation = 1.dp)
-        )
+            shapes = ButtonDefaults.shapes(),
+            colors = pillColors,
+            contentPadding = pillPadding,
+            modifier = Modifier
+                .heightIn(min = 40.dp)
+                .minimumInteractiveComponentSize()
+        ) {
+            SymbolIcon(Icons.Rounded.Route, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            ChipText(if (loopStops > 0) "View loop ($loopStops)" else "View loop")
+        }
         val size = state.saveOfflineSizeLabel
         // rc13 (audit M-2): "Save offline" is hidden until offline saving is actually wired.
         if (SAVE_OFFLINE_READY && (state.saveOfflineEnabled || size != null)) {
-            ElevatedAssistChip(
+            FilledTonalButton(
                 onClick = { actions.setSaveOffline(!state.saveOfflineEnabled) },
-                label = {
-                    ChipText(
-                        when {
-                            state.saveOfflineEnabled -> "Saved offline"
-                            size != null -> "Save offline $size"
-                            else -> "Save offline"
-                        }
-                    )
-                },
-                leadingIcon = {
-                    SymbolIcon(
-                        imageVector = if (state.saveOfflineEnabled) Icons.Rounded.CheckCircle else Icons.Rounded.DownloadForOffline,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                },
-                colors = chipColors,
-                elevation = AssistChipDefaults.elevatedAssistChipElevation(elevation = 1.dp)
-            )
+                shapes = ButtonDefaults.shapes(),
+                colors = pillColors,
+                contentPadding = pillPadding,
+                modifier = Modifier
+                    .heightIn(min = 40.dp)
+                    .minimumInteractiveComponentSize()
+            ) {
+                SymbolIcon(
+                    imageVector = if (state.saveOfflineEnabled) Icons.Rounded.CheckCircle else Icons.Rounded.DownloadForOffline,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                ChipText(
+                    when {
+                        state.saveOfflineEnabled -> "Saved offline"
+                        size != null -> "Save offline $size"
+                        else -> "Save offline"
+                    }
+                )
+            }
         }
-        ElevatedAssistChip(
+        FilledTonalButton(
             onClick = onChangeDestination,
-            label = { ChipText("Change place") },
-            leadingIcon = { SymbolIcon(Icons.Rounded.EditLocationAlt, contentDescription = null, modifier = Modifier.size(18.dp)) },
-            colors = chipColors,
-            elevation = AssistChipDefaults.elevatedAssistChipElevation(elevation = 1.dp)
-        )
+            shapes = ButtonDefaults.shapes(),
+            colors = pillColors,
+            contentPadding = pillPadding,
+            modifier = Modifier
+                .heightIn(min = 40.dp)
+                .minimumInteractiveComponentSize()
+        ) {
+            SymbolIcon(Icons.Rounded.EditLocationAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            ChipText("Change place")
+        }
+        ExpressivePlainTooltipBox(tooltipText = "Refresh guide") {
+            IconButton(
+                onClick = { actions.retry() },
+                enabled = !state.networkInFlight,
+                shapes = IconButtonDefaults.shapes()
+            ) {
+                SymbolIcon(
+                    imageVector = Icons.Rounded.Sync,
+                    contentDescription = "Refresh guide",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }
 
@@ -589,8 +772,15 @@ private fun GuideHero(
 ) {
     val url = hero?.thumbUrl?.takeIf { PlanGuideFormat.isSafeHttpsUrl(it) }
     var imageState by remember(url) { mutableStateOf<AsyncImagePainter.State>(AsyncImagePainter.State.Empty) }
-    val imageLoading = url != null &&
-        (imageState is AsyncImagePainter.State.Loading || imageState is AsyncImagePainter.State.Empty)
+    var imageTimedOut by remember(url) { mutableStateOf(false) }
+    LaunchedEffect(url, imageState is AsyncImagePainter.State.Loading) {
+        if (url != null && imageState is AsyncImagePainter.State.Loading) {
+            delay(HERO_IMAGE_TIMEOUT_MS)
+            imageTimedOut = true
+        }
+    }
+    val imageLoading = url != null && imageState is AsyncImagePainter.State.Loading && !imageTimedOut
+    val imageFailed = imageState is AsyncImagePainter.State.Error || imageTimedOut
     val imageShown = url != null && imageState is AsyncImagePainter.State.Success
     var creditOpen by remember(url) { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
@@ -617,7 +807,8 @@ private fun GuideHero(
                     onState = { imageState = it },
                     modifier = Modifier.matchParentSize()
                 )
-            } else if (showPlaceholderIcon) {
+            }
+            if ((url == null || imageFailed) && showPlaceholderIcon) {
                 SymbolIcon(
                     imageVector = Icons.Rounded.Landscape,
                     contentDescription = null,
@@ -679,19 +870,21 @@ private fun GuideHero(
                         .padding(8.dp),
                     horizontalAlignment = Alignment.End
                 ) {
-                    IconButton(
-                        onClick = { creditOpen = !creditOpen },
-                        shapes = IconButtonDefaults.shapes(),
-                        modifier = Modifier.semantics { contentDescription = "Photo credit" }
-                    ) {
-                        Surface(shape = CircleShape, color = com.splitmate.app.ui.DesignSystemBindings.activePalette.scrim.copy(alpha = 0.45f), contentColor = com.splitmate.app.ui.theme.HubExtendedColors.OnImageScrim) {
-                            SymbolIcon(
-                                imageVector = Icons.Outlined.Info,
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .padding(6.dp)
-                                    .size(18.dp)
-                            )
+                    ExpressivePlainTooltipBox(tooltipText = "Photo credit") {
+                        IconButton(
+                            onClick = { creditOpen = !creditOpen },
+                            shapes = IconButtonDefaults.shapes(),
+                            modifier = Modifier.semantics { contentDescription = "Photo credit" }
+                        ) {
+                            Surface(shape = CircleShape, color = com.splitmate.app.ui.DesignSystemBindings.activePalette.scrim.copy(alpha = 0.45f), contentColor = com.splitmate.app.ui.theme.HubExtendedColors.OnImageScrim) {
+                                SymbolIcon(
+                                    imageVector = Icons.Outlined.Info,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .padding(6.dp)
+                                        .size(18.dp)
+                                )
+                            }
                         }
                     }
                     if (creditOpen) {
@@ -752,6 +945,7 @@ private fun AutoShrinkTitle(text: String, color: Color, modifier: Modifier = Mod
 }
 
 private const val MIN_TITLE_SCALE = 0.7f
+private const val HERO_IMAGE_TIMEOUT_MS = 12_000L
 
 // -------------------------------------------------------------------------------------------------
 // Search, suggestions, disambiguation, skeletons
@@ -767,6 +961,18 @@ private fun DestinationSearch(
     modifier: Modifier = Modifier
 ) {
     val focusManager = LocalFocusManager.current
+    var searchExpanded by rememberSaveable { mutableStateOf(false) }
+    val sanitizedSuggestions = remember(state.bookingSuggestions, state.destinationQuery) {
+        val q = state.destinationQuery.trim()
+        state.bookingSuggestions.mapNotNull { raw ->
+            val label = PlanGuideFormat.sanitizeDisplay(raw) ?: return@mapNotNull null
+            if (q.isEmpty() || label.contains(q, ignoreCase = true)) raw to label else null
+        }
+    }
+    val pillColors = ButtonDefaults.filledTonalButtonColors(
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+        contentColor = MaterialTheme.colorScheme.onSurface
+    )
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -783,42 +989,83 @@ private fun DestinationSearch(
                     .semantics { heading() }
             )
             if (onClose != null) {
-                IconButton(onClick = onClose, shapes = IconButtonDefaults.shapes()) {
-                    SymbolIcon(Icons.Rounded.Close, contentDescription = "Close search")
+                ExpressivePlainTooltipBox(tooltipText = "Close search") {
+                    IconButton(onClick = onClose, shapes = IconButtonDefaults.shapes()) {
+                        SymbolIcon(Icons.Rounded.Close, contentDescription = "Close search")
+                    }
                 }
             }
         }
-        OutlinedTextField(
-            value = state.destinationQuery,
-            onValueChange = { actions.updateDestinationQuery(it) },
-            placeholder = { Text("Search a city, town or region") },
-            leadingIcon = { SymbolIcon(Icons.Rounded.Search, contentDescription = null) },
-            trailingIcon = {
-                if (state.destinationQuery.isNotEmpty()) {
-                    IconButton(onClick = { actions.updateDestinationQuery("") }, shapes = IconButtonDefaults.shapes()) {
-                        SymbolIcon(Icons.Rounded.Close, contentDescription = "Clear search")
+        DockedSearchBar(
+            inputField = {
+                SearchBarDefaults.InputField(
+                    query = state.destinationQuery,
+                    onQueryChange = { actions.updateDestinationQuery(it) },
+                    onSearch = {
+                        searchExpanded = false
+                        actions.submitDestinationQuery()
+                        focusManager.clearFocus()
+                        onSubmitted()
+                    },
+                    expanded = searchExpanded,
+                    onExpandedChange = { searchExpanded = it },
+                    placeholder = { Text("Search a city, town or region") },
+                    leadingIcon = { SymbolIcon(Icons.Rounded.Search, contentDescription = null) },
+                    trailingIcon = {
+                        if (state.destinationQuery.isNotEmpty()) {
+                            ExpressivePlainTooltipBox(tooltipText = "Clear search") {
+                                IconButton(
+                                    onClick = { actions.updateDestinationQuery("") },
+                                    shapes = IconButtonDefaults.shapes()
+                                ) {
+                                    SymbolIcon(Icons.Rounded.Close, contentDescription = "Clear search")
+                                }
+                            }
+                        }
                     }
-                }
+                )
             },
-            singleLine = true,
-            shape = RoundedCornerShape(28.dp),
-            keyboardOptions = KeyboardOptions(
-                capitalization = KeyboardCapitalization.Words,
-                imeAction = ImeAction.Search
-            ),
-            keyboardActions = KeyboardActions(onSearch = {
-                actions.submitDestinationQuery()
-                focusManager.clearFocus()
-                onSubmitted()
-            }),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+            expanded = searchExpanded && sanitizedSuggestions.isNotEmpty(),
+            onExpandedChange = { searchExpanded = it },
+            colors = SearchBarDefaults.colors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
             ),
             modifier = Modifier.fillMaxWidth()
-        )
-        if (state.bookingSuggestions.isNotEmpty()) {
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)
+            ) {
+                sanitizedSuggestions.forEachIndexed { index, (raw, label) ->
+                    SegmentedListItem(
+                        onClick = {
+                            searchExpanded = false
+                            focusManager.clearFocus()
+                            actions.useBookingSuggestion(raw)
+                            onSubmitted()
+                        },
+                        shapes = ListItemDefaults.segmentedShapes(index = index, count = sanitizedSuggestions.size),
+                        colors = ListItemDefaults.segmentedColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                        ),
+                        leadingContent = {
+                            SymbolIcon(Icons.Rounded.Place, contentDescription = null, modifier = Modifier.size(18.dp))
+                        },
+                        content = {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodyLarge,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    )
+                }
+            }
+        }
+        if (!searchExpanded && state.bookingSuggestions.isNotEmpty()) {
             Text(
                 text = "Suggestions from your bookings",
                 style = MaterialTheme.typography.labelLarge,
@@ -830,40 +1077,50 @@ private fun DestinationSearch(
             ) {
                 state.bookingSuggestions.forEach { suggestion ->
                     val text = PlanGuideFormat.sanitizeDisplay(suggestion) ?: return@forEach
-                    SuggestionChip(
+                    FilledTonalButton(
                         onClick = {
                             focusManager.clearFocus()
                             actions.useBookingSuggestion(suggestion)
                             onSubmitted()
                         },
-                        label = { ChipText(text) },
-                        icon = { SymbolIcon(Icons.Rounded.Place, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                    )
+                        shapes = ButtonDefaults.shapes(),
+                        colors = pillColors,
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                        modifier = Modifier
+                            .heightIn(min = 40.dp)
+                            .minimumInteractiveComponentSize()
+                    ) {
+                        SymbolIcon(Icons.Rounded.Place, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        ChipText(text)
+                    }
                 }
             }
         }
         if (onOpenStaySheet != null) {
             val stayLabel = state.stay.stay?.label?.let { PlanGuideFormat.sanitizeDisplay(it) }
                 ?.let { PlanGuideFormat.truncate(it, 28) }
-            ElevatedAssistChip(
+            FilledTonalButton(
                 onClick = {
                     focusManager.clearFocus()
                     onOpenStaySheet()
                 },
-                label = {
-                    ChipText(
-                        if (stayLabel != null) "Stay: $stayLabel"
-                        else "Have a hotel or Airbnb link? Set your stay"
-                    )
-                },
-                leadingIcon = { SymbolIcon(Icons.Rounded.Hotel, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                trailingIcon = { SymbolIcon(Icons.Rounded.ChevronRight, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                colors = AssistChipDefaults.elevatedAssistChipColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
-                ),
-                elevation = AssistChipDefaults.elevatedAssistChipElevation(elevation = 1.dp),
-                modifier = Modifier.heightIn(min = 48.dp)
-            )
+                shapes = ButtonDefaults.shapes(),
+                colors = pillColors,
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .minimumInteractiveComponentSize()
+            ) {
+                SymbolIcon(Icons.Rounded.Hotel, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                ChipText(
+                    if (stayLabel != null) "Stay: $stayLabel"
+                    else "Have a hotel or Airbnb link? Set your stay"
+                )
+                Spacer(Modifier.width(4.dp))
+                SymbolIcon(Icons.Rounded.ChevronRight, contentDescription = null, modifier = Modifier.size(18.dp))
+            }
         }
     }
 }
@@ -875,6 +1132,10 @@ private fun DisambiguationChips(
     onChosen: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val pillColors = ButtonDefaults.filledTonalButtonColors(
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+        contentColor = MaterialTheme.colorScheme.onSurface
+    )
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -891,21 +1152,27 @@ private fun DisambiguationChips(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             phase.candidates.take(3).forEach { candidate ->
-                SuggestionChip(
+                FilledTonalButton(
                     onClick = {
                         actions.chooseCandidate(candidate)
                         onChosen()
                     },
-                    label = {
-                        Text(
-                            text = PlanGuideFormat.candidateLabel(candidate),
-                            style = MaterialTheme.typography.labelLarge,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    icon = { SymbolIcon(Icons.Rounded.TravelExplore, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                )
+                    shapes = ButtonDefaults.shapes(),
+                    colors = pillColors,
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                    modifier = Modifier
+                        .heightIn(min = 40.dp)
+                        .minimumInteractiveComponentSize()
+                ) {
+                    SymbolIcon(Icons.Rounded.TravelExplore, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = PlanGuideFormat.candidateLabel(candidate),
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }

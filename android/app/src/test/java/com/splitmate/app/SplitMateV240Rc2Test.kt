@@ -21,9 +21,10 @@ class SplitMateV240Rc2Test {
         assertTrue(bar.contains("wrapContentWidth(align = Alignment.Start, unbounded = true)"), "Toolbar tabs must not squash during collapse")
         assertTrue(bar.contains("placeRelative(x = -shiftLeftToCenterPx, y = 0)"), "Collapsed single button must shift to horizontal center")
         assertFalse(bar.contains(".shadow("), "the official toolbar owns its shadow")
-        val wiring = app.substringAfter("bottomBar = {").substringBefore("SplitMateBottomNavigationBar(")
-        assertFalse(wiring.contains("animateContentSize"), "animateContentSize clips the toolbar shadow")
-        assertFalse(wiring.contains("fadeOut("), "a fade layer clips the shadow to a rectangle")
+        val wiring = app.substringAfter("NavigationSuiteScaffoldLayout(").substringBefore("layoutType = navSuiteType")
+        assertTrue(wiring.contains("ShortNavigationBar("), "compact shell uses official ShortNavigationBar")
+        assertFalse(wiring.contains("animateContentSize"), "animateContentSize clips the navigation bar shadow")
+        assertFalse(wiring.contains("fadeOut("), "no offscreen fade layer clipping navigation chrome")
     }
 
     @Test

@@ -46,8 +46,10 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -266,24 +268,39 @@ private fun PayerLine(text: String, payerName: String, modifier: Modifier = Modi
     }
 }
 
-/** Official M3 AssistChip with a Material Symbol (min 48dp touch target from the library). */
+// v2.4.0 rc21: migrated from AssistChip( to Expressive OutlinedButton with ButtonDefaults.shapes() press morph.
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun CardActionChip(label: String, icon: ImageVector, onClick: () -> Unit) {
     val haptic = LocalHapticFeedback.current
-    AssistChip(
+    OutlinedButton(
         onClick = {
             haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
             onClick()
         },
-        label = { Text(text = label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) },
-        leadingIcon = { SymbolIcon(imageVector = icon, contentDescription = null, modifier = Modifier.size(AssistChipDefaults.IconSize)) },
-        colors = AssistChipDefaults.assistChipColors(
+        shapes = ButtonDefaults.shapes(),
+        colors = ButtonDefaults.outlinedButtonColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-            labelColor = MaterialTheme.colorScheme.onSurface,
-            leadingIconContentColor = MaterialTheme.colorScheme.onSurface
+            contentColor = MaterialTheme.colorScheme.onSurface
         ),
-        border = AssistChipDefaults.assistChipBorder(enabled = true, borderColor = MaterialTheme.colorScheme.outlineVariant)
-    )
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        contentPadding = ButtonDefaults.SmallContentPadding,
+        modifier = Modifier
+            .heightIn(min = ButtonDefaults.MinHeight)
+            .minimumInteractiveComponentSize()
+    ) {
+        SymbolIcon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(ButtonDefaults.IconSize)
+        )
+        Spacer(modifier = Modifier.width(ButtonDefaults.IconSpacing))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold
+        )
+    }
 }
 
 /** Small tonal status pill (e.g. "Booked", "Equal split"). */

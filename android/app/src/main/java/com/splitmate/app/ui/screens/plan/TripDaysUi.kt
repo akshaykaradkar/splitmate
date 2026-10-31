@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import com.splitmate.app.data.guide.Place
 import com.splitmate.app.data.guide.TripDayRange
 import com.splitmate.app.data.guide.TripDays
+import com.splitmate.app.ui.components.ExpressivePlainTooltipBox
 import com.splitmate.app.ui.components.SymbolIcon
 
 // =================================================================================================
@@ -120,8 +121,10 @@ fun TripDatesPickerDialog(range: TripDayRange?, onConfirm: (startMs: Long, endMs
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = onDismiss, shapes = IconButtonDefaults.shapes()) {
-                        SymbolIcon(Icons.Rounded.Close, contentDescription = "Close")
+                    ExpressivePlainTooltipBox(tooltipText = "Close") {
+                        IconButton(onClick = onDismiss, shapes = IconButtonDefaults.shapes()) {
+                            SymbolIcon(Icons.Rounded.Close, contentDescription = "Close")
+                        }
                     }
                     Text(
                         text = "Trip dates",
@@ -150,7 +153,7 @@ fun TripDatesPickerDialog(range: TripDayRange?, onConfirm: (startMs: Long, endMs
                             modifier = Modifier.padding(start = 24.dp, end = 12.dp, bottom = 12.dp)
                         )
                     },
-                    showModeToggle = false,
+                    showModeToggle = true,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -240,12 +243,14 @@ fun MoveToDayButton(
         }
     }
     Box {
-        IconButton(
-            onClick = { open = true },
-            shapes = IconButtonDefaults.shapes(),
-            modifier = Modifier.semantics { contentDescription = "Move $placeName to another day" }
-        ) {
-            SymbolIcon(Icons.Rounded.EditCalendar, contentDescription = null)
+        ExpressivePlainTooltipBox(tooltipText = "Move $placeName to another day") {
+            IconButton(
+                onClick = { open = true },
+                shapes = IconButtonDefaults.shapes(),
+                modifier = Modifier.semantics { contentDescription = "Move $placeName to another day" }
+            ) {
+                SymbolIcon(Icons.Rounded.EditCalendar, contentDescription = null)
+            }
         }
         DropdownMenuPopup(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuGroup(shapes = MenuDefaults.groupShape(0, 2)) {

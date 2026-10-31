@@ -5,15 +5,21 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -44,6 +50,7 @@ class MoneySnackbar internal constructor(
 ) {
     private val announceLock = Mutex()
     private val announcements = mutableListOf<Job>()
+    internal var claimedByScaffoldCount by mutableIntStateOf(0)
 
     fun offerUndo(message: String, onUndo: () -> Unit) {
         cancelAnnouncements()
@@ -93,7 +100,48 @@ class MoneySnackbar internal constructor(
 /** Null outside [ProvideMoneySnackbar] (previews, isolated tests): callers then skip the snackbar. */
 val LocalMoneySnackbar = staticCompositionLocalOf<MoneySnackbar?> { null }
 
-/** Provides [LocalMoneySnackbar] and draws its host above the bottom toolbar and FAB. */
+/** Explicit Buckwheat / GM3 Expressive [SnackbarHost] with `Snackbar(...)` slot customization (`snackbar.md`). */
+@Composable
+fun SplitMateBuckwheatSnackbarHost(
+    hostState: SnackbarHostState,
+    modifier: Modifier = Modifier
+) {
+    SnackbarHost(
+        hostState = hostState,
+        modifier = modifier,
+        snackbar = { data ->
+            Snackbar(
+                snackbarData = data,
+                shape = MaterialTheme.shapes.medium,
+                containerColor = MaterialTheme.colorScheme.inverseSurface,
+                contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                actionColor = MaterialTheme.colorScheme.inversePrimary,
+                dismissActionContentColor = MaterialTheme.colorScheme.inverseOnSurface
+            )
+        }
+    )
+}
+
+/**
+ * Mounts [LocalMoneySnackbar] inside a screen's `Scaffold(snackbarHost = { MoneyScaffoldSnackbarHost() })`
+ * so `Scaffold` automatically coordinates clearance above `ShortNavigationBar`, `FloatingToolbar`, and FABs.
+ */
+@Composable
+fun MoneyScaffoldSnackbarHost(modifier: Modifier = Modifier) {
+    val moneySnackbar = LocalMoneySnackbar.current ?: return
+    DisposableEffect(moneySnackbar) {
+        moneySnackbar.claimedByScaffoldCount++
+        onDispose {
+            moneySnackbar.claimedByScaffoldCount = (moneySnackbar.claimedByScaffoldCount - 1).coerceAtLeast(0)
+        }
+    }
+    SplitMateBuckwheatSnackbarHost(
+        hostState = moneySnackbar.hostState,
+        modifier = modifier
+    )
+}
+
+/** Provides [LocalMoneySnackbar] and draws a fallback host only when no active `Scaffold` claims it. */
 @Composable
 fun ProvideMoneySnackbar(content: @Composable BoxScope.() -> Unit) {
     val hostState = remember { SnackbarHostState() }
@@ -103,12 +151,14 @@ fun ProvideMoneySnackbar(content: @Composable BoxScope.() -> Unit) {
         CompositionLocalProvider(LocalMoneySnackbar provides snackbar) {
             content()
         }
-        SnackbarHost(
-            hostState = hostState,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(start = 16.dp, end = 16.dp, bottom = 96.dp)
-        )
+        if (snackbar.claimedByScaffoldCount == 0) {
+            SplitMateBuckwheatSnackbarHost(
+                hostState = hostState,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            )
+        }
     }
 }

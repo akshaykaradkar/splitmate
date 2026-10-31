@@ -2,10 +2,18 @@ package com.splitmate.app
 
 import com.splitmate.app.ui.components.SymbolIcon
 import com.splitmate.app.ui.components.sharedGroupElement
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldLayout
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.stateDescription
 import com.splitmate.app.ui.*
 import android.Manifest
 import android.content.Intent
@@ -104,8 +112,10 @@ import com.splitmate.app.ui.components.ContainedLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import com.splitmate.app.ui.components.ExpressiveGapLinearProgressIndicator
 import com.splitmate.app.ui.components.ExpressiveMenuAction
-import com.splitmate.app.ui.components.LinearWavyProgressIndicator
+import com.splitmate.app.ui.components.ExpressivePlainTooltipBox
 import com.splitmate.app.ui.components.MaterialShapes
+import com.splitmate.app.ui.feel.LocalMoneySnackbar
+import com.splitmate.app.ui.feel.MoneyScaffoldSnackbarHost
 import com.splitmate.app.ui.components.MorphPolygonShape
 import com.splitmate.app.ui.components.RoundedPolygonShape
 import com.splitmate.app.ui.components.SplitButtonLayout
@@ -1094,12 +1104,14 @@ fun SplitMateCloudOtpOnboardingScreen(
                             Icon(Icons.Rounded.Lock, contentDescription = null, tint = SplitMateTheme.PrimaryDark)
                         },
                         trailingIcon = {
-                            IconButton(onClick = { isPinVisible = !isPinVisible }, shapes = IconButtonDefaults.shapes()) {
-                                Icon(
-                                    imageVector = if (isPinVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                                    contentDescription = if (isPinVisible) "Hide PIN" else "Show PIN",
-                                    tint = SplitMateTheme.PrimaryDark
-                                )
+                            ExpressivePlainTooltipBox(tooltipText = if (isPinVisible) "Hide PIN" else "Show PIN") {
+                                IconButton(onClick = { isPinVisible = !isPinVisible }, shapes = IconButtonDefaults.shapes()) {
+                                    Icon(
+                                        imageVector = if (isPinVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                                        contentDescription = if (isPinVisible) "Hide PIN" else "Show PIN",
+                                        tint = SplitMateTheme.PrimaryDark
+                                    )
+                                }
                             }
                         },
                         visualTransformation = if (isPinVisible) {
@@ -1427,6 +1439,7 @@ fun SplitMateMainDashboardScaffold(
     onOpenSettings: () -> Unit
 ) {
     val context = LocalContext.current
+    val moneySnackbar = LocalMoneySnackbar.current
     val coroutineScope = rememberCoroutineScope()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val currentTab = remember(uiState.selectedTabName) {
@@ -1482,11 +1495,8 @@ fun SplitMateMainDashboardScaffold(
                                 if (uiState.openedGroupDetailId != null) {
                                     viewModel.openGroupDetail(existingExp.groupId)
                                 }
-                                Toast.makeText(
-                                    context,
-                                    "Already added! Train PNR ${trainSnapshot.pnr} (${matchedGroup?.name ?: "Group"}) — showing earlier expense.",
-                                    Toast.LENGTH_LONG
-                                ).show()
+                                val msg = "Already added! Train PNR ${trainSnapshot.pnr} (${matchedGroup?.name ?: "Group"}) — showing earlier expense."
+                                moneySnackbar?.say(msg) ?: Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                             }
                             activeFlightTicketResult = null
                             activeReviewPnr = trainSnapshot.pnr
@@ -1502,11 +1512,8 @@ fun SplitMateMainDashboardScaffold(
                                 if (uiState.openedGroupDetailId != null) {
                                     viewModel.openGroupDetail(existingExp.groupId)
                                 }
-                                Toast.makeText(
-                                    context,
-                                    "Already added! PNR ${extracted.pnr} (${matchedGroup?.name ?: "Group"}) — showing earlier expense.",
-                                    Toast.LENGTH_LONG
-                                ).show()
+                                val msg = "Already added! PNR ${extracted.pnr} (${matchedGroup?.name ?: "Group"}) — showing earlier expense."
+                                moneySnackbar?.say(msg) ?: Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                                 val cachedEarlierFlight = com.splitmate.app.data.PnrNetworkRepository.loadConfirmedFlightTicketResult(context, extracted.pnr)
                                 activeFlightTicketResult = cachedEarlierFlight ?: extracted
                             } else {
@@ -1514,11 +1521,8 @@ fun SplitMateMainDashboardScaffold(
                             }
                         }
                     } else {
-                        Toast.makeText(
-                            context,
-                            "Could not detect a valid Flight or IRCTC Train E-Ticket in this PDF.",
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        val errMsg = "Could not detect a valid Flight or IRCTC Train E-Ticket in this PDF."
+                        moneySnackbar?.say(errMsg) ?: Toast.makeText(context, errMsg, Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -1708,181 +1712,213 @@ fun SplitMateMainDashboardScaffold(
     val stableOnToggleTripHubView = remember {
         { enabled: Boolean -> useTripHubV2View = enabled }
     }
-    Scaffold(
-        modifier = Modifier
-            .fillMaxSize()
-            .floatingToolbarVerticalNestedScroll(
-                expanded = isToolbarExpanded,
-                onExpand = { if (!isToolbarExpanded) isToolbarExpanded = true },
-                onCollapse = { if (isToolbarExpanded) isToolbarExpanded = false }
-            ),
-        containerColor = animatedScreenBg,
-        floatingActionButton = {
-            AnimatedVisibility(
-                visible = isMediumOrExpandedWindow && (
-                    (currentTab == SplitMateTab.LEDGERS && !isTripHubCanvasVisible) ||
-                        currentTab == SplitMateTab.AUDIT
-                    ),
-                enter = slideInVertically(
-                    animationSpec = SplitMateMotion.defaultSpatial(),
-                    initialOffsetY = { it }
-                ) + fadeIn(animationSpec = SplitMateMotion.defaultEffects()),
-                exit = slideOutVertically(
-                    animationSpec = SplitMateMotion.defaultSpatial(),
-                    targetOffsetY = { it }
-                ) + fadeOut(animationSpec = SplitMateMotion.defaultEffects())
-            ) {
-                // v2.4.0 rc3: official ExtendedFloatingActionButton (expanded overload) with its default
-                // M3 Expressive shape; it collapses to the icon with the toolbar scroll state.
-                ExtendedFloatingActionButton(
-                    onClick = {
-                        viewModel.navigateToSubFlow(
-                            targetTabName = SplitMateTab.SPLIT.name,
-                            originGroupDetailId = uiState.openedGroupDetailId
-                        )
-                    },
-                    expanded = isToolbarExpanded,
-                    icon = {
-                        SymbolIcon(
-                            imageVector = Icons.Rounded.ElectricBolt,
-                            contentDescription = null,
-                            tint = activeFabPalette.onPrimary
-                        )
-                    },
-                    text = {
-                        Text(
-                            text = "Log expense",
-                            fontWeight = FontWeight.ExtraBold,
-                            color = activeFabPalette.onPrimary,
-                            fontFamily = SplitMateTheme.FontRounded
-                        )
-                    },
-                    containerColor = activeFabPalette.primary,
-                    contentColor = activeFabPalette.onPrimary,
-                    elevation = FloatingActionButtonDefaults.elevation(
-                        defaultElevation = 6.dp,
-                        pressedElevation = 10.dp
-                    ),
-                    modifier = Modifier
-                        .navigationBarsPadding()
-                        .padding(bottom = 8.dp)
-                )
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isCompactWindow = maxWidth < 600.dp
+        val isExpandedWindow = maxWidth >= 840.dp
+        val railState = androidx.compose.material3.rememberWideNavigationRailState(
+            if (isExpandedWindow) {
+                androidx.compose.material3.WideNavigationRailValue.Expanded
+            } else {
+                androidx.compose.material3.WideNavigationRailValue.Collapsed
             }
-        },
-        bottomBar = {
-            if (!isMediumOrExpandedWindow) {
-                AnimatedVisibility(
-                    visible = !isImmersiveTripHubOpen &&
-                        currentTab != SplitMateTab.SPLIT,
-                    // v2.4.0 rc2: slide only. A fade renders the bar in an offscreen layer clipped to
-                    // its bounds, which cut the round shadow into a rectangle.
-                    enter = slideInVertically(
-                        animationSpec = SplitMateMotion.defaultSpatial(),
-                        initialOffsetY = { it }
-                    ),
-                    exit = slideOutVertically(
-                        animationSpec = SplitMateMotion.defaultSpatial(),
-                        targetOffsetY = { it }
-                    )
-                ) {
-                    // v2.4.0 rc2: no size animation wrapper here (it clipped to bounds and flattened the shadow).
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("HorizontalFloatingToolbar")
-                    ) {
-                        SplitMateBottomNavigationBar(
-                            selectedTab = currentTab,
-                            expanded = isToolbarExpanded,
-                            onTabSelected = { tab -> viewModel.selectTab(tab.name) },
-                            onQuickSplitClick = {
-                                viewModel.navigateToSubFlow(
-                                    targetTabName = SplitMateTab.SPLIT.name,
-                                    originGroupDetailId = uiState.openedGroupDetailId
+        )
+        LaunchedEffect(isExpandedWindow) {
+            if (isExpandedWindow) railState.expand() else railState.collapse()
+        }
+        val railExpanded =
+            railState.targetValue == androidx.compose.material3.WideNavigationRailValue.Expanded
+        val navSuiteType = when {
+            currentTab == SplitMateTab.SPLIT -> NavigationSuiteType.None
+            isCompactWindow && isImmersiveTripHubOpen -> NavigationSuiteType.None
+            isCompactWindow -> NavigationSuiteType.ShortNavigationBarCompact
+            railExpanded -> NavigationSuiteType.WideNavigationRailExpanded
+            else -> NavigationSuiteType.WideNavigationRailCollapsed
+        }
+
+        NavigationSuiteScaffoldLayout(
+            navigationSuite = {
+                when (navSuiteType) {
+                    NavigationSuiteType.ShortNavigationBarCompact,
+                    NavigationSuiteType.ShortNavigationBarMedium -> {
+                        ShortNavigationBar(
+                            containerColor = activeFabPalette.surfaceContainer,
+                            contentColor = SplitMateTheme.PrimaryDark,
+                            modifier = Modifier.testTag("AdaptiveShortNavigationBar")
+                        ) {
+                            SplitMateTab.values().filter { it.showInPrimaryNav }.forEach { tab ->
+                                val isSelected = currentTab == tab
+                                ShortNavigationBarItem(
+                                    selected = isSelected,
+                                    onClick = { viewModel.selectTab(tab.name) },
+                                    iconPosition = androidx.compose.material3.NavigationItemIconPosition.Top,
+                                    icon = {
+                                        SymbolIcon(
+                                            imageVector = tab.icon,
+                                            contentDescription = null,
+                                            filled = isSelected,
+                                            textWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            text = if (tab == SplitMateTab.AUDIT) "Activity" else tab.label,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                            fontFamily = SplitMateTheme.FontRounded,
+                                            maxLines = 1,
+                                            modifier = Modifier.clearAndSetSemantics {}
+                                        )
+                                    },
+                                    colors = ShortNavigationBarItemDefaults.colors(
+                                        selectedIconColor = activeFabPalette.onPrimaryContainer,
+                                        selectedTextColor = SplitMateTheme.PrimaryDark,
+                                        selectedIndicatorColor = SplitMateTheme.AccentSage,
+                                        unselectedIconColor = SplitMateTheme.TextSecondary,
+                                        unselectedTextColor = SplitMateTheme.TextSecondary
+                                    ),
+                                    modifier = Modifier.semantics { contentDescription = tab.label }
                                 )
                             }
+                        }
+                    }
+                    NavigationSuiteType.WideNavigationRailCollapsed,
+                    NavigationSuiteType.WideNavigationRailExpanded -> {
+                        ExpressiveNavigationRail(
+                            selectedTab = currentTab,
+                            railState = railState,
+                            containerColor = animatedScreenBg,
+                            onToggleRail = { coroutineScope.launch { railState.toggle() } },
+                            onQuickSplitClick = stableOnNavigateToSplit,
+                            onTabSelected = { tab -> viewModel.selectTab(tab.name) }
+                        )
+                    }
+                    else -> Unit
+                }
+            },
+            layoutType = navSuiteType
+        ) {
+            Scaffold(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .floatingToolbarVerticalNestedScroll(
+                        expanded = isToolbarExpanded,
+                        onExpand = { if (!isToolbarExpanded) isToolbarExpanded = true },
+                        onCollapse = { if (isToolbarExpanded) isToolbarExpanded = false }
+                    ),
+                containerColor = animatedScreenBg,
+                snackbarHost = { MoneyScaffoldSnackbarHost() },
+                floatingActionButton = {
+                    AnimatedVisibility(
+                        visible = isCompactWindow &&
+                            !isImmersiveTripHubOpen &&
+                            currentTab != SplitMateTab.SPLIT &&
+                            !(currentTab == SplitMateTab.LEDGERS && isTripHubCanvasVisible),
+                        enter = slideInVertically(
+                            animationSpec = SplitMateMotion.defaultSpatial(),
+                            initialOffsetY = { it }
+                        ) + fadeIn(animationSpec = SplitMateMotion.defaultEffects()),
+                        exit = slideOutVertically(
+                            animationSpec = SplitMateMotion.defaultSpatial(),
+                            targetOffsetY = { it }
+                        ) + fadeOut(animationSpec = SplitMateMotion.defaultEffects())
+                    ) {
+                        // v2.4.0 rc21: compact-only bottom-end ExtendedFloatingActionButton; medium/expanded
+                        // windows host the primary Quick split FAB inside the WideNavigationRail header.
+                        ExtendedFloatingActionButton(
+                            onClick = stableOnNavigateToSplit,
+                            expanded = isToolbarExpanded,
+                            icon = {
+                                SymbolIcon(
+                                    imageVector = Icons.Rounded.Add,
+                                    contentDescription = null,
+                                    tint = activeFabPalette.onPrimary
+                                )
+                            },
+                            text = {
+                                Text(
+                                    text = "Quick split",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = activeFabPalette.onPrimary,
+                                    fontFamily = SplitMateTheme.FontRounded,
+                                    modifier = Modifier.clearAndSetSemantics {}
+                                )
+                            },
+                            containerColor = activeFabPalette.primary,
+                            contentColor = activeFabPalette.onPrimary,
+                            elevation = FloatingActionButtonDefaults.elevation(
+                                defaultElevation = 6.dp,
+                                pressedElevation = 10.dp
+                            ),
+                            modifier = Modifier.semantics { contentDescription = "Quick Split" }
                         )
                     }
                 }
-            }
-        }
-    ) { innerPadding ->
-        // v2.3.2 inset fix: the immersive Trip Hub renders its own LargeTopAppBar, which handles the
-        // status-bar inset (and paints its container behind it). Applying the root innerPadding here as
-        // well produced a double status-bar gap, so it is skipped for the single-pane Trip Hub. Any top
-        // padding that IS applied is consumed so nested Scaffolds/TopAppBars never re-apply it.
-        val tripHubOwnsStatusBar = isImmersiveTripHubOpen && !isTwoPaneTabletWithGroups
-        val appliedTopInsetPadding = if (tripHubOwnsStatusBar) 0.dp else innerPadding.calculateTopPadding()
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = appliedTopInsetPadding)
-                .consumeWindowInsets(PaddingValues(top = appliedTopInsetPadding))
-                .imePadding()
-        ) {
-            if (isMediumOrExpandedWindow && currentTab != SplitMateTab.SPLIT) {
-                ExpressiveNavigationRail(
-                    selectedTab = currentTab,
-                    containerColor = animatedScreenBg,
-                    onTabSelected = { tab -> viewModel.selectTab(tab.name) }
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-            ) {
-                // v2.4.0 rc8: Screen 1-3 labels are mostly Figtree Bold/ExtraBold, so their Material
-                // Symbols use the SemiBold (600) stroke. Text fonts are unchanged (Figtree).
-                CompositionLocalProvider(
-                    com.splitmate.app.ui.components.LocalSymbolTextWeight provides FontWeight.SemiBold
+            ) { innerPadding ->
+                // v2.3.2 inset fix: the immersive Trip Hub renders its own LargeTopAppBar, which handles the
+                // status-bar inset (and paints its container behind it). Applying the root innerPadding here as
+                // well produced a double status-bar gap, so it is skipped for the single-pane Trip Hub. Any top
+                // padding that IS applied is consumed so nested Scaffolds/TopAppBars never re-apply it.
+                val tripHubOwnsStatusBar = isImmersiveTripHubOpen && !isTwoPaneTabletWithGroups
+                val appliedTopInsetPadding = if (tripHubOwnsStatusBar) 0.dp else innerPadding.calculateTopPadding()
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = appliedTopInsetPadding)
+                        .consumeWindowInsets(PaddingValues(top = appliedTopInsetPadding))
+                        .imePadding()
                 ) {
-                when (currentTab) {
-                SplitMateTab.LEDGERS -> LedgersDashboardScreen(
-                    viewModel = viewModel,
-                    onNavigateToSplit = stableOnNavigateToSplit,
-                    onNavigateToSettle = stableOnNavigateToSettle,
-                    onNavigateToPnrSplit = stableOnNavigateToPnrSplit,
-                    onUploadFlightPdf = stableOnUploadFlightPdf,
-                    onOpenPnrWithTicket = stableOnOpenPnrWithTicket,
-                    onAvatarSettingsClick = onOpenSettings,
-                    useTripHubV2View = useTripHubV2View,
-                    onToggleTripHubView = stableOnToggleTripHubView
-                )
-                SplitMateTab.SPLIT -> QuickExpenseScreen(
-                    viewModel = viewModel,
-                    onBackClick = {
-                        if (uiState.returnToGroupDetailId != null) {
-                            viewModel.finishSubFlowToGroupDetail(uiState.returnToGroupDetailId)
-                        } else {
-                            viewModel.selectTab(SplitMateTab.LEDGERS.name)
+                    // v2.4.0 rc8: Screen 1-3 labels are mostly Figtree Bold/ExtraBold, so their Material
+                    // Symbols use the SemiBold (600) stroke. Text fonts are unchanged (Figtree).
+                    CompositionLocalProvider(
+                        com.splitmate.app.ui.components.LocalSymbolTextWeight provides FontWeight.SemiBold
+                    ) {
+                        when (currentTab) {
+                            SplitMateTab.LEDGERS -> LedgersDashboardScreen(
+                                viewModel = viewModel,
+                                onNavigateToSplit = stableOnNavigateToSplit,
+                                onNavigateToSettle = stableOnNavigateToSettle,
+                                onNavigateToPnrSplit = stableOnNavigateToPnrSplit,
+                                onUploadFlightPdf = stableOnUploadFlightPdf,
+                                onOpenPnrWithTicket = stableOnOpenPnrWithTicket,
+                                onAvatarSettingsClick = onOpenSettings,
+                                useTripHubV2View = useTripHubV2View,
+                                onToggleTripHubView = stableOnToggleTripHubView
+                            )
+                            SplitMateTab.SPLIT -> QuickExpenseScreen(
+                                viewModel = viewModel,
+                                onBackClick = {
+                                    if (uiState.returnToGroupDetailId != null) {
+                                        viewModel.finishSubFlowToGroupDetail(uiState.returnToGroupDetailId)
+                                    } else {
+                                        viewModel.selectTab(SplitMateTab.LEDGERS.name)
+                                    }
+                                },
+                                onOpenPnrDirectSplit = {
+                                    if (uiState.groups.isNotEmpty()) {
+                                        activeReviewPnr = ""
+                                        showPnrReviewScreen = true
+                                    } else {
+                                        viewModel.selectTab(SplitMateTab.LEDGERS.name)
+                                    }
+                                },
+                                onSaveSplit = { _, _ ->
+                                    // Return directly inside the group where the expense was logged!
+                                    val loggedGroupId = viewModel.uiState.value.activeGroup?.groupId
+                                    viewModel.finishSubFlowToGroupDetail(loggedGroupId)
+                                }
+                            )
+                            SplitMateTab.SETTLE -> GreedySettlementScreen(viewModel = viewModel)
+                            SplitMateTab.AUDIT -> AuditVaultScreen(
+                                viewModel = viewModel,
+                                onOpenPnrWithTicket = { groupId, pnr ->
+                                    viewModel.selectActiveGroup(groupId)
+                                    openPnrOrFlightTicket(pnr)
+                                }
+                            )
                         }
-                    },
-                    onOpenPnrDirectSplit = {
-                        if (uiState.groups.isNotEmpty()) {
-                            activeReviewPnr = ""
-                            showPnrReviewScreen = true
-                        } else {
-                            viewModel.selectTab(SplitMateTab.LEDGERS.name)
-                        }
-                    },
-                    onSaveSplit = { _, _ ->
-                        // Return directly inside the group where the expense was logged!
-                        val loggedGroupId = viewModel.uiState.value.activeGroup?.groupId
-                        viewModel.finishSubFlowToGroupDetail(loggedGroupId)
                     }
-                )
-                SplitMateTab.SETTLE -> GreedySettlementScreen(viewModel = viewModel)
-                SplitMateTab.AUDIT -> AuditVaultScreen(
-                    viewModel = viewModel,
-                    onOpenPnrWithTicket = { groupId, pnr ->
-                        viewModel.selectActiveGroup(groupId)
-                        openPnrOrFlightTicket(pnr)
-                    }
-                )
-            }
-            }
+                }
             }
         }
     }
@@ -1893,40 +1929,101 @@ fun SplitMateMainDashboardScaffold(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ExpressiveNavigationRail(
     selectedTab: SplitMateTab,
     containerColor: Color,
     onTabSelected: (SplitMateTab) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    railState: androidx.compose.material3.WideNavigationRailState =
+        androidx.compose.material3.rememberWideNavigationRailState(),
+    onToggleRail: () -> Unit = {},
+    onQuickSplitClick: () -> Unit = {}
 ) {
-    // v2.4.0 rc3: the official M3 Expressive WideNavigationRail (collapsed state) and its items.
+    val activePalette = DesignSystemBindings.activePalette
+    val railExpanded =
+        railState.targetValue == androidx.compose.material3.WideNavigationRailValue.Expanded
+    val toggleLabel = if (railExpanded) "Collapse rail" else "Expand rail"
+    // v2.4.0 rc21: official M3 Expressive WideNavigationRail with header toggle + ExtendedFAB.
     androidx.compose.material3.WideNavigationRail(
+        state = railState,
         colors = androidx.compose.material3.WideNavigationRailDefaults.colors(
             containerColor = containerColor,
             contentColor = SplitMateTheme.PrimaryDark
         ),
+        header = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ExpressivePlainTooltipBox(
+                    tooltipText = toggleLabel,
+                    modifier = Modifier.padding(start = 12.dp)
+                ) {
+                    IconButton(
+                        onClick = onToggleRail,
+                        shapes = IconButtonDefaults.shapes(),
+                        modifier = Modifier.semantics {
+                            stateDescription = if (railExpanded) "Expanded" else "Collapsed"
+                        }
+                    ) {
+                        SymbolIcon(
+                            imageVector = Icons.Rounded.SpaceDashboard,
+                            contentDescription = toggleLabel,
+                            tint = SplitMateTheme.PrimaryDark
+                        )
+                    }
+                }
+                ExtendedFloatingActionButton(
+                    onClick = onQuickSplitClick,
+                    expanded = railExpanded,
+                    icon = {
+                        SymbolIcon(
+                            imageVector = Icons.Rounded.Add,
+                            contentDescription = null,
+                            tint = activePalette.onPrimary
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = "Quick split",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = activePalette.onPrimary,
+                            fontFamily = SplitMateTheme.FontRounded,
+                            modifier = Modifier.clearAndSetSemantics {}
+                        )
+                    },
+                    containerColor = activePalette.primary,
+                    contentColor = activePalette.onPrimary,
+                    modifier = Modifier
+                        .padding(start = 12.dp)
+                        .semantics { contentDescription = "Quick Split" }
+                )
+            }
+        },
         modifier = modifier.testTag("AdaptiveNavigationRail")
     ) {
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         SplitMateTab.values().filter { it.showInPrimaryNav }.forEach { tab ->
             val isSelected = selectedTab == tab
             androidx.compose.material3.WideNavigationRailItem(
-                railExpanded = false,
+                railExpanded = railExpanded,
                 selected = isSelected,
                 onClick = { onTabSelected(tab) },
                 icon = {
-                    Icon(
+                    SymbolIcon(
                         imageVector = tab.icon,
-                        contentDescription = tab.label
+                        contentDescription = null,
+                        filled = isSelected,
+                        textWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium
                     )
                 },
                 label = {
                     Text(
-                        text = tab.label,
-                        fontSize = 11.sp,
+                        text = if (tab == SplitMateTab.AUDIT) "Activity" else tab.label,
+                        style = MaterialTheme.typography.labelMedium,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        fontFamily = SplitMateTheme.FontRounded
+                        fontFamily = SplitMateTheme.FontRounded,
+                        modifier = Modifier.clearAndSetSemantics {}
                     )
                 },
                 colors = androidx.compose.material3.WideNavigationRailItemDefaults.colors(
@@ -1935,7 +2032,8 @@ fun ExpressiveNavigationRail(
                     selectedIndicatorColor = SplitMateTheme.AccentSage,
                     unselectedIconColor = SplitMateTheme.TextSecondary,
                     unselectedTextColor = SplitMateTheme.TextSecondary
-                )
+                ),
+                modifier = Modifier.semantics { contentDescription = tab.label }
             )
         }
     }
@@ -2041,6 +2139,10 @@ fun SplitMateBottomNavigationBar(
                         modifier = Modifier
                             .minimumInteractiveComponentSize()
                             .sizeIn(minWidth = 56.dp, minHeight = 48.dp)
+                            .semantics {
+                                role = Role.Tab
+                                selected = isSelected
+                            }
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
@@ -2065,7 +2167,8 @@ fun SplitMateBottomNavigationBar(
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 13.sp,
                                     maxLines = 1,
-                                    softWrap = false
+                                    softWrap = false,
+                                    modifier = Modifier.clearAndSetSemantics {}
                                 )
                             }
                         }
@@ -2093,6 +2196,7 @@ fun LedgersDashboardScreen(
     onToggleTripHubView: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val moneySnackbar = LocalMoneySnackbar.current
     val totalBalance by viewModel.totalBalance.collectAsStateWithLifecycle()
     val activeGroups by viewModel.activeGroups.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -3504,15 +3608,13 @@ fun LedgersDashboardScreen(
                                         }
                                     }
                                 }
-                                LinearWavyProgressIndicator(
+                                ExpressiveGapLinearProgressIndicator(
                                     progress = { assignedProgressRatio },
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(vertical = 6.dp),
                                     color = SplitMateTheme.SageText,
                                     trackColor = SplitMateTheme.SageSurface,
-                                    amplitude = 0f,
-                                    wavelength = 22.dp,
                                     strokeWidth = 5.dp
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -3599,71 +3701,118 @@ fun LedgersDashboardScreen(
                                 }
                                 // v2.4.0 rc3: the paired actions are an official ButtonGroup of official
                                 // FilledTonalButtons (press morph + neighbour give-way via animateWidth).
+                                val editTint = if (isFlightCard) {
+                                    SplitMateTheme.Extended.flightPass.onColor
+                                } else {
+                                    SplitMateTheme.SageText
+                                }
                                 androidx.compose.material3.ButtonGroup(
+                                    overflowIndicator = { menuState ->
+                                        ExpressivePlainTooltipBox(tooltipText = "More actions") {
+                                            androidx.compose.material3.ButtonGroupDefaults.OverflowIndicator(menuState = menuState)
+                                        }
+                                    },
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    val editInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                                    val deleteInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                                    val editTint = if (isFlightCard) {
-                                        SplitMateTheme.Extended.flightPass.onColor
-                                    } else {
-                                        SplitMateTheme.SageText
-                                    }
-                                    FilledTonalButton(
-                                        onClick = { editingExpense = expense },
-                                        shapes = ButtonDefaults.shapes(),
-                                        colors = ButtonDefaults.filledTonalButtonColors(
-                                            containerColor = if (isFlightCard) {
-                                                if (SplitMateTheme.isDark) SplitMateTheme.Extended.flightPass.color else SplitMateTheme.Extended.flightPass.container
-                                            } else {
-                                                SplitMateTheme.SageSurface
-                                            },
-                                            contentColor = editTint
-                                        ),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp),
-                                        interactionSource = editInteraction,
-                                        modifier = Modifier.animateWidth(editInteraction)
-                                    ) {
-                                        SymbolIcon(
-                                            imageVector = Icons.Rounded.Edit,
-                                            contentDescription = "Edit Expense",
-                                            modifier = Modifier.size(13.dp),
-                                            tint = editTint
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = "Edit",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = editTint
-                                        )
-                                    }
+                                    customItem(
+                                        buttonGroupContent = {
+                                            val editInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                                            FilledTonalButton(
+                                                onClick = { editingExpense = expense },
+                                                shapes = ButtonDefaults.shapes(),
+                                                colors = ButtonDefaults.filledTonalButtonColors(
+                                                    containerColor = if (isFlightCard) {
+                                                        if (SplitMateTheme.isDark) SplitMateTheme.Extended.flightPass.color else SplitMateTheme.Extended.flightPass.container
+                                                    } else {
+                                                        SplitMateTheme.SageSurface
+                                                    },
+                                                    contentColor = editTint
+                                                ),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp),
+                                                interactionSource = editInteraction,
+                                                modifier = Modifier
+                                                    .animateWidth(editInteraction)
+                                                    .minimumInteractiveComponentSize()
+                                            ) {
+                                                SymbolIcon(
+                                                    imageVector = Icons.Rounded.Edit,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(13.dp),
+                                                    tint = editTint
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = "Edit",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = editTint
+                                                )
+                                            }
+                                        },
+                                        menuContent = { menuState ->
+                                            DropdownMenuItem(
+                                                text = { Text("Edit") },
+                                                leadingIcon = {
+                                                    SymbolIcon(
+                                                        imageVector = Icons.Rounded.Edit,
+                                                        contentDescription = null
+                                                    )
+                                                },
+                                                onClick = {
+                                                    menuState.dismiss()
+                                                    editingExpense = expense
+                                                }
+                                            )
+                                        }
+                                    )
 
-                                    FilledTonalButton(
-                                        onClick = { deletingExpense = expense },
-                                        shapes = ButtonDefaults.shapes(),
-                                        colors = ButtonDefaults.filledTonalButtonColors(
-                                            containerColor = SplitMateTheme.TerracottaSurface,
-                                            contentColor = SplitMateTheme.TerracottaText
-                                        ),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp),
-                                        interactionSource = deleteInteraction,
-                                        modifier = Modifier.animateWidth(deleteInteraction)
-                                    ) {
-                                        SymbolIcon(
-                                            imageVector = Icons.Rounded.DeleteOutline,
-                                            contentDescription = "Delete Expense",
-                                            modifier = Modifier.size(13.dp),
-                                            tint = SplitMateTheme.TerracottaText
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = "Delete",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = SplitMateTheme.TerracottaText
-                                        )
-                                    }
+                                    customItem(
+                                        buttonGroupContent = {
+                                            val deleteInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                                            FilledTonalButton(
+                                                onClick = { deletingExpense = expense },
+                                                shapes = ButtonDefaults.shapes(),
+                                                colors = ButtonDefaults.filledTonalButtonColors(
+                                                    containerColor = SplitMateTheme.TerracottaSurface,
+                                                    contentColor = SplitMateTheme.TerracottaText
+                                                ),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp),
+                                                interactionSource = deleteInteraction,
+                                                modifier = Modifier
+                                                    .animateWidth(deleteInteraction)
+                                                    .minimumInteractiveComponentSize()
+                                            ) {
+                                                SymbolIcon(
+                                                    imageVector = Icons.Rounded.DeleteOutline,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(13.dp),
+                                                    tint = SplitMateTheme.TerracottaText
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = "Delete",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = SplitMateTheme.TerracottaText
+                                                )
+                                            }
+                                        },
+                                        menuContent = { menuState ->
+                                            DropdownMenuItem(
+                                                text = { Text("Delete") },
+                                                leadingIcon = {
+                                                    SymbolIcon(
+                                                        imageVector = Icons.Rounded.DeleteOutline,
+                                                        contentDescription = null
+                                                    )
+                                                },
+                                                onClick = {
+                                                    menuState.dismiss()
+                                                    deletingExpense = expense
+                                                }
+                                            )
+                                        }
+                                    )
                                 }
                             }
                         }
@@ -3696,8 +3845,29 @@ fun LedgersDashboardScreen(
             .fillMaxSize()
             .nestedScroll(homeScrollBehavior.nestedScrollConnection)
     ) {
-        // 1. Official M3 Expressive TopAppBar (pinned scroll behavior, zero extra status-bar inset)
+        // 1. Official M3 Expressive TopAppBar (title + subtitle overload, pinned scroll behavior, zero extra status-bar inset)
         TopAppBar(
+            title = {
+                Text(
+                    text = "SplitMate",
+                    fontSize = 20.sp,
+                    lineHeight = 22.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = SplitMateTheme.PrimaryDark,
+                    fontFamily = SplitMateTheme.FontDisplay,
+                    modifier = Modifier.semantics { heading() }
+                )
+            },
+            subtitle = {
+                Text(
+                    text = "Fun and trip expenses",
+                    fontSize = 12.sp,
+                    lineHeight = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SplitMateTheme.TextSecondary,
+                    fontFamily = SplitMateTheme.FontRounded
+                )
+            },
             windowInsets = WindowInsets(0, 0, 0, 0),
             scrollBehavior = homeScrollBehavior,
             colors = TopAppBarDefaults.topAppBarColors(
@@ -3720,26 +3890,6 @@ fun LedgersDashboardScreen(
                         modifier = Modifier
                             .size(42.dp)
                             .scale(1.25f)
-                    )
-                }
-            },
-            title = {
-                Column {
-                    Text(
-                        text = "SplitMate",
-                        fontSize = 20.sp,
-                        lineHeight = 22.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = SplitMateTheme.PrimaryDark,
-                        fontFamily = SplitMateTheme.FontDisplay
-                    )
-                    Text(
-                        text = "Fun and trip expenses",
-                        fontSize = 12.sp,
-                        lineHeight = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SplitMateTheme.TextSecondary,
-                        fontFamily = SplitMateTheme.FontRounded
                     )
                 }
             },
@@ -3823,22 +3973,24 @@ fun LedgersDashboardScreen(
                     // v2.4.0 rc3: official IconButton (press morph via IconButtonDefaults.shapes()) around
                     // the avatar. v2.4.0 rc2: TalkBack said only "button"; now "Open settings". The child
                     // semantics carry the click label, which merges into the button's own click action.
-                    IconButton(
-                        onClick = onAvatarSettingsClick,
-                        shapes = IconButtonDefaults.shapes(),
-                        modifier = Modifier
-                            .size(48.dp)
-                            .semantics { contentDescription = "Open settings" }
-                    ) {
-                        SplitMateCharacterAvatar(
-                            modifier = Modifier.semantics { onClick(label = "Open settings", action = null) },
-                            name = uiState.avatarSeed.ifBlank { uiState.currentUserName.ifBlank { "You" } },
-                            phone = uiState.userPhone,
-                            size = 38.dp,
-                            styleId = uiState.avatarStyleId,
-                            colorPresetId = uiState.avatarColorPresetId,
-                            highlighted = uiState.isPhoneVerified
-                        )
+                    ExpressivePlainTooltipBox(tooltipText = "Open settings") {
+                        IconButton(
+                            onClick = onAvatarSettingsClick,
+                            shapes = IconButtonDefaults.shapes(),
+                            modifier = Modifier
+                                .size(48.dp)
+                                .semantics { contentDescription = "Open settings" }
+                        ) {
+                            SplitMateCharacterAvatar(
+                                modifier = Modifier.semantics { onClick(label = "Open settings", action = null) },
+                                name = uiState.avatarSeed.ifBlank { uiState.currentUserName.ifBlank { "You" } },
+                                phone = uiState.userPhone,
+                                size = 38.dp,
+                                styleId = uiState.avatarStyleId,
+                                colorPresetId = uiState.avatarColorPresetId,
+                                highlighted = uiState.isPhoneVerified
+                            )
+                        }
                     }
                 }
             }
@@ -4259,9 +4411,10 @@ fun LedgersDashboardScreen(
                     if (hasGroups) {
                         onNavigateToPnrSplit()
                     } else {
-                        android.widget.Toast.makeText(
+                        val msg = "Please create a Group first before splitting an IRCTC PNR ticket!"
+                        moneySnackbar?.say(msg) ?: android.widget.Toast.makeText(
                             context,
-                            "Please create a Group first before splitting an IRCTC PNR ticket!",
+                            msg,
                             android.widget.Toast.LENGTH_SHORT
                         ).show()
                         showNewGroupDialog = true
@@ -4271,9 +4424,10 @@ fun LedgersDashboardScreen(
                     if (hasGroups) {
                         onUploadFlightPdf()
                     } else {
-                        android.widget.Toast.makeText(
+                        val msg = "Please create a Group first before uploading a Flight E-Ticket PDF!"
+                        moneySnackbar?.say(msg) ?: android.widget.Toast.makeText(
                             context,
-                            "Please create a Group first before uploading a Flight E-Ticket PDF!",
+                            msg,
                             android.widget.Toast.LENGTH_SHORT
                         ).show()
                         showNewGroupDialog = true
@@ -4994,7 +5148,8 @@ fun LedgersDashboardScreen(
             if (granted) {
                 viewModel.loadDeviceContacts(context)
             } else {
-                Toast.makeText(context, "Contacts permission is required to search and add contacts", Toast.LENGTH_SHORT).show()
+                val msg = "Contacts permission is required to search and add contacts"
+                moneySnackbar?.say(msg) ?: Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -5258,21 +5413,25 @@ fun LedgersDashboardScreen(
                                             }
                                         }
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        IconButton(
-                                            onClick = {
-                                                selectedMembers = selectedMembers.filterNot {
-                                                    it.name == member.name && it.cleanPhone == member.cleanPhone
-                                                }
-                                            },
-                                            shapes = IconButtonDefaults.shapes(),
-                                            modifier = Modifier.size(20.dp)
-                                        ) {
-                                            SymbolIcon(
-                                                imageVector = Icons.Rounded.Close,
-                                                contentDescription = "Remove ${member.name}",
-                                                tint = SplitMateTheme.TextSecondary,
-                                                modifier = Modifier.size(14.dp)
-                                            )
+                                        ExpressivePlainTooltipBox(tooltipText = "Remove ${member.name}") {
+                                            IconButton(
+                                                onClick = {
+                                                    selectedMembers = selectedMembers.filterNot {
+                                                        it.name == member.name && it.cleanPhone == member.cleanPhone
+                                                    }
+                                                },
+                                                shapes = IconButtonDefaults.shapes(),
+                                                modifier = Modifier
+                                                    .minimumInteractiveComponentSize()
+                                                    .size(20.dp)
+                                            ) {
+                                                SymbolIcon(
+                                                    imageVector = Icons.Rounded.Close,
+                                                    contentDescription = "Remove ${member.name}",
+                                                    tint = SplitMateTheme.TextSecondary,
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -5647,17 +5806,21 @@ fun JoinGroupByCodeDialog(
                             )
                         }
                     }
-                    IconButton(
-                        onClick = onDismiss,
-                        shapes = IconButtonDefaults.shapes(),
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Close,
-                            contentDescription = "Close",
-                            tint = SplitMateTheme.TextSecondary,
-                            modifier = Modifier.size(18.dp)
-                        )
+                    ExpressivePlainTooltipBox(tooltipText = "Close") {
+                        IconButton(
+                            onClick = onDismiss,
+                            shapes = IconButtonDefaults.shapes(),
+                            modifier = Modifier
+                                .minimumInteractiveComponentSize()
+                                .size(40.dp)
+                        ) {
+                            SymbolIcon(
+                                imageVector = Icons.Rounded.Close,
+                                contentDescription = "Close",
+                                tint = SplitMateTheme.TextSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
 
@@ -5848,34 +6011,36 @@ fun ExpressiveThemeModePill(
     }
     // v2.4.0 rc3: official OutlinedIconButton cycling the theme, with the M3 Expressive press morph
     // (IconButtonDefaults.shapes()) instead of a hand-animated corner radius.
-    OutlinedIconButton(
-        onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
-            onCycleTheme()
-        },
-        shapes = IconButtonDefaults.shapes(),
-        colors = IconButtonDefaults.outlinedIconButtonColors(
-            containerColor = SplitMateTheme.SageSurface.copy(alpha = if (isDarkTheme) 0.82f else 0.72f),
-            contentColor = SplitMateTheme.PrimaryDark
-        ),
-        border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
-        modifier = modifier
-            .size(IconButtonDefaults.smallContainerSize())
-            .testTag("TopBarExpressiveThemePill")
-            // v2.4.0 D3: icon-only, so the label can never be cut off ("Buckwhea…") in a crowded top bar.
-            // The theme name is spoken instead.
-            .semantics { contentDescription = "Theme: $badgeLabel. Double tap to switch." }
-    ) {
-        SymbolIcon(
-            imageVector = when (activeThemeMode) {
-                SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Icons.Rounded.LightMode
-                SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Icons.Rounded.DarkMode
-                SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Icons.Rounded.AutoAwesome
+    ExpressivePlainTooltipBox(tooltipText = "Theme: $badgeLabel") {
+        OutlinedIconButton(
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                onCycleTheme()
             },
-            contentDescription = null,
-            tint = SplitMateTheme.PrimaryDark,
-            modifier = Modifier.size(20.dp)
-        )
+            shapes = IconButtonDefaults.shapes(),
+            colors = IconButtonDefaults.outlinedIconButtonColors(
+                containerColor = SplitMateTheme.SageSurface.copy(alpha = if (isDarkTheme) 0.82f else 0.72f),
+                contentColor = SplitMateTheme.PrimaryDark
+            ),
+            border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
+            modifier = modifier
+                .size(IconButtonDefaults.smallContainerSize())
+                .testTag("TopBarExpressiveThemePill")
+                // v2.4.0 D3: icon-only, so the label can never be cut off ("Buckwhea…") in a crowded top bar.
+                // The theme name is spoken instead.
+                .semantics { contentDescription = "Theme: $badgeLabel. Double tap to switch." }
+        ) {
+            SymbolIcon(
+                imageVector = when (activeThemeMode) {
+                    SplitMateThemeMode.SUNLIT_BUCKWHEAT -> Icons.Rounded.LightMode
+                    SplitMateThemeMode.WARM_ESPRESSO_NIGHT -> Icons.Rounded.DarkMode
+                    SplitMateThemeMode.KYOTO_MATCHA_YUZU -> Icons.Rounded.AutoAwesome
+                },
+                contentDescription = null,
+                tint = SplitMateTheme.PrimaryDark,
+                modifier = Modifier.size(20.dp)
+            )
+        }
     }
 }
 
@@ -5886,6 +6051,7 @@ fun ExpressiveThemeModePill(
 @Composable
 fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
     val context = LocalContext.current
+    val moneySnackbar = LocalMoneySnackbar.current
     val settlementPlan by viewModel.settlementPlan.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val deviceContacts by viewModel.deviceContacts.collectAsStateWithLifecycle()
@@ -5901,7 +6067,8 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
             viewModel.loadDeviceContacts(context)
             showContactLinkSheet = true
         } else {
-            Toast.makeText(context, "Contacts permission required to link mobile number", Toast.LENGTH_SHORT).show()
+            val msg = "Contacts permission required to link mobile number"
+            moneySnackbar?.say(msg) ?: Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -6056,7 +6223,8 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                 fontFamily = SplitMateTheme.FontDisplay,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.ExtraBold,
-                color = SplitMateTheme.PrimaryDark
+                color = SplitMateTheme.PrimaryDark,
+                modifier = Modifier.semantics { heading() }
             )
             Text(
                 text = "Your payments first, then everyone else's",
@@ -6220,23 +6388,27 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                     // Info icon next to Settle up — toggles the payment simplification diagram.
                                     // v2.4.0 rc7 (Screen 3): official FilledTonalIconToggleButton with the M3
                                     // Expressive toggle shape morph (round -> square when checked), 48dp target.
-                                    FilledTonalIconToggleButton(
-                                        checked = showMaxHeapGraphInspector,
-                                        onCheckedChange = { showMaxHeapGraphInspector = it },
-                                        shapes = IconButtonDefaults.toggleableShapes(),
-                                        colors = IconButtonDefaults.filledTonalIconToggleButtonColors(
-                                            containerColor = SplitMateTheme.SageSurface,
-                                            contentColor = SplitMateTheme.SageText,
-                                            checkedContainerColor = SplitMateTheme.SageText,
-                                            checkedContentColor = SplitMateTheme.SageSurface
-                                        ),
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        SymbolIcon(
-                                            imageVector = androidx.compose.material.icons.Icons.Outlined.Info, // v2.4.0 rc3: one info icon style
-                                            contentDescription = "Why were debts simplified?",
-                                            modifier = Modifier.size(16.dp)
-                                        )
+                                    ExpressivePlainTooltipBox(tooltipText = "Why were debts simplified?") {
+                                        FilledTonalIconToggleButton(
+                                            checked = showMaxHeapGraphInspector,
+                                            onCheckedChange = { showMaxHeapGraphInspector = it },
+                                            shapes = IconButtonDefaults.toggleableShapes(),
+                                            colors = IconButtonDefaults.filledTonalIconToggleButtonColors(
+                                                containerColor = SplitMateTheme.SageSurface,
+                                                contentColor = SplitMateTheme.SageText,
+                                                checkedContainerColor = SplitMateTheme.SageText,
+                                                checkedContentColor = SplitMateTheme.SageSurface
+                                            ),
+                                            modifier = Modifier
+                                                .minimumInteractiveComponentSize()
+                                                .size(32.dp)
+                                        ) {
+                                            SymbolIcon(
+                                                imageVector = androidx.compose.material.icons.Icons.Outlined.Info, // v2.4.0 rc3: one info icon style
+                                                contentDescription = "Why were debts simplified?",
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
                                     }
                                 }
                                 Text(
@@ -6932,7 +7104,8 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                                 runCatching {
                                                                     context.startActivity(Intent(Intent.ACTION_VIEW, whatsappUri))
                                                                 }.onFailure {
-                                                                    Toast.makeText(context, "WhatsApp is not installed on this device", Toast.LENGTH_SHORT).show()
+                                                                    val waMsg = "WhatsApp is not installed on this device"
+                                                                    moneySnackbar?.say(waMsg) ?: Toast.makeText(context, waMsg, Toast.LENGTH_SHORT).show()
                                                                 }
                                                             },
                                                             shapes = ButtonDefaults.shapes(),
@@ -6999,7 +7172,8 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                                     runCatching {
                                                                         context.startActivity(Intent(Intent.ACTION_VIEW, whatsappUri))
                                                                     }.onFailure {
-                                                                        Toast.makeText(context, "WhatsApp is not installed on this device", Toast.LENGTH_SHORT).show()
+                                                                        val waMsg = "WhatsApp is not installed on this device"
+                                                                        moneySnackbar?.say(waMsg) ?: Toast.makeText(context, waMsg, Toast.LENGTH_SHORT).show()
                                                                     }
                                                                 },
                                                         containerColor = SplitMateTheme.PrimaryDark,
@@ -7311,7 +7485,8 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                                                     runCatching {
                                                                         context.startActivity(Intent(Intent.ACTION_VIEW, whatsappUri))
                                                                     }.onFailure {
-                                                                        Toast.makeText(context, "WhatsApp is not installed on this device", Toast.LENGTH_SHORT).show()
+                                                                        val waMsg = "WhatsApp is not installed on this device"
+                                                                        moneySnackbar?.say(waMsg) ?: Toast.makeText(context, waMsg, Toast.LENGTH_SHORT).show()
                                                                     }
                                                                 },
                                                         fillWidth = true,
@@ -7446,16 +7621,12 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                             }
                         }
 
-                        LinearWavyProgressIndicator(
+                        ExpressiveGapLinearProgressIndicator(
                             progress = { 1f },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(8.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             color = SplitMateTheme.SageText,
                             trackColor = SplitMateTheme.SurfaceWhite.copy(alpha = 0.55f),
-                            amplitude = 0.8f,
-                            wavelength = 20.dp,
-                            strokeWidth = 2.5.dp
+                            strokeWidth = 4.dp
                         )
                     }
                 }
@@ -7827,7 +7998,8 @@ fun AuditVaultScreen(
                     fontSize = 26.sp,
                     fontWeight = FontWeight.Black,
                     letterSpacing = (-0.6).sp,
-                    color = SplitMateTheme.PrimaryDark
+                    color = SplitMateTheme.PrimaryDark,
+                    modifier = Modifier.semantics { heading() }
                 )
                 Text(
                     text = "Tap any row for split breakdown · Swipe left for boarding pass or quick edit",
@@ -7841,114 +8013,80 @@ fun AuditVaultScreen(
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         item(key = "filter_chip_all_groups") {
                             val allSelected = selectedGroupFilterId == null
-                            val allCornerRadius by animateDpAsState(
-                                targetValue = if (allSelected) 12.dp else 20.dp,
-                                animationSpec = SplitMateMotion.fastSpatial(),
-                                label = "allGroupsChipCornerMorph"
-                            )
-                            val allChipBg by animateColorAsState(
-                                targetValue = if (allSelected) activePalette.tertiaryContainer else activePalette.surfaceContainerLowest,
-                                animationSpec = SplitMateMotion.fastEffects(),
-                                label = "allGroupsChipBg"
-                            )
-                            val allChipContent by animateColorAsState(
-                                targetValue = if (allSelected) activePalette.onTertiaryContainer else activePalette.onSurfaceVariant,
-                                animationSpec = SplitMateMotion.fastEffects(),
-                                label = "allGroupsChipContent"
-                            )
-                            val allChipBorder by animateColorAsState(
-                                targetValue = if (allSelected) activePalette.tertiary.copy(alpha = 0.45f) else activePalette.outlineVariant,
-                                animationSpec = SplitMateMotion.fastEffects(),
-                                label = "allGroupsChipBorder"
-                            )
-                            Surface(
+                            FilterChip(
+                                selected = allSelected,
                                 onClick = { selectedGroupFilterId = null },
-                                shape = RoundedCornerShape(allCornerRadius),
-                                color = allChipBg,
-                                border = BorderStroke(1.dp, allChipBorder),
-                                modifier = Modifier
-                                    .minimumInteractiveComponentSize()
-                                    .heightIn(min = 36.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    if (allSelected) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Check,
-                                            contentDescription = null,
-                                            tint = allChipContent,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                    }
+                                shapes = FilterChipDefaults.shapes(),
+                                label = {
                                     Text(
                                         text = "All Groups (${uiState.expenses.size})",
+                                        style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum, zero"),
                                         fontFamily = SplitMateTheme.FontRounded,
-                                        fontSize = 12.sp,
-                                        fontWeight = if (allSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                        color = allChipContent,
-                                        style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                                        fontWeight = if (allSelected) FontWeight.ExtraBold else FontWeight.SemiBold
                                     )
-                                }
-                            }
+                                },
+                                leadingIcon = if (allSelected) {
+                                    {
+                                        SymbolIcon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(FilterChipDefaults.IconSize)
+                                        )
+                                    }
+                                } else {
+                                    null
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = activePalette.surfaceContainerLowest,
+                                    labelColor = activePalette.onSurfaceVariant,
+                                    selectedContainerColor = activePalette.tertiaryContainer,
+                                    selectedLabelColor = activePalette.onTertiaryContainer,
+                                    selectedLeadingIconColor = activePalette.onTertiaryContainer
+                                ),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (allSelected) activePalette.tertiary.copy(alpha = 0.45f) else activePalette.outlineVariant
+                                )
+                            )
                         }
                         items(uiState.groups, key = { it.groupId }) { grp ->
                             val isSelected = selectedGroupFilterId == grp.groupId
                             val count = uiState.expenses.count { it.groupId == grp.groupId }
-                            val chipCornerRadius by animateDpAsState(
-                                targetValue = if (isSelected) 12.dp else 20.dp,
-                                animationSpec = SplitMateMotion.fastSpatial(),
-                                label = "groupFilterChipCornerMorph"
-                            )
-                            val chipBg by animateColorAsState(
-                                targetValue = if (isSelected) activePalette.tertiaryContainer else activePalette.surfaceContainerLowest,
-                                animationSpec = SplitMateMotion.fastEffects(),
-                                label = "groupFilterChipBg"
-                            )
-                            val chipContent by animateColorAsState(
-                                targetValue = if (isSelected) activePalette.onTertiaryContainer else activePalette.onSurfaceVariant,
-                                animationSpec = SplitMateMotion.fastEffects(),
-                                label = "groupFilterChipContent"
-                            )
-                            val chipBorder by animateColorAsState(
-                                targetValue = if (isSelected) activePalette.tertiary.copy(alpha = 0.45f) else activePalette.outlineVariant,
-                                animationSpec = SplitMateMotion.fastEffects(),
-                                label = "groupFilterChipBorder"
-                            )
-                            Surface(
+                            FilterChip(
+                                selected = isSelected,
                                 onClick = { selectedGroupFilterId = if (isSelected) null else grp.groupId },
-                                shape = RoundedCornerShape(chipCornerRadius),
-                                color = chipBg,
-                                border = BorderStroke(1.dp, chipBorder),
-                                modifier = Modifier
-                                    .minimumInteractiveComponentSize()
-                                    .heightIn(min = 36.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    if (isSelected) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Check,
-                                            contentDescription = null,
-                                            tint = chipContent,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                    }
+                                shapes = FilterChipDefaults.shapes(),
+                                label = {
                                     Text(
                                         text = "${grp.name.toSmartTitleCase()} ($count)",
+                                        style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum, zero"),
                                         fontFamily = SplitMateTheme.FontRounded,
-                                        fontSize = 12.sp,
-                                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                        color = chipContent,
-                                        style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold
                                     )
-                                }
-                            }
+                                },
+                                leadingIcon = if (isSelected) {
+                                    {
+                                        SymbolIcon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(FilterChipDefaults.IconSize)
+                                        )
+                                    }
+                                } else {
+                                    null
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = activePalette.surfaceContainerLowest,
+                                    labelColor = activePalette.onSurfaceVariant,
+                                    selectedContainerColor = activePalette.tertiaryContainer,
+                                    selectedLabelColor = activePalette.onTertiaryContainer,
+                                    selectedLeadingIconColor = activePalette.onTertiaryContainer
+                                ),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isSelected) activePalette.tertiary.copy(alpha = 0.45f) else activePalette.outlineVariant
+                                )
+                            )
                         }
                     }
                 }

@@ -3,12 +3,12 @@
 package com.splitmate.app.ui.screens.plan
 
 import com.splitmate.app.ui.components.SymbolIcon
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -38,19 +38,20 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -58,6 +59,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -67,6 +69,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -82,8 +85,9 @@ import com.splitmate.app.data.guide.PlaceKind
 import com.splitmate.app.data.guide.PlaceSource
 import com.splitmate.app.data.guide.loop.NominatimGeocoder
 import com.splitmate.app.data.guide.loop.ShortLinkResolver
-import com.splitmate.app.ui.components.InFlightWavyProgressIndicator
+import com.splitmate.app.ui.components.ExpressivePlainTooltipBox
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.splitmate.app.ui.components.LocalMotionScheme
 
 /** Input modes of the stay sheet (audit 5.2 E). */
@@ -109,6 +113,7 @@ fun StayPinSheet(
 ) {
     val currentOnDismiss by rememberUpdatedState(onDismiss)
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
     val motion = LocalMotionScheme.current
     val stayUi = state.stay
     val feedback = state.stayFeedback
@@ -133,14 +138,6 @@ fun StayPinSheet(
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
-        BackHandler { currentOnDismiss() }
-        InFlightWavyProgressIndicator(
-            inFlight = state.networkInFlight,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp),
-            contentDescription = "Finding location"
-        )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -173,12 +170,21 @@ fun StayPinSheet(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                IconButton(onClick = { currentOnDismiss() }, shapes = IconButtonDefaults.shapes()) {
-                    SymbolIcon(
-                        imageVector = Icons.Rounded.Close,
-                        contentDescription = "Close",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                ExpressivePlainTooltipBox(tooltipText = "Close") {
+                    IconButton(
+                        onClick = {
+                            scope.launch { sheetState.hide() }.invokeOnCompletion {
+                                if (!sheetState.isVisible) currentOnDismiss()
+                            }
+                        },
+                        shapes = IconButtonDefaults.shapes()
+                    ) {
+                        SymbolIcon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = "Close",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
@@ -334,8 +340,10 @@ private fun PasteLinkTab(
                 Text("Paste a Google Maps share link, or type your hotel or area name")
             },
             trailingIcon = {
-                IconButton(onClick = { clipboard.getText()?.text?.let { text = it.take(MAX_INPUT_CHARS) } }, shapes = IconButtonDefaults.shapes()) {
-                    SymbolIcon(Icons.Rounded.ContentPaste, contentDescription = "Paste from clipboard")
+                ExpressivePlainTooltipBox(tooltipText = "Paste link or coordinates") {
+                    IconButton(onClick = { clipboard.getText()?.text?.let { text = it.take(MAX_INPUT_CHARS) } }, shapes = IconButtonDefaults.shapes()) {
+                        SymbolIcon(Icons.Rounded.ContentPaste, contentDescription = "Paste link or coordinates")
+                    }
                 }
             },
             maxLines = 3,
@@ -357,16 +365,26 @@ private fun PasteLinkTab(
             ) {
                 bookingSuggestions.forEach { suggestion ->
                     val labelText = PlanGuideFormat.sanitizeDisplay(suggestion) ?: return@forEach
-                    androidx.compose.material3.SuggestionChip(
+                    FilledTonalButton(
                         onClick = {
                             text = suggestion.take(MAX_INPUT_CHARS)
                             focusManager.clearFocus()
                             onSubmit(suggestion)
                         },
-                        label = { ChipText(labelText) },
-                        icon = { SymbolIcon(Icons.Rounded.Hotel, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                        modifier = Modifier.heightIn(min = 48.dp)
-                    )
+                        shapes = ButtonDefaults.shapes(),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        modifier = Modifier
+                            .heightIn(min = 40.dp)
+                            .minimumInteractiveComponentSize()
+                    ) {
+                        SymbolIcon(Icons.Rounded.Hotel, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        ChipText(labelText)
+                    }
                 }
             }
         }
@@ -409,7 +427,11 @@ private fun CoordinatesTab(working: Boolean, onSubmit: (String) -> Unit) {
                 }
             }),
             colors = sheetFieldColors(),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics {
+                    if (invalid) error("Enter valid latitude and longitude")
+                }
         )
         Button(
             shapes = ButtonDefaults.shapes(),
@@ -454,51 +476,59 @@ private fun SleepListingsTab(
         }
         return
     }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        listings.forEach { place ->
-            val name = PlanGuideFormat.sanitizeDisplay(place.name) ?: return@forEach
+    val validListings = remember(listings) {
+        listings.mapNotNull { place ->
+            val name = PlanGuideFormat.sanitizeDisplay(place.name) ?: return@mapNotNull null
+            place to name
+        }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
+        validListings.forEachIndexed { index, (place, name) ->
             val detail = PlanGuideFormat.sanitizeDisplay(place.address)
                 ?: PlanGuideFormat.sanitizeDisplay(place.blurb)?.let { PlanGuideFormat.truncate(it, 80) }
             val usable = place.location != null
-            Surface(
+            SegmentedListItem(
                 onClick = { onChoose(place) },
+                shapes = ListItemDefaults.segmentedShapes(index = index, count = validListings.size),
+                colors = ListItemDefaults.segmentedColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+                ),
                 enabled = usable,
-                shape = PlanGuideDefaults.CardShape,
-                color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 56.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
+                modifier = Modifier.fillMaxWidth(),
+                leadingContent = {
                     SymbolIcon(
                         imageVector = Icons.Rounded.Hotel,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp)
                     )
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(name, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
-                        Text(
-                            text = if (usable) detail ?: "Wikivoyage listing" else "No map location",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    if (usable) {
+                },
+                supportingContent = {
+                    Text(
+                        text = if (usable) detail ?: "Wikivoyage listing" else "No map location",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
+                trailingContent = if (usable) {
+                    {
                         SymbolIcon(
                             imageVector = Icons.Rounded.ChevronRight,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                } else null,
+                content = {
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
-            }
+            )
         }
     }
 }

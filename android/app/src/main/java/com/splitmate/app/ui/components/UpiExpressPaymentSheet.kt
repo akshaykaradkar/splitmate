@@ -37,6 +37,8 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -667,21 +669,58 @@ fun UpiExpressPaymentSheet(
         }
     }
 
+    val creditorAvatarShape = remember { MaterialShapes.Cookie9Sided.toShape() }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = SplitMateTheme.ScreenBg,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = MaterialTheme.shapes.extraLarge,
+        dragHandle = { BottomSheetDefaults.DragHandle() }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .navigationBarsPadding()
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Pay ${transferModel.toName} via UPI",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontFamily = FigtreeFontFamily,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = SplitMateTheme.PrimaryDark,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f)
+                        .semantics { heading() }
+                )
+                ExpressiveTooltipIconButton(
+                    tooltipText = "Close",
+                    onClick = {
+                        coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
+                            if (!sheetState.isVisible) onDismiss()
+                        }
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = "Close",
+                        tint = SplitMateTheme.TextSecondary
+                    )
+                }
+            }
+
             // 1. TACTILE RECEIPT STUB HEADER (Avatar + Pre-Filled Amount)
             Surface(
                 shape = RoundedCornerShape(22.dp),
@@ -700,12 +739,14 @@ fun UpiExpressPaymentSheet(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.weight(1f)
                     ) {
-                        AvatarToken(
-                            initials = transferModel.toSeed.ifBlank { transferModel.toName },
-                            bg = SplitMateTheme.SageSurface,
-                            textColor = SplitMateTheme.SageText,
-                            size = 46
-                        )
+                        Box(modifier = Modifier.size(46.dp)) {
+                            AvatarToken(
+                                initials = transferModel.toSeed.ifBlank { transferModel.toName },
+                                bg = SplitMateTheme.SageSurface,
+                                textColor = SplitMateTheme.SageText,
+                                size = 46
+                            )
+                        }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
@@ -809,7 +850,7 @@ fun UpiExpressPaymentSheet(
                                 onMarkSettled()
                                 onDismiss()
                             },
-                            shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(12.dp)),
+                            shapes = ButtonDefaults.shapes(),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = SplitMateTheme.PrimaryDark,
                                 contentColor = SplitMateTheme.ScreenBg
@@ -837,7 +878,7 @@ fun UpiExpressPaymentSheet(
                 // v2.4.0 rc3: official FilledTonalButton with the shapes() press morph.
                 FilledTonalButton(
                     onClick = { qrGalleryLauncher.launch("image/*") },
-                    shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(16.dp)),
+                    shapes = ButtonDefaults.shapes(),
                     colors = ButtonDefaults.filledTonalButtonColors(
                         containerColor = SplitMateTheme.SageSurface,
                         contentColor = SplitMateTheme.SageText
@@ -883,7 +924,7 @@ fun UpiExpressPaymentSheet(
                             Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI)
                         )
                     },
-                    shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(16.dp)),
+                    shapes = ButtonDefaults.shapes(),
                     colors = ButtonDefaults.outlinedButtonColors(
                         containerColor = SplitMateTheme.SurfaceWhite,
                         contentColor = SplitMateTheme.PrimaryDark
@@ -964,6 +1005,13 @@ fun UpiExpressPaymentSheet(
                         if (it.contains("@") && it.substringAfter("@").isNotBlank()) {
                             persistCombinedIdentity(newVpa = it.trim())
                         }
+                    },
+                    label = {
+                        Text(
+                            text = "${transferModel.toName}'s UPI ID",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FigtreeFontFamily
+                        )
                     },
                     placeholder = {
                         Text(
@@ -1136,7 +1184,7 @@ fun UpiExpressPaymentSheet(
                         targetPackage = "com.google.android.apps.nbu.paisa.user"
                     )
                 },
-                shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(20.dp)),
+                shapes = ButtonDefaults.shapes(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = SplitMateTheme.PrimaryDark,
                     contentColor = SplitMateTheme.SurfaceWhite
@@ -1156,7 +1204,7 @@ fun UpiExpressPaymentSheet(
                         modifier = Modifier.weight(1f)
                     ) {
                         Surface(
-                            shape = CircleShape,
+                            shape = creditorAvatarShape,
                             color = SplitMateTheme.SageSurface,
                             modifier = Modifier.size(40.dp)
                         ) {
@@ -1220,7 +1268,7 @@ fun UpiExpressPaymentSheet(
                     onMarkSettled()
                     onDismiss()
                 },
-                shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(16.dp)),
+                shapes = ButtonDefaults.shapes(),
                 colors = ButtonDefaults.outlinedButtonColors(
                     containerColor = SplitMateTheme.SurfaceWhite,
                     contentColor = SplitMateTheme.PrimaryDark

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -127,6 +128,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -138,12 +140,21 @@ import androidx.compose.ui.unit.sp
 import com.splitmate.app.ui.SplitMateBrandFontFamily
 import com.splitmate.app.ui.SplitMateDisplayFontFamily
 import com.splitmate.app.SplitMateTheme
+import com.splitmate.app.ui.components.ExpressivePlainTooltipBox
+import com.splitmate.app.ui.components.ExpressiveTooltipIconButton
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.InputChip
+import androidx.compose.material3.InputChipDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedIconToggleButton
+import androidx.compose.material3.minimumInteractiveComponentSize
+import java.util.Locale
 
 // ==============================================================================
 // Icon + tone resolution
@@ -246,6 +257,7 @@ fun exactExpenseCategoryFor(title: String): ExpenseCategory? =
 // Reusable chip
 // ==============================================================================
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ExpenseCategoryChip(
     category: ExpenseCategory,
@@ -259,12 +271,10 @@ fun ExpenseCategoryChip(
     val (toneBg, toneFg) = ExpenseCategoryIcons.toneColors(category.tone, isDark)
     val selectedBg = SplitMateTheme.PrimaryDark
     val selectedFg = SplitMateTheme.SurfaceWhite
-    // v2.4.0 rc3: official M3 Expressive FilterChip; the official selected shape morph replaces
-    // the hand-picked corner swap (20dp resting, 12dp selected).
     FilterChip(
         selected = selected,
         onClick = onClick,
-        shapes = FilterChipDefaults.shapes(shape = MaterialTheme.shapes.large, selectedShape = RoundedCornerShape(12.dp)),
+        shapes = FilterChipDefaults.shapes(),
         colors = FilterChipDefaults.filterChipColors(
             containerColor = SplitMateTheme.SurfaceWhite,
             selectedContainerColor = selectedBg
@@ -317,7 +327,7 @@ fun ExpenseCategoryChip(
 // "All categories" bottom sheet
 // ==============================================================================
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun ExpenseCategoryPickerSheet(
     selectedTitle: String,
@@ -372,7 +382,18 @@ fun ExpenseCategoryPickerSheet(
                 value = query,
                 onValueChange = { query = it },
                 singleLine = true,
+                label = { Text("Search categories", fontFamily = SplitMateBrandFontFamily) },
                 leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
+                trailingIcon = if (query.isNotEmpty()) {
+                    {
+                        ExpressiveTooltipIconButton(
+                            tooltipText = "Clear search",
+                            onClick = { query = "" }
+                        ) {
+                            Icon(Icons.Rounded.Close, contentDescription = "Clear search")
+                        }
+                    }
+                } else null,
                 placeholder = { Text("Search breakfast, auto, fuel…", fontFamily = SplitMateBrandFontFamily) },
                 shape = RoundedCornerShape(20.dp),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -405,24 +426,69 @@ fun ExpenseCategoryPickerSheet(
                                 onClick = { showCreate = true }
                             )
                             customVisible.forEach { cat ->
-                                ExpenseCategoryChip(
-                                    category = cat,
-                                    selected = cat.title.equals(selectedTitle.trim(), ignoreCase = true),
+                                val isCatSelected = cat.title.equals(selectedTitle.trim(), ignoreCase = true)
+                                val (toneBg, toneFg) = ExpenseCategoryIcons.toneColors(cat.tone, SplitMateTheme.isDark)
+                                val selectedBg = SplitMateTheme.PrimaryDark
+                                val selectedFg = SplitMateTheme.SurfaceWhite
+                                InputChip(
+                                    selected = isCatSelected,
                                     onClick = { onSelect(cat) },
-                                    trailing = {
-                                        // v2.4.0 rc3: official IconButton with the shapes() press morph.
-                                        IconButton(
-                                            onClick = { pendingDelete = cat },
-                                            shapes = IconButtonDefaults.shapes(),
+                                    shapes = InputChipDefaults.shapes(),
+                                    colors = InputChipDefaults.inputChipColors(
+                                        containerColor = SplitMateTheme.SurfaceWhite,
+                                        selectedContainerColor = selectedBg,
+                                        labelColor = SplitMateTheme.PrimaryDark,
+                                        selectedLabelColor = selectedFg
+                                    ),
+                                    border = InputChipDefaults.inputChipBorder(
+                                        enabled = true,
+                                        selected = isCatSelected,
+                                        borderColor = SplitMateTheme.BorderLight,
+                                        selectedBorderColor = selectedBg,
+                                        borderWidth = 1.dp,
+                                        selectedBorderWidth = 1.dp
+                                    ),
+                                    modifier = Modifier.heightIn(min = 40.dp),
+                                    leadingIcon = {
+                                        Box(
                                             modifier = Modifier
-                                                .size(28.dp)
-                                                .semantics { contentDescription = "Remove ${cat.title}" }
+                                                .size(26.dp)
+                                                .background(
+                                                    if (isCatSelected) selectedFg.copy(alpha = 0.16f) else toneBg,
+                                                    CircleShape
+                                                ),
+                                            contentAlignment = Alignment.Center
                                         ) {
                                             Icon(
-                                                Icons.Rounded.Close,
+                                                imageVector = ExpenseCategoryIcons.forKey(cat.iconKey),
                                                 contentDescription = null,
-                                                tint = SplitMateTheme.TextSecondary,
-                                                modifier = Modifier.size(14.dp)
+                                                tint = if (isCatSelected) selectedFg else toneFg,
+                                                modifier = Modifier.size(15.dp)
+                                            )
+                                        }
+                                    },
+                                    label = {
+                                        Text(
+                                            text = cat.title,
+                                            fontFamily = SplitMateBrandFontFamily,
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            color = if (isCatSelected) selectedFg else SplitMateTheme.PrimaryDark
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        ExpressiveTooltipIconButton(
+                                            tooltipText = "Remove ${cat.title}",
+                                            onClick = { pendingDelete = cat },
+                                            modifier = Modifier.minimumInteractiveComponentSize()
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Close,
+                                                contentDescription = "Remove ${cat.title}",
+                                                tint = if (isCatSelected) selectedFg else SplitMateTheme.TextSecondary,
+                                                modifier = Modifier.size(16.dp)
                                             )
                                         }
                                     }
@@ -524,67 +590,75 @@ private fun SectionLabel(text: String) {
     )
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun CreateCategoryChip(label: String, onClick: () -> Unit) {
-    // v2.4.0 rc3: official M3 AssistChip (sage tonal pair).
-    AssistChip(
+    FilledTonalButton(
         onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
-        colors = AssistChipDefaults.assistChipColors(containerColor = SplitMateTheme.SageSurface),
+        shapes = ButtonDefaults.shapes(),
+        colors = ButtonDefaults.filledTonalButtonColors(
+            containerColor = SplitMateTheme.SageSurface,
+            contentColor = SplitMateTheme.SageText
+        ),
         border = BorderStroke(1.dp, SplitMateTheme.AccentSage),
-        modifier = Modifier.heightIn(min = 40.dp),
-        leadingIcon = {
-            Icon(Icons.Rounded.Add, contentDescription = null, tint = SplitMateTheme.SageText, modifier = Modifier.size(16.dp))
-        },
-        label = {
-            Text(
-                text = label,
-                fontFamily = SplitMateBrandFontFamily,
-                fontWeight = FontWeight.Bold,
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = SplitMateTheme.SageText
-            )
-        }
-    )
+        contentPadding = ButtonDefaults.SmallContentPadding,
+        modifier = Modifier
+            .heightIn(min = 40.dp)
+            .minimumInteractiveComponentSize()
+    ) {
+        Icon(Icons.Rounded.Add, contentDescription = null, tint = SplitMateTheme.SageText, modifier = Modifier.size(16.dp))
+        Spacer(modifier = Modifier.width(ButtonDefaults.IconSpacing))
+        Text(
+            text = label,
+            fontFamily = SplitMateBrandFontFamily,
+            fontWeight = FontWeight.Bold,
+            fontSize = 12.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = SplitMateTheme.SageText
+        )
+    }
 }
 
-/** Compact "More" chip used at the end of the existing quick-category rows. */
+/** Compact "More" button used at the end of the existing quick-category rows. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun MoreCategoriesChip(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    // v2.4.0 rc3: official M3 AssistChip.
-    AssistChip(
+    OutlinedButton(
         onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
-        colors = AssistChipDefaults.assistChipColors(containerColor = SplitMateTheme.SurfaceWhite),
+        shapes = ButtonDefaults.shapes(),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = SplitMateTheme.SurfaceWhite,
+            contentColor = SplitMateTheme.PrimaryDark
+        ),
         border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
-        modifier = modifier.heightIn(min = 32.dp),
-        leadingIcon = {
-            Icon(
-                Icons.Rounded.MoreHoriz,
-                contentDescription = null,
-                tint = SplitMateTheme.PrimaryDark,
-                modifier = Modifier.size(14.dp)
-            )
-        },
-        label = {
-            Text(
-                text = "More",
-                fontFamily = SplitMateBrandFontFamily,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = SplitMateTheme.PrimaryDark
-            )
-        }
-    )
+        contentPadding = ButtonDefaults.ExtraSmallContentPadding,
+        modifier = modifier
+            .heightIn(min = 32.dp)
+            .minimumInteractiveComponentSize()
+    ) {
+        Icon(
+            Icons.Rounded.MoreHoriz,
+            contentDescription = null,
+            tint = SplitMateTheme.PrimaryDark,
+            modifier = Modifier.size(14.dp)
+        )
+        Spacer(modifier = Modifier.width(ButtonDefaults.ExtraSmallIconSpacing))
+        Text(
+            text = "More",
+            fontFamily = SplitMateBrandFontFamily,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = SplitMateTheme.PrimaryDark
+        )
+    }
 }
 
 // ==============================================================================
 // Create-category dialog (name + icon grid + live preview)
 // ==============================================================================
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun CreateExpenseCategoryDialog(
     initialName: String = "",
@@ -630,6 +704,7 @@ fun CreateExpenseCategoryDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.verticalScroll(rememberScrollState())
             ) {
+                val currentError = error
                 OutlinedTextField(
                     value = name,
                     onValueChange = { raw ->
@@ -641,10 +716,10 @@ fun CreateExpenseCategoryDialog(
                     label = { Text("Category name", fontFamily = SplitMateBrandFontFamily) },
                     placeholder = { Text("e.g. Paragliding, Kerala Toll", fontFamily = SplitMateBrandFontFamily) },
                     singleLine = true,
-                    isError = error != null,
+                    isError = currentError != null,
                     supportingText = {
                         Text(
-                            error ?: "${name.length}/${ExpenseCategoryCatalog.MAX_TITLE_LENGTH}",
+                            currentError ?: "${name.length}/${ExpenseCategoryCatalog.MAX_TITLE_LENGTH}",
                             fontFamily = SplitMateBrandFontFamily,
                             fontSize = 11.sp
                         )
@@ -657,7 +732,13 @@ fun CreateExpenseCategoryDialog(
                         focusedTextColor = SplitMateTheme.PrimaryDark,
                         unfocusedTextColor = SplitMateTheme.PrimaryDark
                     ),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics {
+                            if (currentError != null) {
+                                this.error(currentError)
+                            }
+                        }
                 )
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -681,19 +762,19 @@ fun CreateExpenseCategoryDialog(
                     color = SplitMateTheme.TextSecondary
                 )
                 FlowRow(
+                    modifier = Modifier.selectableGroup(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     SpendBucket.values().forEach { b ->
                         val isPicked = b == bucket
-                        // v2.4.0 rc3: official M3 Expressive FilterChip (selected semantics, press morph).
                         FilterChip(
                             selected = isPicked,
                             onClick = {
                                 bucket = b
                                 bucketPickedManually = true
                             },
-                            shapes = FilterChipDefaults.shapes(shape = MaterialTheme.shapes.large, selectedShape = MaterialTheme.shapes.large),
+                            shapes = FilterChipDefaults.shapes(),
                             colors = FilterChipDefaults.filterChipColors(
                                 containerColor = SplitMateTheme.SurfaceMuted,
                                 selectedContainerColor = SplitMateTheme.PrimaryDark
@@ -731,43 +812,53 @@ fun CreateExpenseCategoryDialog(
                     color = SplitMateTheme.TextSecondary
                 )
                 FlowRow(
+                    modifier = Modifier.selectableGroup(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     ExpenseCategoryIconKeys.ALL.forEach { key ->
                         val isPicked = key == iconKey
-                        // v2.4.0 rc3: official OutlinedIconToggleButton with the toggleable shapes morph.
-                        OutlinedIconToggleButton(
-                            checked = isPicked,
-                            onCheckedChange = {
-                                iconKey = key
-                                iconPickedManually = true
-                                if (!bucketPickedManually && name.isBlank()) bucket = ExpenseBucketResolver.suggestBucket(name, key)
-                            },
-                            shapes = IconButtonDefaults.toggleableShapes(),
-                            colors = IconButtonDefaults.outlinedIconToggleButtonColors(
-                                containerColor = SplitMateTheme.SurfaceMuted,
-                                contentColor = SplitMateTheme.PrimaryDark,
-                                checkedContainerColor = SplitMateTheme.SageSurface,
-                                checkedContentColor = SplitMateTheme.SageText
-                            ),
-                            border = BorderStroke(
-                                if (isPicked) 2.dp else 1.dp,
-                                if (isPicked) SplitMateTheme.SageText else SplitMateTheme.BorderLight
-                            ),
-                            modifier = Modifier
-                                .size(48.dp)
-                                .semantics {
-                                    selected = isPicked
-                                    contentDescription = "Icon ${key.replace('_', ' ')}"
-                                }
-                        ) {
-                            Icon(
-                                imageVector = ExpenseCategoryIcons.forKey(key),
-                                contentDescription = null,
-                                tint = if (isPicked) SplitMateTheme.SageText else SplitMateTheme.PrimaryDark,
-                                modifier = Modifier.size(22.dp)
-                            )
+                        val iconLabel = remember(key) {
+                            key.replace('_', ' ').replaceFirstChar { ch ->
+                                if (ch.isLowerCase()) ch.titlecase(Locale.US) else ch.toString()
+                            }
+                        }
+                        ExpressivePlainTooltipBox(tooltipText = iconLabel) {
+                            OutlinedIconToggleButton(
+                                checked = isPicked,
+                                onCheckedChange = {
+                                    iconKey = key
+                                    iconPickedManually = true
+                                    if (!bucketPickedManually && name.isBlank()) {
+                                        bucket = ExpenseBucketResolver.suggestBucket(name, key)
+                                    }
+                                },
+                                shapes = IconButtonDefaults.toggleableShapes(),
+                                colors = IconButtonDefaults.outlinedIconToggleButtonColors(
+                                    containerColor = SplitMateTheme.SurfaceMuted,
+                                    contentColor = SplitMateTheme.PrimaryDark,
+                                    checkedContainerColor = SplitMateTheme.SageSurface,
+                                    checkedContentColor = SplitMateTheme.SageText
+                                ),
+                                border = BorderStroke(
+                                    if (isPicked) 2.dp else 1.dp,
+                                    if (isPicked) SplitMateTheme.SageText else SplitMateTheme.BorderLight
+                                ),
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .semantics {
+                                        role = Role.RadioButton
+                                        selected = isPicked
+                                        contentDescription = iconLabel
+                                    }
+                            ) {
+                                Icon(
+                                    imageVector = ExpenseCategoryIcons.forKey(key),
+                                    contentDescription = null,
+                                    tint = if (isPicked) SplitMateTheme.SageText else SplitMateTheme.PrimaryDark,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
                         }
                     }
                 }

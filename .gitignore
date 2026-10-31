@@ -1,6 +1,7 @@
 # Local Android SDK & Gradle build caches (exclude large toolchains)
 .android-sdk/
 android/.gradle/
+android/.kotlin/
 android/build/
 android/app/build/
 android/local.properties

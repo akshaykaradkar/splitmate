@@ -85,8 +85,9 @@ class SplitMateV240Rc3HomeOfficialTest {
     @Test
     fun `RC3H_03 Ledgers controls use official components with press-morph shapes`() {
         val app = src("ui/SplitMateAppComposable.kt")
-        // Tablet: official expanded FAB with default shape, official WideNavigationRail.
-        val fab = app.substringBefore("bottomBar = {").substringAfterLast("ExtendedFloatingActionButton(")
+        // Adaptive shell: official NavigationSuiteScaffoldLayout, ShortNavigationBar, WideNavigationRail, and ExtendedFAB.
+        val fab = app.substringAfter("floatingActionButton = {").substringBefore(") { innerPadding ->").substringAfter("ExtendedFloatingActionButton(")
+        assertTrue(app.contains("NavigationSuiteScaffoldLayout(") && app.contains("ShortNavigationBar("))
         assertTrue(fab.contains("expanded = isToolbarExpanded"))
         assertFalse(fab.substringBefore("modifier = Modifier").contains("shape = "))
         assertTrue(app.contains("androidx.compose.material3.WideNavigationRail("))

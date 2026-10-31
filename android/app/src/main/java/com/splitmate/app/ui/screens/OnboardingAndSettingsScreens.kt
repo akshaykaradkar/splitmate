@@ -34,6 +34,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -59,11 +61,14 @@ import com.splitmate.app.ui.SplitMateThemeState
 import com.splitmate.app.ui.buildDiceBearOpenPeepsUrl
 import com.splitmate.app.ui.components.ConnectedButtonGroup
 import com.splitmate.app.ui.components.ExpressiveGapLinearProgressIndicator
+import com.splitmate.app.ui.components.ExpressivePlainTooltipBox
 import com.splitmate.app.ui.components.MaterialShapes
 import com.splitmate.app.ui.components.MorphPolygonShape
 import com.splitmate.app.ui.components.RoundedPolygonShape
 import com.splitmate.app.ui.components.SplitMateMotion
 import com.splitmate.app.ui.extractInitialsFromNameOrSeed
+import com.splitmate.app.ui.feel.LocalMoneySnackbar
+import com.splitmate.app.ui.feel.MoneyScaffoldSnackbarHost
 import com.splitmate.app.ui.inferGenderFromFirstName
 import com.splitmate.app.ui.toPalette
 
@@ -268,7 +273,8 @@ fun OnboardingSetupScreen(
                     fontWeight = FontWeight.ExtraBold,
                     color = primaryText,
                     textAlign = TextAlign.Center,
-                    lineHeight = 34.sp
+                    lineHeight = 34.sp,
+                    modifier = Modifier.semantics { heading() }
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
@@ -535,6 +541,7 @@ fun UserSettingsScreen(
     onClearVaultClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val moneySnackbar = LocalMoneySnackbar.current
     val prefs = remember { com.splitmate.app.data.EncryptedPrefsProvider.get(context) }
     var selectedThemeMode by remember(activeThemeMode, isDarkThemeInitial) {
         mutableStateOf(
@@ -631,6 +638,7 @@ fun UserSettingsScreen(
     val settingsScrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Scaffold(
         containerColor = screenBg,
+        snackbarHost = { MoneyScaffoldSnackbarHost() },
         modifier = Modifier.nestedScroll(settingsScrollBehavior.nestedScrollConnection),
         topBar = {
             MediumFlexibleTopAppBar(
@@ -639,20 +647,23 @@ fun UserSettingsScreen(
                         text = "Settings",
                         fontFamily = SplitMateDisplayFontFamily,
                         fontWeight = FontWeight.ExtraBold,
-                        color = textPrimary
+                        color = textPrimary,
+                        modifier = Modifier.semantics { heading() }
                     )
                 },
                 navigationIcon = {
-                    IconButton(
-                        onClick = onBackClick,
-                        shapes = IconButtonDefaults.shapes(),
-                        modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = "Back",
-                            tint = textPrimary
-                        )
+                    ExpressivePlainTooltipBox(tooltipText = "Back") {
+                        IconButton(
+                            onClick = onBackClick,
+                            shapes = IconButtonDefaults.shapes(),
+                            modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                                contentDescription = "Back",
+                                tint = textPrimary
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -728,25 +739,29 @@ fun UserSettingsScreen(
                                     gender = selectedGender,
                                     highlighted = true
                                 )
-                                // v2.4.0 rc3: official FilledIconButton with the press morph.
-                                FilledIconButton(
-                                    onClick = { currentSeedSuffix = (100..999).random().toString() },
-                                    shapes = IconButtonDefaults.shapes(),
-                                    colors = IconButtonDefaults.filledIconButtonColors(
-                                        containerColor = activePalette.primary,
-                                        contentColor = activePalette.onPrimary
-                                    ),
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .align(Alignment.BottomEnd)
-                                        .border(1.5.dp, activePalette.surfaceContainerLow, CircleShape)
+                                // v2.4.0 rc3: official FilledIconButton with the press morph + tooltip.
+                                ExpressivePlainTooltipBox(
+                                    tooltipText = "Shuffle look",
+                                    modifier = Modifier.align(Alignment.BottomEnd)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Casino,
-                                        contentDescription = "Shuffle Look",
-                                        tint = activePalette.onPrimary,
-                                        modifier = Modifier.size(15.dp)
-                                    )
+                                    FilledIconButton(
+                                        onClick = { currentSeedSuffix = (100..999).random().toString() },
+                                        shapes = IconButtonDefaults.shapes(),
+                                        colors = IconButtonDefaults.filledIconButtonColors(
+                                            containerColor = activePalette.primary,
+                                            contentColor = activePalette.onPrimary
+                                        ),
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .border(1.5.dp, activePalette.surfaceContainerLow, CircleShape)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Casino,
+                                            contentDescription = "Shuffle Look",
+                                            tint = activePalette.onPrimary,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                    }
                                 }
                             }
                             Text(
@@ -1003,7 +1018,8 @@ fun UserSettingsScreen(
                                         colorPresetId = selectedColorPresetId
                                     )
                                     onUpdateUserProfile(clean, cleanPhone, encodedSeed)
-                                    Toast.makeText(context, "Saved Profile", Toast.LENGTH_SHORT).show()
+                                    moneySnackbar?.say("Saved profile")
+                                        ?: Toast.makeText(context, "Saved Profile", Toast.LENGTH_SHORT).show()
                                 },
                                 // v2.4.0 rc3: official press morph; 48dp min height keeps the touch target.
                                 shapes = ButtonDefaults.shapes(),

@@ -1,7 +1,24 @@
 package com.splitmate.app.ui.components
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.FloatingActionButtonMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonColors
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.OutlinedIconButton
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
@@ -660,61 +677,81 @@ fun ButtonGroup(
     expandedWeightBoost: Float = 0.15f
 ) {
     if (items.isEmpty()) return
-    // v2.4.0 Trip Hub step 3: the official M3 Expressive ButtonGroup. Pressing a button widens it
-    // (animateWidth on the theme's spring) while its neighbours give way; no hand-built weights.
+    // v2.4.0 GM3E Skill Upgrade: official M3 Expressive ButtonGroup with ButtonGroupDefaults.OverflowIndicator
+    // and customItem overflow menu support so excess buttons collapse cleanly at 200% font scale.
     androidx.compose.material3.ButtonGroup(
+        overflowIndicator = { menuState ->
+            ExpressivePlainTooltipBox(tooltipText = "More actions") {
+                androidx.compose.material3.ButtonGroupDefaults.OverflowIndicator(menuState = menuState)
+            }
+        },
         modifier = modifier.fillMaxWidth(),
         expandedRatio = expandedWeightBoost,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         items.forEach { item ->
-            val interactionSource = remember { MutableInteractionSource() }
-            val resolvedContainerColor = item.containerColor ?: if (item.isPrimary) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.secondaryContainer
-            }
-            val resolvedContentColor = item.contentColor ?: if (item.isPrimary) {
-                MaterialTheme.colorScheme.onPrimary
-            } else {
-                MaterialTheme.colorScheme.onSecondaryContainer
-            }
-            // v2.4.0 rc3: official ButtonShapes (pill at rest, tighter corners while pressed) instead of
-            // a fixed CircleShape, so the M3 Expressive press morph runs alongside animateWidth.
-            FilledTonalButton(
-                onClick = item.onClick,
-                shapes = ButtonDefaults.shapes(),
-                enabled = item.enabled,
-                interactionSource = interactionSource,
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
-                colors = ButtonDefaults.filledTonalButtonColors(
-                    containerColor = resolvedContainerColor,
-                    contentColor = resolvedContentColor
-                ),
-                modifier = Modifier
-                    .animateWidth(interactionSource)
-                    .weight(item.weight.coerceAtLeast(0.2f))
-                    .heightIn(min = 48.dp)
-            ) {
-                if (item.icon != null) {
-                    Icon(
-                        imageVector = item.icon,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                }
-                Text(
-                    text = item.label,
-                    style = if (item.isPrimary) {
-                        SplitMateExpressiveTypography.labelLargeEmphasized
+            customItem(
+                buttonGroupContent = {
+                    val interactionSource = remember { MutableInteractionSource() }
+                    val resolvedContainerColor = item.containerColor ?: if (item.isPrimary) {
+                        MaterialTheme.colorScheme.primary
                     } else {
-                        MaterialTheme.typography.labelLarge
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+                        MaterialTheme.colorScheme.secondaryContainer
+                    }
+                    val resolvedContentColor = item.contentColor ?: if (item.isPrimary) {
+                        MaterialTheme.colorScheme.onPrimary
+                    } else {
+                        MaterialTheme.colorScheme.onSecondaryContainer
+                    }
+                    FilledTonalButton(
+                        onClick = item.onClick,
+                        shapes = ButtonDefaults.shapes(),
+                        enabled = item.enabled,
+                        interactionSource = interactionSource,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = resolvedContainerColor,
+                            contentColor = resolvedContentColor
+                        ),
+                        modifier = Modifier
+                            .animateWidth(interactionSource)
+                            .weight(item.weight.coerceAtLeast(0.2f))
+                            .heightIn(min = 48.dp)
+                    ) {
+                        if (item.icon != null) {
+                            Icon(
+                                imageVector = item.icon,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+                        Text(
+                            text = item.label,
+                            style = if (item.isPrimary) {
+                                SplitMateExpressiveTypography.labelLargeEmphasized
+                            } else {
+                                MaterialTheme.typography.labelLarge
+                            },
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                },
+                menuContent = { menuState ->
+                    DropdownMenuItem(
+                        text = { Text(text = item.label) },
+                        leadingIcon = item.icon?.let { iconVec ->
+                            { Icon(imageVector = iconVec, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        },
+                        enabled = item.enabled,
+                        onClick = {
+                            menuState.dismiss()
+                            item.onClick()
+                        }
+                    )
+                }
+            )
         }
     }
 }
@@ -731,7 +768,10 @@ fun ButtonGroup(
  * - Selected (`index == selectedIndex`, `checked = true`) morphs both start & end corners
  *   to `50%` (`CircleShape`) via [SplitMateMotion.fastSpatial] and applies
  *   [SplitMateExpressiveTypography.labelLargeEmphasized].
+ * - Uses `FlowRow` + `Modifier.selectableGroup()` per GM3 `buttongroup.md` so large font scales
+ *   reflow across lines instead of clipping labels.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @ExperimentalMaterial3ExpressiveApi
 @Composable
 fun <T> ConnectedButtonGroup(
@@ -743,14 +783,12 @@ fun <T> ConnectedButtonGroup(
     iconProvider: ((T, Boolean) -> ImageVector?)? = null
 ) {
     if (options.isEmpty()) return
-    // v2.3.6 Wave 4: real Material 3 Expressive connected button group — official ToggleButton +
-    // ButtonGroupDefaults connected leading/middle/trailing shapes (asymmetric inner corners, press
-    // squish, checked morph to full pill) with ButtonGroupDefaults.ConnectedSpaceBetween gaps.
-    // Brand colours: checked = sage primaryContainer, unchecked = surfaceContainerHigh.
-    Row(
-        modifier = modifier.fillMaxWidth(),
+    FlowRow(
+        modifier = modifier
+            .fillMaxWidth()
+            .selectableGroup(),
         horizontalArrangement = Arrangement.spacedBy(androidx.compose.material3.ButtonGroupDefaults.ConnectedSpaceBetween),
-        verticalAlignment = Alignment.CenterVertically
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         options.forEachIndexed { index, option ->
             val checked = index == selectedIndex
@@ -760,8 +798,6 @@ fun <T> ConnectedButtonGroup(
                 index == options.lastIndex -> androidx.compose.material3.ButtonGroupDefaults.connectedTrailingButtonShapes()
                 else -> androidx.compose.material3.ButtonGroupDefaults.connectedMiddleButtonShapes()
             }
-            // v2.4.0 rc3: unchecked segments use onSurface (not onSurfaceVariant) and Medium weight so they
-            // read as available options rather than disabled ones. Checked styling is unchanged.
             val contentColor = if (checked) {
                 MaterialTheme.colorScheme.onPrimaryContainer
             } else {
@@ -777,9 +813,10 @@ fun <T> ConnectedButtonGroup(
                     checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                     checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ),
-                contentPadding = PaddingValues(horizontal = 8.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                 modifier = Modifier
                     .weight(1f)
+                    .minimumInteractiveComponentSize()
                     .heightIn(min = 40.dp)
                     .semantics { role = androidx.compose.ui.semantics.Role.RadioButton }
             ) {
@@ -804,7 +841,7 @@ fun <T> ConnectedButtonGroup(
                     fontWeight = if (checked) FontWeight.ExtraBold else FontWeight.Medium,
                     fontSize = 12.sp,
                     color = contentColor,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
             }
@@ -825,15 +862,6 @@ data class ExpressiveFabMenuItem(
     val contentColor: Color? = null
 )
 
-/**
- * SplitMate entry point for the Material 3 Expressive FAB menu.
- *
- * v2.3.6: delegates to the real `androidx.compose.material3.FloatingActionButtonMenu` and
- * `ToggleFloatingActionButton`: the toggle morphs from a 56dp rounded square into a circle and the
- * `+` icon turns into `x`; menu items expand with the theme's fast spatial spring
- * (`MaterialTheme.motionScheme`, snapped under reduced motion). The call-site API (labels, icons,
- * [toggleLabel] used as the accessibility label) is unchanged.
- */
 @ExperimentalMaterial3ExpressiveApi
 @Composable
 fun FloatingActionButtonMenu(
@@ -844,26 +872,31 @@ fun FloatingActionButtonMenu(
     toggleIcon: ImageVector = Icons.Rounded.Add,
     toggleLabel: String? = null
 ) {
+    BackHandler(enabled = expanded) { onToggle() }
     androidx.compose.material3.FloatingActionButtonMenu(
         expanded = expanded,
         modifier = modifier,
         button = {
-            androidx.compose.material3.ToggleFloatingActionButton(
-                checked = expanded,
-                onCheckedChange = { onToggle() },
-                modifier = Modifier.semantics {
-                    contentDescription = if (expanded) "Close menu" else (toggleLabel ?: "Open menu")
-                    stateDescription = if (expanded) "Expanded" else "Collapsed"
-                }
+            ExpressivePlainTooltipBox(
+                tooltipText = if (expanded) "Close menu" else (toggleLabel ?: "Open menu")
             ) {
-                val progress = { checkedProgress }
-                Icon(
-                    imageVector = if (checkedProgress > 0.5f) Icons.Rounded.Close else toggleIcon,
-                    contentDescription = null,
-                    modifier = with(androidx.compose.material3.ToggleFloatingActionButtonDefaults) {
-                        Modifier.animateIcon(progress)
+                androidx.compose.material3.ToggleFloatingActionButton(
+                    checked = expanded,
+                    onCheckedChange = { onToggle() },
+                    modifier = Modifier.semantics {
+                        contentDescription = if (expanded) "Close menu" else (toggleLabel ?: "Open menu")
+                        stateDescription = if (expanded) "Expanded" else "Collapsed"
                     }
-                )
+                ) {
+                    val progress = { checkedProgress }
+                    Icon(
+                        imageVector = if (checkedProgress > 0.5f) Icons.Rounded.Close else toggleIcon,
+                        contentDescription = null,
+                        modifier = with(androidx.compose.material3.ToggleFloatingActionButtonDefaults) {
+                            Modifier.animateIcon(progress)
+                        }
+                    )
+                }
             }
         }
     ) {
@@ -1085,7 +1118,7 @@ fun SplitButtonLayout(
     contentColor: Color = MaterialTheme.colorScheme.onPrimary,
     fillWidth: Boolean = false
 ) {
-    var menuExpanded by remember { mutableStateOf(false) }
+    var menuExpanded by rememberSaveable { mutableStateOf(false) }
     // v2.4.0 Trip Hub step 3: the official M3 Expressive split button (SplitButtonLayout +
     // SplitButtonDefaults.LeadingButton / TrailingButton): the trailing button's inner corners
     // morph to a pill while its menu is open, with the library's own press squish and motion.
@@ -1097,7 +1130,9 @@ fun SplitButtonLayout(
                 androidx.compose.material3.SplitButtonDefaults.LeadingButton(
                     onClick = onLeadingClick,
                     colors = colors,
-                    modifier = (if (fillWidth) Modifier.fillMaxWidth() else Modifier).heightIn(min = buttonHeight)
+                    modifier = (if (fillWidth) Modifier.fillMaxWidth() else Modifier)
+                        .minimumInteractiveComponentSize()
+                        .heightIn(min = buttonHeight)
                 ) {
                     if (leadingIcon != null) {
                         Icon(
@@ -1115,19 +1150,19 @@ fun SplitButtonLayout(
                 }
             },
             trailingButton = {
-                // v2.4.0 D3: same trailing wrapper as the slot overload (min width keeps the
-                // pill end from being clipped when the label is long).
+                // v2.4.0 GM3E Skill Upgrade: TooltipBox + parent contentDescription/stateDescription
                 SplitButtonDefaults.TrailingButton(
                     checked = menuExpanded,
                     onCheckedChange = { menuExpanded = it },
                     containerColor = containerColor,
                     contentColor = contentColor,
                     height = buttonHeight,
-                    width = SplitButtonDefaults.MediumContainerHeight
+                    width = SplitButtonDefaults.MediumContainerHeight,
+                    tooltipLabel = "More actions"
                 ) {
                     SplitButtonDefaults.TrailingIcon(
                         checked = menuExpanded,
-                        contentDescription = "More actions",
+                        contentDescription = null,
                         iconSize = if (fillWidth) 22.dp else 18.dp
                     )
                 }
@@ -1297,32 +1332,33 @@ object SplitButtonDefaults {
         contentColor: Color = MaterialTheme.colorScheme.onPrimary,
         height: Dp = ContainerHeight,
         width: Dp = TrailingButtonWidth,
+        tooltipLabel: String = "More options",
         expandedStateDescription: String = "Menu expanded",
         collapsedStateDescription: String = "Menu collapsed",
-        content: @Composable () -> Unit = { TrailingIcon(checked = checked) }
+        content: @Composable () -> Unit = { TrailingIcon(checked = checked, contentDescription = null) }
     ) {
-        // v2.4.0: the official M3 Expressive trailing toggle (inner corners morph to a pill while open).
+        // v2.4.0 GM3E Skill Upgrade: parent TrailingButton owns both contentDescription and stateDescription
+        // and is wrapped in PlainTooltip via TooltipBox per splitbutton.md & tooltip.md.
         val stateText = if (checked) expandedStateDescription else collapsedStateDescription
-        androidx.compose.material3.SplitButtonDefaults.TrailingButton(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            modifier = modifier
-                .heightIn(min = height)
-                .widthIn(min = width)
-                .semantics { stateDescription = stateText },
-            enabled = enabled,
-            // v2.4.0 D3: explicit shapes with dp outer corners (half the height): the alpha library drew
-            // percent-based outer corners square on first frame, leaving a flat trailing end.
-            // v2.4.0 rc3: everything else comes from the official size-aware trailing shapes: the
-            // inner (facing) corners at rest / pressed and the checked (menu open) shape. Only the
-            // outer end corners are overridden with explicit dp values to keep the D3 fix.
-            shapes = trailingShapesWithDpOuterCorners(
-                official = androidx.compose.material3.SplitButtonDefaults.trailingButtonShapesFor(height),
-                height = height
-            ),
-            colors = ButtonDefaults.buttonColors(containerColor = containerColor, contentColor = contentColor)
-        ) {
-            content()
+        ExpressivePlainTooltipBox(tooltipText = tooltipLabel) {
+            androidx.compose.material3.SplitButtonDefaults.TrailingButton(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                modifier = modifier
+                    .minimumInteractiveComponentSize()
+                    .heightIn(min = height)
+                    .widthIn(min = width)
+                    .semantics { contentDescription = tooltipLabel }
+                    .semantics { stateDescription = stateText },
+                enabled = enabled,
+                shapes = trailingShapesWithDpOuterCorners(
+                    official = androidx.compose.material3.SplitButtonDefaults.trailingButtonShapesFor(height),
+                    height = height
+                ),
+                colors = ButtonDefaults.buttonColors(containerColor = containerColor, contentColor = contentColor)
+            ) {
+                content()
+            }
         }
     }
 
@@ -1604,4 +1640,119 @@ fun EditorialFinancialTotalText(
             }
         }
     )
+}
+
+// ==============================================================================
+// 9. PLAIN TOOLTIP & EXPRESSIVE ICON BUTTON WRAPPERS (GM3E tooltip.md / iconbutton.md)
+// ==============================================================================
+
+/**
+ * Wraps any icon-only control in an accessible Material 3 [TooltipBox] + [PlainTooltip]
+ * positioned above the anchor per `google3/ux/gdp/ai/skills/android/material_compose_components`
+ * (`tooltip.md` & `iconbutton.md`).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ExpressivePlainTooltipBox(
+    tooltipText: String,
+    modifier: Modifier = Modifier,
+    anchorPosition: TooltipAnchorPosition = TooltipAnchorPosition.Above,
+    content: @Composable () -> Unit
+) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(anchorPosition),
+        tooltip = {
+            PlainTooltip(
+                modifier = Modifier.semantics {
+                    liveRegion = LiveRegionMode.Polite
+                    paneTitle = tooltipText
+                }
+            ) {
+                Text(text = tooltipText)
+            }
+        },
+        state = rememberTooltipState(),
+        modifier = modifier,
+        content = content
+    )
+}
+
+/**
+ * Standard GM3 Expressive [IconButton] wrapped in [ExpressivePlainTooltipBox] with
+ * press-morphing [IconButtonDefaults.shapes] and guaranteed `48x48.dp` minimum touch target.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun ExpressiveTooltipIconButton(
+    tooltipText: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    colors: IconButtonColors = IconButtonDefaults.iconButtonColors(),
+    content: @Composable () -> Unit
+) {
+    ExpressivePlainTooltipBox(tooltipText = tooltipText) {
+        IconButton(
+            onClick = onClick,
+            modifier = modifier.minimumInteractiveComponentSize(),
+            enabled = enabled,
+            shapes = IconButtonDefaults.shapes(),
+            colors = colors,
+            content = content
+        )
+    }
+}
+
+/**
+ * Standard GM3 Expressive [OutlinedIconButton] wrapped in [ExpressivePlainTooltipBox] with
+ * press-morphing [IconButtonDefaults.shapes] and guaranteed `48x48.dp` minimum touch target.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun ExpressiveTooltipOutlinedIconButton(
+    tooltipText: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    colors: IconButtonColors = IconButtonDefaults.outlinedIconButtonColors(),
+    border: androidx.compose.foundation.BorderStroke? = IconButtonDefaults.outlinedIconButtonBorder(enabled),
+    content: @Composable () -> Unit
+) {
+    ExpressivePlainTooltipBox(tooltipText = tooltipText) {
+        OutlinedIconButton(
+            onClick = onClick,
+            modifier = modifier.minimumInteractiveComponentSize(),
+            enabled = enabled,
+            shapes = IconButtonDefaults.shapes(),
+            colors = colors,
+            border = border,
+            content = content
+        )
+    }
+}
+
+/**
+ * Standard GM3 Expressive [FilledTonalIconButton] wrapped in [ExpressivePlainTooltipBox] with
+ * press-morphing [IconButtonDefaults.shapes] and guaranteed `48x48.dp` minimum touch target.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun ExpressiveTooltipFilledTonalIconButton(
+    tooltipText: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    colors: IconButtonColors = IconButtonDefaults.filledTonalIconButtonColors(),
+    content: @Composable () -> Unit
+) {
+    ExpressivePlainTooltipBox(tooltipText = tooltipText) {
+        FilledTonalIconButton(
+            onClick = onClick,
+            modifier = modifier.minimumInteractiveComponentSize(),
+            enabled = enabled,
+            shapes = IconButtonDefaults.shapes(),
+            colors = colors,
+            content = content
+        )
+    }
 }

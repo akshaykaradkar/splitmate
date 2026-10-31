@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -18,16 +19,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.automirrored.rounded.Undo
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.FlightTakeoff
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Train
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -35,10 +39,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -55,11 +62,13 @@ import com.splitmate.app.ui.cleanDisplayExpenseTitle
 import com.splitmate.app.ui.components.EditorialFinancialTotalText
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import com.splitmate.app.ui.components.ExpressiveMenuAction
+import com.splitmate.app.ui.components.ExpressiveTooltipIconButton
 import com.splitmate.app.ui.components.SplitButtonLayout
 import com.splitmate.app.ui.components.rememberAnimatedSegmentedIslandItemShape
 import com.splitmate.app.ui.extractTravelTicketFromTitle
 import com.splitmate.app.ui.formatIndianRupeesFromCents
 import com.splitmate.app.ui.isFlightTicketExpense
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -116,7 +125,7 @@ fun ActivityDetailSheet(
                     Text("Cancel", fontWeight = FontWeight.Bold, color = SplitMateTheme.TextSecondary)
                 }
             },
-            containerColor = SplitMateTheme.SurfaceWhite
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     }
     val parsedTravelTicket = remember(expense.title) {
@@ -142,45 +151,75 @@ fun ActivityDetailSheet(
         }
     }
 
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = SplitMateTheme.SurfaceWhite,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = MaterialTheme.shapes.extraLarge,
+        dragHandle = { BottomSheetDefaults.DragHandle() }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 12.dp)
                 .navigationBarsPadding()
+                .imePadding()
+                .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
-            Text(
-                text = cleanTitle,
-                fontFamily = SplitMateTheme.FontDisplay,
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 18.sp,
-                color = SplitMateTheme.PrimaryDark,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                // v2.3.3: "Paid by X · Personal expense" / "Paid by X for Y · Y owes ₹Z"; SHARED unchanged.
-                text = breakdown.paidBySubtitle(
-                    payerName = payer?.name ?: "You",
-                    sharedDetail = if (currencySymbol == "₹") {
-                        com.splitmate.app.ExpenseSplitCopy.perPersonCaption(
-                            totalCents = expense.totalAmountCents,
-                            memberCount = breakdown.splittingMembersCount
-                        )
-                    } else {
-                        "${breakdown.perPersonHeadlineShare}/person"
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = cleanTitle,
+                        fontFamily = SplitMateTheme.FontDisplay,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 18.sp,
+                        color = SplitMateTheme.PrimaryDark,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.semantics { heading() }
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        // v2.3.3: "Paid by X · Personal expense" / "Paid by X for Y · Y owes ₹Z"; SHARED unchanged.
+                        text = breakdown.paidBySubtitle(
+                            payerName = payer?.name ?: "You",
+                            sharedDetail = if (currencySymbol == "₹") {
+                                com.splitmate.app.ExpenseSplitCopy.perPersonCaption(
+                                    totalCents = expense.totalAmountCents,
+                                    memberCount = breakdown.splittingMembersCount
+                                )
+                            } else {
+                                "${breakdown.perPersonHeadlineShare}/person"
+                            }
+                        ),
+                        fontFamily = SplitMateTheme.FontRounded,
+                        fontSize = 12.sp,
+                        color = SplitMateTheme.TextSecondary,
+                        style = TextStyle(fontFeatureSettings = "tnum")
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                ExpressiveTooltipIconButton(
+                    tooltipText = "Close",
+                    onClick = {
+                        scope.launch { sheetState.hide() }.invokeOnCompletion {
+                            if (!sheetState.isVisible) onDismiss()
+                        }
                     }
-                ),
-                fontFamily = SplitMateTheme.FontRounded,
-                fontSize = 12.sp,
-                color = SplitMateTheme.TextSecondary,
-                style = TextStyle(fontFeatureSettings = "tnum")
-            )
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = "Close",
+                        tint = SplitMateTheme.TextSecondary
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(12.dp))
 
             // 2. Typography Hero Moment: Elevate the transaction total using MaterialTheme.typography.displaySmall + SplitMateTnumMonospace.

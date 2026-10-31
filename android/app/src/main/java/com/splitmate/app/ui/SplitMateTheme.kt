@@ -1637,11 +1637,12 @@ fun OpenPeepsHeroStage(
         label = "scene_float_y"
     )
     val floatOffsetY = if (reduceMotionForLoops) 0f else floatOffsetYAnimated
+    val colorScheme = MaterialTheme.colorScheme
 
     Surface(
         shape = RoundedCornerShape(28.dp),
-        color = Color(0xFFF4EFE6),
-        border = BorderStroke(1.dp, SplitMateTheme.BorderLight),
+        color = colorScheme.surfaceContainer,
+        border = BorderStroke(1.dp, colorScheme.outlineVariant),
         modifier = modifier
             .fillMaxWidth()
             .height(stageHeight)
@@ -1656,7 +1657,7 @@ fun OpenPeepsHeroStage(
                 val h = size.height
 
                 drawOval(
-                    color = Color(0xFFEDE7DF),
+                    color = colorScheme.outlineVariant,
                     topLeft = androidx.compose.ui.geometry.Offset(w * 0.08f, h * 0.84f),
                     size = androidx.compose.ui.geometry.Size(w * 0.84f, h * 0.14f)
                 )
@@ -1667,7 +1668,7 @@ fun OpenPeepsHeroStage(
                     quadraticBezierTo(w * 0.48f, h * 0.08f, w * 0.44f, h * 0.86f)
                     close()
                 }
-                drawPath(pathSage, Color(0xFFD7E8B6).copy(alpha = 0.55f))
+                drawPath(pathSage, colorScheme.primaryContainer.copy(alpha = 0.55f))
 
                 val pathPeach = androidx.compose.ui.graphics.Path().apply {
                     moveTo(w * 0.52f, h * 0.88f)
@@ -1675,10 +1676,10 @@ fun OpenPeepsHeroStage(
                     quadraticBezierTo(w * 0.92f, h * 0.48f, w * 0.86f, h * 0.86f)
                     close()
                 }
-                drawPath(pathPeach, Color(0xFFFED8C8).copy(alpha = 0.55f))
+                drawPath(pathPeach, colorScheme.secondaryContainer.copy(alpha = 0.55f))
 
                 drawCircle(
-                    color = Color(0xFFDCE3FD).copy(alpha = 0.48f),
+                    color = colorScheme.tertiaryContainer.copy(alpha = 0.48f),
                     radius = w * 0.16f,
                     center = androidx.compose.ui.geometry.Offset(w * 0.5f, h * 0.48f)
                 )
@@ -1730,8 +1731,8 @@ fun OpenPeepsHeroStage(
                     activeSceneIndex = (activeSceneIndex + 1) % SplitMateCrewScenes.size
                 },
                 shape = RoundedCornerShape(50),
-                color = Color(0xFFFAF6F0).copy(alpha = 0.94f),
-                border = BorderStroke(1.dp, Color(0xFF365314).copy(alpha = 0.28f)),
+                color = colorScheme.surfaceContainerLow.copy(alpha = 0.94f),
+                border = BorderStroke(1.dp, colorScheme.outlineVariant),
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(10.dp)
@@ -1743,8 +1744,8 @@ fun OpenPeepsHeroStage(
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Shuffle,
-                        contentDescription = "Shuffle crew scene",
-                        tint = Color(0xFF365314),
+                        contentDescription = null,
+                        tint = colorScheme.primary,
                         modifier = Modifier.size(14.dp)
                     )
                     Text(
@@ -1752,7 +1753,7 @@ fun OpenPeepsHeroStage(
                         fontFamily = FigtreeFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
-                        color = Color(0xFF23201E)
+                        color = colorScheme.onSurface
                     )
                     Text(
                         text = "${activeSceneIndex + 1}/${SplitMateCrewScenes.size}",
@@ -1762,7 +1763,7 @@ fun OpenPeepsHeroStage(
                             fontSize = 11.sp,
                             fontFeatureSettings = "tnum"
                         ),
-                        color = Color(0xFF365314)
+                        color = colorScheme.primary
                     )
                 }
             }
@@ -1945,14 +1946,15 @@ fun ContactPickerBottomSheet(
     onConfirmSelection: (List<DeviceContact>) -> Unit = onConfirmSelected
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var searchQuery by remember { mutableStateOf("") }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
     var selectedPhones by remember(initialSelectedPhones) {
         mutableStateOf(initialSelectedPhones.toSet())
     }
     var customAddedContacts by remember { mutableStateOf(listOf<DeviceContact>()) }
-    var manualNameInput by remember { mutableStateOf("") }
-    var manualPhoneInput by remember { mutableStateOf("") }
+    var manualNameInput by rememberSaveable { mutableStateOf("") }
+    var manualPhoneInput by rememberSaveable { mutableStateOf("") }
     var promptingPhonelessContact by remember { mutableStateOf<DeviceContact?>(null) }
+    val colorScheme = MaterialTheme.colorScheme
 
     val allContacts = remember(contacts, customAddedContacts) {
         customAddedContacts + contacts
@@ -1994,20 +1996,20 @@ fun ContactPickerBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = SplitMateTheme.ScreenBg,
-        contentColor = SplitMateTheme.PrimaryDark,
-        scrimColor = Color.Black.copy(alpha = 0.72f),
+        containerColor = colorScheme.surfaceContainerLow,
+        contentColor = colorScheme.onSurface,
+        scrimColor = colorScheme.scrim.copy(alpha = 0.72f),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     ) {
         Surface(
-            color = SplitMateTheme.ScreenBg,
-            contentColor = SplitMateTheme.PrimaryDark,
+            color = colorScheme.surfaceContainerLow,
+            contentColor = colorScheme.onSurface,
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(SplitMateTheme.ScreenBg)
+                    .background(colorScheme.surfaceContainerLow)
                     .padding(horizontal = 20.dp)
                     .padding(bottom = 24.dp)
                     .imePadding()
@@ -2021,12 +2023,12 @@ fun ContactPickerBottomSheet(
                         Text(
                             text = title,
                             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold),
-                            color = SplitMateTheme.PrimaryDark
+                            color = colorScheme.onSurface
                         )
                         Text(
                             text = subtitle,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = SplitMateTheme.TextSecondary
+                            color = colorScheme.onSurfaceVariant
                         )
                     }
                     if (multiSelect && allContacts.isNotEmpty()) {
@@ -2040,16 +2042,17 @@ fun ContactPickerBottomSheet(
                                 } else {
                                     selectedPhones + selectablePhones
                                 }
-                            }
+                            },
+                            shapes = ButtonDefaults.shapes()
                         ) {
                             Text(
                                 text = if (selectedPhones.size == filteredContacts.size && filteredContacts.isNotEmpty()) {
                                     "Clear"
                                 } else {
-                                    "Select All"
+                                    "Select all"
                                 },
                                 fontWeight = FontWeight.Bold,
-                                color = SplitMateTheme.SageText
+                                color = colorScheme.primary
                             )
                         }
                     }
@@ -2060,39 +2063,49 @@ fun ContactPickerBottomSheet(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
+                    label = {
+                        Text("Search contacts")
+                    },
                     placeholder = {
                         Text(
                             text = "Search by name or 10-digit phone...",
-                            color = SplitMateTheme.TextSecondary
+                            color = colorScheme.onSurfaceVariant
                         )
                     },
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Rounded.Search,
-                            contentDescription = "Search contacts",
-                            tint = SplitMateTheme.TextSecondary
+                            contentDescription = null,
+                            tint = colorScheme.onSurfaceVariant
                         )
                     },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Close,
-                                    contentDescription = "Clear search",
-                                    tint = SplitMateTheme.TextSecondary
-                                )
+                            com.splitmate.app.ui.components.ExpressivePlainTooltipBox(
+                                tooltipText = "Clear search"
+                            ) {
+                                IconButton(
+                                    onClick = { searchQuery = "" },
+                                    shapes = IconButtonDefaults.shapes()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = "Clear search",
+                                        tint = colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     },
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = SplitMateTheme.PrimaryDark,
-                        unfocusedTextColor = SplitMateTheme.PrimaryDark,
-                        focusedBorderColor = SplitMateTheme.PrimaryDark,
-                        unfocusedBorderColor = SplitMateTheme.BorderLight,
-                        focusedContainerColor = SplitMateTheme.SurfaceWhite,
-                        unfocusedContainerColor = SplitMateTheme.SurfaceWhite
+                        focusedTextColor = colorScheme.onSurface,
+                        unfocusedTextColor = colorScheme.onSurface,
+                        focusedBorderColor = colorScheme.primary,
+                        unfocusedBorderColor = colorScheme.outlineVariant,
+                        focusedContainerColor = colorScheme.surfaceContainerLowest,
+                        unfocusedContainerColor = colorScheme.surfaceContainerLowest
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -2102,10 +2115,10 @@ fun ContactPickerBottomSheet(
                 // Inline Buckwheat "Add by Mobile Number (+91)" Card (F9 / RCA-2B / RCA-2C)
                 Surface(
                     shape = RoundedCornerShape(18.dp),
-                    color = if (SplitMateTheme.isDark) Color(0xFF24201C) else Color(0xFFF7F3EC),
+                    color = colorScheme.surfaceContainer,
                     border = BorderStroke(
                         width = if (promptingPhonelessContact != null) 1.5.dp else 1.dp,
-                        color = if (promptingPhonelessContact != null) Color(0xFFE06B52) else Color(0xFFEDE7DF)
+                        color = if (promptingPhonelessContact != null) colorScheme.secondary else colorScheme.outlineVariant
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -2127,7 +2140,7 @@ fun ContactPickerBottomSheet(
                                     "Add by Mobile Number (+91)"
                                 },
                                 style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.ExtraBold),
-                                color = if (promptingPhonelessContact != null) Color(0xFF7C2D12) else SplitMateTheme.PrimaryDark,
+                                color = if (promptingPhonelessContact != null) colorScheme.onSecondaryContainer else colorScheme.onSurface,
                                 modifier = Modifier.weight(1f)
                             )
                             if (promptingPhonelessContact != null) {
@@ -2143,12 +2156,13 @@ fun ContactPickerBottomSheet(
                                         }
                                         promptingPhonelessContact = null
                                     },
+                                    shapes = ButtonDefaults.shapes(),
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                                 ) {
                                     Text(
-                                        text = "Add Offline Without Number",
+                                        text = "Add offline without number",
                                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = Color(0xFF7C2D12)
+                                        color = colorScheme.onSecondaryContainer
                                     )
                                 }
                             }
@@ -2162,8 +2176,11 @@ fun ContactPickerBottomSheet(
                             OutlinedTextField(
                                 value = manualNameInput,
                                 onValueChange = { manualNameInput = it },
+                                label = {
+                                    Text("Full name")
+                                },
                                 placeholder = {
-                                    Text("Friend's Name", fontSize = 12.sp, color = SplitMateTheme.TextSecondary)
+                                    Text("Friend's Name", fontSize = 12.sp, color = colorScheme.onSurfaceVariant)
                                 },
                                 singleLine = true,
                                 shape = RoundedCornerShape(12.dp),
@@ -2171,15 +2188,15 @@ fun ContactPickerBottomSheet(
                                     fontFamily = FigtreeFontFamily,
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 13.sp,
-                                    color = SplitMateTheme.PrimaryDark
+                                    color = colorScheme.onSurface
                                 ),
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedTextColor = SplitMateTheme.PrimaryDark,
-                                    unfocusedTextColor = SplitMateTheme.PrimaryDark,
-                                    focusedBorderColor = BuckwheatOlivePrimary,
-                                    unfocusedBorderColor = SplitMateTheme.BorderLight,
-                                    focusedContainerColor = SplitMateTheme.SurfaceWhite,
-                                    unfocusedContainerColor = SplitMateTheme.SurfaceWhite
+                                    focusedTextColor = colorScheme.onSurface,
+                                    unfocusedTextColor = colorScheme.onSurface,
+                                    focusedBorderColor = colorScheme.primary,
+                                    unfocusedBorderColor = colorScheme.outlineVariant,
+                                    focusedContainerColor = colorScheme.surfaceContainerLowest,
+                                    unfocusedContainerColor = colorScheme.surfaceContainerLowest
                                 ),
                                 modifier = Modifier.weight(0.95f)
                             )
@@ -2189,6 +2206,9 @@ fun ContactPickerBottomSheet(
                                 onValueChange = { raw ->
                                     manualPhoneInput = raw.filter { it.isDigit() }.takeLast(10)
                                 },
+                                label = {
+                                    Text("Phone number")
+                                },
                                 prefix = {
                                     Text(
                                         text = "+91 ",
@@ -2196,30 +2216,33 @@ fun ContactPickerBottomSheet(
                                             fontFamily = SplitMateTnumMonospace,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 12.sp,
-                                            color = BuckwheatOlivePrimary,
+                                            color = colorScheme.primary,
                                             fontFeatureSettings = "tnum"
                                         )
                                     )
                                 },
                                 placeholder = {
-                                    Text("9876543210", fontSize = 12.sp, color = SplitMateTheme.TextSecondary)
+                                    Text("9876543210", fontSize = 12.sp, color = colorScheme.onSurfaceVariant)
                                 },
+                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone
+                                ),
                                 singleLine = true,
                                 shape = RoundedCornerShape(12.dp),
                                 textStyle = TextStyle(
                                     fontFamily = SplitMateTnumMonospace,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
-                                    color = SplitMateTheme.PrimaryDark,
+                                    color = colorScheme.onSurface,
                                     fontFeatureSettings = "tnum"
                                 ),
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedTextColor = SplitMateTheme.PrimaryDark,
-                                    unfocusedTextColor = SplitMateTheme.PrimaryDark,
-                                    focusedBorderColor = BuckwheatOlivePrimary,
-                                    unfocusedBorderColor = SplitMateTheme.BorderLight,
-                                    focusedContainerColor = SplitMateTheme.SurfaceWhite,
-                                    unfocusedContainerColor = SplitMateTheme.SurfaceWhite
+                                    focusedTextColor = colorScheme.onSurface,
+                                    unfocusedTextColor = colorScheme.onSurface,
+                                    focusedBorderColor = colorScheme.primary,
+                                    unfocusedBorderColor = colorScheme.outlineVariant,
+                                    focusedContainerColor = colorScheme.surfaceContainerLowest,
+                                    unfocusedContainerColor = colorScheme.surfaceContainerLowest
                                 ),
                                 modifier = Modifier.weight(1.05f)
                             )
@@ -2250,16 +2273,16 @@ fun ContactPickerBottomSheet(
                                 onDismiss()
                             },
                             enabled = isManualEntryValid,
-                            shape = RoundedCornerShape(50),
+                            shapes = ButtonDefaults.shapes(),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = BuckwheatOlivePrimary,
-                                contentColor = Color(0xFFFAF6F0),
-                                disabledContainerColor = SplitMateTheme.BorderLight,
-                                disabledContentColor = SplitMateTheme.TextSecondary
+                                containerColor = colorScheme.primary,
+                                contentColor = colorScheme.onPrimary,
+                                disabledContainerColor = colorScheme.surfaceContainerHighest,
+                                disabledContentColor = colorScheme.onSurfaceVariant
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(42.dp)
+                                .heightIn(min = 48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.PersonAdd,
@@ -2268,7 +2291,7 @@ fun ContactPickerBottomSheet(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "+ Add & Send Invite",
+                                text = "Add & send invite",
                                 style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.ExtraBold)
                             )
                         }
@@ -2285,8 +2308,8 @@ fun ContactPickerBottomSheet(
                         contentAlignment = Alignment.Center
                     ) {
                         ExpressiveMorphingLoader(
-                            containerColor = SplitMateTheme.SageSurface,
-                            indicatorColor = SplitMateTheme.PrimaryDark
+                            containerColor = colorScheme.primaryContainer,
+                            indicatorColor = colorScheme.onSurface
                         )
                     }
                 } else if (filteredContacts.isEmpty()) {
@@ -2295,8 +2318,8 @@ fun ContactPickerBottomSheet(
                             .fillMaxWidth()
                             .padding(vertical = 12.dp),
                         shape = RoundedCornerShape(20.dp),
-                        color = SplitMateTheme.SurfaceWhite,
-                        border = BorderStroke(1.dp, SplitMateTheme.BorderLight)
+                        color = colorScheme.surfaceContainerLowest,
+                        border = BorderStroke(1.dp, colorScheme.outlineVariant)
                     ) {
                         Column(
                             modifier = Modifier
@@ -2308,17 +2331,17 @@ fun ContactPickerBottomSheet(
                             Icon(
                                 imageVector = Icons.Rounded.Contacts,
                                 contentDescription = null,
-                                tint = SplitMateTheme.TextSecondary,
+                                tint = colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(28.dp)
                             )
                             Text(
                                 text = if (allContacts.isEmpty()) {
                                     "No device contacts found — enter Name & +91 mobile number above"
                                 } else {
-                                    "No contacts matching \"$searchQuery\" — use + Add & Send Invite above"
+                                    "No contacts matching \"$searchQuery\" — use Add & send invite above"
                                 },
                                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = SplitMateTheme.TextSecondary
+                                color = colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -2327,12 +2350,12 @@ fun ContactPickerBottomSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 160.dp, max = 280.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)
                     ) {
                         itemsIndexed(
                             filteredContacts,
                             key = { idx, c -> "${c.name}|${c.cleanPhone}|$idx" }
-                        ) { _, contact ->
+                        ) { idx, contact ->
                             val isPhoneless = contact.cleanPhone.startsWith("contact_")
                             val isChecked = selectedPhones.contains(contact.cleanPhone)
                             val toggleSelection = {
@@ -2347,75 +2370,63 @@ fun ContactPickerBottomSheet(
                                     }
                                 }
                             }
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .clickable { toggleSelection() },
-                                shape = RoundedCornerShape(16.dp),
-                                color = if (isChecked) {
-                                    SplitMateTheme.SageSurface
-                                } else {
-                                    SplitMateTheme.SurfaceWhite
-                                },
-                                border = BorderStroke(
-                                    width = if (isChecked) 1.5.dp else 1.dp,
-                                    color = if (isChecked) BuckwheatOlivePrimary else SplitMateTheme.BorderLight
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                        modifier = Modifier.weight(1f)
+                            SegmentedListItem(
+                                checked = isChecked,
+                                onCheckedChange = { toggleSelection() },
+                                shapes = ListItemDefaults.segmentedShapes(
+                                    index = idx,
+                                    count = filteredContacts.size
+                                ),
+                                colors = ListItemDefaults.segmentedColors(
+                                    containerColor = colorScheme.surfaceContainerLowest,
+                                    contentColor = colorScheme.onSurface,
+                                    supportingContentColor = if (isPhoneless) colorScheme.onSecondaryContainer else colorScheme.onSurfaceVariant,
+                                    selectedContainerColor = colorScheme.primaryContainer,
+                                    selectedContentColor = colorScheme.onPrimaryContainer,
+                                    selectedSupportingContentColor = if (isPhoneless) colorScheme.onSecondaryContainer else colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                ),
+                                leadingContent = {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(MaterialShapes.Cookie9Sided.toShape())
+                                            .background(
+                                                if (isChecked) colorScheme.primary else colorScheme.surfaceContainerHigh
+                                            ),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Box(
-                                           modifier = Modifier
-                                                .size(40.dp)
-                                                .clip(CircleShape)
-                                                .background(
-                                                    if (isChecked) BuckwheatSageContainer else SplitMateTheme.SurfaceMuted
-                                                )
-                                                .border(1.dp, SplitMateTheme.BorderLight, CircleShape),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = extractInitialsFromNameOrSeed(contact.name),
-                                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
-                                                color = if (isChecked) BuckwheatOlivePrimary else SplitMateTheme.PrimaryDark
-                                            )
-                                        }
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = contact.name,
-                                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                                color = SplitMateTheme.PrimaryDark,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            Text(
-                                                text = contact.formattedPhone,
-                                                style = MaterialTheme.typography.labelMedium,
-                                                color = if (isPhoneless) Color(0xFF7C2D12) else SplitMateTheme.TextSecondary
-                                            )
-                                        }
+                                        Text(
+                                            text = extractInitialsFromNameOrSeed(contact.name),
+                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
+                                            color = if (isChecked) colorScheme.onPrimary else colorScheme.onSurface
+                                        )
                                     }
+                                },
+                                supportingContent = {
+                                    Text(
+                                        text = contact.formattedPhone,
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                },
+                                trailingContent = {
                                     Checkbox(
                                         checked = isChecked,
-                                        onCheckedChange = { toggleSelection() },
+                                        onCheckedChange = null,
                                         colors = CheckboxDefaults.colors(
-                                            checkedColor = BuckwheatOlivePrimary,
-                                            checkmarkColor = Color.White
+                                            checkedColor = colorScheme.primary,
+                                            checkmarkColor = colorScheme.onPrimary
                                         )
                                     )
+                                },
+                                content = {
+                                    Text(
+                                        text = contact.name,
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
-                            }
+                            )
                         }
                     }
                 }
@@ -2432,10 +2443,10 @@ fun ContactPickerBottomSheet(
                         onDismiss()
                     },
                     enabled = selectedCount > 0,
-                    shape = RoundedCornerShape(50),
+                    shapes = ButtonDefaults.shapes(),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = SplitMateTheme.PrimaryDark,
-                        contentColor = SplitMateTheme.ScreenBg
+                        containerColor = colorScheme.onSurface,
+                        contentColor = colorScheme.surfaceContainerLow
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -2443,12 +2454,12 @@ fun ContactPickerBottomSheet(
                 ) {
                     Text(
                         text = if (multiSelect) {
-                            "Add Selected ($selectedCount)"
+                            "Add selected ($selectedCount)"
                         } else {
-                            "Link Selected Contact"
+                            "Link selected contact"
                         },
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
-                        color = SplitMateTheme.ScreenBg
+                        color = colorScheme.surfaceContainerLow
                     )
                 }
             }
@@ -2676,10 +2687,17 @@ fun SplitMateExpressiveTheme(
             shapes = SplitMateExpressiveShapes,
             typography = SplitMateTypography
         ) {
-            ProvideTextStyle(
-                value = TextStyle(fontFamily = FigtreeFontFamily),
-                content = content
-            )
+            CompositionLocalProvider(
+                LocalTonalElevationEnabled provides false
+            ) {
+                ProvideTextStyle(
+                    value = TextStyle(
+                        fontFamily = FigtreeFontFamily,
+                        fontFeatureSettings = "tnum, zero"
+                    ),
+                    content = content
+                )
+            }
         }
     }
 }
@@ -2898,31 +2916,23 @@ fun CompactLedgerTicketStub(
 ) {
     val context = LocalContext.current
     val localView = androidx.compose.ui.platform.LocalView.current
-    val isDark = SplitMateTheme.isDark
+    val colorScheme = MaterialTheme.colorScheme
     val isFlight = isFlightOverride ?: isFlightTicketExpense(ticket.cleanTitle, ticket)
-    val stubBg = when {
-        isFlight && isDark -> Color(0xFF1B1936)
-        isFlight -> Color(0xFFF3F5FF)
-        isDark -> Color(0xFF212B18)
-        else -> Color(0xFFF3F7EA)
+    val stubBg = if (isFlight) {
+        colorScheme.tertiaryContainer.copy(alpha = 0.55f)
+    } else {
+        colorScheme.primaryContainer.copy(alpha = 0.55f)
     }
-    val stubBorder = when {
-        isFlight && isDark -> Color(0xFF3E397A)
-        isFlight -> Color(0xFFC7D2FE)
-        isDark -> Color(0xFF3B5224)
-        else -> Color(0xFFCDE0A8)
+    val stubBorder = colorScheme.outlineVariant
+    val badgeBg = if (isFlight) {
+        colorScheme.tertiaryContainer
+    } else {
+        colorScheme.primaryContainer
     }
-    val badgeBg = when {
-        isFlight && isDark -> Color(0xFF2B2768)
-        isFlight -> Color(0xFFEEF2FF)
-        isDark -> Color(0xFF2D401B)
-        else -> Color(0xFFDCE9B9)
-    }
-    val badgeText = when {
-        isFlight && isDark -> Color(0xFFDCE3FD)
-        isFlight -> Color(0xFF2B2768)
-        isDark -> Color(0xFFD7E8B6)
-        else -> Color(0xFF365314)
+    val badgeText = if (isFlight) {
+        colorScheme.onTertiaryContainer
+    } else {
+        colorScheme.onPrimaryContainer
     }
 
     val fromCode = ticket.fromStation.ifBlank { "—" }.uppercase(java.util.Locale.US)
@@ -2963,7 +2973,7 @@ fun CompactLedgerTicketStub(
                 ) {
                     Icon(
                         imageVector = if (isFlight) Icons.Rounded.FlightTakeoff else Icons.Rounded.Train,
-                        contentDescription = if (isFlight) "Flight Ticket Stub" else "IRCTC Ticket Stub",
+                        contentDescription = null,
                         tint = badgeText,
                         modifier = Modifier.size(18.dp)
                     )

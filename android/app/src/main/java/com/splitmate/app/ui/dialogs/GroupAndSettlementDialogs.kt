@@ -2,8 +2,6 @@ package com.splitmate.app
 
 import com.splitmate.app.ui.theme.HubExtendedColors
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +12,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -24,27 +25,43 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Hotel
 import androidx.compose.material.icons.rounded.LocalBar
 import androidx.compose.material.icons.rounded.LocalTaxi
 import androidx.compose.material.icons.rounded.Restaurant
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.ShoppingCart
 import androidx.compose.material.icons.rounded.Train
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimeInput
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.TimePickerDialog
+import androidx.compose.material3.TimePickerDialogDefaults
+import androidx.compose.material3.TimePickerDisplayMode
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,9 +74,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
@@ -68,7 +89,9 @@ import com.splitmate.app.data.GroupMemberEntity
 import com.splitmate.app.ui.ParsedTravelTicket
 import com.splitmate.app.ui.buildDiceBearOpenPeepsUrl
 import com.splitmate.app.ui.extractInitialsFromNameOrSeed
+import com.splitmate.app.ui.components.ExpressiveTooltipIconButton
 import com.splitmate.app.ui.components.MaterialShapes
+import com.splitmate.app.ui.components.SplitMateMotion
 import com.splitmate.app.ui.components.toShape
 import com.splitmate.app.ui.extractTravelTicketFromTitle
 import com.splitmate.app.ui.formatTravelExpenseTitle
@@ -77,8 +100,12 @@ import com.splitmate.app.ui.category.ExpenseCategoryIcons
 import com.splitmate.app.ui.category.ExpenseCategoryPickerSheet
 import com.splitmate.app.ui.category.MoreCategoriesChip
 import androidx.compose.runtime.collectAsState
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun EditLoggedExpenseDialog(
     expense: ExpenseEntity,
@@ -126,8 +153,12 @@ fun EditLoggedExpenseDialog(
     }
     var trainOrFlightNo by remember(existingTicket) { mutableStateOf(existingTicket?.trainOrFlightNo ?: "") }
     var routeFromTo by remember(existingTicket) { mutableStateOf(existingTicket?.route ?: "") }
-    var departureInfo by remember(existingTicket) { mutableStateOf(existingTicket?.departureInfo ?: "") }
+    var departureDateInput by remember(existingTicket) { mutableStateOf(existingTicket?.departureDate ?: "") }
+    var departureTimeInput by remember(existingTicket) { mutableStateOf(existingTicket?.departureTime ?: "") }
     var coachAndSeats by remember(existingTicket) { mutableStateOf(existingTicket?.coachAndSeats ?: "") }
+    var showDepartureDatePicker by remember { mutableStateOf(false) }
+    var showDepartureTimePicker by remember { mutableStateOf(false) }
+    var timePickerDisplayMode by remember { mutableStateOf(TimePickerDisplayMode.Picker) }
 
     val quickCategories = listOf(
         Triple("Train / PNR", Icons.Rounded.Train, true),
@@ -154,35 +185,204 @@ fun EditLoggedExpenseDialog(
         )
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = SplitMateTheme.SurfaceWhite,
-        shape = SplitMateTheme.RadiusCard,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Rounded.Edit,
-                    contentDescription = null,
-                    tint = SplitMateTheme.SageText,
-                    modifier = Modifier.size(22.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
+    if (showDepartureDatePicker) {
+        val datePickerState = rememberDatePickerState()
+        DatePickerDialog(
+            onDismissRequest = { showDepartureDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            val date = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
+                            departureDateInput = date.format(DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.US))
+                        }
+                        showDepartureDatePicker = false
+                    },
+                    shapes = ButtonDefaults.shapes()
+                ) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDepartureDatePicker = false },
+                    shapes = ButtonDefaults.shapes()
+                ) {
+                    Text("Cancel")
+                }
+            },
+            colors = androidx.compose.material3.DatePickerDefaults.colors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            )
+        ) {
+            DatePicker(state = datePickerState, showModeToggle = true)
+        }
+    }
+
+    if (showDepartureTimePicker) {
+        val timePickerState = rememberTimePickerState(is24Hour = true)
+        TimePickerDialog(
+            onDismissRequest = { showDepartureTimePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        departureTimeInput = String.format(Locale.US, "%02d:%02d", timePickerState.hour, timePickerState.minute)
+                        showDepartureTimePicker = false
+                    },
+                    shapes = ButtonDefaults.shapes()
+                ) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDepartureTimePicker = false },
+                    shapes = ButtonDefaults.shapes()
+                ) {
+                    Text("Cancel")
+                }
+            },
+            title = {
                 Text(
-                    text = "Edit Logged Expense",
-                    fontFamily = SplitMateTheme.FontDisplay,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 19.sp,
-                    color = SplitMateTheme.PrimaryDark
+                    if (timePickerDisplayMode == TimePickerDisplayMode.Picker) "Select departure time" else "Enter departure time"
+                )
+            },
+            modeToggleButton = {
+                TimePickerDialogDefaults.DisplayModeToggle(
+                    onDisplayModeChange = {
+                        timePickerDisplayMode = if (timePickerDisplayMode == TimePickerDisplayMode.Picker) {
+                            TimePickerDisplayMode.Input
+                        } else {
+                            TimePickerDisplayMode.Picker
+                        }
+                    },
+                    displayMode = timePickerDisplayMode
                 )
             }
-        },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-            ) {
+        ) {
+            if (timePickerDisplayMode == TimePickerDisplayMode.Picker) {
+                TimePicker(state = timePickerState)
+            } else {
+                TimeInput(state = timePickerState)
+            }
+        }
+    }
+
+    val performSave: () -> Unit = {
+        val exactCents = if (lockAmountAndSplit) {
+            expense.totalAmountCents
+        } else {
+            com.splitmate.app.ui.parseRupeesToPaiseExact(editedAmountStr) ?: expense.totalAmountCents
+        }
+        val parsedRupees = exactCents / 100.0
+        val splitIdsToSave = if (lockAmountAndSplit) initialSplitMemberIds.toList() else selectedSplitMemberIds.toList()
+        val cleanPnrTrim = pnrNumber.trim().uppercase(Locale.US)
+        val explicitTravelPnrOverride: String = if (includeTravelTicket) cleanPnrTrim else ""
+        val finalTitle = if (includeTravelTicket &&
+            (cleanPnrTrim.isNotBlank() ||
+                trainOrFlightNo.isNotBlank() ||
+                coachAndSeats.isNotBlank() ||
+                departureDateInput.isNotBlank() ||
+                departureTimeInput.isNotBlank())
+        ) {
+            val routeParts = routeFromTo
+                .split(Regex("""\s*(?:->|→|-|\bto\b)\s*""", RegexOption.IGNORE_CASE), limit = 2)
+                .map { it.trim() }
+            val parsedFrom = routeParts.getOrNull(0).orEmpty()
+            val parsedTo = routeParts.getOrNull(1).orEmpty()
+            val baseMode = if (cleanPnrTrim.length == 6 && cleanPnrTrim.any { it.isLetter() }) "Flight" else "Train / PNR Ticket"
+            val parsedTicket = ParsedTravelTicket(
+                pnr = cleanPnrTrim,
+                trainOrFlightNo = trainOrFlightNo.trim(),
+                fromStation = parsedFrom,
+                toStation = parsedTo,
+                departureDate = departureDateInput.trim(),
+                departureTime = departureTimeInput.trim(),
+                coachAndSeats = coachAndSeats.trim(),
+                cleanTitle = editedTitle.trim().ifBlank { baseMode }
+            )
+            formatTravelExpenseTitle(editedTitle.trim().ifBlank { baseMode }, parsedTicket)
+        } else {
+            editedTitle.trim().ifBlank { "Group Expense" }
+        }
+        if (onSaveExact != null) {
+            onSaveExact(
+                finalTitle,
+                exactCents,
+                selectedPayerId,
+                splitIdsToSave,
+                editedCategoryRef,
+                explicitTravelPnrOverride
+            )
+        } else {
+            onSave(finalTitle, parsedRupees, selectedPayerId, splitIdsToSave, editedCategoryRef)
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.surfaceContainerLow
+        ) {
+            Scaffold(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                topBar = {
+                    TopAppBar(
+                        title = {
+                            Text(
+                                text = "Edit expense",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontFamily = SplitMateTheme.FontDisplay,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = SplitMateTheme.PrimaryDark,
+                                modifier = Modifier.semantics { heading() }
+                            )
+                        },
+                        navigationIcon = {
+                            ExpressiveTooltipIconButton(
+                                tooltipText = "Close",
+                                onClick = onDismiss
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Close,
+                                    contentDescription = "Close",
+                                    tint = SplitMateTheme.PrimaryDark
+                                )
+                            }
+                        },
+                        actions = {
+                            TextButton(
+                                onClick = performSave,
+                                shapes = ButtonDefaults.shapes(),
+                                modifier = Modifier.heightIn(min = 48.dp)
+                            ) {
+                                Text(
+                                    text = "Save",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = SplitMateTheme.SageText
+                                )
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                        )
+                    )
+                }
+            ) { innerPadding ->
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .imePadding()
+                        .navigationBarsPadding()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 12.dp)
+                ) {
                 Text(
                     text = "Quick Category Switch:",
                     fontSize = 11.sp,
@@ -445,69 +645,93 @@ fun EditLoggedExpenseDialog(
                             modifier = Modifier.weight(1f)
                         )
                     }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = departureDateInput,
+                            onValueChange = { departureDateInput = it },
+                            label = { Text("Departure Date", style = MaterialTheme.typography.bodySmall) },
+                            trailingIcon = {
+                                ExpressiveTooltipIconButton(
+                                    tooltipText = "Pick departure date",
+                                    onClick = { showDepartureDatePicker = true }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.CalendarMonth,
+                                        contentDescription = "Pick departure date",
+                                        tint = SplitMateTheme.SageText
+                                    )
+                                }
+                            },
+                            singleLine = true,
+                            shape = SplitMateTheme.RadiusPanel,
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = departureTimeInput,
+                            onValueChange = { departureTimeInput = it },
+                            label = { Text("Departure Time", style = MaterialTheme.typography.bodySmall) },
+                            trailingIcon = {
+                                ExpressiveTooltipIconButton(
+                                    tooltipText = "Pick departure time",
+                                    onClick = { showDepartureTimePicker = true }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Schedule,
+                                        contentDescription = "Pick departure time",
+                                        tint = SplitMateTheme.SageText
+                                    )
+                                }
+                            },
+                            singleLine = true,
+                            shape = SplitMateTheme.RadiusPanel,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        onClick = onDismiss,
+                        shapes = ButtonDefaults.shapes(),
+                        modifier = Modifier.heightIn(min = 48.dp)
+                    ) {
+                        Text(
+                            text = "Cancel",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = SplitMateTheme.TextSecondary
+                        )
+                    }
+                    Button(
+                        onClick = performSave,
+                        shapes = ButtonDefaults.shapes(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SplitMateTheme.PrimaryDark,
+                            contentColor = SplitMateTheme.ScreenBg
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                    ) {
+                        Text(
+                            text = "Save Changes",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
                 }
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val exactCents = if (lockAmountAndSplit) {
-                        expense.totalAmountCents
-                    } else {
-                        com.splitmate.app.ui.parseRupeesToPaiseExact(editedAmountStr) ?: expense.totalAmountCents
-                    }
-                    val parsedRupees = exactCents / 100.0
-                    val splitIdsToSave = if (lockAmountAndSplit) initialSplitMemberIds.toList() else selectedSplitMemberIds.toList()
-                    val cleanPnrTrim = pnrNumber.trim().uppercase(Locale.US)
-                    val explicitTravelPnrOverride: String = if (includeTravelTicket) cleanPnrTrim else ""
-                    val finalTitle = if (includeTravelTicket && (cleanPnrTrim.isNotBlank() || trainOrFlightNo.isNotBlank() || coachAndSeats.isNotBlank())) {
-                        val routeParts = routeFromTo
-                            .split(Regex("""\s*(?:->|→|-|\bto\b)\s*""", RegexOption.IGNORE_CASE), limit = 2)
-                            .map { it.trim() }
-                        val parsedFrom = routeParts.getOrNull(0).orEmpty()
-                        val parsedTo = routeParts.getOrNull(1).orEmpty()
-                        val baseMode = if (cleanPnrTrim.length == 6 && cleanPnrTrim.any { it.isLetter() }) "Flight" else "Train / PNR Ticket"
-                        val parsedTicket = ParsedTravelTicket(
-                            pnr = cleanPnrTrim,
-                            trainOrFlightNo = trainOrFlightNo.trim(),
-                            fromStation = parsedFrom,
-                            toStation = parsedTo,
-                            departureTime = departureInfo.trim(),
-                            coachAndSeats = coachAndSeats.trim(),
-                            cleanTitle = editedTitle.trim().ifBlank { baseMode }
-                        )
-                        formatTravelExpenseTitle(editedTitle.trim().ifBlank { baseMode }, parsedTicket)
-                    } else {
-                        editedTitle.trim().ifBlank { "Group Expense" }
-                    }
-                    if (onSaveExact != null) {
-                        onSaveExact(
-                            finalTitle,
-                            exactCents,
-                            selectedPayerId,
-                            splitIdsToSave,
-                            editedCategoryRef,
-                            explicitTravelPnrOverride
-                        )
-                    } else {
-                        onSave(finalTitle, parsedRupees, selectedPayerId, splitIdsToSave, editedCategoryRef)
-                    }
-                },
-                shapes = ButtonDefaults.shapes(shape = SplitMateTheme.RadiusButton),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = SplitMateTheme.PrimaryDark,
-                    contentColor = SplitMateTheme.ScreenBg
-                )
-            ) {
-                Text("Save Changes", fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) {
-                Text("Cancel", fontWeight = FontWeight.Bold, color = SplitMateTheme.TextSecondary)
-            }
         }
-    )
+    }
 }
 
 @Composable
@@ -605,13 +829,14 @@ fun OverlappingAvatarStack(
             }
         }
         if (remainingCount > 0) {
+            val overflowBadgeShape = remember { MaterialShapes.Cookie9Sided.toShape() }
             Box(
                 modifier = Modifier
                     .offset(x = (-avatars.size * 8).dp)
                     .size(28.dp)
-                    .clip(CircleShape)
+                    .clip(overflowBadgeShape)
                     .background(SplitMateTheme.SurfaceMuted)
-                    .border(2.dp, SplitMateTheme.SurfaceWhite, CircleShape),
+                    .border(2.dp, SplitMateTheme.SurfaceWhite, overflowBadgeShape),
                 contentAlignment = Alignment.Center
             ) {
                 Text("+$remainingCount", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SplitMateTheme.PrimaryDark)
@@ -636,7 +861,7 @@ fun ActivityItemRow(
         modifier = Modifier
             .fillMaxWidth()
             .border(1.dp, SplitMateTheme.BorderLight, SplitMateTheme.RadiusCard)
-            .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy))
+            .animateContentSize(animationSpec = SplitMateMotion.defaultSpatial())
     ) {
         Row(
             modifier = Modifier

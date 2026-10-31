@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalLayoutApi::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 
 package com.splitmate.app.ui.screens.plan
 
@@ -33,18 +33,24 @@ import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material.icons.rounded.NearMe
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenuGroup
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
+import androidx.compose.material3.DropdownMenuPopup
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ToggleButtonDefaults
+import androidx.compose.material3.TonalToggleButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,6 +86,7 @@ import com.splitmate.app.data.guide.Place
 import com.splitmate.app.data.guide.PlaceKind
 import com.splitmate.app.data.guide.PlaceSource
 import com.splitmate.app.data.guide.nav.TravelMode
+import com.splitmate.app.ui.components.ExpressivePlainTooltipBox
 import com.splitmate.app.ui.components.GuideShapeTokens
 import com.splitmate.app.ui.components.LocalMotionScheme
 import com.splitmate.app.ui.components.SplitButtonDefaults
@@ -460,73 +467,84 @@ fun DirectionsSplitButton(
     modifier: Modifier = Modifier,
     fillWidth: Boolean = false
 ) {
-    var menuOpen by remember { mutableStateOf(false) }
+    var menuOpen by rememberSaveable { mutableStateOf(false) }
     val height = if (fillWidth) SplitButtonDefaults.MediumContainerHeight else SplitButtonDefaults.ContainerHeight
-    SplitButtonLayout(
-        leadingButton = {
-            SplitButtonDefaults.LeadingButton(
-                onClick = { actions.directions(place) },
-                height = height,
-                modifier = Modifier.semantics { contentDescription = "Directions to ${place.name}" }
-            ) {
-                SymbolIcon(imageVector = Icons.Rounded.NearMe, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Directions",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1
-                )
-            }
-        },
-        trailingButton = {
-            SplitButtonDefaults.TrailingButton(
-                checked = menuOpen,
-                onCheckedChange = { menuOpen = it },
-                height = height,
-                content = {
-                    SplitButtonDefaults.TrailingIcon(
-                        checked = menuOpen,
-                        contentDescription = "More ways to get to ${place.name}"
+    Box(modifier = modifier) {
+        SplitButtonLayout(
+            leadingButton = {
+                SplitButtonDefaults.LeadingButton(
+                    onClick = { actions.directions(place) },
+                    height = height,
+                    modifier = Modifier.semantics { contentDescription = "Directions to ${place.name}" }
+                ) {
+                    SymbolIcon(imageVector = Icons.Rounded.NearMe, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Directions",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
                     )
                 }
-            )
-        },
-        modifier = modifier,
-        fillWidth = fillWidth,
-        menuExpanded = menuOpen,
-        onMenuDismissRequest = { menuOpen = false },
-        menuContent = {
-            DirectionsMenuItem("Walk", Icons.AutoMirrored.Rounded.DirectionsWalk) {
-                menuOpen = false
-                actions.navigate(place, TravelMode.WALKING)
+            },
+            trailingButton = {
+                ExpressivePlainTooltipBox(tooltipText = "More route options") {
+                    SplitButtonDefaults.TrailingButton(
+                        checked = menuOpen,
+                        onCheckedChange = { menuOpen = it },
+                        height = height,
+                        tooltipLabel = "More ways to get to ${place.name}",
+                        content = {
+                            SplitButtonDefaults.TrailingIcon(
+                                checked = menuOpen,
+                                contentDescription = null
+                            )
+                        }
+                    )
+                }
+            },
+            fillWidth = fillWidth,
+            menuExpanded = menuOpen,
+            onMenuDismissRequest = { menuOpen = false }
+        )
+        DropdownMenuPopup(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuGroup(shapes = MenuDefaults.groupShape(0, 2)) {
+                DirectionsMenuItem("Walk", Icons.AutoMirrored.Rounded.DirectionsWalk, index = 0, count = 3) {
+                    menuOpen = false
+                    actions.navigate(place, TravelMode.WALKING)
+                }
+                DirectionsMenuItem("Drive", Icons.Rounded.DirectionsCar, index = 1, count = 3) {
+                    menuOpen = false
+                    actions.navigate(place, TravelMode.DRIVING)
+                }
+                DirectionsMenuItem("Open in another app", Icons.AutoMirrored.Rounded.OpenInNew, index = 2, count = 3) {
+                    menuOpen = false
+                    actions.openInOtherApp(place)
+                }
             }
-            DirectionsMenuItem("Drive", Icons.Rounded.DirectionsCar) {
-                menuOpen = false
-                actions.navigate(place, TravelMode.DRIVING)
-            }
-            DirectionsMenuItem("Open in another app", Icons.AutoMirrored.Rounded.OpenInNew) {
-                menuOpen = false
-                actions.openInOtherApp(place)
-            }
-            DirectionsMenuItem("Copy coordinates", Icons.Rounded.ContentCopy) {
-                menuOpen = false
-                actions.copyCoordinates(place)
-            }
-            DirectionsMenuItem("Share to group", Icons.Rounded.Share) {
-                menuOpen = false
-                actions.sharePlace(place)
+            Spacer(modifier = Modifier.heightIn(min = MenuDefaults.GroupSpacing))
+            DropdownMenuGroup(shapes = MenuDefaults.groupShape(1, 2)) {
+                DirectionsMenuItem("Copy coordinates", Icons.Rounded.ContentCopy, index = 0, count = 2) {
+                    menuOpen = false
+                    actions.copyCoordinates(place)
+                }
+                DirectionsMenuItem("Share to group", Icons.Rounded.Share, index = 1, count = 2) {
+                    menuOpen = false
+                    actions.sharePlace(place)
+                }
             }
         }
-    )
+    }
 }
 
 @Composable
-private fun DirectionsMenuItem(label: String, icon: ImageVector, onClick: () -> Unit) {
+private fun DirectionsMenuItem(label: String, icon: ImageVector, index: Int, count: Int, onClick: () -> Unit) {
     DropdownMenuItem(
-        text = { Text(label, style = MaterialTheme.typography.bodyLarge) },
-        leadingIcon = { SymbolIcon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
+        selected = false,
         onClick = onClick,
+        text = { Text(label, style = MaterialTheme.typography.bodyLarge) },
+        shapes = MenuDefaults.itemShape(index, count),
+        leadingIcon = { SymbolIcon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
         modifier = Modifier.heightIn(min = 48.dp)
     )
 }
@@ -544,22 +562,18 @@ fun AddToLoopToggle(pinned: Boolean, onToggle: () -> Unit, modifier: Modifier = 
 @Composable
 private fun AddToLoopToggleContent(pinned: Boolean, targetDay: Int?, onToggle: () -> Unit, modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
-    val colors = if (pinned) {
-        ButtonDefaults.filledTonalButtonColors(
-            containerColor = scheme.primaryContainer,
-            contentColor = scheme.onPrimaryContainer
-        )
-    } else {
-        ButtonDefaults.filledTonalButtonColors(
+    TonalToggleButton(
+        checked = pinned,
+        onCheckedChange = { onToggle() },
+        shapes = ToggleButtonDefaults.shapes(),
+        colors = ToggleButtonDefaults.tonalToggleButtonColors(
             containerColor = scheme.surfaceContainerHigh,
-            contentColor = scheme.onSurface
-        )
-    }
-    FilledTonalButton(
-        onClick = onToggle,
-        shapes = ButtonDefaults.shapes(),
-        colors = colors,
+            contentColor = scheme.onSurface,
+            checkedContainerColor = scheme.primaryContainer,
+            checkedContentColor = scheme.onPrimaryContainer
+        ),
         modifier = modifier
+            .minimumInteractiveComponentSize()
             .heightIn(min = 40.dp)
             .semantics { stateDescription = if (pinned) "In loop" else "Not in loop" }
     ) {

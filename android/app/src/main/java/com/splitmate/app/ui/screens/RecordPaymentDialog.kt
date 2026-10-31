@@ -5,8 +5,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
@@ -19,6 +22,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.error
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -34,7 +39,7 @@ import com.splitmate.app.ui.formatIndianRupeesFromCents
  *
  * [onRecord] returns null on success or the reason the payment was refused (shown inline).
  */
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun RecordPaymentDialog(
     members: List<GroupMemberEntity>,
@@ -50,6 +55,7 @@ fun RecordPaymentDialog(
     var error by rememberSaveable { mutableStateOf<String?>(null) }
 
     val amountCents = ManualPaymentInput.parseAmountToCents(amountText)
+    val isAmountError = amountText.isNotBlank() && amountCents == null
     val from = members.find { it.memberId == fromId }
     val to = members.find { it.memberId == toId }
     val canRecord = from != null && to != null && from.memberId != to.memberId && amountCents != null
@@ -94,10 +100,24 @@ fun RecordPaymentDialog(
                     label = { Text("Amount") },
                     prefix = { Text("₹") },
                     singleLine = true,
-                    isError = amountText.isNotBlank() && amountCents == null,
+                    isError = isAmountError,
+                    supportingText = if (isAmountError) {
+                        {
+                            Text(
+                                text = "Enter a valid payment amount",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    } else null,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     textStyle = MaterialTheme.typography.bodyLarge.merge(TextStyle(fontFeatureSettings = "tnum")),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics {
+                            if (isAmountError) {
+                                this.error("Enter a valid payment amount")
+                            }
+                        }
                 )
                 val summary = when {
                     error != null -> error
@@ -116,6 +136,7 @@ fun RecordPaymentDialog(
         confirmButton = {
             TextButton(
                 enabled = canRecord,
+                shapes = ButtonDefaults.shapes(),
                 onClick = {
                     val result = onRecord(fromId!!, toId!!, amountCents!!)
                     if (result == null) onDismiss() else error = result
@@ -125,7 +146,10 @@ fun RecordPaymentDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                onClick = onDismiss,
+                shapes = ButtonDefaults.shapes()
+            ) {
                 Text(
                     text = "Cancel",
                     style = MaterialTheme.typography.labelLarge,
@@ -136,7 +160,7 @@ fun RecordPaymentDialog(
     )
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun MemberPicker(
     title: String,
@@ -153,6 +177,7 @@ private fun MemberPicker(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         FlowRow(
+            modifier = Modifier.selectableGroup(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
@@ -161,6 +186,7 @@ private fun MemberPicker(
                     selected = m.memberId == selectedId,
                     enabled = m.memberId in enabledIds || m.memberId == selectedId,
                     onClick = { onSelect(m.memberId) },
+                    shapes = FilterChipDefaults.shapes(),
                     label = { Text(label(m), maxLines = 1) },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
