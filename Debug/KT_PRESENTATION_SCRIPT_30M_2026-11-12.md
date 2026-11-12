@@ -20,9 +20,15 @@ Good morning, everyone. Today we are conducting the final knowledge transfer for
 
 Over the period from 23 October to 12 November 2026, we ran eleven experiment sets to evaluate quality, latency, throughput, concurrent writes, and serving costs. The purpose of this session is to hand over verified empirical findings so you can author the Technical Design Document.
 
-Throughout this presentation, every technical statement is strictly labeled. When I say measured, that number came directly from a verified run output file. Calculated means simple arithmetic on measured values. Inference indicates an interpretation that the data suggests but does not strictly prove. Finally, unverified means the figure appears in analysis notes or session logs rather than an automated run artifact.
+Throughout this presentation, every technical statement is strictly labeled. When I say MEASURED, that number came directly from a verified run output file. CALCULATED means simple arithmetic on measured values. INFERENCE indicates an interpretation that the data suggests but does not strictly prove. Finally, UNVERIFIED means the figure appears in analysis notes or session logs rather than an automated run artifact. Unverified figures are kept because they represent operational reality, but each is recorded with the specific reason for that status and what is needed to verify it—for example, reconciling cloud billing exports to verify build costs. Every number in our presentation and spreadsheet traces directly to a run output file or documented evidence source in the findings repository.
 
 Our goal today is to give you an accurate, unvarnished picture of how Vertex AI Vector Search performs at thirty million scale, including its strengths, edge cases, and operational limits.
+
+
+**If asked:**
+- **How reliable are these numbers across the presentation?**: Numbers labeled MEASURED come directly from automated run files, while CALCULATED represents exact arithmetic on them. Most load cells were single runs rather than multi-run distributions, and cloud multi-tenancy introduces noticeable cross-session variance across different days. Figures labeled UNVERIFIED are preserved from analysis logs because they represent operational reality, but they require explicit verification such as billing exports or resource queries.
+- **What is the exact scope of these 11 experiment sets?**: The evaluation covers 30,000,000 dense and sparse vectors tested across quality (recall against BruteForce and human judged relevance), throughput and latency under open-loop load, autoscaling behavior, 100 writes per second streaming ingestion with freshness probes, and dimension reduction with sparse pruning.
+- **Why are UNVERIFIED numbers included in the handover if they lack run files?**: They provide critical engineering guidance—such as data sizes, build costs, and memory footprints—that would otherwise be missing from the TDD. Each unverified item is explicitly retained with the reason for its status and the exact step needed to verify it, such as reading dataBytesCount from the index resource or auditing billing logs.
 
 *(time: ~1.5 min)*
 
@@ -52,12 +58,21 @@ Before diving into individual experiments, let us walk through how our results s
 
 The workbook contains nine tabs in order along the bottom. The first three tabs give high-level summaries: 30M - all indexes covers every experiment across all index variants, while 30M - 768-d and 30M - 512-d isolate the reduced-dimension findings. Next are five detailed settings tabs: EXP-7 settings, EXP-2 settings, EXP-3 settings, EXP-8 settings, and EXP-9 settings. The final tab is the Legend, which defines every rule and term.
 
-Row colors immediately reveal the outcome of our pre-set engineering rules. Green rows highlight configurations that were picked and confirmed. Yellow marks the single configuration on EXP-7 tab row 30, which was picked once but failed its confirmation repeat. Red rows mark configurations that failed our pre-set rules on latency, error rate, or recall floor.
+Row colors immediately reveal the outcome of our pre-set engineering rules. Green rows highlight configurations that were picked and confirmed. Yellow marks the single configuration on EXP-7 tab row 30, which was picked once but failed its confirmation repeat. Red rows mark configurations that failed our pre-set rules on latency, error rate, or recall floor. When you see 'winner = null', it means the experiment's own report found no setting that satisfied its pre-set rule, rather than picking an unverified compromise.
 
 Let us also define the parameter notation shown in column Setting code. We write configurations as alpha, followed by A, followed by F.
 Alpha represents the dense vector weight in Reciprocal Rank Fusion for hybrid search. Zero point three is today's production baseline, zero point five is quality-favoured, zero point seven is recall-heavy, one point zero is dense only, and zero point zero is sparse only.
 Capital A denotes approximate neighbours searched per shard, where A500 is the 500 default, up to A5000 for 5,000 neighbours.
-Capital F denotes the fraction of leaf nodes searched in the index tree, where Funset means the unset 5% default, F0.02 searches 2%, F0.05 searches 5%, and F1.00 is a full 100% leaf scan. Note that leaf overrides act on the dense leg, not the sparse leg.
+Capital F denotes the fraction of leaf nodes searched in the index tree, where Funset means the unset 5% default with no leaf override passed in the API call, F0.02 searches 2%, F0.05 searches 5%, and F1.00 is a full 100% leaf scan. Note that leaf overrides act on the dense leg, not the sparse leg.
+
+Finally, notice the reference notes in the rightmost columns of the sheet. Citations like 'doc §2, §4.9' point directly to the corresponding section of the per-experiment findings document in the handover package—where section 2 records the pre-set rule established before the run, section 4 contains the raw result tables, section 5 presents synthesized findings, and section 6 details caveats and evidence gaps. Identifiers like exp7_combo_30m_20261031 indicate the exact run folder, capturing the experiment, scale, and date, so every number in the sheet traces to a run output file. You will also see 'same session' versus 'different session': this distinction matters because shared multi-tenant cloud infrastructure introduces variance between test days, meaning same-session comparisons share environmental conditions while different-session comparisons reflect shifting platform baselines.
+
+
+**If asked:**
+- **What is the difference between 'same session' and 'different session', and why does it matter?**: In 'same session' tests, two indexes or configurations were evaluated on the same day under identical cloud environment conditions and control baselines. In 'different session' tests, runs occurred on different days, where multi-tenant background noise caused baseline 1024-d latency at 565 QPS to shift between 58.4 ms and 95.8 ms. Therefore, cross-session latency comparisons must not be treated as direct apples-to-apples performance deltas.
+- **What does 'winner = null' signify in the sheet?**: It indicates that an experiment evaluated all candidate configurations against a pre-set engineering rule defined in §2 of its findings document, and no configuration met all criteria. Rather than picking a compromised setting post-hoc, the experiment formally reports null to signal that the pre-set quality, latency, or error gates were not satisfied.
+- **How do we trace any specific cell in the spreadsheet back to raw data?**: Look at the Notes column: citations like 'doc exp3 §4.6' refer to Section 4.6 of the EXP-3 findings document in the handover package, and run IDs like exp7_combo_30m_20261031 identify the exact run output folder. Every number traces directly through the findings docs to a timestamped JSON or CSV output file.
+- **What does Funset mean in the setting code?**: Funset indicates that no leaf search override was passed in the API call, so the engine defaulted to its built-in index setting of 5% of leaf nodes. Any explicit F value like F0.02 or F0.05 overrides this on the dense leg, while the sparse leg remains unaffected.
 
 *(time: ~1.5 min)*
 
@@ -84,6 +99,12 @@ A critical measured finding shown in column Shard Count is that all four complet
 
 Keep in mind our regional quota limit is 50 nodes. Because each 5-shard deployment takes 10 nodes at 2 replicas and 15 nodes at 3 replicas, you cannot deploy two 5-shard indexes alongside the 13-shard BruteForce index, as that would demand 58 nodes.
 
+
+**If asked:**
+- **Why did BruteForce require 13 shards while Tree-AH required only 5?**: BruteForce indexes in Vertex AI store uncompressed full vectors and compute exact distances without an inverted index or clustering tree, requiring higher memory per shard. With 30,000,000 vectors at 1024 dimensions, the service partitioned the exact index across 13 shards, requiring 26 nodes for 2 replicas.
+- **Can we deploy two 5-shard indexes and the BruteForce index at the same time?**: No, because our regional quota is 50 nodes. Two 5-shard indexes at 2 replicas require 20 nodes, and the 13-shard BruteForce index requires 26 nodes at 2 replicas, totaling 46 nodes; if any 5-shard index scales to 3 replicas (15 nodes), demand hits 51 nodes, exceeding the 50-node limit.
+- **Why did PCA dimension reduction to 768-d or 512-d not reduce shard counts?**: Shard sizing on Vertex Vector Search appears driven by the uncompressed sparse-side input size rather than dense vector dimensions. The sparse data includes approximately 23.8 GiB of restrict metadata and over 3,161,907,488 SPLADE tokens, keeping total sparse input above 40 GiB against an internal 10 GiB per-shard boundary.
+
 *(time: ~1.5 min)*
 
 ---
@@ -108,6 +129,12 @@ Here is an essential architectural detail for the TDD team: recall is measured a
 
 On costs, every 30M deployment uses e2-highmem-16 instances. We report costs at list price, which is $10.12 per hour for 10 nodes, and at net price, which applies the standard 42.75% factor to reach $4.33 per hour.
 
+
+**If asked:**
+- **Why is hybrid recall measured against BruteForce called an 'agreement' metric rather than absolute ground-truth relevance?**: While the BruteForce dense leg is exact, its sparse retrieval leg is incomplete due to internal candidate limits, returning a tie-aware score of only 0.8898 at K=100 and as few as 268 results for top-500 requests. Therefore, measured hybrid recall represents agreement with the 1024-dimension BruteForce key rather than absolute ground-truth relevance.
+- **Why were load cells run for 180 seconds rather than longer durations?**: The 180-second load cells allowed sweeping broad parameter combinations within daily quota constraints and compute budgets. As noted in SUMMARY Section 5, capacity sustained beyond 180 seconds per cell under continuous production traffic remains unverified.
+- **How was the net cost factor of 42.75% determined?**: The 42.75% factor is an enterprise contractual pricing multiplier applied to list prices, reducing $10.12 per hour for 10 nodes to $4.33 per hour net. While established for ongoing serving infrastructure, applying it to index builds remains unconfirmed pending billing reconciliation.
+
 *(time: ~1.5 min)*
 
 ---
@@ -131,6 +158,12 @@ Across 2,000 golden queries with zero errors, baseline hybrid recall measured 0.
 On latency and throughput, results revealed significant run-to-run variation. At 81 QPS, p99 was 54.0 milliseconds in run 1 and 64.8 milliseconds in run 2. At 565 QPS on 10 nodes, run 2 passed cleanly with a p99 of 75.6 milliseconds, zero errors, and 27.31% average CPU.
 
 However, run 1 at that same 565 QPS failed dramatically, logging a p99 of 1,098.6 milliseconds and 32 errors. Crucially, average CPU utilization during that failure was only 25.64%. This proved early on that latency degradation on this platform is not primarily caused by CPU exhaustion. Across later runs in different sessions, 1024-dimension p99 at 565 QPS ranged between 58.4 and 95.8 milliseconds.
+
+
+**If asked:**
+- **Why did Run 1 fail at 565 QPS with a 1,098.6 ms p99 while Run 2 passed at 75.6 ms with similar CPU?**: Average CPU utilization was 25.64% in Run 1 and 27.31% in Run 2, proving the failure was not CPU starvation. The latency degradation and 32 errors in Run 1 were caused by internal queueing or platform scheduling delays during that specific session rather than resource exhaustion.
+- **Why is baseline hybrid recall (0.6799 at R@100) lower than dense-only recall (0.8914)?**: At alpha 0.3, reciprocal rank fusion heavily weights sparse SPLADE keyword scores, where sparse-only search achieves an R@100 of only 0.6705. Because sparse keywords dominate the top ranks at alpha 0.3, hybrid recall reflects the lower retrieval recall of the sparse leg.
+- **What was the effect of removing categorical filters on baseline recall?**: Without categorical filters, hybrid R@10 dropped from 0.7555 to 0.7420, and R@500 dropped from 0.6574 to 0.6405. Applying filters narrows the candidate search space per shard, which slightly improves recall within the filtered partition.
 
 *(time: ~1.5 min)*
 
@@ -163,6 +196,12 @@ Row 7 on 1024-dimension and row 16 on 768-dimension are highlighted green becaus
 
 From an engineering and cost standpoint, alpha is purely a request-time parameter. Serving alpha 0.3, 0.5, or 0.7 requires the exact same 10 nodes at 565 QPS, costing $10.12 per hour list and $4.33 net.
 
+
+**If asked:**
+- **Why is alpha 0.5 recommended over alpha 0.7 when alpha 0.7 has higher hybrid R@100 (0.8740 vs 0.7918)?**: Hybrid recall for each alpha is measured against that alpha's own BruteForce answer key, so raw recall cannot be compared directly across different alphas. Human relevance evaluation on score-3 judged products proved that alpha 0.5 produced the highest quality gain with a +0.1101 lift in hit@100, compared to +0.0765 at alpha 0.7.
+- **Why did sparse-only search (alpha 0.0) fail the load rule?**: Sparse-only retrieval relies exclusively on inverted posting lists, causing uneven shard execution times that pushed tail latency over the 100 millisecond limit under load. This confirmed that pure sparse retrieval cannot meet production throughput requirements.
+- **Does changing alpha from 0.3 to 0.5 require re-indexing or affect serving costs?**: No. Alpha is purely a query-time mathematical weight applied during reciprocal rank fusion. Changing alpha requires zero re-indexing and serves 565 QPS on the exact same 10 nodes at $10.12 per hour list and $4.33 net.
+
 *(time: ~1.5 min)*
 
 ---
@@ -194,6 +233,12 @@ Unfortunately, deeper search settings could not survive production traffic on 10
 
 Because deeper settings failed load and baseline missed the recall margin by 0.2243, winner was null. The capacity ceiling for baseline requests on 10 nodes was located between 565 and 800 QPS.
 
+
+**If asked:**
+- **Why was there no winner in EXP-3?**: The pre-set selection rule required hybrid R@100 within margin of the best non-ceiling cell (0.9042), dense R@500 >= 0.95, and p99 <= 100 ms with error rate < 0.1% at 565 QPS on 10 nodes. Deeper search settings like A5000_F0.10 (5,000 neighbours per shard, 10% leaves) reached the recall margin but failed 400 QPS twice with p99s of 132.4 ms and 122.3 ms; meanwhile, the production default A500_Funset held 565 QPS but was 0.2243 below the best R@100.
+- **Why did increasing fractionLeafNodesToSearch (F) improve dense recall but barely move hybrid recall?**: Leaf overrides act exclusively on the dense ScaNN index tree, raising dense recall from 0.7754 to 0.9705 as F increases from 5% to 20%. Sparse recall is the same for every fraction at a given A, so in the hybrid result the gain comes almost entirely from A, not F (EXP-3 findings §5.5).
+- **What did EXP-3 establish regarding the capacity ceiling of 10 nodes?**: The capacity ceiling for baseline requests on 10 nodes sits between 565 and 800 QPS, as the baseline setting held 565 QPS at 68.9 ms (repeat 68.1 ms) but failed 800 QPS at 126.7 ms.
+
 *(time: ~1.5 min)*
 
 ---
@@ -223,6 +268,12 @@ However, dense-only recall tells a starker story, which is why 512-dimension on 
 Where dimension reduction succeeded was in latency and CPU headroom. At 565 QPS on 10 nodes, average CPU dropped by 24.2% on 768-dimension and by 36.7% on 512-dimension. Both reduced indexes held 800 QPS on 10 nodes, with 768-dimension delivering a p99 of 81.5 milliseconds and 512-dimension delivering 67.1 milliseconds. In both cases, the same-session 1024-dimension control failed 800 QPS, logging 235.1 milliseconds and 958.2 milliseconds. Note that the 768-dimension pass at 800 QPS was marginal, as the busiest node hit 59.99% CPU and 195 requests were rejected during warm-up.
 
 For the TDD team, the critical financial takeaway is that dimension reduction achieved zero hourly infrastructure savings. Both indexes still require 5 shards and cost $10.12 per hour list, or $4.33 net, for 10 nodes.
+
+
+**If asked:**
+- **Why was there no cost saving from reducing dimensions to 768-d or 512-d?**: Shard allocation remained at exactly 5 shards for both 768-d and 512-d rather than dropping to 4 or 3 shards. Because 5 shards require 10 nodes at 2 replicas, hourly serving infrastructure costs stayed identical at $10.12 per hour list and $4.33 net.
+- **Why was 512-d rejected while 768-d was deemed viable?**: PCA 512-d caused severe dense recall loss, dropping dense R@100 by 0.1403 and dense R@500 by 0.1091, and even full leaf scans failed to recover recall, reaching only 0.8150. In contrast, 768-d lost only 0.0009 hybrid R@100 and recovered dense recall to 0.9959 under full scan.
+- **Why was the 768-d pass at 800 QPS considered marginal?**: Although 768-d achieved an 81.5 ms p99 at 800 QPS, the busiest node reached 59.99% CPU utilization and 195 requests were rejected during warm-up. This indicates 800 QPS operates near the saturation boundary of 10 nodes.
 
 *(time: ~2.0 min)*
 
@@ -258,6 +309,12 @@ More concerningly, this recall penalty deepens as you increase search depth. Whe
 Furthermore, in same-session control testing against 1024-dimension, the pruned index was not faster. At 565 QPS, p99 was 71.1 milliseconds on the pruned index versus 58.4 milliseconds on 1024-dimension, a 12.7 millisecond penalty. At 800 QPS, p99 was 86.6 milliseconds versus 71.3 milliseconds, a 15.3 millisecond penalty, with average CPU within one percentage point.
 
 Because dense R@500 reached only 0.8160 against the 0.95 requirement and shards stayed at 5, winner was null. Top-96 sparse pruning did not deliver the intended operational or latency benefits.
+
+
+**If asked:**
+- **Why didn't top-96 sparse pruning reduce shards or cost?**: Pruning eliminated 20.69% of SPLADE terms, but uncompressed sparse payload remained above 40 GiB due to 23.8 GiB of invariant restrict tokens and remaining weights. Because total sparse input stayed above the internal 10 GiB per-shard boundary, Vertex AI allocated 5 shards, saving zero dollars in node hosting.
+- **Why did top-96 pruning penalize recall more severely at deeper search settings?**: Pruning permanently removed low-weight tail tokens from the index. When search parameters expand to A2000 or A5000, unpruned indexes retrieve relevant items matching those tail terms, whereas the pruned index cannot, widening the R@100 penalty from -0.0202 at baseline to -0.0794 under A5000_F0.20.
+- **Was the pruned index faster in latency than the unpruned index?**: No. In same-session testing, the pruned index delivered a p99 of 71.1 ms at 565 QPS versus 58.4 ms on 1024-d, and 86.6 ms at 800 QPS versus 71.3 ms. Pruning fewer postings did not translate into lower query latency.
 
 *(time: ~1.5 min)*
 
@@ -297,6 +354,12 @@ The other red rows show why other combinations failed. Setting alpha 0.7 with 50
 
 Notice also the cross-session variance. Setting alpha 0.5 with 5,000 neighbours and 5% leaves missed 400 QPS in EXP-7 at 105.5 milliseconds, but held 565 QPS in EXP-8 on 4 November with an 85.0 millisecond p99. This demonstrates that multi-tenant cloud variance can shift latencies across sessions.
 
+
+**If asked:**
+- **Why is this the pick?**: It satisfied the pre-set pick rule by achieving the highest passing hybrid R@100 (0.8577) at 565 QPS on 10 nodes in Run A, and it was confirmed in all three test runs on 4 November with p99 dropping to 49.5 ms and 51.2 ms with zero errors. Furthermore, it delivers a +0.1459 lift in judged quality while reducing CPU utilization by 24.2% compared to 1024-d.
+- **Why not the 1024-d pick?**: Although the 1024-d candidate (alpha 0.5, A5000, F0.02) passed Run A on 31 October with a 95.0 ms p99, it failed confirmation on 4 November: repeat 2 failed the 100 ms limit with 101.5 ms p99, and repeat 1 experienced an 8-second query stall where 346 requests exceeded 1,000 ms. A configuration that fails repeat testing cannot be recommended for production.
+- **What causes cross-session latency variance between 31 October and 4 November?**: Tests ran on shared, multi-tenant Google Cloud infrastructure where underlying physical host allocation, neighbor tenant activity, and network conditions fluctuate between deployment sessions. For instance, setting alpha 0.5 with A5000_F0.05 missed 400 QPS on 31 October (105.5 ms) but held 565 QPS on 4 November (85.0 ms).
+
 *(time: ~1.5 min)*
 
 ---
@@ -328,6 +391,12 @@ Surprisingly, look at red rows 2 through 4 for Configuration (a), today's produc
 
 We also captured valuable autoscaling metrics. Pod scale-out was observed when busiest node mean CPU reached 0.71, or when individual peak CPU samples crossed 60%. The Cloud Monitoring replica metric showed significant lag, updating one cell or more after new CPU series appeared. Finally, scale-down from 15 nodes back to 10 nodes required at least 9 minutes of sustained idle time.
 
+
+**If asked:**
+- **What is the real capacity ceiling?**: The capacity ceiling varies by session and configuration: for the production default on 10 nodes, it sits between 565 and 800 QPS (holding 565 QPS in EXP-1 run 2, but failing 800 QPS at 126.7 ms in EXP-3). Under Configuration (c), 10 nodes held 800 QPS (74.0 ms) and autoscaling to 15 nodes held 1,200 QPS (94.4 ms) in a single run, but 1,000 QPS failed p99 in both runs.
+- **Why did Configuration (a) fail 565 QPS in all three runs of EXP-8 when it passed in EXP-1?**: All three failing runs in EXP-8 occurred within the first 19 minutes following index deployment, where JVM or engine warm-up effects coincided with open-loop traffic. Because CPU remained below 38%, the failure was attributed to cold-start execution rather than hardware capacity exhaustion.
+- **How responsive is Vertex AI autoscaling during sudden traffic spikes?**: Autoscaling exhibited noticeable metric lag, with replica expansion lagging by at least one 180-second load cell after node CPU crossed the 0.71 mean or 60% peak threshold. Furthermore, scaling back down from 15 to 10 nodes required at least 9 minutes of sustained low utilization.
+
 *(time: ~1.5 min)*
 
 ---
@@ -354,6 +423,12 @@ System availability and data correctness were outstanding. Query throughput held
 However, row 5 is highlighted in red because streaming writes failed our pre-set tail latency criterion. While median latency rose by only 2.5 milliseconds, p99 latency increased by 36.8%, rising from 57.62 milliseconds in the read-only phase to 78.85 milliseconds during writes. This exceeded our pre-set tail latency limit of 1.25 times baseline, reaching 1.3684 times. In 6 of the 60 minutes, p99 exceeded 100 milliseconds, with a worst minute of 141.24 milliseconds. Busiest node CPU stayed below 24%, proving the tail latency rise is not due to CPU saturation.
 
 On freshness, sparse updates were visible almost instantly, with a p99 of 0.255 seconds. However, dense freshness failed our strict criteria: 9 out of 334 test probes were never returned by dense self-queries within 120 seconds. Those same items were found by sparse search in 0.131 seconds, and the dense probe used an unusually narrow filter, so this may be a test artifact rather than data loss.
+
+
+**If asked:**
+- **Can production take writes?**: Yes for data integrity and availability, but conditionally for strict latency SLAs: the platform handled 360,000 writes with zero data loss, zero recall drift, and only 3 failed requests out of 1,440,000 queries at 400 QPS on 10 nodes. However, background write commits caused p99 tail latency to increase by 36.8%, exceeding 100 ms in 6 of the 60 minutes (worst minute 141.24 ms), so workloads requiring strict p99 <= 100 ms should test 15 nodes.
+- **Why did dense freshness fail the pre-set criterion with 9 missing probes?**: The dense probe evaluated an extremely restrictive filter (matching exactly 1 item out of 30,000,000), which prevented ScaNN approximate search from traversing to the newly inserted leaf within the 120-second probe window. All 9 items were immediately found by sparse search in 0.131 seconds and confirmed present in post-run read-backs, indicating an evaluation probe artifact rather than ingestion failure.
+- **Did streaming ingestion degrade search recall over time?**: No. Minute-by-minute evaluation throughout the 60-minute ingestion period showed hybrid recall remained perfectly flat at 0.7555 for R@10 and 0.6799 for R@100, and full verification after index restore confirmed zero recall degradation.
 
 *(time: ~2.0 min)*
 
@@ -395,6 +470,12 @@ Other settings on the EXP-7 tab were disqualified: deeper search settings with 5
 
 Furthermore, PCA 768-dimension gives the engineering team 24.2% lower CPU at 565 QPS and comfortably held 800 QPS at 81.5 milliseconds on 10 nodes. Because both 1024-dimension and 768-dimension land on 5 shards, adopting PCA 768-dimension with alpha 0.5, 2,000 neighbours per shard, and 5% leaves costs exactly the same: $10.12 per hour list, or $4.33 net for 10 nodes. It is superior in quality, stability, and headroom at zero extra cost.
 
+
+**If asked:**
+- **Why is this the pick?**: It was the only high-recall configuration that satisfied the pre-set pick rule across four independent runs on two separate days, achieving hybrid R@100 of 0.8577 and p99s of 49.5 ms and 51.2 ms on 10 nodes. It provides a +0.1459 lift in human-judged top-100 relevance and 24.2% lower CPU utilization at zero additional infrastructure cost.
+- **Why not the 1024-d pick?**: The 1024-d candidate (alpha 0.5, A5000, F0.02) failed repeat verification on 4 November, logging a 101.5 ms p99 in repeat 2 and an 8-second stall with 346 requests exceeding 1,000 ms in repeat 1. In contrast, PCA 768-d showed zero stalls, zero errors, and tighter latency stability across all repeats.
+- **Does adopting PCA 768-d require maintaining a projection pipeline in production?**: Yes. Because queries and ingestion vectors must be projected from 1024 to 768 dimensions using the frozen PCA matrix, production serving and ingestion pipelines must incorporate the matrix multiplication step before issuing API calls.
+
 *(time: ~2.0 min)*
 
 ---
@@ -420,6 +501,12 @@ Because every 30M Tree-AH index landed on 5 shards, the hourly infrastructure co
 Consequently, serving cost per query depends entirely on the query throughput you can sustain on those 10 nodes. At 400 QPS, serving costs USD 7.0303 per million queries at list price. At 565 QPS, cost drops to less than or equal to USD 4.9772 list, or USD 2.1278 net. At 800 QPS on 10 nodes, it reaches USD 3.5152 list, or USD 1.5027 net.
 
 Regarding index build expenses, unverified list estimates derived from data byte counts were USD 409.72 for 1024-dimension and BruteForce, USD 323.89 for 768-dimension and top-96 pruned, and USD 238.06 for 512-dimension. The total unverified build cost across all five indexes was approximately USD 1,705.29 list, or about USD 729.01 net.
+
+
+**If asked:**
+- **What is the distinction between list vs net pricing?**: List price represents Google Cloud's public rate of $10.1237 per hour for 10 nodes, while net price applies an enterprise contractual factor of 42.75% to yield $4.3279 per hour. However, while the net factor is established for ongoing serving infrastructure, applying it to one-time index build costs is unconfirmed pending billing reconciliation.
+- **Why are index build costs labeled UNVERIFIED?**: Build costs ($409.72 for 1024-d, $323.89 for 768-d, $238.06 for 512-d) were arithmetically calculated from index byte sizes and hourly pipeline rates rather than directly extracted from cloud billing records. They provide accurate scale estimates but require final reconciliation against monthly cloud billing invoices.
+- **How does query volume affect the net cost per million searches?**: Serving infrastructure costs are fixed per hour based on deployed node count; therefore, higher throughput directly lowers per-query cost. On 10 nodes, running at 400 QPS costs $3.0055 net per million queries, increasing throughput to 565 QPS lowers cost to $2.1278 net, and operating at 800 QPS achieves $1.5027 net per million queries.
 
 *(time: ~1.5 min)*
 
@@ -447,6 +534,12 @@ First, transition the production hybrid RRF alpha parameter from 0.3 to 0.5. Thi
 Second, provision 30M serving infrastructure on 10 pinned e2-highmem-16 nodes for traffic between 400 and 565 QPS. If your service level objective requires p99 to remain strictly under 100 milliseconds during continuous 100 per second streaming writes, you must evaluate 15 nodes in pre-production, as 10 nodes exhibited tail spikes up to 141 milliseconds.
 
 Third, maintain PCA 768-dimension with alpha 0.5, 2,000 neighbours per shard, and 5% leaf search as the qualified architecture to gain 24% CPU headroom, but reject top-96 sparse pruning. Pruning reduced search quality without reducing shard count or saving a single dollar.
+
+
+**If asked:**
+- **What is not tested according to SUMMARY §5?**: SUMMARY Section 5 documents that the POC did not establish an absolute capacity ceiling for any index, a capacity figure for today's production request on 1024-d, performance at 9-shard (50M) scale, or behavior under continuous write load with autoscaling enabled. In addition, all queries originated from a single VM over the public endpoint rather than internal production VPC networking, and sparse recall against an exact ground truth remains unmeasured.
+- **What is the operational risk if production experiences continuous streaming writes on 10 nodes?**: While 10 nodes maintained read availability with only 3 failed requests out of 1,440,000 queries during 100 writes per second at 400 QPS, background write flushes caused p99 tail latency to exceed 100 ms in 6 of 60 minutes, with a peak of 141.24 ms. If production SLAs require strict p99 <= 100 ms at all times, the TDD must recommend testing 15 nodes.
+- **Why should the TDD reject top-96 sparse pruning?**: Top-96 pruning failed to reduce shard counts below 5, producing exactly zero dollars in infrastructure savings. At the same time, it degraded hybrid recall by up to 0.0794 under deeper search settings and increased tail latency by over 12 ms without any operational benefit.
 
 *(time: ~2.0 min)*
 
@@ -487,6 +580,12 @@ Rule four: always verify that the target endpoint has zero deployed indexes befo
 
 Rule five: understand that our file locking script is strictly local to each virtual machine. It does not synchronize between our main Workbench VM and the secondary VM. You must manually check running processes on both machines before starting work.
 
+
+**If asked:**
+- **Why is file locking restricted to a single VM rather than synchronized across VMs?**: The execution environment uses local shell-level file locks (`flock`) on each virtual machine's local filesystem rather than a distributed lock manager. Because Workbench VM `gopalad-torch-32` and the secondary VM cannot see each other's locks, engineers must manually verify running processes on both machines before launching jobs.
+- **Why is running two 30M test sessions simultaneously strictly prohibited?**: The regional project quota is strictly capped at 50 nodes. A single 5-shard index deployment requires 10 nodes at 2 replicas or 15 nodes at 3 replicas; running two sessions or deploying alongside BruteForce (26 nodes) can easily demand over 50 nodes, causing deployment failures and aborted runs.
+- **Where should an author look if two handover files appear to report different numbers?**: Consult `master_docs_and_audits/30M_RESULTS_REGISTER.md` and Section 7 of `SUMMARY_30m_findings.md`. Section 7 documents all known cross-session variations—such as control movements and metric definitions—and confirms that no two documents report conflicting values for the same physical run.
+
 *(time: ~2.0 min)*
 
 ---
@@ -519,5 +618,11 @@ Question two: why did 800 QPS on 1024-dimension fail in EXP-3 and EXP-6, but pas
 Question three: can we use Cloud Console vector counts to monitor streaming ingestion? No. In EXP-5, the vector count metrics remained completely frozen at thirty million while 180,000 new records were ingested. Freshness must be tracked using active search probes.
 
 Thank you for your time, and let us open the floor to your questions.
+
+
+**If asked:**
+- **What are the immediate execution steps once the 512-d top-96 index build completes?**: Once index id 7229181200487677952 completes building, engineering will execute runbook `EXP9_512_SP96_RUNBOOK_2026-11-11.md` through stages A3 to A5 for deployment and B1 to B6 for recall, timing, and load evaluation.
+- **Why did 800 QPS on 1024-d fail in EXP-3 and EXP-6, but pass in EXP-9?**: These runs occurred across different days and independent VM deployment sessions. Multi-tenant cloud variance shifted baseline latency, causing the 1024-d control at 565 QPS to vary between 58.4 ms and 95.8 ms across sessions, which allowed 800 QPS to pass at 71.3 ms during the EXP-9 session.
+- **Why can't Cloud Console vector counts be used to verify streaming write ingestion?**: In EXP-5, the Cloud Console vector count metric remained static at 30,000,000 throughout the entire hour while 180,000 new records were streamed. The console counter updates only on major internal index compactions, so active probe queries are required to verify real-time ingestion.
 
 *(time: ~2.0 min)*
