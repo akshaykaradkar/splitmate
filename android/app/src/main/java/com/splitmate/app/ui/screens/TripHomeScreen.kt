@@ -91,6 +91,7 @@ import androidx.compose.material.icons.rounded.CheckCircleOutline
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ConfirmationNumber
 import androidx.compose.material.icons.rounded.DirectionsCar
+import androidx.compose.material.icons.rounded.DownloadForOffline
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
@@ -1062,6 +1063,34 @@ fun TripHomeScreen(
         TripHubLayoutRules.isEmptyTrip(classifiedExpenses.size, netBalancesMap.values)
     }
 
+    var showExportLedgerSheet by remember(resolvedGroupId) { mutableStateOf(false) }
+    if (showExportLedgerSheet) {
+        val exportModel = remember(
+            resolvedGroupId,
+            group?.name,
+            uiState.activeCurrency,
+            uiState.members,
+            uiState.expenses,
+            uiState.splits,
+            uiState.settlements
+        ) {
+            com.splitmate.app.ui.export.GroupLedgerExportBuilder.build(
+                groupId = resolvedGroupId,
+                groupName = (group?.name ?: "Trip Hub").toSmartTitleCase(),
+                currencyCode = uiState.activeCurrency.currencyCode,
+                currencySymbol = uiState.activeCurrency.symbol,
+                members = uiState.members,
+                expenses = uiState.expenses,
+                splits = uiState.splits,
+                settlements = uiState.settlements
+            )
+        }
+        com.splitmate.app.ui.export.GroupLedgerExportSheet(
+            model = exportModel,
+            onDismiss = { showExportLedgerSheet = false }
+        )
+    }
+
     Scaffold(
         containerColor = TripHubTokens.CanvasBg,
         snackbarHost = { MoneyScaffoldSnackbarHost() },
@@ -1106,6 +1135,10 @@ fun TripHomeScreen(
                 onOpenSyncAndPerspectiveSheet = {
                     performCrispTactileHaptic(context, localView, heavy = false)
                     showSyncAndPerspectiveSheet = true
+                },
+                onExportLedgerClick = {
+                    performCrispTactileHaptic(context, localView, heavy = false)
+                    showExportLedgerSheet = true
                 },
                 selectedSectionTab = selectedSectionTab,
                 onSelectSectionTab = { newTab ->
@@ -1734,6 +1767,7 @@ private fun TripHubTopBar(
     onBackClick: () -> Unit,
     onSwitchToClassicLedgerClick: () -> Unit,
     onOpenSyncAndPerspectiveSheet: () -> Unit,
+    onExportLedgerClick: () -> Unit = {},
     selectedSectionTab: TripHubSectionTab,
     onSelectSectionTab: (TripHubSectionTab) -> Unit,
     scrollBehavior: TopAppBarScrollBehavior
@@ -1926,6 +1960,20 @@ private fun TripHubTopBar(
                             onClick = {
                                 showHeaderOverflow = false
                                 onCycleThemeClick()
+                            }
+                        )
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("Export Excel / CSV", fontFamily = FigtreeFontFamily, fontWeight = FontWeight.SemiBold) },
+                            leadingIcon = {
+                                SymbolIcon(
+                                    imageVector = Icons.Rounded.DownloadForOffline,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(ButtonDefaults.IconSize)
+                                )
+                            },
+                            onClick = {
+                                showHeaderOverflow = false
+                                onExportLedgerClick()
                             }
                         )
                         androidx.compose.material3.DropdownMenuItem(
@@ -5631,6 +5679,38 @@ private fun TripHubMoneySettlementView(
                         },
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    var showMoneyExportSheet by remember(groupId) { mutableStateOf(false) }
+                    com.splitmate.app.ui.export.GroupLedgerExportButton(
+                        onClick = { showMoneyExportSheet = true },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (showMoneyExportSheet) {
+                        val moneyExportModel = remember(
+                            groupId,
+                            groupName,
+                            uiState.activeCurrency,
+                            uiState.members,
+                            uiState.expenses,
+                            uiState.splits,
+                            uiState.settlements
+                        ) {
+                            com.splitmate.app.ui.export.GroupLedgerExportBuilder.build(
+                                groupId = groupId,
+                                groupName = groupName,
+                                currencyCode = uiState.activeCurrency.currencyCode,
+                                currencySymbol = uiState.activeCurrency.symbol,
+                                members = uiState.members,
+                                expenses = uiState.expenses,
+                                splits = uiState.splits,
+                                settlements = uiState.settlements
+                            )
+                        }
+                        com.splitmate.app.ui.export.GroupLedgerExportSheet(
+                            model = moneyExportModel,
+                            onDismiss = { showMoneyExportSheet = false }
+                        )
+                    }
 
                     if (simplifiedTransfers.isNotEmpty()) {
                         // v2.4.0 D3: a plain note line, not another box inside the card.

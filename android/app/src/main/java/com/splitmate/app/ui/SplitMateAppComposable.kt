@@ -6291,6 +6291,37 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                         )
                     }
                 )
+                var showSettleExportSheet by remember(resolvedActiveGroupId) { mutableStateOf(false) }
+                com.splitmate.app.ui.export.GroupLedgerExportButton(
+                    onClick = { showSettleExportSheet = true },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (showSettleExportSheet && resolvedActiveGroupId.isNotBlank()) {
+                    val settleExportModel = remember(
+                        resolvedActiveGroupId,
+                        uiState.activeGroup?.name,
+                        uiState.activeCurrency,
+                        uiState.members,
+                        uiState.expenses,
+                        uiState.splits,
+                        uiState.settlements
+                    ) {
+                        com.splitmate.app.ui.export.GroupLedgerExportBuilder.build(
+                            groupId = resolvedActiveGroupId,
+                            groupName = uiState.activeGroup?.name ?: "Our trip",
+                            currencyCode = uiState.activeCurrency.currencyCode,
+                            currencySymbol = uiState.activeCurrency.symbol,
+                            members = uiState.members,
+                            expenses = uiState.expenses,
+                            splits = uiState.splits,
+                            settlements = uiState.settlements
+                        )
+                    }
+                    com.splitmate.app.ui.export.GroupLedgerExportSheet(
+                        model = settleExportModel,
+                        onDismiss = { showSettleExportSheet = false }
+                    )
+                }
             }
         }
 
