@@ -4178,6 +4178,78 @@ class SplitMateViewModel(
         return null
     }
 
+    /**
+     * Records one or more **Trip Fund** advances (pre-trip pool / top-up transfers) to [treasurerMemberId].
+     * Anyone in the group may record advances. Each contribution is persisted as a [SettlementEntity]
+     * whose `settlementId` starts with `advance_` so it never inflates Total Trip Spend, reconciles
+     * with 0.00c drift, and syncs losslessly across devices.
+     */
+    fun recordTripFundAdvances(
+        treasurerMemberId: String,
+        contributionsByMemberId: Map<String, Long>
+    ): String? {
+        val state = _uiState.value
+        val groupMembers = state.members.filter { it.groupId == state.activeGroupId }
+        val treasurer = groupMembers.find { it.memberId == treasurerMemberId }
+            ?: return "Choose who is holding the Trip Fund"
+        val validEntries = contributionsByMemberId.entries
+            .filter { (fromId, cents) -> fromId != treasurer.memberId && cents > 0L }
+            .mapNotNull { (fromId, cents) ->
+                val sender = groupMembers.find { it.memberId == fromId } ?: return@mapNotNull null
+                sender to cents
+            }
+        if (validEntries.isEmpty()) return "Select at least one contributor with an amount above zero"
+
+        com.splitmate.app.data.CloudGroupSyncRepository.setGroupPendingCloudPush(null, state.activeGroupId, true)
+        val syncStatus = if (dao != null || state.isOfflineMode) "PENDING" else "SYNCED"
+        val nowBase = System.currentTimeMillis()
+        val newAdvances = validEntries.mapIndexed { idx, (sender, cents) ->
+            SettlementEntity(
+                settlementId = com.splitmate.app.data.SplitMateIds.newId("advance"),
+                groupId = state.activeGroupId,
+                fromMemberId = sender.memberId,
+                fromMemberName = sender.name,
+                toMemberId = treasurer.memberId,
+                toMemberName = treasurer.name,
+                amountCents = cents,
+                currencyCode = state.activeCurrencyCode,
+                lockedExchangeRate = state.activeCurrency.rateFromBase,
+                syncStatus = syncStatus,
+                settledAt = nowBase + idx
+            )
+        }
+        val totalCents = newAdvances.sumOf { it.amountCents }
+        val formattedTotal = formatIndianRupeesFromCents(totalCents, currencySymbol = state.activeCurrency.symbol)
+        val banner = "Added $formattedTotal to ${treasurer.name}'s Trip Fund (${newAdvances.size} ${if (newAdvances.size == 1) "advance" else "advances"})"
+
+        _uiState.update { curr ->
+            curr.copy(
+                settlements = newAdvances + curr.settlements,
+                statusBannerMessage = banner
+            )
+        }
+
+        viewModelScope.launch(ioDispatcher) {
+            val d = dao
+            if (d != null) {
+                newAdvances.forEach { d.insertSettlement(it) }
+                val normUserPhone = resolveEffectiveUserPhone10(d)
+                runCatching {
+                    com.splitmate.app.data.CloudGroupSyncRepository.syncGroupWithCloud(
+                        context = null,
+                        dao = d,
+                        groupId = state.activeGroupId,
+                        localUserPhone10 = normUserPhone,
+                        localUserName = _uiState.value.currentUserName.ifBlank { "You" },
+                        isLocalMutation = true
+                    )
+                    refreshStateFromDaoSnapshot(d = d)
+                }
+            }
+        }
+        return null
+    }
+
     /** True when the current user can record at least one payment in the active trip. */
     fun canCurrentUserRecordPayments(state: SplitMateUiState = _uiState.value): Boolean {
         val groupMembers = state.members.filter { it.groupId == state.activeGroupId }

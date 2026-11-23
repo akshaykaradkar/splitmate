@@ -458,6 +458,44 @@ object GroupLedgerXlsxWriter {
             r += 2
         }
 
+        // Trip Fund Advances Table (pre-trip pool / top-ups, excluded from Total Group Spend)
+        if (model.tripFundAdvances.isNotEmpty()) {
+            sb.append("<row r=\"$r\">")
+            listOf("Advance Date", "Contributor", "Trip Fund Holder", "Amount ($sym)", "Type").forEachIndexed { idx, h ->
+                sb.append(stringCell(idx, r, h, STYLE_HEADER, sanitizeUserInput = false))
+            }
+            sb.append("</row>")
+            r++
+            val firstAdvRow = r
+            model.tripFundAdvances.forEach { a ->
+                sb.append("<row r=\"$r\">")
+                sb.append(stringCell(0, r, a.dateLabel, STYLE_DEFAULT, sanitizeUserInput = false))
+                sb.append(stringCell(1, r, a.fromName, STYLE_DEFAULT))
+                sb.append(stringCell(2, r, a.toName, STYLE_DEFAULT))
+                sb.append(moneyCell(3, r, a.amountCents, STYLE_MONEY))
+                sb.append(stringCell(4, r, "Trip Fund Advance", STYLE_DEFAULT, sanitizeUserInput = false))
+                sb.append("</row>")
+                r++
+            }
+            val lastAdvRow = r - 1
+            sb.append("<row r=\"$r\">")
+            sb.append(stringCell(0, r, "TOTAL TRIP FUND", STYLE_TOTAL_LABEL, sanitizeUserInput = false))
+            sb.append(stringCell(1, r, "", STYLE_TOTAL_LABEL, sanitizeUserInput = false))
+            sb.append(stringCell(2, r, "", STYLE_TOTAL_LABEL, sanitizeUserInput = false))
+            sb.append(
+                formulaCell(
+                    3,
+                    r,
+                    "SUM(D$firstAdvRow:D$lastAdvRow)",
+                    model.tripFundAdvances.sumOf { it.amountCents },
+                    STYLE_TOTAL_MONEY
+                )
+            )
+            sb.append(stringCell(4, r, "${model.tripFundAdvances.size} advance(s)", STYLE_TOTAL_LABEL, sanitizeUserInput = false))
+            sb.append("</row>")
+            r += 2
+        }
+
         // Recorded / Paid Settlements Table
         if (model.recordedSettlements.isNotEmpty()) {
             sb.append("<row r=\"$r\">")

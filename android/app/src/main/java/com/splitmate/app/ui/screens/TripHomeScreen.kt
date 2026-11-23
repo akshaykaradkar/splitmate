@@ -93,6 +93,7 @@ import androidx.compose.material.icons.rounded.ConfirmationNumber
 import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material.icons.rounded.DownloadForOffline
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Savings
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.FlightTakeoff
@@ -1063,6 +1064,30 @@ fun TripHomeScreen(
         TripHubLayoutRules.isEmptyTrip(classifiedExpenses.size, netBalancesMap.values)
     }
 
+    var showCollectTripFundSheet by remember(resolvedGroupId) { mutableStateOf(false) }
+    val activeTripFundSummaries = remember(resolvedGroupId, uiState.members, uiState.expenses, uiState.settlements) {
+        com.splitmate.app.ui.fund.TripFundCalculator.summarize(
+            groupId = resolvedGroupId,
+            members = uiState.members,
+            expenses = uiState.expenses,
+            settlements = uiState.settlements
+        )
+    }
+    if (showCollectTripFundSheet) {
+        val fundMembers = remember(resolvedGroupId, uiState.members) {
+            uiState.members.filter { it.groupId == resolvedGroupId }
+        }
+        com.splitmate.app.ui.fund.CollectTripFundSheet(
+            members = fundMembers,
+            currencySymbol = uiState.activeCurrency.symbol,
+            onRecordAdvances = { treasurerId, contributions ->
+                if (resolvedGroupId.isNotBlank()) viewModel.selectActiveGroup(resolvedGroupId)
+                viewModel.recordTripFundAdvances(treasurerId, contributions)
+            },
+            onDismiss = { showCollectTripFundSheet = false }
+        )
+    }
+
     var showExportLedgerSheet by remember(resolvedGroupId) { mutableStateOf(false) }
     if (showExportLedgerSheet) {
         val exportModel = remember(
@@ -1187,6 +1212,14 @@ fun TripHomeScreen(
                             }
                         ),
                         ExpressiveFabMenuItem(
+                            label = "Trip Fund",
+                            icon = Icons.Rounded.Savings,
+                            subtitle = "Collect upfront advances",
+                            onClick = {
+                                showCollectTripFundSheet = true
+                            }
+                        ),
+                        ExpressiveFabMenuItem(
                             label = "More",
                             icon = Icons.Rounded.ViewAgenda,
                             subtitle = "Stay, rental or cab",
@@ -1257,6 +1290,11 @@ fun TripHomeScreen(
                 // v2.4.0 Trip Hub step 1: money stays on Money; elsewhere a small balance chip opens it.
                 TripHubBalanceChip(
                     activeMemberNetCents = activeMemberNetCents,
+                    isHoldingTripFund = com.splitmate.app.ui.fund.TripFundCalculator.isCustodialPoolBalance(
+                        memberId = activePerspectiveMember?.memberId,
+                        netBalanceCents = activeMemberNetCents,
+                        summaries = activeTripFundSummaries
+                    ),
                     onClick = {
                         performCrispTactileHaptic(context, localView, heavy = false)
                         selectedSectionTab = TripHubSectionTab.MONEY
@@ -2203,16 +2241,23 @@ private fun DynamicCategorySubFilterRow(
 @Composable
 private fun TripHubBalanceChip(
     activeMemberNetCents: Long,
+    isHoldingTripFund: Boolean = false,
     onClick: () -> Unit
 ) {
     val formattedAbs = formatIndianRupeesFromCents(cents = abs(activeMemberNetCents), includePlusSign = false, currencySymbol = "₹")
-    val label = TripHubLayoutRules.balanceChipLabel(activeMemberNetCents, formattedAbs)
+    val label = if (isHoldingTripFund) {
+        "Holding $formattedAbs Trip Fund"
+    } else {
+        TripHubLayoutRules.balanceChipLabel(activeMemberNetCents, formattedAbs)
+    }
     val (container, content) = when {
+        isHoldingTripFund -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
         activeMemberNetCents > 0L -> TripHubTokens.PositiveSagePillBg to TripHubTokens.PositiveSageText
         activeMemberNetCents < 0L -> TripHubTokens.TerracottaPeachBg to TripHubTokens.TerracottaIconTint
         else -> TripHubTokens.SunkenWell to TripHubTokens.TextSecondary
     }
     val spoken = when {
+        isHoldingTripFund -> "Holding ${com.splitmate.app.ui.a11y.SpokenMoney.rupees(activeMemberNetCents)} Trip Fund cash"
         activeMemberNetCents > 0L -> "You get back ${com.splitmate.app.ui.a11y.SpokenMoney.rupees(activeMemberNetCents)}"
         activeMemberNetCents < 0L -> "You owe ${com.splitmate.app.ui.a11y.SpokenMoney.rupees(activeMemberNetCents)}"
         else -> "All settled"
@@ -2240,6 +2285,7 @@ private fun TripHubBalanceChip(
             ) {
                 SymbolIcon(
                     imageVector = when {
+                        isHoldingTripFund -> Icons.Rounded.Savings
                         activeMemberNetCents > 0L -> Icons.Rounded.ArrowDownward
                         activeMemberNetCents < 0L -> Icons.Rounded.ArrowUpward
                         else -> Icons.Rounded.CheckCircle
@@ -5529,6 +5575,27 @@ private fun TripHubMoneySettlementView(
         }
     }
 
+    val moneyTripFundSummaries = remember(groupId, uiState.members, uiState.expenses, uiState.settlements) {
+        com.splitmate.app.ui.fund.TripFundCalculator.summarize(
+            groupId = groupId,
+            members = uiState.members,
+            expenses = uiState.expenses,
+            settlements = uiState.settlements
+        )
+    }
+    var showMoneyTripFundSheet by remember(groupId) { mutableStateOf(false) }
+    if (showMoneyTripFundSheet) {
+        com.splitmate.app.ui.fund.CollectTripFundSheet(
+            members = groupMembers,
+            currencySymbol = uiState.activeCurrency.symbol,
+            onRecordAdvances = { treasurerId, contributions ->
+                if (groupId.isNotBlank()) viewModel.selectActiveGroup(groupId)
+                viewModel.recordTripFundAdvances(treasurerId, contributions)
+            },
+            onDismiss = { showMoneyTripFundSheet = false }
+        )
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 160.dp),
@@ -5554,6 +5621,19 @@ private fun TripHubMoneySettlementView(
                         placementSpec = LocalMotionScheme.current.defaultSpatialSpec(),
                         fadeOutSpec = LocalMotionScheme.current.fastEffectsSpec()
                     )
+                )
+            }
+        }
+        // v2.4.0-rc24: Auto-surfacing Trip Fund / Cash in Hand summary card when advances exist.
+        if (moneyTripFundSummaries.isNotEmpty()) {
+            item(key = "trip_fund_summary_card") {
+                com.splitmate.app.ui.fund.TripFundSummaryCard(
+                    summaries = moneyTripFundSummaries,
+                    currencySymbol = uiState.activeCurrency.symbol,
+                    onAddAdvanceClick = { showMoneyTripFundSheet = true },
+                    onRemoveAdvance = { settlementId ->
+                        viewModel.undoSettlement(settlementId, groupIdHint = groupId)
+                    }
                 )
             }
         }
@@ -6407,6 +6487,14 @@ private fun TripHubMoneySettlementView(
                 .filter { viewModel.canCurrentUserMarkTransferPaid(groupId, it.memberId, uiState) }
                 .map { it.memberId }
                 .toSet()
+            if (groupMembers.size > 1) {
+                item(key = "collect_trip_fund_button") {
+                    com.splitmate.app.ui.fund.CollectTripFundButton(
+                        onClick = { showMoneyTripFundSheet = true },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
             if (receiverIdsICanConfirm.isNotEmpty() && groupMembers.size > 1) {
                 item(key = "record_manual_payment") {
                     var showRecordPayment by remember { mutableStateOf(false) }

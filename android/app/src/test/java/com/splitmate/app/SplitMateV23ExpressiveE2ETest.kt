@@ -4128,9 +4128,9 @@ class SplitMateV23ExpressiveE2ETest {
         fun `T5_12 TripHomeScreen white-box M3 Expressive choreography FAB menu theme cycling all_settled_card morph and 22 spatial placements`() {
             val src = readSourceFile("ui/screens/TripHomeScreen.kt")
 
-            // 1. FloatingActionButtonMenu with 4 ExpressiveFabMenuItems + 1-tap theme cycling in TripHubTopBar
+            // 1. FloatingActionButtonMenu with 5 ExpressiveFabMenuItems (Train, Flight, Split a bill, Trip Fund, More)
             assertTrue(src.contains("FloatingActionButtonMenu("))
-            assertEquals(4, Regex("""ExpressiveFabMenuItem\(""").findAll(src).count())
+            assertEquals(5, Regex("""ExpressiveFabMenuItem\(""").findAll(src).count())
             assertTrue(
                 src.contains("onCycleThemeClick = {") && src.contains("viewModel.cycleExpressiveThemeMode(context)"),
                 "TripHomeScreen must wire onCycleThemeClick to viewModel.cycleExpressiveThemeMode(context)"

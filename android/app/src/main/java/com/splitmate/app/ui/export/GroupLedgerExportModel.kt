@@ -7,6 +7,7 @@ import com.splitmate.app.data.GroupMemberEntity
 import com.splitmate.app.data.SettlementEntity
 import com.splitmate.app.ui.cleanDisplayExpenseTitle
 import com.splitmate.app.ui.extractTravelTicketFromTitle
+import com.splitmate.app.ui.fund.isTripFundAdvance
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -27,6 +28,7 @@ data class GroupLedgerExportModel(
     val expenses: List<ExportExpenseRow>,
     val memberBalances: List<ExportMemberBalanceRow>,
     val pendingTransfers: List<ExportTransferRow>,
+    val tripFundAdvances: List<ExportRecordedSettlementRow>,
     val recordedSettlements: List<ExportRecordedSettlementRow>,
     val totalSpendCents: Long,
     val naiveDebtLegCount: Int
@@ -221,15 +223,22 @@ object GroupLedgerExportBuilder {
 
         val sentByMember = mutableMapOf<String, Long>()
         val receivedByMember = mutableMapOf<String, Long>()
-        val recordedSettlementRows = groupSettlements.map { s ->
+        val tripFundAdvanceRows = mutableListOf<ExportRecordedSettlementRow>()
+        val recordedSettlementRows = mutableListOf<ExportRecordedSettlementRow>()
+        groupSettlements.forEach { s ->
             sentByMember[s.fromMemberId] = (sentByMember[s.fromMemberId] ?: 0L) + s.amountCents
             receivedByMember[s.toMemberId] = (receivedByMember[s.toMemberId] ?: 0L) + s.amountCents
-            ExportRecordedSettlementRow(
+            val row = ExportRecordedSettlementRow(
                 dateLabel = Instant.ofEpochMilli(s.settledAt).atZone(zoneId).toLocalDate().format(dateFormatter),
                 fromName = memberNameById[s.fromMemberId] ?: s.fromMemberName,
                 toName = memberNameById[s.toMemberId] ?: s.toMemberName,
                 amountCents = s.amountCents
             )
+            if (s.isTripFundAdvance()) {
+                tripFundAdvanceRows += row
+            } else {
+                recordedSettlementRows += row
+            }
         }
 
         val balanceRows = exportMembers.map { col ->
@@ -283,6 +292,7 @@ object GroupLedgerExportBuilder {
             expenses = expenseRows,
             memberBalances = balanceRows,
             pendingTransfers = pendingTransfers,
+            tripFundAdvances = tripFundAdvanceRows,
             recordedSettlements = recordedSettlementRows,
             totalSpendCents = expenseRows.sumOf { it.totalCents },
             naiveDebtLegCount = naiveDebtLegs

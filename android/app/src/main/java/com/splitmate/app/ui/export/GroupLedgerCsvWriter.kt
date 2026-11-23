@@ -135,9 +135,32 @@ object GroupLedgerCsvWriter {
             )
         }
 
-        if (model.recordedSettlements.isNotEmpty()) {
+        if (model.tripFundAdvances.isNotEmpty()) {
             row()
-            row("SECTION 4: RECORDED / PAID SETTLEMENTS")
+            row("SECTION 4: TRIP FUND ADVANCES (EXCLUDED FROM TOTAL TRIP SPEND)")
+            row("Date", "Contributor", "Trip Fund Holder", "Amount ($sym)", "Type")
+            model.tripFundAdvances.forEach { a ->
+                row(
+                    a.dateLabel,
+                    GroupLedgerExportBuilder.sanitizeSpreadsheetText(a.fromName),
+                    GroupLedgerExportBuilder.sanitizeSpreadsheetText(a.toName),
+                    GroupLedgerExportBuilder.formatCentsDecimal(a.amountCents),
+                    "Trip Fund Advance"
+                )
+            }
+            row(
+                "TOTAL TRIP FUND",
+                "",
+                "",
+                GroupLedgerExportBuilder.formatCentsDecimal(model.tripFundAdvances.sumOf { it.amountCents }),
+                "${model.tripFundAdvances.size} advance(s)"
+            )
+        }
+
+        if (model.recordedSettlements.isNotEmpty()) {
+            val sectionNum = if (model.tripFundAdvances.isNotEmpty()) 5 else 4
+            row()
+            row("SECTION $sectionNum: RECORDED / PAID SETTLEMENTS")
             row("Date", "From", "To", "Amount ($sym)", "Status")
             model.recordedSettlements.forEach { s ->
                 row(
