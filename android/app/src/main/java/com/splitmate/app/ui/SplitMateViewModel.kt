@@ -1439,7 +1439,8 @@ class SplitMateViewModel(
         explicitTravelPnr: String? = null,
         explicitProviderName: String? = null,
         explicitScheduledAtEpochMs: Long? = null,
-        categoryRef: String? = null
+        categoryRef: String? = null,
+        customSharesByMemberId: Map<String, Long>? = null
     ) {
         if (totalAmountCents <= 0L) return
         val state = _uiState.value
@@ -1510,17 +1511,26 @@ class SplitMateViewModel(
         val expenseId = com.splitmate.app.data.SplitMateIds.newId("exp")
         com.splitmate.app.data.CloudGroupSyncRepository.setGroupPendingCloudPush(null, state.activeGroupId, true)
 
-        val equalAllocations = SplitMateMathEngine.splitEquallyZeroDrift(
-            totalCents = totalAmountCents,
-            members = chosenMembers.map { it.memberId to it.name },
-            payerId = payer.memberId,
-            currentUserId = currentUser?.memberId
-        )
+        val validCustomShares = customSharesByMemberId
+            ?.filterKeys { key -> chosenMembers.any { it.memberId == key } }
+            ?.filterValues { it >= 0L }
+            ?.takeIf { map -> map.isNotEmpty() && map.values.sum() == totalAmountCents }
+
+        val equalAllocations = if (validCustomShares == null) {
+            SplitMateMathEngine.splitEquallyZeroDrift(
+                totalCents = totalAmountCents,
+                members = chosenMembers.map { it.memberId to it.name },
+                payerId = payer.memberId,
+                currentUserId = currentUser?.memberId
+            )
+        } else {
+            emptyList()
+        }
 
         val expenseEntity = ExpenseEntity(
             expenseId = expenseId,
             groupId = state.activeGroupId,
-            title = title.trim().ifBlank { "Quick Equal Split" },
+            title = title.trim().ifBlank { if (validCustomShares != null) "Quick Split" else "Quick Equal Split" },
             payerId = payer.memberId,
             baseSubtotalCents = totalAmountCents,
             taxCents = 0L,
@@ -1543,22 +1553,40 @@ class SplitMateViewModel(
         )
         com.splitmate.app.ui.category.CustomExpenseCategoryStore.ensurePublished(appContext, state.activeGroupId, categoryRef)
 
-        val splitEntities = equalAllocations.mapIndexed { idx, alloc ->
-            ExpenseSplitEntity(
-                splitId = "${expenseId}_sp_$idx",
-                expenseId = expenseId,
-                memberId = alloc.memberId,
-                baseClaimedCents = alloc.baseClaimedCents,
-                finalOwedCents = alloc.finalCents,
-                plusOneCent = alloc.plusOneCent
-            )
+        val splitEntities = if (validCustomShares != null) {
+            chosenMembers.mapIndexedNotNull { idx, member ->
+                val share = validCustomShares[member.memberId] ?: 0L
+                if (share <= 0L) null else ExpenseSplitEntity(
+                    splitId = "${expenseId}_sp_$idx",
+                    expenseId = expenseId,
+                    memberId = member.memberId,
+                    baseClaimedCents = share,
+                    finalOwedCents = share,
+                    plusOneCent = false
+                )
+            }
+        } else {
+            equalAllocations.mapIndexed { idx, alloc ->
+                ExpenseSplitEntity(
+                    splitId = "${expenseId}_sp_$idx",
+                    expenseId = expenseId,
+                    memberId = alloc.memberId,
+                    baseClaimedCents = alloc.baseClaimedCents,
+                    finalOwedCents = alloc.finalCents,
+                    plusOneCent = alloc.plusOneCent
+                )
+            }
         }
 
         _uiState.update { curr ->
             curr.copy(
                 expenses = listOf(expenseEntity) + curr.expenses,
                 splits = curr.splits + splitEntities,
-                statusBannerMessage = "Split \"${expenseEntity.title}\" equally among ${chosenMembers.size} people (Exact Split)"
+                statusBannerMessage = if (validCustomShares != null) {
+                    "Split \"${expenseEntity.title}\" across ${splitEntities.size} people (0.00c drift)"
+                } else {
+                    "Split \"${expenseEntity.title}\" equally among ${chosenMembers.size} people (Exact Split)"
+                }
             )
         }
 

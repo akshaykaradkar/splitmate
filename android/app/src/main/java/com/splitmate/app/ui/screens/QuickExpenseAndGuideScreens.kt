@@ -223,6 +223,8 @@ fun QuickExpenseScreen(
     }
     var showEditTitleDialog by remember { mutableStateOf(false) }
     var pendingCommitAfterCategorySelection by remember { mutableStateOf(false) }
+    var activeSplitMode by remember { mutableStateOf(QuickSplitMode.EQUAL) }
+    var customSplitInputs by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     // v2.3.4: expanded category catalog + user-created categories (title-based; no data change).
     var showCategorySheet by remember { mutableStateOf(false) }
     val customCategories by com.splitmate.app.ui.category.CustomExpenseCategoryStore.categories.collectAsState()
@@ -667,15 +669,23 @@ fun QuickExpenseScreen(
                         showEditTitleDialog = false
 
                         val currentAmountPaise = parseAmountInputToPaise(amountDigits)
-                        if (pendingCommitAfterCategorySelection && hasSelectedGroup && currentAmountPaise > 0L && selectedMemberIds.isNotEmpty()) {
+                        val selected = participants.filter { selectedMemberIds.contains(it.id) }
+                        val dialogAllocation = computeQuickSplitSharesPaise(
+                            mode = activeSplitMode,
+                            totalAmountPaise = currentAmountPaise,
+                            memberIds = selected.map { it.id },
+                            rawInputs = customSplitInputs
+                        )
+                        val dialogAllocationValid = activeSplitMode == QuickSplitMode.EQUAL || dialogAllocation.isValid
+                        if (pendingCommitAfterCategorySelection && hasSelectedGroup && currentAmountPaise > 0L && selectedMemberIds.isNotEmpty() && dialogAllocationValid) {
                             pendingCommitAfterCategorySelection = false
-                            val selected = participants.filter { selectedMemberIds.contains(it.id) }
                             viewModel?.commitQuickEqualExpense(
                                 title = finalTitle,
                                 totalAmountCents = currentAmountPaise,
                                 selectedMemberIds = selected.map { it.id },
                                 payerMemberId = selectedPayerId,
-                                categoryRef = com.splitmate.app.ui.category.ExpenseCategoryRefs.refForTitle(finalTitle, customCategories)
+                                categoryRef = com.splitmate.app.ui.category.ExpenseCategoryRefs.refForTitle(finalTitle, customCategories),
+                                customSharesByMemberId = if (activeSplitMode == QuickSplitMode.EQUAL) null else dialogAllocation.sharesByMemberId
                             )
                             onSaveSplit(currentAmountPaise / 100L, selected)
                         } else {
@@ -730,8 +740,19 @@ fun QuickExpenseScreen(
     Scaffold(
         containerColor = screenBg,
         topBar = {
-            // Root BottomNav destination — NO back arrow navigationIcon and NO INR/Equal Split badge!
             TopAppBar(
+                navigationIcon = {
+                    com.splitmate.app.ui.components.ExpressiveTooltipIconButton(
+                        tooltipText = "Back",
+                        onClick = onBackClick
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.ArrowBack,
+                            contentDescription = "Back",
+                            tint = textPrimary
+                        )
+                    }
+                },
                 title = {
                     Box {
                         // v2.4.0 rc3: official FilledTonalButton (sage tonal pair) with the press morph.
@@ -934,9 +955,10 @@ fun QuickExpenseScreen(
                     .padding(innerPadding)
                     .consumeWindowInsets(innerPadding)
                     .imePadding()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 2.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceBetween
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // ==================================================================
                 // 1. TOP CONTEXT SECTION: Stepped M3 surface-container-low Tonal Pane
@@ -1472,8 +1494,20 @@ fun QuickExpenseScreen(
                 // 2. BOTTOM UNIFIED CLUSTER: Hero ₹ 0 Amount Display + Split Pill + Tactile Calculator Keypad
                 // Grouping the amount display and numeric keypad together so the user's thumb & eye stay coupled
                 // ==================================================================
-                var activeSplitMode by remember { mutableStateOf(QuickSplitMode.EQUAL) }
-                val isZeroDriftVerified = memberCount > 0 && (remainderPaise == 0L || isRemainderEquallySplit)
+                val selectedOrderedIds = remember(participants, selectedMemberIds) {
+                    participants.filter { selectedMemberIds.contains(it.id) }.map { it.id }
+                }
+                val customAllocation = remember(activeSplitMode, totalAmountPaise, selectedOrderedIds, customSplitInputs) {
+                    computeQuickSplitSharesPaise(
+                        mode = activeSplitMode,
+                        totalAmountPaise = totalAmountPaise,
+                        memberIds = selectedOrderedIds,
+                        rawInputs = customSplitInputs
+                    )
+                }
+                val isSplitAllocationValid = activeSplitMode == QuickSplitMode.EQUAL || customAllocation.isValid
+                val isZeroDriftVerified = memberCount > 0 && isSplitAllocationValid &&
+                    (activeSplitMode != QuickSplitMode.EQUAL || remainderPaise == 0L || isRemainderEquallySplit)
                 val badgeMorphProgress by animateFloatAsState(
                     targetValue = if (isZeroDriftVerified) 1f else 0f,
                     animationSpec = SplitMateMotion.defaultSpatial(),
@@ -1504,12 +1538,97 @@ fun QuickExpenseScreen(
                             onSelect = { _, mode ->
                                 haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                 activeSplitMode = mode
+                                if (mode == QuickSplitMode.SHARES) {
+                                    customSplitInputs = selectedOrderedIds.associateWith { id ->
+                                        customSplitInputs[id]?.takeIf { it.isNotBlank() } ?: "1"
+                                    }
+                                }
                             },
                             labelProvider = { it.label },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(bottom = 6.dp)
                         )
+
+                        if (activeSplitMode != QuickSplitMode.EQUAL && selectedOrderedIds.isNotEmpty()) {
+                            Surface(
+                                shape = MaterialTheme.shapes.medium,
+                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                border = BorderStroke(1.dp, keypadBorder),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 6.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    val unitSuffix = when (activeSplitMode) {
+                                        QuickSplitMode.EXACT -> currencySymbol
+                                        QuickSplitMode.PERCENTAGE -> "%"
+                                        QuickSplitMode.SHARES -> "x"
+                                        QuickSplitMode.EQUAL -> ""
+                                    }
+                                    val hintLine = customAllocation.statusLabel(currencySymbol)
+                                    Text(
+                                        text = hintLine,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (customAllocation.isValid) QuickExpenseThemeTokens.SageText else QuickExpenseThemeTokens.TerracottaText
+                                    )
+                                    participants.filter { selectedMemberIds.contains(it.id) }.forEach { member ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text(
+                                                text = member.name,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = textPrimary,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            val computedPaise = customAllocation.sharesByMemberId[member.id] ?: 0L
+                                            if (activeSplitMode != QuickSplitMode.EXACT && totalAmountPaise > 0L) {
+                                                Text(
+                                                    text = "$currencySymbol${formatPaiseForSplitBadge(computedPaise)}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = textSecondary
+                                                )
+                                            }
+                                            OutlinedTextField(
+                                                value = customSplitInputs[member.id].orEmpty(),
+                                                onValueChange = { raw ->
+                                                    val filtered = raw.filter { it.isDigit() || it == '.' }.take(9)
+                                                    customSplitInputs = customSplitInputs + (member.id to filtered)
+                                                },
+                                                singleLine = true,
+                                                placeholder = {
+                                                    Text(
+                                                        text = if (activeSplitMode == QuickSplitMode.SHARES) "1" else "0",
+                                                        style = MaterialTheme.typography.bodySmall
+                                                    )
+                                                },
+                                                suffix = { Text(unitSuffix, style = MaterialTheme.typography.labelSmall) },
+                                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
+                                                ),
+                                                textStyle = MaterialTheme.typography.bodySmall.copy(
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = textPrimary
+                                                ),
+                                                modifier = Modifier.width(108.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
 
                         // Hero Tabular Amount Display on a plain tonal surface (aurora energy effect removed in v2.3.6)
                         Surface(
@@ -1650,7 +1769,7 @@ fun QuickExpenseScreen(
                                 }
 
                                 // High-contrast Peach Remainder Banner when remainderPaise > 0L & not yet reconciled
-                                if (remainderPaise > 0L && (!isRemainderEquallySplit || remainderCoinFlightProgress.value > 0f)) {
+                                if (activeSplitMode == QuickSplitMode.EQUAL && remainderPaise > 0L && (!isRemainderEquallySplit || remainderCoinFlightProgress.value > 0f)) {
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Box(modifier = Modifier.fillMaxWidth()) {
                                         Surface(
@@ -1667,7 +1786,11 @@ fun QuickExpenseScreen(
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 Text(
-                                                    text = "Extra +${payerExtraPaise}p rounded to Payer",
+                                                    text = if (remainderPaise == 1L) {
+                                                        "Extra +1p rounded to Payer"
+                                                    } else {
+                                                        "Extra +${remainderPaise}p (+1p to ${remainderRecipientIds.size} members)"
+                                                    },
                                                     fontFamily = SplitMateBrandFontFamily,
                                                     fontSize = 11.sp,
                                                     fontWeight = FontWeight.Bold,
@@ -1929,7 +2052,7 @@ fun QuickExpenseScreen(
 
                             // Log & Split FAB spanning EXACTLY two rows in height (54dp + 8dp + 54dp = 116dp)
                             // Always 100% opaque — never transparent or washed-out white/grey when amount is 0.
-                            val canCommitSplit = hasSelectedGroup && totalAmountPaise > 0L && selectedMemberIds.isNotEmpty()
+                            val canCommitSplit = hasSelectedGroup && totalAmountPaise > 0L && selectedMemberIds.isNotEmpty() && isSplitAllocationValid
                             val ctaEnabledContainer = if (isDark) activePalette.primary else activePalette.onSurface
                             val ctaEnabledContent = if (isDark) activePalette.onPrimary else activePalette.surfaceContainerLowest
                             val ctaContainerColor = if (canCommitSplit) {
@@ -1965,7 +2088,8 @@ fun QuickExpenseScreen(
                                                 totalAmountCents = totalAmountPaise,
                                                 selectedMemberIds = selected.map { it.id },
                                                 payerMemberId = selectedPayerId,
-                                                categoryRef = com.splitmate.app.ui.category.ExpenseCategoryRefs.refForTitle(expenseCategoryTitle, customCategories)
+                                                categoryRef = com.splitmate.app.ui.category.ExpenseCategoryRefs.refForTitle(expenseCategoryTitle, customCategories),
+                                                customSharesByMemberId = if (activeSplitMode == QuickSplitMode.EQUAL) null else customAllocation.sharesByMemberId
                                             )
                                             onSaveSplit(totalAmountPaise / 100L, selected)
                                         }
@@ -2104,7 +2228,7 @@ fun TactileSquircleKey(
     // v2.4.0 rc3: the official M3 Expressive OutlinedButton press morph (shapes) replaces the
     // hand-built press scale and corner animation. What a key types is unchanged.
     val accessibleKeyLabel = if (label == "BACK") "Backspace" else label
-    val keyButton: @Composable () -> Unit = {
+    val keyButton: @Composable (Modifier) -> Unit = { buttonModifier ->
         OutlinedButton(
             onClick = onClick,
             shapes = ButtonDefaults.shapes(
@@ -2117,7 +2241,7 @@ fun TactileSquircleKey(
             ),
             border = BorderStroke(1.dp, keypadBorder),
             contentPadding = PaddingValues(0.dp),
-            modifier = modifier
+            modifier = buttonModifier
                 .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
         ) {
             Box(
@@ -2145,12 +2269,134 @@ fun TactileSquircleKey(
         }
     }
     if (isIcon && icon != null) {
-        ExpressivePlainTooltipBox(tooltipText = accessibleKeyLabel) {
-            keyButton()
+        // Apply parent layout modifier (e.g. RowScope.weight(1f).height(54.dp)) directly on
+        // TooltipBox so weighted sibling keys ('.' and '0') are never crushed to 0dp width.
+        ExpressivePlainTooltipBox(
+            tooltipText = accessibleKeyLabel,
+            modifier = modifier
+        ) {
+            keyButton(Modifier.fillMaxSize())
         }
     } else {
-        keyButton()
+        keyButton(modifier)
     }
+}
+
+internal data class QuickSplitAllocationResult(
+    val mode: QuickSplitMode,
+    val sharesByMemberId: Map<String, Long>,
+    val isValid: Boolean,
+    val remainingPaise: Long = 0L,
+    val remainingPercentBasisPoints: Long = 0L
+) {
+    fun statusLabel(currencySymbol: String): String = when (mode) {
+        QuickSplitMode.EQUAL -> "Equal split"
+        QuickSplitMode.EXACT -> when {
+            isValid -> "Exact amounts match total (0.00c drift)"
+            remainingPaise > 0L -> "$currencySymbol${formatPaiseForSplitBadge(remainingPaise)} left to assign"
+            else -> "Over by $currencySymbol${formatPaiseForSplitBadge(-remainingPaise)}"
+        }
+        QuickSplitMode.PERCENTAGE -> when {
+            isValid -> "Percentages total 100% (0.00c drift)"
+            remainingPercentBasisPoints > 0L -> "${"%.2f".format(remainingPercentBasisPoints / 100.0).trimEnd('0').trimEnd('.')}% left to assign"
+            else -> "Over 100% by ${"%.2f".format(-remainingPercentBasisPoints / 100.0).trimEnd('0').trimEnd('.')}%"
+        }
+        QuickSplitMode.SHARES -> if (isValid) {
+            "Split proportionally by shares (0.00c drift)"
+        } else {
+            "Enter at least one share > 0"
+        }
+    }
+}
+
+internal fun computeQuickSplitSharesPaise(
+    mode: QuickSplitMode,
+    totalAmountPaise: Long,
+    memberIds: List<String>,
+    rawInputs: Map<String, String>
+): QuickSplitAllocationResult {
+    if (memberIds.isEmpty()) {
+        return QuickSplitAllocationResult(mode = mode, sharesByMemberId = emptyMap(), isValid = false)
+    }
+    return when (mode) {
+        QuickSplitMode.EQUAL -> {
+            QuickSplitAllocationResult(mode = mode, sharesByMemberId = emptyMap(), isValid = totalAmountPaise > 0L)
+        }
+        QuickSplitMode.EXACT -> {
+            val shares = memberIds.associateWith { id -> parseAmountInputToPaise(rawInputs[id].orEmpty()) }
+            val sum = shares.values.sum()
+            val remaining = totalAmountPaise - sum
+            QuickSplitAllocationResult(
+                mode = mode,
+                sharesByMemberId = shares,
+                isValid = totalAmountPaise > 0L && remaining == 0L,
+                remainingPaise = remaining
+            )
+        }
+        QuickSplitMode.PERCENTAGE -> {
+            val bpsByMember = memberIds.associateWith { id ->
+                val parsed = rawInputs[id].orEmpty().toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
+                kotlin.math.round(parsed * 100.0).toLong()
+            }
+            val totalBps = bpsByMember.values.sum()
+            val remainingBps = 10_000L - totalBps
+            val shares = if (totalAmountPaise > 0L && totalBps == 10_000L) {
+                distributeByLargestRemainder(totalAmountPaise, memberIds, bpsByMember.mapValues { it.value.toDouble() })
+            } else {
+                memberIds.associateWith { 0L }
+            }
+            QuickSplitAllocationResult(
+                mode = mode,
+                sharesByMemberId = shares,
+                isValid = totalAmountPaise > 0L && remainingBps == 0L,
+                remainingPercentBasisPoints = remainingBps
+            )
+        }
+        QuickSplitMode.SHARES -> {
+            val weights = memberIds.associateWith { id ->
+                val raw = rawInputs[id]
+                if (raw.isNullOrBlank()) 1.0 else (raw.toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0)
+            }
+            val totalWeight = weights.values.sum()
+            val shares = if (totalAmountPaise > 0L && totalWeight > 0.0) {
+                distributeByLargestRemainder(totalAmountPaise, memberIds, weights)
+            } else {
+                memberIds.associateWith { 0L }
+            }
+            QuickSplitAllocationResult(
+                mode = mode,
+                sharesByMemberId = shares,
+                isValid = totalAmountPaise > 0L && totalWeight > 0.0
+            )
+        }
+    }
+}
+
+private fun distributeByLargestRemainder(
+    totalPaise: Long,
+    memberIds: List<String>,
+    weights: Map<String, Double>
+): Map<String, Long> {
+    val totalWeight = weights.values.sum()
+    if (totalPaise <= 0L || totalWeight <= 0.0) return memberIds.associateWith { 0L }
+    val floors = mutableMapOf<String, Long>()
+    val remainders = mutableListOf<Pair<String, Double>>()
+    var assigned = 0L
+    for (id in memberIds) {
+        val exact = totalPaise.toDouble() * (weights[id] ?: 0.0) / totalWeight
+        val floorVal = kotlin.math.floor(exact).toLong()
+        floors[id] = floorVal
+        assigned += floorVal
+        remainders += id to (exact - floorVal)
+    }
+    var leftover = (totalPaise - assigned).coerceAtLeast(0L)
+    remainders.sortedByDescending { it.second }.forEach { (id, _) ->
+        if (leftover > 0L) {
+            floors[id] = (floors[id] ?: 0L) + 1L
+            leftover--
+        }
+    }
+    return floors
 }
 
 // Helper functions for appending keypad input & exact paise parsing

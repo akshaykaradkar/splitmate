@@ -1340,11 +1340,11 @@ object SplitButtonDefaults {
         // v2.4.0 GM3E Skill Upgrade: parent TrailingButton owns both contentDescription and stateDescription
         // and is wrapped in PlainTooltip via TooltipBox per splitbutton.md & tooltip.md.
         val stateText = if (checked) expandedStateDescription else collapsedStateDescription
-        ExpressivePlainTooltipBox(tooltipText = tooltipLabel) {
+        ExpressivePlainTooltipBox(tooltipText = tooltipLabel, modifier = modifier) {
             androidx.compose.material3.SplitButtonDefaults.TrailingButton(
                 checked = checked,
                 onCheckedChange = onCheckedChange,
-                modifier = modifier
+                modifier = Modifier
                     .minimumInteractiveComponentSize()
                     .heightIn(min = height)
                     .widthIn(min = width)
@@ -1659,22 +1659,23 @@ fun ExpressivePlainTooltipBox(
     anchorPosition: TooltipAnchorPosition = TooltipAnchorPosition.Above,
     content: @Composable () -> Unit
 ) {
-    TooltipBox(
-        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(anchorPosition),
-        tooltip = {
-            PlainTooltip(
-                modifier = Modifier.semantics {
-                    liveRegion = LiveRegionMode.Polite
-                    paneTitle = tooltipText
+    Box(modifier = modifier) {
+        TooltipBox(
+            positionProvider = TooltipDefaults.rememberTooltipPositionProvider(anchorPosition),
+            tooltip = {
+                PlainTooltip(
+                    modifier = Modifier.semantics {
+                        liveRegion = LiveRegionMode.Polite
+                        paneTitle = tooltipText
+                    }
+                ) {
+                    Text(text = tooltipText)
                 }
-            ) {
-                Text(text = tooltipText)
-            }
-        },
-        state = rememberTooltipState(),
-        modifier = modifier,
-        content = content
-    )
+            },
+            state = rememberTooltipState(),
+            content = content
+        )
+    }
 }
 
 /**
@@ -1691,10 +1692,10 @@ fun ExpressiveTooltipIconButton(
     colors: IconButtonColors = IconButtonDefaults.iconButtonColors(),
     content: @Composable () -> Unit
 ) {
-    ExpressivePlainTooltipBox(tooltipText = tooltipText) {
+    ExpressivePlainTooltipBox(tooltipText = tooltipText, modifier = modifier) {
         IconButton(
             onClick = onClick,
-            modifier = modifier.minimumInteractiveComponentSize(),
+            modifier = Modifier.minimumInteractiveComponentSize(),
             enabled = enabled,
             shapes = IconButtonDefaults.shapes(),
             colors = colors,
@@ -1718,10 +1719,10 @@ fun ExpressiveTooltipOutlinedIconButton(
     border: androidx.compose.foundation.BorderStroke? = IconButtonDefaults.outlinedIconButtonBorder(enabled),
     content: @Composable () -> Unit
 ) {
-    ExpressivePlainTooltipBox(tooltipText = tooltipText) {
+    ExpressivePlainTooltipBox(tooltipText = tooltipText, modifier = modifier) {
         OutlinedIconButton(
             onClick = onClick,
-            modifier = modifier.minimumInteractiveComponentSize(),
+            modifier = Modifier.minimumInteractiveComponentSize(),
             enabled = enabled,
             shapes = IconButtonDefaults.shapes(),
             colors = colors,
@@ -1745,10 +1746,10 @@ fun ExpressiveTooltipFilledTonalIconButton(
     colors: IconButtonColors = IconButtonDefaults.filledTonalIconButtonColors(),
     content: @Composable () -> Unit
 ) {
-    ExpressivePlainTooltipBox(tooltipText = tooltipText) {
+    ExpressivePlainTooltipBox(tooltipText = tooltipText, modifier = modifier) {
         FilledTonalIconButton(
             onClick = onClick,
-            modifier = modifier.minimumInteractiveComponentSize(),
+            modifier = Modifier.minimumInteractiveComponentSize(),
             enabled = enabled,
             shapes = IconButtonDefaults.shapes(),
             colors = colors,

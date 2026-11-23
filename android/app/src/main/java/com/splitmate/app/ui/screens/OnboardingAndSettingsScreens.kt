@@ -841,6 +841,41 @@ fun UserSettingsScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
 
+                            OutlinedTextField(
+                                value = editedUpiId,
+                                onValueChange = { editedUpiId = it },
+                                label = {
+                                    Text(
+                                        text = "UPI ID (optional, for receiving payments)",
+                                        fontFamily = SplitMateBrandFontFamily,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                },
+                                placeholder = {
+                                    Text("e.g. yourname@okicici", fontFamily = SplitMateBrandFontFamily)
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.AlternateEmail,
+                                        contentDescription = null,
+                                        tint = textPrimary
+                                    )
+                                },
+                                singleLine = true,
+                                shape = MaterialTheme.shapes.large,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = textPrimary,
+                                    unfocusedTextColor = textPrimary,
+                                    focusedContainerColor = mutedBg.copy(alpha = 0.4f),
+                                    unfocusedContainerColor = mutedBg.copy(alpha = 0.4f),
+                                    focusedBorderColor = textPrimary,
+                                    unfocusedBorderColor = borderColor,
+                                    focusedLabelColor = textPrimary,
+                                    unfocusedLabelColor = textSecondary
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
                             // A. Character Presentation (Male, Female, Neutral)
                             Column(modifier = Modifier.fillMaxWidth()) {
                                 Text(
@@ -1018,6 +1053,7 @@ fun UserSettingsScreen(
                                         colorPresetId = selectedColorPresetId
                                     )
                                     onUpdateUserProfile(clean, cleanPhone, encodedSeed)
+                                    onUpdateUpiId(editedUpiId.trim())
                                     moneySnackbar?.say("Saved profile")
                                         ?: Toast.makeText(context, "Saved Profile", Toast.LENGTH_SHORT).show()
                                 },
@@ -1471,9 +1507,12 @@ fun UserSettingsScreen(
                         onClearVaultClick()
                     },
                     shapes = ButtonDefaults.shapes(),
-                    colors = ButtonDefaults.buttonColors(containerColor = SplitMateThemeTokens.TerracottaText)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
                 ) {
-                    Text("Reset Data", fontFamily = SplitMateBrandFontFamily, fontWeight = FontWeight.Bold, color = com.splitmate.app.ui.DesignSystemBindings.activePalette.onPrimary)
+                    Text("Reset Data", fontFamily = SplitMateBrandFontFamily, fontWeight = FontWeight.Bold)
                 }
             }
         )

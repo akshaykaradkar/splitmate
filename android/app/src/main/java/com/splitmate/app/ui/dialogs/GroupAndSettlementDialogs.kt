@@ -186,7 +186,16 @@ fun EditLoggedExpenseDialog(
     }
 
     if (showDepartureDatePicker) {
-        val datePickerState = rememberDatePickerState()
+        val initialDateMillis = remember(departureDateInput) {
+            runCatching {
+                val parsed = java.time.LocalDate.parse(
+                    departureDateInput.trim(),
+                    DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.US)
+                )
+                parsed.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+            }.getOrNull()
+        }
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialDateMillis)
         DatePickerDialog(
             onDismissRequest = { showDepartureDatePicker = false },
             confirmButton = {
@@ -220,7 +229,24 @@ fun EditLoggedExpenseDialog(
     }
 
     if (showDepartureTimePicker) {
-        val timePickerState = rememberTimePickerState(is24Hour = true)
+        val initialHourMin = remember(departureTimeInput) {
+            val match = Regex("""(\d{1,2}):(\d{2})(?:\s*(AM|PM))?""", RegexOption.IGNORE_CASE).find(departureTimeInput.trim())
+            val rawHour = match?.groupValues?.getOrNull(1)?.toIntOrNull()
+            val minute = match?.groupValues?.getOrNull(2)?.toIntOrNull()?.coerceIn(0, 59) ?: 0
+            val amPm = match?.groupValues?.getOrNull(3)?.uppercase(Locale.US).orEmpty()
+            val hour = when {
+                rawHour == null -> 9
+                amPm == "PM" && rawHour in 1..11 -> rawHour + 12
+                amPm == "AM" && rawHour == 12 -> 0
+                else -> rawHour.coerceIn(0, 23)
+            }
+            hour to minute
+        }
+        val timePickerState = rememberTimePickerState(
+            initialHour = initialHourMin.first,
+            initialMinute = initialHourMin.second,
+            is24Hour = true
+        )
         TimePickerDialog(
             onDismissRequest = { showDepartureTimePicker = false },
             confirmButton = {
@@ -268,54 +294,63 @@ fun EditLoggedExpenseDialog(
         }
     }
 
+    val parsedEditedCents = if (lockAmountAndSplit) {
+        expense.totalAmountCents
+    } else {
+        com.splitmate.app.ui.parseRupeesToPaiseExact(editedAmountStr)?.takeIf { it > 0L }
+    }
+    var amountValidationError by remember(editedAmountStr) { mutableStateOf(false) }
+
     val performSave: () -> Unit = {
-        val exactCents = if (lockAmountAndSplit) {
-            expense.totalAmountCents
+        val exactCents = parsedEditedCents
+        if (exactCents == null || exactCents <= 0L) {
+            amountValidationError = true
         } else {
-            com.splitmate.app.ui.parseRupeesToPaiseExact(editedAmountStr) ?: expense.totalAmountCents
-        }
-        val parsedRupees = exactCents / 100.0
-        val splitIdsToSave = if (lockAmountAndSplit) initialSplitMemberIds.toList() else selectedSplitMemberIds.toList()
-        val cleanPnrTrim = pnrNumber.trim().uppercase(Locale.US)
-        val explicitTravelPnrOverride: String = if (includeTravelTicket) cleanPnrTrim else ""
-        val finalTitle = if (includeTravelTicket &&
-            (cleanPnrTrim.isNotBlank() ||
-                trainOrFlightNo.isNotBlank() ||
-                coachAndSeats.isNotBlank() ||
-                departureDateInput.isNotBlank() ||
-                departureTimeInput.isNotBlank())
-        ) {
-            val routeParts = routeFromTo
-                .split(Regex("""\s*(?:->|→|-|\bto\b)\s*""", RegexOption.IGNORE_CASE), limit = 2)
-                .map { it.trim() }
-            val parsedFrom = routeParts.getOrNull(0).orEmpty()
-            val parsedTo = routeParts.getOrNull(1).orEmpty()
-            val baseMode = if (cleanPnrTrim.length == 6 && cleanPnrTrim.any { it.isLetter() }) "Flight" else "Train / PNR Ticket"
-            val parsedTicket = ParsedTravelTicket(
-                pnr = cleanPnrTrim,
-                trainOrFlightNo = trainOrFlightNo.trim(),
-                fromStation = parsedFrom,
-                toStation = parsedTo,
-                departureDate = departureDateInput.trim(),
-                departureTime = departureTimeInput.trim(),
-                coachAndSeats = coachAndSeats.trim(),
-                cleanTitle = editedTitle.trim().ifBlank { baseMode }
-            )
-            formatTravelExpenseTitle(editedTitle.trim().ifBlank { baseMode }, parsedTicket)
-        } else {
-            editedTitle.trim().ifBlank { "Group Expense" }
-        }
-        if (onSaveExact != null) {
-            onSaveExact(
-                finalTitle,
-                exactCents,
-                selectedPayerId,
-                splitIdsToSave,
-                editedCategoryRef,
-                explicitTravelPnrOverride
-            )
-        } else {
-            onSave(finalTitle, parsedRupees, selectedPayerId, splitIdsToSave, editedCategoryRef)
+            amountValidationError = false
+            val parsedRupees = exactCents / 100.0
+            val splitIdsToSave = if (lockAmountAndSplit) initialSplitMemberIds.toList() else selectedSplitMemberIds.toList()
+            val cleanPnrTrim = pnrNumber.trim().uppercase(Locale.US)
+            val explicitTravelPnrOverride: String = if (includeTravelTicket) cleanPnrTrim else ""
+            val finalTitle = if (includeTravelTicket &&
+                (cleanPnrTrim.isNotBlank() ||
+                    trainOrFlightNo.isNotBlank() ||
+                    routeFromTo.isNotBlank() ||
+                    coachAndSeats.isNotBlank() ||
+                    departureDateInput.isNotBlank() ||
+                    departureTimeInput.isNotBlank())
+            ) {
+                val routeParts = routeFromTo
+                    .split(Regex("""\s*(?:->|→|-|\bto\b)\s*""", RegexOption.IGNORE_CASE), limit = 2)
+                    .map { it.trim() }
+                val parsedFrom = routeParts.getOrNull(0).orEmpty()
+                val parsedTo = routeParts.getOrNull(1).orEmpty()
+                val baseMode = if (cleanPnrTrim.length == 6 && cleanPnrTrim.any { it.isLetter() }) "Flight" else "Train / PNR Ticket"
+                val parsedTicket = ParsedTravelTicket(
+                    pnr = cleanPnrTrim,
+                    trainOrFlightNo = trainOrFlightNo.trim(),
+                    fromStation = parsedFrom,
+                    toStation = parsedTo,
+                    departureDate = departureDateInput.trim(),
+                    departureTime = departureTimeInput.trim(),
+                    coachAndSeats = coachAndSeats.trim(),
+                    cleanTitle = editedTitle.trim().ifBlank { baseMode }
+                )
+                formatTravelExpenseTitle(editedTitle.trim().ifBlank { baseMode }, parsedTicket)
+            } else {
+                editedTitle.trim().ifBlank { "Group Expense" }
+            }
+            if (onSaveExact != null) {
+                onSaveExact(
+                    finalTitle,
+                    exactCents,
+                    selectedPayerId,
+                    splitIdsToSave,
+                    editedCategoryRef,
+                    explicitTravelPnrOverride
+                )
+            } else {
+                onSave(finalTitle, parsedRupees, selectedPayerId, splitIdsToSave, editedCategoryRef)
+            }
         }
     }
 
@@ -474,10 +509,22 @@ fun EditLoggedExpenseDialog(
 
                 OutlinedTextField(
                     value = editedAmountStr,
-                    onValueChange = { editedAmountStr = com.splitmate.app.ui.sanitizeDecimalRupeesInput(it) },
+                    onValueChange = {
+                        editedAmountStr = com.splitmate.app.ui.sanitizeDecimalRupeesInput(it)
+                        amountValidationError = false
+                    },
                     label = { Text("Total Amount (₹)", fontSize = 12.sp) },
+                    isError = amountValidationError,
+                    supportingText = if (amountValidationError) {
+                        { Text("Enter an amount greater than 0", style = MaterialTheme.typography.bodySmall) }
+                    } else {
+                        null
+                    },
                     singleLine = true,
                     enabled = !lockAmountAndSplit,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
+                    ),
                     shape = SplitMateTheme.RadiusPanel,
                     modifier = Modifier.fillMaxWidth()
                 )

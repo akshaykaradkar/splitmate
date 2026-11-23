@@ -1962,6 +1962,7 @@ private fun TripHubTopBar(
             attentionTab = if (moneyNeedsAttention) TripHubSectionTab.MONEY else null
         )
 
+        val searchFocusManager = androidx.compose.ui.platform.LocalFocusManager.current
         AnimatedVisibility(visible = isSearchExpanded) {
             Surface(
                 shape = SearchBarDefaults.inputFieldShape,
@@ -1974,7 +1975,7 @@ private fun TripHubTopBar(
                 SearchBarDefaults.InputField(
                     query = searchQuery,
                     onQueryChange = onSearchQueryChange,
-                    onSearch = {},
+                    onSearch = { searchFocusManager.clearFocus() },
                     expanded = false,
                     onExpandedChange = {},
                     placeholder = {

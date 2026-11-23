@@ -8182,7 +8182,13 @@ fun AuditVaultScreen(
                 }
                 val perPersonShare = breakdown.perPersonHeadlineShare
                 val isMePayer = payer?.isCurrentUser == true
-                val signedCents = if (isMePayer) expense.totalAmountCents else -expense.totalAmountCents
+                val currentUserMemberId = groupMembers.find { it.isCurrentUser }?.memberId
+                val myExpenseShareCents = currentUserMemberId?.let { meId ->
+                    uiState.splits
+                        .filter { it.expenseId == expense.expenseId && it.memberId == meId }
+                        .sumOf { it.finalOwedCents }
+                } ?: 0L
+                val signedCents = if (isMePayer) expense.totalAmountCents else -myExpenseShareCents
                 val formattedSignedTotal = formatIndianRupeesFromCents(
                     cents = signedCents,
                     includePlusSign = true,

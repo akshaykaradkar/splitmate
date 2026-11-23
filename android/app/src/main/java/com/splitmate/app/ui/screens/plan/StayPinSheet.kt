@@ -232,6 +232,7 @@ fun StayPinSheet(
                     },
                     onUseDestinationCenter = {
                         searchedByName = false
+                        awaitingNewStay = true
                         actions.chooseStay(TripGuideActions.StaySelection.DestinationCenter)
                     }
                 )
@@ -255,6 +256,7 @@ fun StayPinSheet(
                 },
                 onUseDestinationCenter = {
                     searchedByName = false
+                    awaitingNewStay = true
                     actions.chooseStay(TripGuideActions.StaySelection.DestinationCenter)
                 },
                 onUseSleep = { tab = StayTab.SLEEP.ordinal },

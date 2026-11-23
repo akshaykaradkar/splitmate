@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
@@ -996,6 +997,7 @@ private fun DestinationSearch(
                 }
             }
         }
+        val isDropdownExpanded = searchExpanded && sanitizedSuggestions.isNotEmpty()
         DockedSearchBar(
             inputField = {
                 SearchBarDefaults.InputField(
@@ -1007,25 +1009,40 @@ private fun DestinationSearch(
                         focusManager.clearFocus()
                         onSubmitted()
                     },
-                    expanded = searchExpanded,
+                    expanded = isDropdownExpanded,
                     onExpandedChange = { searchExpanded = it },
                     placeholder = { Text("Search a city, town or region") },
                     leadingIcon = { SymbolIcon(Icons.Rounded.Search, contentDescription = null) },
                     trailingIcon = {
                         if (state.destinationQuery.isNotEmpty()) {
-                            ExpressivePlainTooltipBox(tooltipText = "Clear search") {
-                                IconButton(
-                                    onClick = { actions.updateDestinationQuery("") },
-                                    shapes = IconButtonDefaults.shapes()
-                                ) {
-                                    SymbolIcon(Icons.Rounded.Close, contentDescription = "Clear search")
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                ExpressivePlainTooltipBox(tooltipText = "Search destination") {
+                                    IconButton(
+                                        onClick = {
+                                            searchExpanded = false
+                                            actions.submitDestinationQuery()
+                                            focusManager.clearFocus()
+                                            onSubmitted()
+                                        },
+                                        shapes = IconButtonDefaults.shapes()
+                                    ) {
+                                        SymbolIcon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = "Search destination")
+                                    }
+                                }
+                                ExpressivePlainTooltipBox(tooltipText = "Clear search") {
+                                    IconButton(
+                                        onClick = { actions.updateDestinationQuery("") },
+                                        shapes = IconButtonDefaults.shapes()
+                                    ) {
+                                        SymbolIcon(Icons.Rounded.Close, contentDescription = "Clear search")
+                                    }
                                 }
                             }
                         }
                     }
                 )
             },
-            expanded = searchExpanded && sanitizedSuggestions.isNotEmpty(),
+            expanded = isDropdownExpanded,
             onExpandedChange = { searchExpanded = it },
             colors = SearchBarDefaults.colors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLowest

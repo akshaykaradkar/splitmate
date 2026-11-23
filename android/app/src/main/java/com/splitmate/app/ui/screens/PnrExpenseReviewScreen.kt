@@ -1828,15 +1828,18 @@ fun PnrExpenseReviewScreen(
                                             modifier = Modifier.weight(1f)
                                         )
                                     }
+                                    var manualDateEdited by remember(pnrInput) { mutableStateOf(false) }
+                                    var manualTimeEdited by remember(pnrInput) { mutableStateOf(false) }
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         OutlinedTextField(
-                                            value = manualDepartureDateInput.ifBlank { defaultDepDateDisplay },
+                                            value = if (manualDateEdited) manualDepartureDateInput else manualDepartureDateInput.ifBlank { defaultDepDateDisplay },
                                             onValueChange = {
                                                 if (!isSubmitting) {
+                                                    manualDateEdited = true
                                                     controller.manualDepartureDateInput = it.take(24)
                                                 }
                                             },
@@ -1860,9 +1863,10 @@ fun PnrExpenseReviewScreen(
                                             modifier = Modifier.weight(1f)
                                         )
                                         OutlinedTextField(
-                                            value = manualDepartureTimeInput.ifBlank { defaultDepTimeDisplay },
+                                            value = if (manualTimeEdited) manualDepartureTimeInput else manualDepartureTimeInput.ifBlank { defaultDepTimeDisplay },
                                             onValueChange = {
                                                 if (!isSubmitting) {
+                                                    manualTimeEdited = true
                                                     controller.manualDepartureTimeInput = it.take(16)
                                                 }
                                             },
@@ -2064,9 +2068,16 @@ fun PnrExpenseReviewScreen(
     if (showManualTimePicker) {
         val existingTime = manualDepartureTimeInput.trim().ifBlank { snapshot?.departureTime.orEmpty() }
         val parsedHourMin = remember(existingTime) {
-            val match = Regex("""(\d{1,2}):(\d{2})""").find(existingTime)
-            val h = match?.groupValues?.getOrNull(1)?.toIntOrNull()?.coerceIn(0, 23) ?: 9
+            val match = Regex("""(\d{1,2}):(\d{2})(?:\s*(AM|PM))?""", RegexOption.IGNORE_CASE).find(existingTime)
+            val rawHour = match?.groupValues?.getOrNull(1)?.toIntOrNull()
             val m = match?.groupValues?.getOrNull(2)?.toIntOrNull()?.coerceIn(0, 59) ?: 0
+            val amPm = match?.groupValues?.getOrNull(3)?.uppercase(java.util.Locale.US).orEmpty()
+            val h = when {
+                rawHour == null -> 9
+                amPm == "PM" && rawHour in 1..11 -> rawHour + 12
+                amPm == "AM" && rawHour == 12 -> 0
+                else -> rawHour.coerceIn(0, 23)
+            }
             h to m
         }
         val timePickerState = rememberTimePickerState(
