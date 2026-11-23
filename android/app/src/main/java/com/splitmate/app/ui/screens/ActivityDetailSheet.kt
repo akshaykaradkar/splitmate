@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -166,6 +168,9 @@ fun ActivityDetailSheet(
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .imePadding()
+                // rc25: the whole sheet scrolls, so Edit / Delete stay reachable on small screens,
+                // in landscape and at large font sizes.
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
             Row(

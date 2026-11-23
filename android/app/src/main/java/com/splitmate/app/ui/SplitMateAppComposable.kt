@@ -443,6 +443,9 @@ fun SplitMateApp(viewModel: SplitMateViewModel) {
                 onUpdateUserProfile = { newName, newPhone, newSeed ->
                     viewModel.updateUserProfile(newName, newPhone, newSeed, uiState.userUpiId)
                 },
+                onSaveProfile = { newName, newPhone, newSeed, newUpi ->
+                    viewModel.updateUserProfile(newName, newPhone, newSeed, newUpi)
+                },
                 onThemeToggle = { isDark ->
                     prefs.edit().putBoolean("is_dark_theme", isDark).apply()
                     viewModel.toggleDarkTheme(isDark)
@@ -2331,7 +2334,8 @@ fun LedgersDashboardScreen(
                 )
                 editingExpense = null
             },
-            lockAmountAndSplit = viewModel.isExpenseItemized(exp, uiState)
+            lockAmountAndSplit = viewModel.isExpenseItemized(exp, uiState),
+            lockReason = viewModel.expenseLockReason(exp, uiState)
         )
     }
 
@@ -6174,7 +6178,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
     }
     val settlementProgressRatio = remember(settlementPlan, resolvedGroupSettlements) {
         val openCents = settlementPlan.sumOf { it.transfer.amountCents }.coerceAtLeast(0L)
-        val paidCents = resolvedGroupSettlements.sumOf { it.amountCents }.coerceAtLeast(0L)
+        val paidCents = com.splitmate.app.ui.fund.repaidCentsExcludingAdvances(resolvedGroupSettlements)
         val totalCents = openCents + paidCents
         when {
             settlementPlan.isEmpty() -> 1f
@@ -7708,7 +7712,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                     color = SplitMateTheme.PrimaryDark
                                 )
                                 Text(
-                                    text = "Tap any completed payment for receipt details or undo",
+                                    text = "Tap any payment or Trip Fund advance for details or undo",
                                     fontSize = 11.sp,
                                     color = SplitMateTheme.TextSecondary
                                 )
@@ -7720,7 +7724,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                             color = SplitMateTheme.SurfaceMuted
                         ) {
                             Text(
-                                text = "${recordedSettlements.size} Paid",
+                                text = com.splitmate.app.ui.fund.settleHistoryBadgeLabel(recordedSettlements),
                                 fontFamily = SplitMateTheme.FontRounded,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
@@ -7834,7 +7838,7 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                                         Spacer(modifier = Modifier.width(10.dp))
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(
-                                                text = "$fromShortName paid $toShortName",
+                                                text = com.splitmate.app.ui.fund.settleHistoryRowTitle(settlement, fromShortName, toShortName),
                                                 fontFamily = SplitMateTheme.FontDisplay,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 fontSize = 14.sp,
@@ -7900,14 +7904,22 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
                         ) {
                             Column {
                                 Text(
-                                    text = "$fromFullName paid $toFullName",
+                                    text = if (selectedSettlement.settlementId.startsWith(com.splitmate.app.ui.fund.ADVANCE_ID_PREFIX)) {
+                                        "$fromFullName → $toFullName's Trip Fund"
+                                    } else {
+                                        "$fromFullName paid $toFullName"
+                                    },
                                     fontFamily = SplitMateTheme.FontDisplay,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 18.sp,
                                     color = SplitMateTheme.PrimaryDark
                                 )
                                 Text(
-                                    text = "Settled on $fullDateStr",
+                                    text = if (selectedSettlement.settlementId.startsWith(com.splitmate.app.ui.fund.ADVANCE_ID_PREFIX)) {
+                                        "Trip Fund advance · $fullDateStr"
+                                    } else {
+                                        "Settled on $fullDateStr"
+                                    },
                                     fontFamily = SplitMateTheme.FontRounded,
                                     fontSize = 12.sp,
                                     color = SplitMateTheme.TextSecondary,
@@ -7928,7 +7940,12 @@ fun GreedySettlementScreen(viewModel: SplitMateViewModel) {
 
                         OutlinedButton(
                             onClick = {
-                                viewModel.undoSettlement(selectedSettlement.settlementId)
+                                if (selectedSettlement.settlementId.startsWith(com.splitmate.app.ui.fund.ADVANCE_ID_PREFIX)) {
+                                    // Same rule as the Trip Fund card: sender, holder or organizer only.
+                                    viewModel.removeTripFundAdvance(selectedSettlement.settlementId)
+                                } else {
+                                    viewModel.undoSettlement(selectedSettlement.settlementId)
+                                }
                                 selectedSettlementForSheet = null
                             },
                             shapes = ButtonDefaults.shapes(),
@@ -8555,7 +8572,8 @@ fun AuditVaultScreen(
                 )
                 editingExpenseEntity = null
             },
-            lockAmountAndSplit = viewModel.isExpenseItemized(exp, uiState)
+            lockAmountAndSplit = viewModel.isExpenseItemized(exp, uiState),
+            lockReason = viewModel.expenseLockReason(exp, uiState)
         )
     }
 }

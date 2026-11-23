@@ -2032,25 +2032,18 @@ fun ContactPickerBottomSheet(
                         )
                     }
                     if (multiSelect && allContacts.isNotEmpty()) {
+                        // rc25: one flag drives both the label and the action, and "Clear" only
+                        // unticks the rows the search is showing.
+                        val toggle = contactPickerSelectAllToggle(
+                            visiblePhones = filteredContacts.map { it.cleanPhone },
+                            selectedPhones = selectedPhones
+                        )
                         TextButton(
-                            onClick = {
-                                val selectablePhones = filteredContacts
-                                    .filterNot { it.cleanPhone.startsWith("contact_") }
-                                    .map { it.cleanPhone }
-                                selectedPhones = if (selectablePhones.isNotEmpty() && selectedPhones.containsAll(selectablePhones)) {
-                                    emptySet()
-                                } else {
-                                    selectedPhones + selectablePhones
-                                }
-                            },
+                            onClick = { selectedPhones = toggle.nextSelection },
                             shapes = ButtonDefaults.shapes()
                         ) {
                             Text(
-                                text = if (selectedPhones.size == filteredContacts.size && filteredContacts.isNotEmpty()) {
-                                    "Clear"
-                                } else {
-                                    "Select all"
-                                },
+                                text = toggle.label,
                                 fontWeight = FontWeight.Bold,
                                 color = colorScheme.primary
                             )
@@ -3101,3 +3094,24 @@ fun CompactLedgerTicketStub(
 }
 
 
+
+/** Label and result of the contact picker's "Select all / Clear" button. */
+internal data class ContactPickerSelectAllToggle(val label: String, val nextSelection: Set<String>)
+
+/**
+ * "Select all" ticks every selectable row the search is showing and keeps earlier picks.
+ * It reads "Clear" only when all of those rows are already ticked, and then unticks just them.
+ * Rows without a phone number (`contact_` placeholders) cannot be ticked.
+ */
+internal fun contactPickerSelectAllToggle(
+    visiblePhones: List<String>,
+    selectedPhones: Set<String>
+): ContactPickerSelectAllToggle {
+    val selectable = visiblePhones.filterNot { it.startsWith("contact_") }.toSet()
+    val allVisibleSelected = selectable.isNotEmpty() && selectedPhones.containsAll(selectable)
+    return if (allVisibleSelected) {
+        ContactPickerSelectAllToggle(label = "Clear", nextSelection = selectedPhones - selectable)
+    } else {
+        ContactPickerSelectAllToggle(label = "Select all", nextSelection = selectedPhones + selectable)
+    }
+}

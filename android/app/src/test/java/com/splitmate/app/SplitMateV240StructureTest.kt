@@ -57,7 +57,7 @@ class SplitMateV240StructureTest {
         assertTrue(form.contains("rememberReducedMotionEnabled()"), "cursor holds still under reduced motion")
         assertFalse(form.contains("LinearWavyProgressIndicator("))
         assertTrue(form.contains("if (totalAmountPaise > 0L && isZeroDriftVerified)"), "'Adds up exactly' waits for an amount")
-        assertTrue(form.contains("if (totalAmountPaise > 0L || memberCount == 0)"), "per-person pill waits for an amount")
+        assertTrue(form.contains("if ((totalAmountPaise > 0L && activeSplitMode == QuickSplitMode.EQUAL) || memberCount == 0)"), "per-person pill waits for an amount")
     }
 
     // ---------------------------------------------------------------- share progress

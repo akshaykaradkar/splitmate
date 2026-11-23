@@ -148,7 +148,7 @@ class SplitMateV240Rc22KeypadAndQaBugfixTest {
     fun `RC22_03 QA audit P1 and P2 fixes are wired across Settings, Dialogs, Explore, Stay and Audit`() {
         val settings = src("ui/screens/OnboardingAndSettingsScreens.kt")
         assertTrue(settings.contains("UPI ID (optional, for receiving payments)"))
-        assertTrue(settings.contains("onUpdateUpiId(editedUpiId.trim())"))
+        assertTrue(settings.contains("onSaveProfile(clean, cleanPhone, encodedSeed, editedUpiId.trim())"))
         assertTrue(settings.contains("containerColor = MaterialTheme.colorScheme.error"))
 
         val dialogs = src("ui/dialogs/GroupAndSettlementDialogs.kt")

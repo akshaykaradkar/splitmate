@@ -1537,12 +1537,16 @@ fun QuickExpenseScreen(
                             selectedIndex = QuickSplitMode.entries.indexOf(activeSplitMode),
                             onSelect = { _, mode ->
                                 haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                                activeSplitMode = mode
-                                if (mode == QuickSplitMode.SHARES) {
-                                    customSplitInputs = selectedOrderedIds.associateWith { id ->
-                                        customSplitInputs[id]?.takeIf { it.isNotBlank() } ?: "1"
+                                if (mode != activeSplitMode) {
+                                    // Rupees, percent and shares are different units: never carry
+                                    // typed numbers from one mode into another.
+                                    customSplitInputs = if (mode == QuickSplitMode.SHARES) {
+                                        selectedOrderedIds.associateWith { "1" }
+                                    } else {
+                                        emptyMap()
                                     }
                                 }
+                                activeSplitMode = mode
                             },
                             labelProvider = { it.label },
                             modifier = Modifier
@@ -1604,7 +1608,8 @@ fun QuickExpenseScreen(
                                             OutlinedTextField(
                                                 value = customSplitInputs[member.id].orEmpty(),
                                                 onValueChange = { raw ->
-                                                    val filtered = raw.filter { it.isDigit() || it == '.' }.take(9)
+                                                    // One dot and at most two decimals, so the field always shows what is saved.
+                                                    val filtered = com.splitmate.app.ui.sanitizeDecimalRupeesInput(raw)
                                                     customSplitInputs = customSplitInputs + (member.id to filtered)
                                                 },
                                                 singleLine = true,
@@ -1675,7 +1680,8 @@ fun QuickExpenseScreen(
                                     // Real-time Exact Split / Per-Person Share Pill (tapping triggers 1.2s 0.00c Drift verification pulse)
                                     // v2.4.0 D7: the per-person pill appears once there is an amount (the "pick someone"
                                     // warning still shows straight away).
-                                    if (totalAmountPaise > 0L || memberCount == 0) {
+                                    // The pill shows the equal share, so it is hidden in Exact / % / Shares.
+                                    if ((totalAmountPaise > 0L && activeSplitMode == QuickSplitMode.EQUAL) || memberCount == 0) {
                                         Surface(
                                             onClick = {
                                                 haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)

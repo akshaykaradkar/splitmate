@@ -28,6 +28,7 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Savings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -60,7 +61,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.error
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -68,6 +71,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.splitmate.app.data.GroupMemberEntity
+import com.splitmate.app.data.SettlementEntity
 import com.splitmate.app.ui.components.ExpressivePlainTooltipBox
 import com.splitmate.app.ui.components.SymbolIcon
 import com.splitmate.app.ui.feel.Feel
@@ -90,12 +94,40 @@ import java.util.Locale
 fun TripFundSummaryCard(
     summaries: List<TripFundHolderSummary>,
     currencySymbol: String,
-    onAddAdvanceClick: () -> Unit,
+    onAddAdvanceClick: (holderMemberId: String) -> Unit,
     onRemoveAdvance: (settlementId: String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    canRemoveAdvance: (SettlementEntity) -> Boolean = { true }
 ) {
     if (summaries.isEmpty()) return
     val haptics = LocalHapticFeedback.current
+    var pendingRemoval by remember { mutableStateOf<SettlementEntity?>(null) }
+    pendingRemoval?.let { adv ->
+        AlertDialog(
+            onDismissRequest = { pendingRemoval = null },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            title = { Text("Remove this advance?") },
+            text = {
+                Text(
+                    "${adv.fromMemberName} → ${adv.toMemberName}, " +
+                        formatIndianRupeesFromCents(adv.amountCents, currencySymbol = currencySymbol) +
+                        ". Balances for everyone in the trip will change."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onRemoveAdvance(adv.settlementId)
+                        pendingRemoval = null
+                    },
+                    shapes = ButtonDefaults.shapes()
+                ) { Text("Remove") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRemoval = null }, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
+            }
+        )
+    }
     val dateFmt = remember { DateTimeFormatter.ofPattern("dd MMM", Locale.US) }
 
     Column(
@@ -159,7 +191,7 @@ fun TripFundSummaryCard(
                         FilledTonalButton(
                             onClick = {
                                 haptics.feel(Feel.Tick)
-                                onAddAdvanceClick()
+                                onAddAdvanceClick(summary.treasurerMemberId)
                             },
                             shapes = ButtonDefaults.shapes(),
                             colors = ButtonDefaults.filledTonalButtonColors(
@@ -190,14 +222,14 @@ fun TripFundSummaryCard(
                     ) {
                         TripFundMetricTile(
                             label = "Collected",
-                            amount = formatIndianRupeesFromCents(summary.totalCollectedCents, currencySymbol = currencySymbol),
+                            amount = formatIndianRupeesFromCents(summary.totalCollectedCents, currencySymbol = currencySymbol, trimZeroDecimals = true),
                             containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                             contentColor = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.weight(1f)
                         )
                         TripFundMetricTile(
                             label = "Spent",
-                            amount = formatIndianRupeesFromCents(summary.treasurerSpentCents, currencySymbol = currencySymbol),
+                            amount = formatIndianRupeesFromCents(summary.treasurerSpentCents, currencySymbol = currencySymbol, trimZeroDecimals = true),
                             containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                             contentColor = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.weight(1f)
@@ -207,7 +239,8 @@ fun TripFundSummaryCard(
                             label = if (isDepleted) "Out of pocket" else "Cash in hand",
                             amount = formatIndianRupeesFromCents(
                                 kotlin.math.abs(summary.cashInHandCents),
-                                currencySymbol = currencySymbol
+                                currencySymbol = currencySymbol,
+                                trimZeroDecimals = true
                             ),
                             containerColor = if (isDepleted) {
                                 MaterialTheme.colorScheme.secondaryContainer
@@ -220,6 +253,14 @@ fun TripFundSummaryCard(
                                 MaterialTheme.colorScheme.onPrimaryContainer
                             },
                             modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    if (summary.returnedCents > 0L) {
+                        Text(
+                            text = "${formatIndianRupeesFromCents(summary.returnedCents, currencySymbol = currencySymbol, trimZeroDecimals = true)} already returned to contributors",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
@@ -288,11 +329,11 @@ fun TripFundSummaryCard(
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.primary
                                         )
-                                        ExpressivePlainTooltipBox(tooltipText = "Remove advance") {
+                                        if (canRemoveAdvance(adv)) ExpressivePlainTooltipBox(tooltipText = "Remove advance") {
                                             IconButton(
                                                 onClick = {
                                                     haptics.feel(Feel.Tick)
-                                                    onRemoveAdvance(adv.settlementId)
+                                                    pendingRemoval = adv
                                                 },
                                                 shapes = IconButtonDefaults.shapes()
                                             ) {
@@ -365,26 +406,37 @@ fun CollectTripFundSheet(
     members: List<GroupMemberEntity>,
     currencySymbol: String,
     onRecordAdvances: (treasurerMemberId: String, contributionsByMemberId: Map<String, Long>) -> String?,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    /** Holder to preselect, e.g. when opened from that holder's "Top up" button. */
+    initialTreasurerId: String? = null,
+    /** Whether this phone's user may record [memberId]'s advance to [treasurerId]. */
+    canRecordFor: (treasurerId: String, memberId: String) -> Boolean = { _, _ -> true }
 ) {
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    val defaultTreasurerId = remember(members) {
-        members.firstOrNull { it.isCurrentUser }?.memberId ?: members.firstOrNull()?.memberId.orEmpty()
+    val defaultTreasurerId = remember(members, initialTreasurerId) {
+        members.firstOrNull { it.memberId == initialTreasurerId }?.memberId
+            ?: members.firstOrNull { it.isCurrentUser }?.memberId
+            ?: members.firstOrNull()?.memberId.orEmpty()
     }
     var treasurerId by rememberSaveable(members.map { it.memberId }.joinToString(",")) {
         mutableStateOf(defaultTreasurerId)
     }
     var defaultAmountInput by rememberSaveable { mutableStateOf("") }
-    var selectedContributorIds by remember(treasurerId, members) {
-        mutableStateOf(members.filter { it.memberId != treasurerId }.map { it.memberId }.toSet())
+    // Everyone this user may record for starts ticked. Changing the holder keeps the ticks and
+    // typed amounts (the holder's own row is simply not shown).
+    var selectedContributorIds by remember {
+        mutableStateOf(
+            members.filter { it.memberId != defaultTreasurerId && canRecordFor(defaultTreasurerId, it.memberId) }
+                .map { it.memberId }
+                .toSet()
+        )
     }
-    var customAmountByMember by remember(treasurerId) {
-        mutableStateOf<Map<String, String>>(emptyMap())
-    }
+    var customAmountByMember by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var submitted by remember { mutableStateOf(false) }
 
     val otherMembers = remember(members, treasurerId) {
         members.filter { it.memberId != treasurerId }
@@ -394,16 +446,15 @@ fun CollectTripFundSheet(
         otherMembers,
         selectedContributorIds,
         defaultAmountInput,
-        customAmountByMember
+        customAmountByMember,
+        treasurerId
     ) {
-        otherMembers
-            .filter { it.memberId in selectedContributorIds }
-            .mapNotNull { member ->
-                val raw = customAmountByMember[member.memberId]?.takeIf { it.isNotBlank() } ?: defaultAmountInput
-                val cents = parseRupeesToPaiseExact(raw)?.takeIf { it > 0L } ?: return@mapNotNull null
-                member.memberId to cents
-            }
-            .toMap()
+        resolveTripFundContributions(
+            contributorIds = otherMembers.map { it.memberId }
+                .filter { it in selectedContributorIds && canRecordFor(treasurerId, it) },
+            defaultAmountText = defaultAmountInput,
+            perMemberAmountText = customAmountByMember
+        )
     }
     val totalBatchCents = resolvedContributions.values.sum()
 
@@ -532,7 +583,7 @@ fun CollectTripFundSheet(
             // 3. Multi-select contributors (supports partial contributors & per-person overrides)
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    text = "Who has transferred? (${selectedContributorIds.size} of ${otherMembers.size})",
+                    text = "Who has transferred? (${otherMembers.count { it.memberId in selectedContributorIds && canRecordFor(treasurerId, it.memberId) }} of ${otherMembers.size})",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -541,7 +592,8 @@ fun CollectTripFundSheet(
                     verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)
                 ) {
                     otherMembers.forEachIndexed { idx, member ->
-                        val isChecked = member.memberId in selectedContributorIds
+                        val allowed = canRecordFor(treasurerId, member.memberId)
+                        val isChecked = allowed && member.memberId in selectedContributorIds
                         val effectiveAmountText = customAmountByMember[member.memberId] ?: defaultAmountInput
                         SegmentedListItem(
                             checked = isChecked,
@@ -554,12 +606,16 @@ fun CollectTripFundSheet(
                                 }
                                 errorMessage = null
                             },
+                            enabled = allowed,
                             shapes = ListItemDefaults.segmentedShapes(index = idx, count = otherMembers.size),
                             colors = ListItemDefaults.segmentedColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
                             ),
                             leadingContent = {
-                                Checkbox(checked = isChecked, onCheckedChange = null)
+                                Checkbox(checked = isChecked, onCheckedChange = null, enabled = allowed)
+                            },
+                            supportingContent = if (allowed) null else {
+                                { Text("Only they, the holder or an organizer can record this") }
                             },
                             trailingContent = {
                                 if (isChecked) {
@@ -592,19 +648,30 @@ fun CollectTripFundSheet(
                 }
             }
 
+            errorMessage?.let { msg ->
+                Text(
+                    text = msg,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                )
+            }
+
             // 4. Primary CTA
             Button(
                 onClick = {
+                    if (submitted) return@Button
                     val resultError = onRecordAdvances(treasurerId, resolvedContributions)
                     if (resultError != null) {
                         haptics.feel(Feel.Reject)
                         errorMessage = resultError
                     } else {
+                        submitted = true
                         haptics.feel(Feel.Confirm)
                         closeSheet()
                     }
                 },
-                enabled = resolvedContributions.isNotEmpty() && totalBatchCents > 0L,
+                enabled = !submitted && resolvedContributions.isNotEmpty() && totalBatchCents > 0L,
                 shapes = ButtonDefaults.shapes(),
                 modifier = Modifier
                     .fillMaxWidth()

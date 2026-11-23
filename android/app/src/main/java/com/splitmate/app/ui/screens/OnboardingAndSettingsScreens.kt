@@ -535,6 +535,11 @@ fun UserSettingsScreen(
     onUpdateUpiId: (String) -> Unit = {},
     onUpdateCurrencyCode: (String) -> Unit = {},
     onUpdateUserProfile: (newName: String, newPhone: String, newSeed: String) -> Unit = { _, _, _ -> },
+    /** Saves name, phone, avatar and UPI ID together. Defaults to the two older callbacks. */
+    onSaveProfile: (newName: String, newPhone: String, newSeed: String, newUpiId: String) -> Unit = { n, p, s, u ->
+        onUpdateUserProfile(n, p, s)
+        onUpdateUpiId(u)
+    },
     onThemeToggle: (isDark: Boolean) -> Unit = {},
     onSelectThemeMode: (SplitMateThemeMode) -> Unit = {},
     onExportLedgerText: () -> String = { "" },
@@ -1052,8 +1057,9 @@ fun UserSettingsScreen(
                                         styleId = selectedStyleId,
                                         colorPresetId = selectedColorPresetId
                                     )
-                                    onUpdateUserProfile(clean, cleanPhone, encodedSeed)
-                                    onUpdateUpiId(editedUpiId.trim())
+                                    // One save with all four values. Two separate calls let the second
+                                    // one write the old name, phone and avatar back.
+                                    onSaveProfile(clean, cleanPhone, encodedSeed, editedUpiId.trim())
                                     moneySnackbar?.say("Saved profile")
                                         ?: Toast.makeText(context, "Saved Profile", Toast.LENGTH_SHORT).show()
                                 },

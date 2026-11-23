@@ -729,13 +729,20 @@ fun FlightExpenseReviewScreen(
         }
     }
 
-    val totalAirfarePaise = remember(extractedTicket.totalFarePaise, existingFlightExpenseInGroup?.totalAmountCents) {
+    val parsedAirfarePaise = remember(extractedTicket.totalFarePaise, existingFlightExpenseInGroup?.totalAmountCents) {
         when {
             extractedTicket.totalFarePaise > 0L -> extractedTicket.totalFarePaise
             existingFlightExpenseInGroup != null && existingFlightExpenseInGroup.totalAmountCents > 0L -> existingFlightExpenseInGroup.totalAmountCents
             else -> 0L
         }
     }
+    // The fare read from the ticket can be missing or wrong, so it can be typed here. A typed fare
+    // above zero wins; an empty field falls back to the fare from the ticket.
+    var fareOverrideInput by androidx.compose.runtime.saveable.rememberSaveable(extractedTicket.pnr, extractedTicket.flightNumber) {
+        mutableStateOf("")
+    }
+    val totalAirfarePaise = com.splitmate.app.ui.parseRupeesToPaiseExact(fareOverrideInput)?.takeIf { it > 0L }
+        ?: parsedAirfarePaise
     val totalAirfareRupees = (totalAirfarePaise / 100.0).roundToLong()
 
     // Map extracted passengers into FlightPassenger UI model with matched group member annotations
@@ -1132,6 +1139,7 @@ fun FlightExpenseReviewScreen(
                                 Text(
                                     text = when {
                                         !canModifyFlightExpense -> com.splitmate.app.ExpenseEditPermission.READ_ONLY_REASON
+                                        totalAirfarePaise <= 0L -> "Enter the fare to continue"
                                         existingFlightExpenseInGroup != null -> "Already added · update split ($exactButtonTotal)"
                                         else -> "Confirm $exactButtonTotal · Paid by $payerMemberName"
                                     },
@@ -1273,6 +1281,12 @@ fun FlightExpenseReviewScreen(
                 // 4. BELOW THE TICKET: Smart Passenger-Matched Payer + Clean Minimal Ledger Split Breakdown
                 item {
                     Column(modifier = Modifier.fillMaxWidth()) {
+                        FlightFareField(
+                            value = fareOverrideInput,
+                            onValueChange = { fareOverrideInput = com.splitmate.app.ui.sanitizeDecimalRupeesInput(it) },
+                            parsedFarePaise = parsedAirfarePaise,
+                            enabled = !isCommittingBoardingPass
+                        )
                         // Auto-matched Payer Intelligence Banner (when a flight passenger matches a group member)
                         if (isPayerAutoMatchedFromTicket && payerMember != null) {
                             Surface(
@@ -2529,7 +2543,7 @@ fun AnimatedLuxuryAirlineBoardingPass(
                                     color = FlightPassTokens.SkyBlueText
                                 )
                                 Text(
-                                    text = "Saved to your trip",
+                                    text = "Not saved yet · confirm below",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     letterSpacing = 0.1.sp,

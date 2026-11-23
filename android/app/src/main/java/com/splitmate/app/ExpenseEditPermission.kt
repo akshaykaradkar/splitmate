@@ -58,6 +58,19 @@ object ItemizedExpenseGuard {
         "Itemized receipt: amount and shares are locked so tax, tip and item claims stay intact. " +
             "You can still change the title or payer."
 
+    const val CUSTOM_SPLIT_LOCKED_REASON =
+        "Custom split: amount and shares are locked so each person's share stays as entered. " +
+            "You can still change the title or payer. To change the shares, delete this expense and add it again."
+
+    /** True when the lock comes from receipt data (tax, tip, remainder, multiplier), not just unequal shares. */
+    fun hasReceiptData(expense: ExpenseEntity): Boolean =
+        expense.taxCents != 0L || expense.tipCents != 0L || expense.unassignedBaseCents != 0L ||
+            expense.baseSubtotalCents != expense.totalAmountCents || abs(expense.lockedMultiplier - 1.0) > 1e-9
+
+    /** The message to show for a locked expense: receipts and exact / % / shares splits read differently. */
+    fun lockedReasonFor(expense: ExpenseEntity, splits: List<ExpenseSplitEntity>): String =
+        if (!hasReceiptData(expense) && isItemized(expense, splits)) CUSTOM_SPLIT_LOCKED_REASON else LOCKED_REASON
+
     fun isItemized(expense: ExpenseEntity, splits: List<ExpenseSplitEntity>): Boolean {
         if (expense.taxCents != 0L || expense.tipCents != 0L) return true
         if (expense.unassignedBaseCents != 0L) return true
@@ -150,4 +163,24 @@ object ExpenseSplitMergeRules {
         }
         return keptLocal to keptRemote
     }
+}
+
+/**
+ * rc25: decides whether a bare 10-digit number in an expense title is a train PNR.
+ * Phone numbers are 10 digits too, so the title (or the caller) has to say it is a train ticket.
+ */
+object TravelPnrInference {
+    private val trainContext = Regex(
+        """\b(pnr|train|irctc|railway|rail|express|shatabdi|rajdhani|vande|duronto|sleeper|berth|coach|tatkal)\b""",
+        RegexOption.IGNORE_CASE
+    )
+
+    fun bareTenDigitsLookLikeTrainPnr(
+        title: String,
+        explicitCategory: String?,
+        parsedTicketHasMetadata: Boolean
+    ): Boolean =
+        explicitCategory?.trim().equals("TRAIN", ignoreCase = true) ||
+            parsedTicketHasMetadata ||
+            trainContext.containsMatchIn(title)
 }

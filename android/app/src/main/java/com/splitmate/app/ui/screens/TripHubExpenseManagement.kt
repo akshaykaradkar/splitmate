@@ -180,7 +180,8 @@ fun TripHubExpenseManagementHost(
                 )
                 editingExpenseId = null
             },
-            lockAmountAndSplit = viewModel.isExpenseItemized(exp, uiState)
+            lockAmountAndSplit = viewModel.isExpenseItemized(exp, uiState),
+            lockReason = viewModel.expenseLockReason(exp, uiState)
         )
     }
 }

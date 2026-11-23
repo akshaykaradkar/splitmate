@@ -1364,7 +1364,16 @@ class SplitMateViewModel(
             .find(trimmed)?.groupValues?.getOrNull(1)?.uppercase(Locale.US)
         val labelledPnr = Regex("""\bPNR:\s*([A-Za-z0-9]{6,10})\b""", RegexOption.IGNORE_CASE)
             .find(trimmed)?.groupValues?.getOrNull(1)?.uppercase(Locale.US)
-        val pnrDigits = Regex("""\b(\d{10})\b""").find(trimmed)?.groupValues?.getOrNull(1)
+        // rc25: a bare 10-digit number is a train PNR only when the title is about a train ticket.
+        // "Paid Ramesh 9876543210" is a phone number and must never match an earlier expense.
+        val bareTenDigits = Regex("""\b(\d{10})\b""").find(trimmed)?.groupValues?.getOrNull(1)
+        val pnrDigits = bareTenDigits?.takeIf {
+            com.splitmate.app.TravelPnrInference.bareTenDigitsLookLikeTrainPnr(
+                title = trimmed,
+                explicitCategory = explicitCategory,
+                parsedTicketHasMetadata = parsedTicket?.hasTicketMetadata == true
+            )
+        }
         val resolvedPnr = explicitPnr?.trim()?.takeIf { it.isNotEmpty() }?.uppercase(Locale.US)
             ?: parsedTicket?.pnr?.trim()?.takeIf { it.isNotEmpty() }?.uppercase(Locale.US)
             ?: bracketPnr
@@ -1483,6 +1492,15 @@ class SplitMateViewModel(
                     }
                     return
                 }
+                // rc25: this path can only re-split equally. A custom split (exact / % / shares) must not
+                // be silently flattened onto the earlier expense, so point the user at that expense.
+                if (!customSharesByMemberId.isNullOrEmpty()) {
+                    _uiState.update { curr ->
+                        curr.copy(statusBannerMessage = "PNR $detectedPnr is already logged. Open that expense to change it.")
+                    }
+                    return
+                }
+                val beforeEdit = existingExp
                 // Do NOT count as a new expense — update the earlier logged expense in place with pure Long paise
                 editExistingExpense(
                     expenseId = existingExp.expenseId,
@@ -1492,8 +1510,13 @@ class SplitMateViewModel(
                     selectedMemberIds = selectedMemberIds,
                     newTotalCentsOverride = totalAmountCents
                 )
-                _uiState.update { curr ->
-                    curr.copy(statusBannerMessage = "PNR $detectedPnr already added — updated earlier expense without duplicating")
+                // rc25: only claim success when the edit really went through; a refused edit keeps
+                // the reason that editExistingExpense put on the banner.
+                val afterEdit = _uiState.value.expenses.firstOrNull { it.expenseId == beforeEdit.expenseId }
+                if (afterEdit != null && afterEdit != beforeEdit) {
+                    _uiState.update { curr ->
+                        curr.copy(statusBannerMessage = "PNR $detectedPnr already added — updated earlier expense without duplicating")
+                    }
                 }
                 return
             }
@@ -3658,6 +3681,30 @@ class SplitMateViewModel(
         onResult = onResult
     )
 
+    /** What a member has in a trip's ledger: shares above zero, expenses they paid, payments and advances. */
+    data class MemberLedgerHistory(val shares: Int, val paidExpenses: Int, val payments: Int) {
+        fun describePaidAndPayments(): String = listOfNotNull(
+            "$paidExpenses paid ${if (paidExpenses == 1) "expense" else "expenses"}".takeIf { paidExpenses > 0 },
+            "$payments recorded ${if (payments == 1) "payment" else "payments"}".takeIf { payments > 0 }
+        ).joinToString(" and ")
+    }
+
+    fun memberLedgerHistory(
+        groupId: String,
+        memberId: String,
+        state: SplitMateUiState = _uiState.value
+    ): MemberLedgerHistory {
+        val groupExpenses = state.expenses.filter { it.groupId == groupId }
+        val expenseIds = groupExpenses.map { it.expenseId }.toSet()
+        return MemberLedgerHistory(
+            shares = state.splits.count { it.expenseId in expenseIds && it.memberId == memberId && it.finalOwedCents > 0L },
+            paidExpenses = groupExpenses.count { it.payerId == memberId },
+            payments = state.settlements.count {
+                it.groupId == groupId && (it.fromMemberId == memberId || it.toMemberId == memberId)
+            }
+        )
+    }
+
     fun removeMemberFromGroup(
         context: android.content.Context? = null,
         groupId: String = _uiState.value.activeGroupId,
@@ -3694,6 +3741,19 @@ class SplitMateViewModel(
         val survivingMembers = gMembers.filter { it.memberId != targetMemberId }
         if (survivingMembers.isEmpty()) {
             val msg = "Group must retain at least 1 member"
+            _uiState.update { it.copy(statusBannerMessage = msg) }
+            onResult(false, msg)
+            return false
+        }
+
+        // Removing a member deletes their payments and hands their paid expenses to the organizer,
+        // which changes balances that were already settled. Refused until members can be kept as
+        // inactive. A member who only has shares (dropped out before paying anything) can still be
+        // removed; their shares are re-split as before.
+        val targetHistory = memberLedgerHistory(groupId, targetMemberId, state)
+        if (targetHistory.paidExpenses > 0 || targetHistory.payments > 0) {
+            val msg = "${targetMember.name} has ${targetHistory.describePaidAndPayments()}. " +
+                "Removing them would delete that history and change everyone's balances, so they stay in the trip."
             _uiState.update { it.copy(statusBannerMessage = msg) }
             onResult(false, msg)
             return false
@@ -3866,6 +3926,16 @@ class SplitMateViewModel(
         if (myNetCents != 0L) {
             val formattedNet = formatIndianRupeesFromCents(kotlin.math.abs(myNetCents), includePlusSign = false, currencySymbol = "₹")
             val msg = "Settle your $formattedNet balance before leaving \"$groupName\""
+            _uiState.update { it.copy(statusBannerMessage = msg) }
+            onResult(false, msg)
+            return false
+        }
+
+        // Leaving deletes this member's payments and re-splits their shares across the others, even
+        // when everyone is settled. Refused while the member has any history in the trip.
+        val myHistory = memberLedgerHistory(groupId, meMember.memberId, state)
+        if (myHistory.shares > 0 || myHistory.paidExpenses > 0 || myHistory.payments > 0) {
+            val msg = "You have expenses or payments in \"$groupName\". Leaving would change everyone's balances, so you stay in the trip."
             _uiState.update { it.copy(statusBannerMessage = msg) }
             onResult(false, msg)
             return false
@@ -4179,10 +4249,46 @@ class SplitMateViewModel(
     }
 
     /**
+     * Who may record or remove a Trip Fund advance from [fromMemberId] to [toMemberId]: the sender,
+     * the holder, or a trip organizer. Checked on this device only (same as Mark paid).
+     */
+    fun canCurrentUserManageAdvance(
+        groupId: String = _uiState.value.activeGroupId,
+        fromMemberId: String,
+        toMemberId: String,
+        state: SplitMateUiState = _uiState.value
+    ): Boolean {
+        val me = state.members.firstOrNull { it.groupId == groupId && it.isCurrentUser }
+        if (me != null && (me.memberId == fromMemberId || me.memberId == toMemberId)) return true
+        return isUserGroupOrganizer(groupId, state)
+    }
+
+    /** Removes a Trip Fund advance after the permission check. Returns null on success, else the reason. */
+    fun removeTripFundAdvance(settlementId: String, groupIdHint: String? = null): String? {
+        val state = _uiState.value
+        val advance = state.settlements.find { it.settlementId == settlementId }
+            ?: return "This advance was already removed"
+        if (!advance.settlementId.startsWith(com.splitmate.app.ui.fund.ADVANCE_ID_PREFIX)) {
+            return "This is not a Trip Fund advance"
+        }
+        if (!canCurrentUserManageAdvance(advance.groupId, advance.fromMemberId, advance.toMemberId, state)) {
+            return "Only ${advance.fromMemberName}, ${advance.toMemberName} or an organizer can remove this advance"
+        }
+        undoSettlement(settlementId, groupIdHint ?: advance.groupId)
+        _uiState.update {
+            it.copy(statusBannerMessage = "Removed Trip Fund advance (${advance.fromMemberName} → ${advance.toMemberName})")
+        }
+        return null
+    }
+
+    private var lastAdvanceBatchSignature: String = ""
+    private var lastAdvanceBatchAtMs: Long = 0L
+
+    /**
      * Records one or more **Trip Fund** advances (pre-trip pool / top-up transfers) to [treasurerMemberId].
-     * Anyone in the group may record advances. Each contribution is persisted as a [SettlementEntity]
-     * whose `settlementId` starts with `advance_` so it never inflates Total Trip Spend, reconciles
-     * with 0.00c drift, and syncs losslessly across devices.
+     * Each advance may be recorded by its sender, the holder or an organizer (see
+     * [canCurrentUserManageAdvance]). Each contribution is persisted as a [SettlementEntity]
+     * whose `settlementId` starts with `advance_` so it never counts as trip spend.
      */
     fun recordTripFundAdvances(
         treasurerMemberId: String,
@@ -4199,10 +4305,22 @@ class SplitMateViewModel(
                 sender to cents
             }
         if (validEntries.isEmpty()) return "Select at least one contributor with an amount above zero"
+        val notAllowed = validEntries.firstOrNull { (sender, _) ->
+            !canCurrentUserManageAdvance(state.activeGroupId, sender.memberId, treasurer.memberId, state)
+        }
+        if (notAllowed != null) {
+            return "Only ${notAllowed.first.name}, ${treasurer.name} or an organizer can record ${notAllowed.first.name}'s advance"
+        }
+        // Double tap on the save button: the same batch again within 3 seconds is ignored.
+        val batchSignature = state.activeGroupId + "|" + treasurer.memberId + "|" +
+            validEntries.map { "${it.first.memberId}:${it.second}" }.sorted().joinToString(",")
+        val nowBase = System.currentTimeMillis()
+        if (batchSignature == lastAdvanceBatchSignature && nowBase - lastAdvanceBatchAtMs in 0..3_000L) return null
+        lastAdvanceBatchSignature = batchSignature
+        lastAdvanceBatchAtMs = nowBase
 
         com.splitmate.app.data.CloudGroupSyncRepository.setGroupPendingCloudPush(null, state.activeGroupId, true)
         val syncStatus = if (dao != null || state.isOfflineMode) "PENDING" else "SYNCED"
-        val nowBase = System.currentTimeMillis()
         val newAdvances = validEntries.mapIndexed { idx, (sender, cents) ->
             SettlementEntity(
                 settlementId = com.splitmate.app.data.SplitMateIds.newId("advance"),
@@ -4343,6 +4461,13 @@ class SplitMateViewModel(
     /** v2.3.5 (#4): true when the quick edit dialog must lock amount + shares (itemized receipt). */
     fun isExpenseItemized(expense: ExpenseEntity, state: SplitMateUiState = _uiState.value): Boolean =
         com.splitmate.app.ItemizedExpenseGuard.isItemized(
+            expense,
+            state.splits.filter { it.expenseId == expense.expenseId }
+        )
+
+    /** Why the amount and shares of [expense] are locked in the edit dialog (receipt vs custom split). */
+    fun expenseLockReason(expense: ExpenseEntity, state: SplitMateUiState = _uiState.value): String =
+        com.splitmate.app.ItemizedExpenseGuard.lockedReasonFor(
             expense,
             state.splits.filter { it.expenseId == expense.expenseId }
         )
@@ -4629,7 +4754,9 @@ class SplitMateViewModel(
                 newParticipantIds = selectedMemberIds?.filter { id -> groupMembers.any { it.memberId == id } }?.ifEmpty { null }
             )
         ) {
-            _uiState.update { it.copy(statusBannerMessage = com.splitmate.app.ItemizedExpenseGuard.LOCKED_REASON) }
+            _uiState.update {
+                it.copy(statusBannerMessage = com.splitmate.app.ItemizedExpenseGuard.lockedReasonFor(existing, allExistingSplits))
+            }
             return
         }
 

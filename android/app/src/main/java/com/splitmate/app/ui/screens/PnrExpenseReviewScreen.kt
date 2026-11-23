@@ -313,6 +313,21 @@ data class PassengerTicketRow(
 )
 
 /**
+ * Whether the "Enter fare, route and departure" card is on screen. Once the user has typed
+ * anything into it the card stays, so it cannot vanish under their finger after the first digit
+ * makes the total non-zero.
+ */
+internal fun shouldShowManualTicketCard(
+    isManualEntry: Boolean,
+    isLiveVerified: Boolean,
+    effectiveTotalPaise: Long,
+    resolvedFromCode: String,
+    resolvedToCode: String,
+    hasTypedManualValues: Boolean
+): Boolean = isManualEntry || !isLiveVerified || effectiveTotalPaise <= 0L ||
+    resolvedFromCode.isBlank() || resolvedToCode.isBlank() || hasTypedManualValues
+
+/**
  * Concurrency-safe state coordinator for [PnrExpenseReviewScreen].
  *
  * Enforces:
@@ -342,7 +357,28 @@ class PnrReviewSessionController(
     var hasUserCustomizedSplit by mutableStateOf(false)
     var hasUserCustomizedPayer by mutableStateOf(false)
 
+    /**
+     * True only while the user has picked the "Manual Ticket" tab themselves. In that mode the PNR
+     * is just a label on a ticket the user is typing in, so editing it must not wipe the fare,
+     * route, date/time or member picks, and must not start a live lookup behind their back.
+     * A lookup that fell back to manual entry on its own does NOT set this (rule C-03 still
+     * isolates PNR A's typed values from PNR B there).
+     */
+    var isExplicitManualMode by mutableStateOf(false)
+
     private var activeLookupJob: Job? = null
+
+    fun enterExplicitManualMode() {
+        val manualPnr = pnrInput.filter { it.isDigit() }.take(10)
+        activeLookupJob?.cancel()
+        activeLookupJob = null
+        isFetching = false
+        pnrInput = manualPnr
+        isExplicitManualMode = true
+        liveSnapshot = com.splitmate.app.data.PnrNetworkRepository.buildUnverifiedManualFallbackSnapshot(
+            cleanPnr = manualPnr
+        )
+    }
 
     fun syncForGroupOrExistingExpense(
         groupMembers: List<GroupMemberEntity>,
@@ -400,6 +436,17 @@ class PnrReviewSessionController(
         val digits = rawValue.filter { it.isDigit() }.take(10)
         val changed = digits != pnrInput
         pnrInput = digits
+        val manualSnapshot = liveSnapshot
+        if (isExplicitManualMode && manualSnapshot != null && manualSnapshot.isManualEntry && !manualSnapshot.isLiveVerified) {
+            if (changed) {
+                activeLookupJob?.cancel()
+                activeLookupJob = null
+                isFetching = false
+                fetchError = null
+                liveSnapshot = manualSnapshot.copy(pnr = digits)
+            }
+            return
+        }
         if (changed) {
             activeLookupJob?.cancel()
             activeLookupJob = null
@@ -447,6 +494,7 @@ class PnrReviewSessionController(
         activeLookupJob = null
         isFetching = false
         fetchError = null
+        isExplicitManualMode = false
         pnrInput = imported.pnr
         liveSnapshot = imported
         manualTotalFareInput = ""
@@ -492,6 +540,7 @@ class PnrReviewSessionController(
 
             isFetching = false
             liveSnapshot = fetched
+            isExplicitManualMode = false
 
             val membersNow = groupMembersProvider()
             val existingMatch = existingExpenseProvider(clean)
@@ -1479,13 +1528,10 @@ fun PnrExpenseReviewScreen(
                         onSelect = { index, _ ->
                             if (isSubmitting) return@ConnectedButtonGroup
                             if (index == 1 && !isManualModeSelected) {
-                                val manualPnr = pnrInput.filter { it.isDigit() }.take(10)
-                                controller.pnrInput = manualPnr
-                                controller.liveSnapshot = com.splitmate.app.data.PnrNetworkRepository.buildUnverifiedManualFallbackSnapshot(
-                                    cleanPnr = manualPnr
-                                )
+                                controller.enterExplicitManualMode()
                             } else if (index == 0 && isManualModeSelected) {
                                 val cleanDigits = pnrInput.filter { it.isDigit() }.take(10)
+                                controller.isExplicitManualMode = false
                                 controller.liveSnapshot = null
                                 if (cleanDigits.length == 10) {
                                     triggerLivePnrLookup(cleanDigits, isExplicitManualRefresh = false)
@@ -1760,7 +1806,19 @@ fun PnrExpenseReviewScreen(
                         val depTimeDisplay = manualDepartureTimeInput.trim().ifBlank { defaultDepTimeDisplay }
 
                         // Manual Ticket Fare, Route & Departure Date/Time Card when CRIS is offline / unverified or fare is 0
-                        if (snapshot.isManualEntry || !snapshot.isLiveVerified || effectiveTotalPaise <= 0L || resolvedFromCode.isBlank() || resolvedToCode.isBlank()) {
+                        if (shouldShowManualTicketCard(
+                                isManualEntry = snapshot.isManualEntry,
+                                isLiveVerified = snapshot.isLiveVerified,
+                                effectiveTotalPaise = effectiveTotalPaise,
+                                resolvedFromCode = resolvedFromCode,
+                                resolvedToCode = resolvedToCode,
+                                hasTypedManualValues = manualTotalFareInput.isNotBlank() ||
+                                    manualFromStationInput.isNotBlank() ||
+                                    manualToStationInput.isNotBlank() ||
+                                    manualDepartureDateInput.isNotBlank() ||
+                                    manualDepartureTimeInput.isNotBlank()
+                            )
+                        ) {
                             Surface(
                                 shape = MaterialTheme.shapes.large,
                                 color = TactilePaperPassTokens.PaperSurface,

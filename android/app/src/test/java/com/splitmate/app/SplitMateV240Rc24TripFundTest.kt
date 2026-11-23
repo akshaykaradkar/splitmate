@@ -96,7 +96,7 @@ class SplitMateV240Rc24TripFundTest {
     }
 
     @Test
-    fun `RC24_02 anyone in group can batch-record Trip Fund advances without inflating Total Trip Spend`() {
+    fun `RC24_02 an organizer can batch-record Trip Fund advances for others without inflating Total Trip Spend`() {
         val vm = SplitMateViewModel()
         vm.createNewGroup(name = "Manali Trip", currencyCode = "INR", friendNamesCsv = "Priya, Sam, Raj")
         val stateBefore = vm.uiState.value
@@ -105,7 +105,7 @@ class SplitMateV240Rc24TripFundTest {
         val sam = activeMembers.first { it.name == "Sam" }
         val raj = activeMembers.first { it.name == "Raj" }
 
-        // Even when Priya (not the current user) is the Treasurer, anyone can record Trip Fund advances.
+        // The trip creator is an organizer, so they may record advances between other members.
         val err = vm.recordTripFundAdvances(
             treasurerMemberId = priya.memberId,
             contributionsByMemberId = mapOf(

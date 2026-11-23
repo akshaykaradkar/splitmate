@@ -67,7 +67,11 @@ object SettlementDuplicateGuard {
     ): Set<String> {
         if (settlements.size < 2) return emptySet()
         val removed = mutableSetOf<String>()
+        // Trip Fund advances are never cleanup candidates: two equal top-ups a few minutes apart
+        // are normal, and the sender's balance is positive after the first one. They still count
+        // towards balances below.
         settlements
+            .filterNot { it.settlementId.startsWith(com.splitmate.app.ui.fund.ADVANCE_ID_PREFIX) }
             .groupBy { Triple(it.fromMemberId, it.toMemberId, it.amountCents) }
             .values
             .filter { it.size > 1 }

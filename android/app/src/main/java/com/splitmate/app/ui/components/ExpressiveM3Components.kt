@@ -1125,7 +1125,9 @@ fun SplitButtonLayout(
     val buttonHeight = if (fillWidth) SplitButtonDefaults.MediumContainerHeight else SplitButtonDefaults.ContainerHeight
     val colors = ButtonDefaults.buttonColors(containerColor = containerColor, contentColor = contentColor)
     Box(modifier = modifier) {
-        androidx.compose.material3.SplitButtonLayout(
+        SplitButtonRow(
+            fillWidth = fillWidth,
+            spacing = SplitButtonDefaults.Spacing,
             leadingButton = {
                 androidx.compose.material3.SplitButtonDefaults.LeadingButton(
                     onClick = onLeadingClick,
@@ -1166,9 +1168,7 @@ fun SplitButtonLayout(
                         iconSize = if (fillWidth) 22.dp else 18.dp
                     )
                 }
-            },
-            modifier = if (fillWidth) Modifier.fillMaxWidth() else Modifier,
-            spacing = SplitButtonDefaults.Spacing
+            }
         )
 
         DropdownMenu(
@@ -1199,6 +1199,40 @@ fun SplitButtonLayout(
                 )
             }
         }
+    }
+}
+
+/**
+ * Lays out the two halves of a split button.
+ *
+ * Normal width uses the official `SplitButtonLayout`. Full width does not: the official layout
+ * measures the leading button first, so a leading button that fills the width leaves the trailing
+ * (menu) button 0 px. Here the leading button takes the remaining width and the trailing button
+ * keeps its own size.
+ */
+@ExperimentalMaterial3ExpressiveApi
+@Composable
+private fun SplitButtonRow(
+    fillWidth: Boolean,
+    spacing: Dp,
+    leadingButton: @Composable () -> Unit,
+    trailingButton: @Composable () -> Unit
+) {
+    if (fillWidth) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(spacing),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(modifier = Modifier.weight(1f), propagateMinConstraints = true) { leadingButton() }
+            trailingButton()
+        }
+    } else {
+        androidx.compose.material3.SplitButtonLayout(
+            leadingButton = leadingButton,
+            trailingButton = trailingButton,
+            spacing = spacing
+        )
     }
 }
 
@@ -1244,17 +1278,11 @@ fun SplitButtonLayout(
 ) {
     // v2.4.0 Trip Hub step 3: lays out through the official M3 Expressive SplitButtonLayout.
     Box(modifier = modifier) {
-        androidx.compose.material3.SplitButtonLayout(
-            leadingButton = {
-                if (fillWidth) {
-                    Box(modifier = Modifier.fillMaxWidth(), propagateMinConstraints = true) { leadingButton() }
-                } else {
-                    leadingButton()
-                }
-            },
-            trailingButton = trailingButton,
-            modifier = if (fillWidth) Modifier.fillMaxWidth() else Modifier,
-            spacing = spacing
+        SplitButtonRow(
+            fillWidth = fillWidth,
+            spacing = spacing,
+            leadingButton = leadingButton,
+            trailingButton = trailingButton
         )
         if (menuContent != null) {
             DropdownMenu(

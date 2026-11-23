@@ -118,6 +118,8 @@ fun EditLoggedExpenseDialog(
      * edit cannot flatten tax / tip / item claims into an equal split; title + payer stay editable.
      */
     lockAmountAndSplit: Boolean = false,
+    /** rc25: why it is locked. Receipts and custom (exact / % / shares) splits get different text. */
+    lockReason: String = ItemizedExpenseGuard.LOCKED_REASON,
     onSaveExact: ((
         newTitle: String,
         exactTotalCents: Long,
@@ -536,7 +538,7 @@ fun EditLoggedExpenseDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = ItemizedExpenseGuard.LOCKED_REASON,
+                            text = lockReason,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = SplitMateTheme.TerracottaText,

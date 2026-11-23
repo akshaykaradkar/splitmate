@@ -1080,6 +1080,9 @@ fun TripHomeScreen(
         com.splitmate.app.ui.fund.CollectTripFundSheet(
             members = fundMembers,
             currencySymbol = uiState.activeCurrency.symbol,
+            canRecordFor = { holderId, memberId ->
+                viewModel.canCurrentUserManageAdvance(resolvedGroupId, memberId, holderId, uiState)
+            },
             onRecordAdvances = { treasurerId, contributions ->
                 if (resolvedGroupId.isNotBlank()) viewModel.selectActiveGroup(resolvedGroupId)
                 viewModel.recordTripFundAdvances(treasurerId, contributions)
@@ -1571,6 +1574,14 @@ fun TripHomeScreen(
                                 actionIcon = Icons.AutoMirrored.Rounded.ReceiptLong,
                                 onAction = onLogQuickExpenseClick
                             )
+                        }
+                        if (groupMembers.size > 1) {
+                            item(key = "empty_money_trip_fund") {
+                                com.splitmate.app.ui.fund.CollectTripFundButton(
+                                    onClick = { showCollectTripFundSheet = true },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
                     }
                 } else {
@@ -5584,10 +5595,15 @@ private fun TripHubMoneySettlementView(
         )
     }
     var showMoneyTripFundSheet by remember(groupId) { mutableStateOf(false) }
+    var moneyTripFundHolderId by remember(groupId) { mutableStateOf<String?>(null) }
     if (showMoneyTripFundSheet) {
         com.splitmate.app.ui.fund.CollectTripFundSheet(
             members = groupMembers,
             currencySymbol = uiState.activeCurrency.symbol,
+            initialTreasurerId = moneyTripFundHolderId,
+            canRecordFor = { holderId, memberId ->
+                viewModel.canCurrentUserManageAdvance(groupId, memberId, holderId, uiState)
+            },
             onRecordAdvances = { treasurerId, contributions ->
                 if (groupId.isNotBlank()) viewModel.selectActiveGroup(groupId)
                 viewModel.recordTripFundAdvances(treasurerId, contributions)
@@ -5630,9 +5646,15 @@ private fun TripHubMoneySettlementView(
                 com.splitmate.app.ui.fund.TripFundSummaryCard(
                     summaries = moneyTripFundSummaries,
                     currencySymbol = uiState.activeCurrency.symbol,
-                    onAddAdvanceClick = { showMoneyTripFundSheet = true },
+                    onAddAdvanceClick = { holderId ->
+                        moneyTripFundHolderId = holderId
+                        showMoneyTripFundSheet = true
+                    },
+                    canRemoveAdvance = { adv ->
+                        viewModel.canCurrentUserManageAdvance(groupId, adv.fromMemberId, adv.toMemberId, uiState)
+                    },
                     onRemoveAdvance = { settlementId ->
-                        viewModel.undoSettlement(settlementId, groupIdHint = groupId)
+                        viewModel.removeTripFundAdvance(settlementId, groupIdHint = groupId)
                     }
                 )
             }
@@ -6487,14 +6509,6 @@ private fun TripHubMoneySettlementView(
                 .filter { viewModel.canCurrentUserMarkTransferPaid(groupId, it.memberId, uiState) }
                 .map { it.memberId }
                 .toSet()
-            if (groupMembers.size > 1) {
-                item(key = "collect_trip_fund_button") {
-                    com.splitmate.app.ui.fund.CollectTripFundButton(
-                        onClick = { showMoneyTripFundSheet = true },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
             if (receiverIdsICanConfirm.isNotEmpty() && groupMembers.size > 1) {
                 item(key = "record_manual_payment") {
                     var showRecordPayment by remember { mutableStateOf(false) }
@@ -6529,6 +6543,19 @@ private fun TripHubMoneySettlementView(
                         )
                     }
                 }
+            }
+        }
+        // Shown whether or not payments are pending, so a fund can be started on a new or settled
+        // trip. Once a fund exists, its card has "Top up" instead.
+        if (groupMembers.size > 1 && moneyTripFundSummaries.isEmpty()) {
+            item(key = "collect_trip_fund_button") {
+                com.splitmate.app.ui.fund.CollectTripFundButton(
+                    onClick = {
+                        moneyTripFundHolderId = null
+                        showMoneyTripFundSheet = true
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
         allExpensesSection()

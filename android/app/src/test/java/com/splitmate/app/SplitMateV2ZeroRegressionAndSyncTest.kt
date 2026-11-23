@@ -2196,11 +2196,44 @@ class SplitMateV2ZeroRegressionAndSyncTest {
         )
         testDispatcher.scheduler.advanceUntilIdle()
 
-        // Log a settlement involving Rahul
+        // Organizer removes Priya, who only has a share (she never paid and has no payments).
+        // Her share is re-split between the remaining participants of that expense.
+        assertTrue(orgVm.removeMemberFromGroup(gId, priya.memberId))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val stateAfterRemove = orgVm.uiState.value
+        val remainingMembers = stateAfterRemove.members.filter { it.groupId == gId }
+        assertEquals(3, remainingMembers.size)
+        assertFalse(remainingMembers.any { it.memberId == priya.memberId })
+
+        // PA-6: Splits are redistributed ONLY between Akshay and Rahul (4500 + 4500 = 9000), excluding Karan
+        val updatedExpense = stateAfterRemove.expenses.single { it.groupId == gId }
+        assertEquals(rahul.memberId, updatedExpense.payerId, "The payer is unchanged")
+        val updatedSplits = stateAfterRemove.splits.filter { it.expenseId == updatedExpense.expenseId }
+        assertEquals(2, updatedSplits.size)
+        assertEquals(setOf(akshay.memberId, rahul.memberId), updatedSplits.map { it.memberId }.toSet())
+        assertFalse(updatedSplits.any { it.memberId == karan.memberId }, "Non-participating member Karan must not be added to subset expense")
+        assertEquals(9_000L, updatedSplits.sumOf { it.finalOwedCents })
+
+        // PA-3 & PA-4: Durable tombstone recorded for Priya's phone (9876543212)
+        assertTrue(syncRepo.isPhoneRemovedFromGroup(gId, "9876543212"))
+
+        // Re-adding Priya via addMemberToActiveGroup must un-tombstone 9876543212
+        orgVm.addMemberToActiveGroup("Priya Rejoined", "9876543212")
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(
+            syncRepo.isPhoneRemovedFromGroup(gId, "9876543212"),
+            "Re-inviting a previously removed phone must clear its local tombstone"
+        )
+        assertEquals(4, orgVm.uiState.value.members.count { it.groupId == gId })
+
+        // v2.4.0 rc25: Rahul paid an expense and has a recorded payment. Removing him used to hand
+        // his expense to the organizer and delete the payment, which changed settled balances.
+        // It is now refused and the ledger is left exactly as it was.
         orgVm.markGreedyTransferSettled(
             SplitMateMathEngine.SimplifiedTransfer(
-                fromMemberId = priya.memberId,
-                fromName = priya.name,
+                fromMemberId = akshay.memberId,
+                fromName = akshay.name,
                 toMemberId = rahul.memberId,
                 toName = rahul.name,
                 amountCents = 1_000L
@@ -2208,41 +2241,18 @@ class SplitMateV2ZeroRegressionAndSyncTest {
         )
         testDispatcher.scheduler.advanceUntilIdle()
         assertEquals(1, orgVm.uiState.value.settlements.count { it.groupId == gId })
-
-        // Organizer removes Rahul
-        orgVm.removeMemberFromGroup(gId, rahul.memberId)
+        val beforeRefusedRemove = orgVm.uiState.value
+        var refusal = ""
+        assertFalse(orgVm.removeMemberFromGroup(groupId = gId, targetMemberId = rahul.memberId) { _, msg -> refusal = msg })
         testDispatcher.scheduler.advanceUntilIdle()
-
-        val stateAfterRemove = orgVm.uiState.value
-        val remainingMembers = stateAfterRemove.members.filter { it.groupId == gId }
-        assertEquals(3, remainingMembers.size)
-        assertFalse(remainingMembers.any { it.memberId == rahul.memberId })
-
-        // PA-1: Expense paid by Rahul must now be reassigned to Organizer Akshay
-        val updatedExpense = stateAfterRemove.expenses.single { it.groupId == gId }
-        assertEquals(akshay.memberId, updatedExpense.payerId, "Removed payer must fall back to Organizer Akshay (PA-1)")
-
-        // PA-6: Splits must be redistributed ONLY between Akshay and Priya (4500 + 4500 = 9000), excluding Karan
-        val updatedSplits = stateAfterRemove.splits.filter { it.expenseId == updatedExpense.expenseId }
-        assertEquals(2, updatedSplits.size)
-        assertEquals(setOf(akshay.memberId, priya.memberId), updatedSplits.map { it.memberId }.toSet())
-        assertFalse(updatedSplits.any { it.memberId == karan.memberId }, "Non-participating member Karan must not be added to subset expense")
-        assertEquals(9_000L, updatedSplits.sumOf { it.finalOwedCents })
-
-        // Settlements involving Rahul must be purged
-        assertEquals(0, stateAfterRemove.settlements.count { it.groupId == gId })
-
-        // PA-3 & PA-4: Durable tombstone recorded for Rahul's phone (9876543211)
-        assertTrue(syncRepo.isPhoneRemovedFromGroup(gId, "9876543211"))
-
-        // Re-adding Rahul via addMemberToActiveGroup must un-tombstone 9876543211
-        orgVm.addMemberToActiveGroup("Rahul Rejoined", "9876543211")
-        testDispatcher.scheduler.advanceUntilIdle()
-        assertFalse(
-            syncRepo.isPhoneRemovedFromGroup(gId, "9876543211"),
-            "Re-inviting a previously removed phone must clear its local tombstone"
-        )
-        assertEquals(4, orgVm.uiState.value.members.count { it.groupId == gId })
+        assertTrue(refusal.contains("1 paid expense and 1 recorded payment"), refusal)
+        val afterRefusedRemove = orgVm.uiState.value
+        assertEquals(4, afterRefusedRemove.members.count { it.groupId == gId })
+        assertEquals(rahul.memberId, afterRefusedRemove.expenses.single { it.groupId == gId }.payerId)
+        assertEquals(beforeRefusedRemove.splits.filter { it.expenseId == updatedExpense.expenseId }.toSet(),
+            afterRefusedRemove.splits.filter { it.expenseId == updatedExpense.expenseId }.toSet())
+        assertEquals(1, afterRefusedRemove.settlements.count { it.groupId == gId })
+        assertFalse(syncRepo.isPhoneRemovedFromGroup(gId, "9876543211"))
 
         // Non-organizer (Karan, 0.00c balance) leaves the trip on his own device
         val capsule = orgVm.exportGroupSyncPayload(gId)!!.syncToken
